@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { ESTADOS, estadoDeFase, normalizarEstado, estaAtivo, frase, rotulo } from "./estadoAgente";
+import { ESTADOS, estadoDeFase, normalizarEstado, estaAtivo, frase, rotulo, aindaEscrevendo, PULSO_AGENTE_MS, PRAZO_AGENTE_MS } from "./estadoAgente";
+
+describe("estadoAgente · #468 'redigindo…' não fica preso", () => {
+  it("quem ficou sem aviso no prazo sai; quem teve aviso recente fica", () => {
+    expect(aindaEscrevendo(["aura", "teo", "nina"], { aura: 1_000, teo: 5_000 }, 2_000)).toEqual(["teo"]);
+  });
+  it("o prazo cabe mais de um pulso (um aviso perdido não apaga quem ainda trabalha)", () => {
+    expect(PRAZO_AGENTE_MS).toBeGreaterThanOrEqual(2 * PULSO_AGENTE_MS);
+  });
+});
 
 describe("estadoAgente · fase do harness → estado", () => {
   it.each([

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { criarContador, ehChamadaDeIA, instalarMonitorIA, respostaEmStream } from "./monitorIA";
+import { criarContador, ehChamadaDeIA, instalarMonitorIA, respostaEmStream, avisarTrabalhoIA } from "./monitorIA";
 import { urlDoLabNoTablet, ehMsgIA, MSG_IA, type EstadoIALab } from "./loungeHub";
 
 const O = "http://localhost:3000";
@@ -74,5 +74,34 @@ describe("#440 · o escritório não acende 'IA trabalhando' no metaverso", () =
     await new Promise((r) => setTimeout(r, 0));
     expect(avisos.at(-1)!.ativos).toBe(0);
     desinstalar();
+  });
+});
+
+describe("#468 · a agente do escritório escrevendo mantém 'IA trabalhando'", () => {
+  const janela = () => {
+    const alvo = new EventTarget();
+    return Object.assign(alvo, { location: { origin: O }, fetch: async () => new Response("{}", { headers: { "content-length": "2" } }) }) as unknown as Window & typeof globalThis;
+  };
+  it("a mensagem volta na hora, mas enquanto a agente escreve o monitor continua ocupado", async () => {
+    const w = janela(), avisos: EstadoIALab[] = [];
+    const desinstalar = instalarMonitorIA((e) => avisos.push(e), w);
+    await w.fetch("/api/canal/abc/mensagem", { method: "POST" });
+    avisarTrabalhoIA("escritorio:abc:aura", true, w);
+    expect(avisos.at(-1)!.ativos).toBe(1);
+    avisarTrabalhoIA("escritorio:abc:aura", true, w);   // o pulso repetido não conta duas vezes
+    expect(avisos.at(-1)!.ativos).toBe(1);
+    avisarTrabalhoIA("escritorio:abc:aura", false, w);
+    expect(avisos.at(-1)!.ativos).toBe(0);
+    expect(avisos.at(-1)!.terminou).not.toBeNull();
+    desinstalar();
+  });
+  it("fim de quem nunca começou não mexe no contador; depois de desinstalar, nada conta", () => {
+    const w = janela(), avisos: EstadoIALab[] = [];
+    const desinstalar = instalarMonitorIA((e) => avisos.push(e), w);
+    avisarTrabalhoIA("escritorio:abc:teo", false, w);
+    expect(avisos).toHaveLength(0);
+    desinstalar();
+    avisarTrabalhoIA("escritorio:abc:teo", true, w);
+    expect(avisos).toHaveLength(0);
   });
 });

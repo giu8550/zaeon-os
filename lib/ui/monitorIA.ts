@@ -21,6 +21,17 @@ export const IGNORAR_PADROES: readonly RegExp[] = [
   /^\/api\/canal\/[^/]+\/(?:digitando|agenda|entrar)(?:\/.*)?$/,        // digitando, agenda, entrar
 ];
 
+/**
+ * #468: trabalho de IA que NÃO é um fetch desta página — o agente do escritório responde em segundo plano (a mensagem
+ * volta na hora; a resposta chega depois pelo tempo real). O escritório avisa com este evento enquanto a agente que
+ * VOCÊ chamou escreve, e o metaverso mantém "IA trabalhando" (antes virava "livre" em 3 s).
+ */
+export const EV_TRABALHO_IA = "zaeon:ia-trabalho";
+export type TrabalhoIA = { chave: string; ativo: boolean };
+export function avisarTrabalhoIA(chave: string, ativo: boolean, w: Window = window): void {
+  try { w.dispatchEvent(new CustomEvent<TrabalhoIA>(EV_TRABALHO_IA, { detail: { chave, ativo } })); } catch { /* ignore */ }
+}
+
 /** é uma chamada de IA? (POST, mesma origem, em /api/, fora das ignoradas) */
 export function ehChamadaDeIA(url: string, metodo: string | undefined, origem: string): boolean {
   if ((metodo ?? "GET").toUpperCase() !== "POST") return false;
@@ -79,5 +90,23 @@ export function instalarMonitorIA(avisar: (e: EstadoIALab) => void, w: Window & 
     } catch (e) { clearTimeout(seguranca); fim(id); throw e; }
   };
   w.fetch = embrulhado;
-  return () => { if (w.fetch === embrulhado) w.fetch = original; };
+  // #468: trabalho avisado pelo escritório (uma chave por agente; repetir "ativo" não conta duas vezes)
+  const porChave = new Map<string, { id: number; seguranca: ReturnType<typeof setTimeout> }>();
+  const aoTrabalho = (ev: Event) => {
+    const d = (ev as CustomEvent<TrabalhoIA>).detail;
+    if (!d?.chave) return;
+    const j = porChave.get(d.chave);
+    if (d.ativo && !j) {
+      const id = cont.comecar(); avisar(cont.estado());
+      porChave.set(d.chave, { id, seguranca: setTimeout(() => { porChave.delete(d.chave); fim(id); }, 15 * 60_000) });
+    } else if (!d.ativo && j) {
+      clearTimeout(j.seguranca); porChave.delete(d.chave); fim(j.id);
+    }
+  };
+  w.addEventListener?.(EV_TRABALHO_IA, aoTrabalho);
+  return () => {
+    if (w.fetch === embrulhado) w.fetch = original;
+    w.removeEventListener?.(EV_TRABALHO_IA, aoTrabalho);
+    for (const j of porChave.values()) clearTimeout(j.seguranca);
+  };
 }

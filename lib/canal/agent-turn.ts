@@ -16,7 +16,7 @@ import { registrarUso } from "@/lib/canal/usage";
 import { rosterComMentores, mergeProfiles, type AgentView } from "@/lib/agents/roster";
 import { EV_DIGITANDO, EV_MENSAGEM, publicarPusher, type MensagemWire, type Publicar } from "@/lib/canal/realtime";
 import { limparSaidaAgente } from "@/lib/canal/saida";
-import { estadoDeFase, type EstadoAgente } from "@/lib/canal/estadoAgente";
+import { estadoDeFase, PULSO_AGENTE_MS, type EstadoAgente } from "@/lib/canal/estadoAgente";
 import { proximoDaCadeia, podePassar } from "@/lib/canal/encadear";
 import { estaForaDaConversa } from "@/lib/canal/alvo";
 import { agentesDasSalas } from "@/lib/canal/agentesSalas";
@@ -72,6 +72,8 @@ export type TurnoDeps = {
   prisma: TurnoPrisma;
   gerar?: Gerar;          // default = harness (import tardio)
   publicar?: Publicar;    // default = Pusher
+  /** #468: de quanto em quanto tempo repete "ainda escrevendo" (padrão PULSO_AGENTE_MS; os testes encurtam). */
+  pulsoMs?: number;
   /** #396 (B): dispara o turno do próximo agente da cadeia (a fila injeta; sem isto, não encadeia). */
   encadear?: (job: TurnoInput & { mensagemId: string }) => Promise<unknown> | unknown;
 };
@@ -256,6 +258,10 @@ export async function executarTurno(input: TurnoInput, deps: TurnoDeps): Promise
     atual = e;
     void Promise.resolve(publicar(canal.id, EV_DIGITANDO, { agentKey: agente.agentKey, estado: e })).catch(() => undefined);
   };
+  // #468: repete o estado enquanto trabalha — a tela apaga quem ficou sem aviso (lib/canal/estadoAgente)
+  const pulso = setInterval(() => {
+    void Promise.resolve(publicar(canal.id, EV_DIGITANDO, { agentKey: agente.agentKey, estado: atual })).catch(() => undefined);
+  }, deps.pulsoMs ?? PULSO_AGENTE_MS);
   try {
     // G6 (Fatia 7): nunca persistir imagem remota/HTML vindo do modelo (texto limpo sai idêntico).
     const texto = limparSaidaAgente((await gerar({ agente: agenteComCanal, objective, history, canal, userId: input.userId, onFase })).trim());
@@ -300,6 +306,7 @@ export async function executarTurno(input: TurnoInput, deps: TurnoDeps): Promise
     } catch { /* best-effort */ }
     return { ok: false, motivo: "erro", erro };
   } finally {
+    clearInterval(pulso);
     await publicar(canal.id, EV_DIGITANDO, { agentKey: agente.agentKey, estado: fim });
   }
 }

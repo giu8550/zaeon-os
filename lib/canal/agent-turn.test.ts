@@ -275,6 +275,24 @@ describe("agent-turn · executarTurno", () => {
       expect(eventos.filter(([ev]) => ev === EV_DIGITANDO).every(([, p]) => p.agentKey === "aura")).toBe(true);
     });
 
+    it("#468 · enquanto o agente demora, repete o estado atual (a tela apaga quem ficou sem aviso); para no fim", async () => {
+      const { prisma } = fakePrisma(canal, [msg({ autorId: A, texto: "@aura pesquisa isso", mencoes: ["aura"] })]);
+      const eventos: [string, any][] = [];
+      const gerar = vi.fn(async ({ onFase }: any) => {
+        onFase?.("gather");
+        await new Promise((r) => setTimeout(r, 60));
+        return "pronto";
+      });
+      await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A }, { prisma, gerar, pulsoMs: 20, publicar: async (_c, ev, p) => { eventos.push([ev, p]); } });
+      const lista = estados(eventos);
+      expect(lista[0]).toBe("digitando");
+      expect(lista.at(-1)).toBe("ocioso");
+      expect(lista.filter((e) => e === "pesquisando").length).toBeGreaterThanOrEqual(2);
+      const depois = eventos.length;
+      await new Promise((r) => setTimeout(r, 60));
+      expect(eventos.length).toBe(depois);   // o pulso parou junto com o turno
+    });
+
     it("sem nenhuma fase (gerar simples) o fluxo continua digitando → ocioso", async () => {
       const { prisma } = fakePrisma(canal, [msg({ autorId: A, texto: "@aura oi", mencoes: ["aura"] })]);
       const eventos: [string, any][] = [];
