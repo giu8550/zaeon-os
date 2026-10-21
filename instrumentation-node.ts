@@ -33,6 +33,14 @@ export async function iniciarWorkerRagOpcional() {
   } catch (e) { console.warn("[rag-worker] não iniciado:", (e as Error)?.message); }
 }
 
+/** Memória L3 (MEMORY_L3=1): gavetas verbatim no Atlas. Nunca lança — sem ela o chat segue sem memória. */
+export async function ligarMemoriaOpcional() {
+  try {
+    const { ligarMemoriaL3 } = await import("@/lib/agent/memory-boot");
+    if (await ligarMemoriaL3()) console.info("[memoria-l3] ligada (memory_drawers, gemini-embedding-001 1536)");
+  } catch (e) { console.warn("[memoria-l3] não ligada:", (e as Error)?.message); }
+}
+
 export async function iniciarWorkers() {
   const { getRedisConnection, isQueueEnabled, SCHOLAR_QUEUE } = await import("@/lib/queue/scholar");
   if (!isQueueEnabled()) {

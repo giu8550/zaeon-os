@@ -270,9 +270,10 @@ export function createMongoMemory(deps: MemoryDeps): MemoryAPI {
       if (deps.supportsRankFusion) {
         hits = await drawers.aggregate(rankFusionPipeline(qv, queryText, filter, k)); // A9 nativo
       } else {
-        // RRF app-side: vetor (sempre) + texto (best-effort — sem índice de texto, ignora).
+        // RRF app-side: vetor + texto, cada ramo best-effort — um ramo quebrado (índice ausente/filtro não
+        // indexado) não pode zerar o outro (antes o erro do vetor derrubava o recall inteiro em silêncio).
         const [vec, txt] = await Promise.all([
-          drawers.aggregate(vectorPipeline(qv, filter, k)),
+          drawers.aggregate(vectorPipeline(qv, filter, k)).catch((e) => { console.warn("[memoria-l3] ramo vetor falhou:", String((e as Error)?.message ?? e).slice(0, 160)); return [] as RecallHit[]; }),
           Promise.resolve().then(() => drawers.aggregate(textPipeline(queryText, filter, k))).catch(() => [] as RecallHit[]),
         ]);
         hits = rrfFuse([vec, txt], 60).slice(0, k);

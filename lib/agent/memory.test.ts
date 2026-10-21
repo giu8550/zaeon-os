@@ -111,6 +111,18 @@ describe("memory · createMongoMemory.search", () => {
     expect(await mem.search("q", { userId: "u1" })).toEqual([]);
   });
 
+  it("ramo vetor quebrado (filtro não indexado no Atlas) → o ramo de texto ainda responde", async () => {
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const coll = makeColl(async (pipeline) => {
+      if (pipeline.find((s: any) => s.$vectorSearch)) throw new Error("Path 'wingLabel' needs to be indexed as filter");
+      return [hit({ id: "t", score: 0.8 })];
+    });
+    const mem = createMongoMemory({ drawers: coll, embed });
+    const r = await mem.wakeUp({ userId: "u1", wingLabel: "estudos" }, "nitrogênio");
+    aviso.mockRestore();
+    expect(r.map((h) => h.id)).toEqual(["t"]);
+  });
+
   it("recall bumpa lastAccessedAt/accessCount dos hits (best-effort)", async () => {
     const coll = makeColl(async () => [hit({ id: "h1", score: 0.9 })]);
     const mem = createMongoMemory({ drawers: coll, embed });

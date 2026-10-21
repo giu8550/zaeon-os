@@ -7,7 +7,7 @@ vi.mock("@/lib/ai/vertex-credentials", async (orig) => ({
 }));
 vi.mock("@/lib/ai/contextCache", () => ({ vertexAccessToken: vi.fn(async () => "tok-123") }));
 
-import { embedVertex, LOTE_EMBED, RAG_EMBED_DIM, RAG_EMBED_MODEL } from "./embed";
+import { embedGemini, embedVertex, LOTE_EMBED, RAG_EMBED_DIM, RAG_EMBED_MODEL } from "./embed";
 
 const vetor = () => Array.from({ length: RAG_EMBED_DIM }, () => 0.5);
 const resposta = (n: number) => new Response(JSON.stringify({ predictions: Array.from({ length: n }, () => ({ embeddings: { values: vetor() } })) }), { status: 200 });
@@ -81,5 +81,18 @@ describe("embedVertex", () => {
   it("lista vazia => [] sem chamar a rede", async () => {
     expect(await embedVertex([], "documento")).toEqual([]);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("embedGemini (memória L3)", () => {
+  it("dimensão pedida e SEM task_type quando não vem", async () => {
+    fetchMock.mockImplementation(async (_u: string, init: any) =>
+      new Response(JSON.stringify({ predictions: JSON.parse(init.body).instances.map(() => ({ embeddings: { values: Array(1536).fill(0.1) } })) }), { status: 200 }));
+    const out = await embedGemini(["a", "b"], { dim: 1536 });
+    expect(out).toHaveLength(2);
+    expect(out[0]).toHaveLength(1536);
+    const corpo = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(corpo.instances).toEqual([{ content: "a" }, { content: "b" }]);
+    expect(corpo.parameters).toEqual({ outputDimensionality: 1536, autoTruncate: true });
   });
 });
