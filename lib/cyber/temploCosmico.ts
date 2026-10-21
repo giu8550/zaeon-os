@@ -92,16 +92,27 @@ export function bocaDoElevadorTC(q: P2, h: number): "sobe" | "desce" | null {
   if (Math.abs(h - CYBER.h) < 1.5 && Math.hypot(q.x - E.topo.x, q.z - E.topo.z) < E.r) return "desce";
   return null;
 }
-/** as ESTAÇÕES dos estudantes de TI no campus: fileiras dos dois lados do CORREDOR do meio (livre), mesas viradas pra
- *  torre (o −z), a cadeira atrás; `ocupada` = tem um estudante digitando ali */
-export const ESTACOES_TI: readonly { x: number; z: number; ocupada: boolean }[] = (() => {
-  const out: { x: number; z: number; ocupada: boolean }[] = [];
-  for (let z = SALAO.z - SALAO.r - 16; z >= CAMPUS.zFim + 20; z -= 9) for (const lado of [-1, 1]) for (const dx of [11, 18, 25]) {
-    const i = out.length; out.push({ x: SALAO.x + lado * dx, z, ocupada: (i * 7) % 10 < 7 });
-  }
+/** as ESTAÇÕES DE TRABALHO do campus (out/2026, o dono: "estações de trabalho de verdade, como as da cidadela, nas cores da
+ *  sala"): CABINES no molde das da cidadela (lib/cyber/ceu `CABINE`: o piso, a mesa, o monitor, a cadeira, os painéis de
+ *  vidro), em fileiras dos dois lados do CORREDOR do meio (livre), viradas pra torre (o −z) — e, do lado de cada uma, o
+ *  DIFUSOR que recebe os raios da tempestade de cima */
+export const ESTACOES_TI: readonly { x: number; z: number }[] = (() => {
+  const out: { x: number; z: number }[] = [];
+  for (let z = SALAO.z - SALAO.r - 16; z >= CAMPUS.zFim + 20; z -= 9) for (const lado of [-1, 1]) for (const dx of [11, 18, 25]) out.push({ x: SALAO.x + lado * dx, z });
   return out;
 })();
-export const MESA_TI = { larg: 4.2, prof: 1.2 } as const;
+/** a cabine do campus (o mesmo molde da da cidadela; referencial dela: x ao longo da largura, z pra FRENTE — o monitor
+ *  — que no campus aponta pro −z, a torre) */
+export const CABINE_TI = { larg: 3.0, prof: 2.8, mesaZ: 0.75, monitorZ: 1.05, assentoZ: -0.35, painelX: 1.45 } as const;
+/** um ponto do referencial de uma cabine do campus → layout (a cabine olha pro −z: o giro de meia volta) */
+export const daCabineTI = (e: { x: number; z: number }, lx: number, lz: number): P2 => ({ x: e.x - lx, z: e.z - lz });
+/** o DIFUSOR de cada cabine (do lado dela, fora do painel): onde fica (referencial da cabine) e a altura da ponta, onde o
+ *  raio chega */
+export const DIFUSOR_TI = { lx: 2.15, lz: 0.4, alt: 3.6, r: 0.35 } as const;
+export const difusorDe = (e: { x: number; z: number }) => daCabineTI(e, DIFUSOR_TI.lx, DIFUSOR_TI.lz);
+/** a TEMPESTADE do campus (no lugar dos telões de código): as nuvens por cima das fileiras (altura acima do salão) e de
+ *  quanto em quanto tempo cai um raio (s, em média, no campus todo) */
+export const TEMPESTADE_TI = { alt: 24, cadaRaio: 0.45 } as const;
 
 // ───────────── a REDE: plataformas e pontes ─────────────
 export type PlatTC = { id: string; x: number; z: number; r: number; /** piso acima do pátio do lounge */ h: number };
@@ -270,7 +281,11 @@ export function colisoresDoComplexo(rLounge: number): { x: number; z: number; r:
   // a COLUNA da torre: um ANEL de colisores no contorno (não um círculo cheio — a colisão é no plano: o cheio empurrava pra
   // fora quem está LÁ EM CIMA, no topo, que fica no mesmo xz); na base só se anda em volta
   { const n = Math.ceil((2 * Math.PI * TORRE_TI.colR) / 0.9); for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; out.push({ x: TORRE_TI.x + Math.cos(a) * TORRE_TI.colR, z: TORRE_TI.z + Math.sin(a) * TORRE_TI.colR, r: 0.7 }); } }
-  for (const e of ESTACOES_TI) for (const k of [-1, 0, 1]) out.push({ x: e.x + k * (MESA_TI.larg / 2 - 0.6), z: e.z, r: 0.75 });   // as MESAS do campus   // o NÚCLEO do monumento da Cyber Room (fechado, por ora)   // o tronco da ÁRVORE DA VIDA no meio do disco rasta
+  for (const e of ESTACOES_TI) {   // as CABINES do campus (a mesa, os painéis) e o DIFUSOR do lado
+    for (const x of [-0.65, 0.65]) out.push({ ...daCabineTI(e, x, CABINE_TI.mesaZ + 0.1), r: 0.75 });
+    for (const sx of [-1, 1]) for (const z of [-0.7, 0.5]) out.push({ ...daCabineTI(e, sx * CABINE_TI.painelX, z), r: 0.4 });
+    out.push({ ...difusorDe(e), r: DIFUSOR_TI.r + 0.1 });
+  }   // as MESAS do campus   // o NÚCLEO do monumento da Cyber Room (fechado, por ora)   // o tronco da ÁRVORE DA VIDA no meio do disco rasta
   for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; out.push({ x: TORRE_RASTA.x + Math.cos(a) * TORRE_RASTA.r, z: TORRE_RASTA.z + Math.sin(a) * TORRE_RASTA.r, r: 0.8 }); }
   return out;
 }
