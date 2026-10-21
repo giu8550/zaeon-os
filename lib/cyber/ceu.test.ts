@@ -1,4 +1,4 @@
-import { RASTA } from "./temploCosmico";
+import { PLATS, RASTA } from "./temploCosmico";
 import { describe, expect, it } from "vitest";
 import { CAPELA_NA_ZAEON, PISTA, PISO_FESTA, BURACO_NEGRO, CIDADE, ESCADAS, FIO, alturaDoFio, alturaDaEscada, DEGRAU, ESCADA_LEVA, bocaDeEscada, chaoDaNave, colisoresDaCidade, foraDaIlha, mundo, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, daSala, paredeDaSala, MOVEIS, PALCO, MESA_DJ, alturaNaCidade, naCabineDJ, naSala, pontoDaCabineDJ, rumoDoDJ, naPistaDeDanca, rumoDaPista, bocaDaEscada, bocaDoElevador, posDaViagem, TORRE_DJ, pontoDaEscada, uDaViagem, rumoDaViagem, VIAGEM_ESCADA, naEscadaDoLounge, rotDaSala, ALTURA_LOUNGE, ESCADA_LOUNGE, inicioDaPonta, naEscadaLocal, pisoNoAr, pisoDeVoo, LOUNGE_ANGULO, LOUNGE_MEIA_ABERTURA, DOCA_ANGULO, DOCA_MEIA_ABERTURA, solidosDaCidade, naTorreDJ, foraDaTorreDJ, CAMPO_DJ, BN_NA_SALA, TRELICA, type NomeSala } from "./ceu";
 import { NOS, noDoAnel } from "./buracos";
@@ -191,8 +191,9 @@ describe("Zaeon mega: o LOUNGE numa plataforma própria, lá no alto, ligada por
     expect(MOVEIS.lounge.filter((m) => m.tipo === "caixaSom").every((m) => m.solido === false)).toBe(true);   // suspensas: o chão é livre
     for (const m of MOVEIS.lounge) for (const [a, b] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
       const lx = (a! * m.larg) / 2, lz = (b! * m.prof) / 2, x = m.x + lx * Math.cos(m.rot) + lz * Math.sin(m.rot), z = m.z - lx * Math.sin(m.rot) + lz * Math.cos(m.rot);
-      const rasta = Math.hypot(m.x - RASTA.x, m.z - RASTA.z) < RASTA.r;   // (os do LOUNGE RASTA ficam no disco dele — o Templo Cósmico)
-      expect(rasta ? Math.hypot(x - RASTA.x, z - RASTA.z) : Math.hypot(x, z)).toBeLessThan(L.r);
+      // (os do LOUNGE RASTA e dos LOUNGES ESTUDANTIS ficam nas plataformas deles — o Templo Cósmico)
+      const plat = PLATS.find((p) => p.id !== "salao" && Math.hypot(m.x - p.x, m.z - p.z) < p.r);
+      expect(plat ? Math.hypot(x - plat.x, z - plat.z) : Math.hypot(x, z)).toBeLessThan(plat ? plat.r : L.r);
     }
     expect(PALCO.h).toBeGreaterThan(2);
   });

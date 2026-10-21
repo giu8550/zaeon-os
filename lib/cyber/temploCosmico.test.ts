@@ -4,7 +4,7 @@ import { NOS } from "./buracos";
 import { FIO, saidaDaSala } from "./fiosCosmicos";
 import { definirNivel } from "./nivelAtivo";
 import { nivelDoPonto } from "./niveis";
-import { ALCANCE_DUELO, ARVORE_RASTA, BOCA_SAIDA_SALAO, CASAIS, CYBER, NUCLEO_CYBER, barradoNaCupula, portaDaCupula, CHEGADA_SALAO, ESP, FESTAS, PIRAMIDE, PONTES, PONTE_LOUNGE, RASTA, SALAO, TEMPLO_RASTA, alturaDaEscadariaRasta, naPiramide } from "./temploCosmico";
+import { ESTUDO, ALCANCE_DUELO, ARVORE_RASTA, BOCA_SAIDA_SALAO, CASAIS, CYBER, NUCLEO_CYBER, barradoNaCupula, portaDaCupula, CHEGADA_SALAO, ESP, FESTAS, PIRAMIDE, PONTES, PONTE_LOUNGE, RASTA, SALAO, TEMPLO_RASTA, alturaDaEscadariaRasta, naPiramide } from "./temploCosmico";
 import { ESCADARIA, TEMPLO, curvaDaEscadaria, noTemplo } from "./templo";
 import { RotinaExaminer, lugarDeGuarda } from "./examiner";
 
@@ -113,5 +113,20 @@ describe("o Templo Cósmico: o SALÃO central e a ponte pro lounge", () => {
     const fora = barradoNaCupula({ x: TEMPLO.x, z: TEMPLO.z }, false)!; expect(noTemplo(fora, 0)).toBe(false);
     expect(barradoNaCupula({ x: TEMPLO.x, z: TEMPLO.z }, true)).toBeNull(); expect(barradoNaCupula({ x: 0, z: 0 }, false)).toBeNull();
     expect(colisoresDaCidade().every((c) => Math.hypot(c.x - mundo(daSala(L, fora.x, fora.z)).x, c.z - mundo(daSala(L, fora.x, fora.z)).z) > c.r + 0.3)).toBe(true);
+  });
+  it("os LOUNGES ESTUDANTIS: dos dois lados do salão, no nível dele, com rodas de sofá; depois deles a ESCADA sobe até a festa", () => {
+    const cs = colisoresDaCidade();
+    for (const [e, ida, escada] of [[ESTUDO, "estudoL", "lounge"], [{ ...ESP(ESTUDO), h: ESTUDO.h }, "estudoR", "rasta"]] as const) {
+      expect(alturaNaCidade(W(e.x, e.z + 20))).toBe(ALTURA_LOUNGE + ESTUDO.h);
+      // salão → lounge estudantil → escada → festa: sem nada no caminho (o corredor fica livre) e subindo sempre
+      const a = PONTES.find((p) => p.id === ida)!, b = PONTES.find((p) => p.id === escada)!, pts = [a.a, a.b, b.a, b.b];
+      let ant = -Infinity;
+      for (let k = 0; k < pts.length - 1; k++) for (let u = 0; u <= 1; u += 0.02) {
+        const p = W(pts[k]!.x + (pts[k + 1]!.x - pts[k]!.x) * u, pts[k]!.z + (pts[k + 1]!.z - pts[k]!.z) * u), h = alturaNaCidade(p);
+        expect(h).toBeGreaterThanOrEqual(ant - 1e-6); ant = h;
+        expect(cs.every((c) => Math.hypot(c.x - p.x, c.z - p.z) > c.r + 0.5), `${ida} ${k} ${u.toFixed(2)}`).toBe(true);
+      }
+      expect(ant).toBeGreaterThan(ALTURA_LOUNGE - 0.5);   // (chegou no pátio da festa)
+    }
   });
 });

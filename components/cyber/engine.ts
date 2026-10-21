@@ -3907,6 +3907,10 @@ export class CyberEngine {
       const ls = c.caixasAmbiente.filter((x) => x.sala === n).map((x) => { const l = this.som.loop(`ambiente-${n}`, x.obj, { dist: DISTANCIA.ambiente, volume: 0.5 }); this.som.volumeLoop(l, 1); return l; });
       this.loopsAmbiente.set(n, ls);
     }
+    if (this.som && n === "lounge") {   // os LOUNGES ESTUDANTIS do Templo Cósmico: o som calmo de estudo (o da Sala do Saber)
+      const ls = c.caixasEstudo.map((obj) => { const l = this.som.loop("ambiente-biblioteca", obj, { dist: DISTANCIA.ambiente, volume: 0.5 }); this.som.volumeLoop(l, 1); return l; });
+      this.loopsAmbiente.set(n, ls);
+    }
   }
   /** DESMONTA uma sala (a pessoa saiu dela): o que é do engine nela sai junto */
   private desmontarSalaAqui(n: NomeSala) {
