@@ -1,6 +1,6 @@
 # RAG por turma e por aluno, dentro do chat — design
 
-**Data:** 2026-10-21 · **Dono:** Martinez · **Status:** aguardando aprovação (revisado após a leitura de um revisor independente)
+**Data:** 2026-10-21 · **Dono:** Martinez · **Status:** aprovado pelo dono em 2026-10-21 (revisado após a leitura de um revisor independente)
 
 ## 1. Intenção
 
