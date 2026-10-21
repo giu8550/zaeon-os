@@ -178,3 +178,19 @@ Na ida pra produção (F1), o Atlas recusou os índices de busca: **o plano do c
 - **Rede:** Postgres só na tailnet (porta 5432 via `tailscale serve`), papel próprio `rag_app` com permissão só nas tabelas do RAG.
 - **Backup:** dump diário pro servidor de storage (kvm4000, InterServer/EUA) — obrigatório, porque passa a ter dado de aluno. Depende de acesso SSH a ele.
 - As coleções Mongo `rag_documentos`/`rag_trechos` (vazias) e o script dos índices do Atlas saem.
+
+## 11. F3, recorte do aluno (2026-10-21, decisão do dono: "foca no aluno, sem modo professor")
+
+Feito: o aluno logado sobe **vários PDFs de uma vez** (📎 com seleção múltipla, soltar vários, soltar uma **pasta**
+inteira — até 100 arquivos por soltar), tudo pra **base pessoal** (`donoId` da sessão; nunca turma). Rota
+`app/api/rag/minha-base` (GET lista / POST 1 PDF por requisição, 2 em paralelo / DELETE tira só a permissão dele),
+teto de **50 enviados** (os gerados pelo chat não contam), bandeja por arquivo acima do composer, confirmação da Aura
+por lote, lista **"Minha base"** com status e remover. Escolhas minhas:
+- **1 PDF** segue o chip de hoje (o Gemini lê o PDF inteiro) e a base guarda em silêncio (a Aura só fala se falhar).
+  **Vários**: sem chip — as próximas perguntas já vêm da base (e um chip antigo é tirado, senão o turno leria só ele).
+- Sem sessão (401): comportamento antigo (a IA lê o primeiro PDF), nada sobe.
+
+Fica pra depois: "pra qual turma?" do professor; PDF da biblioteca (▶/arrastar) contando como envio; priorizar no
+turno os documentos recém-enviados. **Achado:** o ramo por palavra-chave da busca usa E entre todas as palavras
+(`websearch_to_tsquery`), então pergunta em frase ("do que trata o Capítulo 2?") só acha pelo vetor — logo depois do
+envio (sem vetor ainda) ou com o embed estourando o prazo, a base não acha nada.

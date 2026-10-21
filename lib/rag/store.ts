@@ -254,3 +254,16 @@ export async function contarBase(db: RagDb, e: EscopoRag): Promise<{ pessoais: n
   );
   return { pessoais: Number(r.rows[0].pessoais), deTurma: e.turmaIds.length === 0 ? 0 : Number(r.rows[0].de_turma) };
 }
+
+/**
+ * Documentos que a pessoa ENVIOU para a base pessoal (teto da "Minha base"): os dela, fora os em erro e os gerados pelo
+ * chat (que têm teto próprio, F4). Documento de turma que também é dela conta — ocupa a lista dela do mesmo jeito.
+ */
+export async function contarEnviadosPessoais(db: RagDb, donoId: string): Promise<number> {
+  const r = await db.query<{ n: string | number }>(
+    `SELECT count(*) AS n FROM rag_documentos
+      WHERE $1::text = ANY(dono_ids) AND status <> 'erro' AND coalesce(origem, '') <> 'gerado'`,
+    [donoId],
+  );
+  return Number(r.rows[0].n);
+}

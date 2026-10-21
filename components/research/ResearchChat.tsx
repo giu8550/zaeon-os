@@ -48,6 +48,7 @@ import { useCerebro } from "@/components/cerebro/useCerebro";
 import { AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
 import { AvisoSoltar, ChipAnexo, useAnexoChat } from "@/components/chat/useAnexoChat";
+import { BarraBase } from "@/components/chat/MinhaBase";
 import {
   carregarThreads, salvarThreads, criarThread, criarSubThread, fecharThread, renomearThread, tocarThread,
   carregarMensagens, salvarMensagens, threadAtiva, marcarAtiva, tituloAPartirDe,
@@ -215,9 +216,11 @@ export default function ResearchChat({
   const focarComposer = () => requestAnimationFrame(() => rootRef.current?.querySelector("textarea")?.focus({ preventScroll: true }));
   const sendRef = useRef<(t?: string) => void>(() => {});
   // 📎 / soltar arquivo na conversa: a IA lê o PDF (não abre o leitor). ▶ da biblioteca também chega aqui.
-  const { anexo, anexoRef, tirar: tirarAnexo, anexarArquivos, soltar, arrastando } = useAnexoChat("pesquisa", {
+  const { anexo, anexoRef, tirar: tirarAnexo, anexarArquivos, soltar, arrastando, envios, versaoBase } = useAnexoChat("pesquisa", {
     focar: focarComposer,
     perguntar: (t) => { onAtivar?.(); sendRef.current(t); },
+    // Minha base (RAG F3): a Aura confirma o lote guardado na conversa
+    aoGuardar: (texto) => setMessages((prev) => [...prev, { id: uid(), role: "assistant", text: texto }]),
   });
   const trocarAba = (id: string) => {
     onAtivar?.();
@@ -715,6 +718,7 @@ export default function ResearchChat({
             placeholder={anexo ? `Pergunte sobre ${anexo.nome}…` : ""}
             onFiles={(f) => void anexarArquivos(f)}
           >
+            <BarraBase envios={envios} versao={versaoBase} />
             {anexo && <ChipAnexo anexo={anexo} onTirar={tirarAnexo} />}
             {paletteOpen && (
               <div className="flex flex-wrap items-center gap-1.5 px-1 pb-2">
