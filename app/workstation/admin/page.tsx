@@ -12,7 +12,8 @@ import {
     SpeakerWaveIcon,
     UsersIcon,
     SparklesIcon,
-    CpuChipIcon
+    CpuChipIcon,
+    BookOpenIcon
 } from "@heroicons/react/24/outline";
 
 
@@ -24,6 +25,7 @@ import VoiceAccessModule from "./modules/VoiceAccessModule";
 import InviteGroupsModule from "./modules/InviteGroupsModule";
 import AgentsModule from "./modules/AgentsModule";
 import FrotaModule from "./modules/FrotaModule";
+import BaseConhecimentoModule from "./modules/BaseConhecimentoModule";
 import { agentsAdmin } from "@/lib/canal/flags";
 import { adminLabelPlugins } from "@/lib/mentores/rota";
 
@@ -64,7 +66,7 @@ const SidebarItem = ({ icon: Icon, label, active, onClick, isOpen }: any) => (
 
 export default function AdminControlRoom() {
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState<"profiles" | "voice" | "invites" | "reports" | "plugins" | "payments" | "agents" | "frota">("profiles");
+    const [activeTab, setActiveTab] = useState<"profiles" | "voice" | "invites" | "reports" | "plugins" | "payments" | "agents" | "frota" | "rag">("profiles");
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [mounted, setMounted] = useState(false);
 
@@ -142,6 +144,14 @@ export default function AdminControlRoom() {
                         onClick={() => setActiveTab('frota')}
                         isOpen={isSidebarOpen}
                     />
+                    {/* RAG F1: PDFs por turma que o chat do Zaeon consulta */}
+                    <SidebarItem
+                        icon={BookOpenIcon}
+                        label="Base de conhecimento"
+                        active={activeTab === 'rag'}
+                        onClick={() => setActiveTab('rag')}
+                        isOpen={isSidebarOpen}
+                    />
                     <SidebarItem
                         icon={DocumentChartBarIcon}
                         label="Reports"
@@ -186,6 +196,7 @@ export default function AdminControlRoom() {
                         {activeTab === 'plugins' && <PluginsModule glassPanel={glassPanel} />}
                         {activeTab === 'agents' && agentsAdmin() && <AgentsModule glassPanel={glassPanel} />}
                         {activeTab === 'frota' && <FrotaModule glassPanel={glassPanel} />}
+                        {activeTab === 'rag' && <BaseConhecimentoModule glassPanel={glassPanel} />}
 
                         {activeTab === 'payments' && (
                             <div className="flex-1 flex items-center justify-center opacity-30">

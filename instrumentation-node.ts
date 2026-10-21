@@ -25,6 +25,14 @@ export async function iniciarWorkerChoresOpcional() {
   } catch (e) { console.warn("[chores-worker] não iniciado:", (e as Error)?.message); }
 }
 
+/** Worker da indexação RAG: RAG_WORKER=1 + RAG_QUEUE=1 + REDIS_URL. Nunca lança. */
+export async function iniciarWorkerRagOpcional() {
+  try {
+    const { iniciarWorkerRag } = await import("@/lib/queue/rag");
+    if (!(await iniciarWorkerRag())) console.warn("[rag-worker] RAG_WORKER=1 mas fila desligada (RAG_QUEUE=1 + REDIS_URL) — não iniciado.");
+  } catch (e) { console.warn("[rag-worker] não iniciado:", (e as Error)?.message); }
+}
+
 export async function iniciarWorkers() {
   const { getRedisConnection, isQueueEnabled, SCHOLAR_QUEUE } = await import("@/lib/queue/scholar");
   if (!isQueueEnabled()) {

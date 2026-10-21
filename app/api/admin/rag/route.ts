@@ -1,0 +1,82 @@
+/**
+ * /api/admin/rag (só admin) — base de conhecimento por turma (RAG F1).
+ *  GET    ?turmaId=                    ⇒ { turmas, documentos } (documentos da turma, sem markdown)
+ *  POST   multipart turmaId + arquivos ⇒ { resultados } (até 10 PDFs por chamada; a UI manda 1 por vez)
+ *  DELETE ?documentoId=&turmaId=       ⇒ { resultado: "removida" | "documento_apagado" }
+ */
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+import { NextResponse } from "next/server";
+import { prisma } from "@/src/lib/prisma";
+import { assertAdmin } from "@/lib/admin/assertAdmin";
+import { ingerirPdf } from "@/lib/rag/ingerir";
+import { listarDocumentos, removerPermissao, type RagDb } from "@/lib/rag/store";
+import { extractPdfStructured } from "@/lib/scholar/pdf";
+import { enfileirarIndexacao } from "@/lib/queue/rag";
+
+const MAX_ARQUIVOS = 10;
+const db = prisma as unknown as RagDb;
+
+const negado = (status: 401 | 403) => NextResponse.json({ error: status === 401 ? "Unauthorized" : "Forbidden" }, { status });
+const ehPdf = (f: File) => f.type === "application/pdf" || /\.pdf$/i.test(f.name);
+
+export async function GET(req: Request) {
+  const a = await assertAdmin();
+  if (!a.ok) return negado(a.status);
+  const turmaId = new URL(req.url).searchParams.get("turmaId") ?? "";
+  const turmas = await (prisma as any).turma.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } });
+  const documentos = turmaId ? await listarDocumentos(db, { turmaId }) : [];
+  return NextResponse.json({ turmas, documentos });
+}
+
+export async function POST(req: Request) {
+  const a = await assertAdmin();
+  if (!a.ok) return negado(a.status);
+  let fd: FormData;
+  try { fd = await req.formData(); } catch { return NextResponse.json({ error: "form_invalido" }, { status: 400 }); }
+  const turmaId = String(fd.get("turmaId") ?? "");
+  const arquivos = fd.getAll("arquivos").filter((x): x is File => typeof x !== "string");
+  if (!turmaId) return NextResponse.json({ error: "turmaId_obrigatorio" }, { status: 400 });
+  if (arquivos.length === 0) return NextResponse.json({ error: "sem_arquivos" }, { status: 400 });
+  if (arquivos.length > MAX_ARQUIVOS) return NextResponse.json({ error: "max_10_arquivos" }, { status: 400 });
+
+  const usuario = await (prisma as any).user.findUnique({ where: { email: a.email }, select: { id: true } });
+  if (!usuario) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const out: Array<Record<string, unknown>> = [];
+  for (const f of arquivos) {
+    if (!ehPdf(f)) { out.push({ nomeArquivo: f.name, status: "erro", erro: "nao_pdf" }); continue; }
+    try {
+      const r = await ingerirPdf(
+        { db, extrair: extractPdfStructured, enfileirar: enfileirarIndexacao },
+        { bytes: new Uint8Array(await f.arrayBuffer()), nomeArquivo: f.name, origem: "admin", criadoPor: usuario.id, permissao: { turmaId } },
+      );
+      out.push({ nomeArquivo: f.name, ...r });
+    } catch (e) {
+      console.error("[rag/admin] ingestão falhou", f.name, (e as Error)?.message);
+      out.push({ nomeArquivo: f.name, documentoId: "", status: "erro", erro: "leitura_falhou", trechos: 0, paginas: 0 });
+    }
+  }
+  return NextResponse.json({ resultados: out });
+}
+
+export async function DELETE(req: Request) {
+  const a = await assertAdmin();
+  if (!a.ok) return negado(a.status);
+  const sp = new URL(req.url).searchParams;
+  const documentoId = sp.get("documentoId") ?? "";
+  const turmaId = sp.get("turmaId") ?? "";
+  if (!documentoId || !turmaId) return NextResponse.json({ error: "documentoId_e_turmaId_obrigatorios" }, { status: 400 });
+  // id malformado (não é ObjectId) nem chega ao store: o Prisma lançaria erro de conversão => 500 enganoso.
+  if (!/^[a-f0-9]{24}$/i.test(documentoId)) return NextResponse.json({ error: "documento_inexistente" }, { status: 404 });
+  try {
+    const resultado = await removerPermissao(db, documentoId, { turmaId });
+    return NextResponse.json({ resultado });
+  } catch (e) {
+    const msg = (e as Error)?.message ?? "";
+    // o store lança `documento <id> não existe` quando o documento sumiu (lista velha / outro admin removeu)
+    if (/^documento .+ não existe$/.test(msg)) return NextResponse.json({ error: "documento_inexistente" }, { status: 404 });
+    console.error("[rag/admin] remover falhou", documentoId, msg);
+    return NextResponse.json({ error: "falha_ao_remover" }, { status: 500 });
+  }
+}
