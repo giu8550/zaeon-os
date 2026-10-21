@@ -8,6 +8,8 @@ import { CONVERSA, divaga, episodiosDoDia, limparFala, normalizarFala, promptEpi
 import { gerarFalasSemRepetir, gerarResposta, type DepsTexto } from "./texto";
 import { CONFIG_PADRAO, aplicarMigracoes, novoLote, sanitizarConfig, totalDaFrota } from "./config";
 import { salaDoPonto, spotsDe } from "./lugares";
+import { nivelDoPonto } from "../niveis";
+import { NOS } from "../buracos";
 import { CIDADE, colisoresDaCidade, mundo, salaEm } from "../ceu";
 
 const frota = gerarFrota(), DIA = 20734, plano = planejarDia(frota, DIA, FLAGS_PADRAO);
@@ -77,13 +79,13 @@ describe("a agenda do dia", () => {
       void agente;
     }
   });
-  it("a proporção: ~58% estudo nas plataformas, ~8% no lounge, ~30% moto, ~5% andando (pouco pedestre na Zaeon)", () => {
+  it("a proporção: ~45% estudo nas plataformas, ~30% nos LOUNGES (o Templo Cósmico), ~20% moto, ~5% andando", () => {
     const t: Record<string, number> = {}; let total = 0;
     for (const { blocos } of todos) for (const b of blocos) if (b.atividade !== "festa") { t[b.atividade] = (t[b.atividade] ?? 0) + dur(b); total += dur(b); }
     const pct = (k: string) => (100 * (t[k] ?? 0)) / total;
-    expect(pct("estudo-plataforma")).toBeGreaterThan(52); expect(pct("estudo-plataforma")).toBeLessThan(64);
-    expect(pct("estudo-lounge")).toBeGreaterThan(4); expect(pct("estudo-lounge")).toBeLessThan(11);
-    expect(pct("moto")).toBeGreaterThan(24); expect(pct("moto")).toBeLessThan(35);
+    expect(pct("estudo-plataforma")).toBeGreaterThan(38); expect(pct("estudo-plataforma")).toBeLessThan(52);
+    expect(pct("estudo-lounge")).toBeGreaterThan(20); expect(pct("estudo-lounge")).toBeLessThan(36);
+    expect(pct("moto")).toBeGreaterThan(14); expect(pct("moto")).toBeLessThan(26);
     expect(pct("andar")).toBeGreaterThan(2); expect(pct("andar")).toBeLessThan(8);
   });
   it("sem universidades no mapa, o estudo é todo na Zaeon (biblioteca, jardim, lounge e a cidadela)", () => {
@@ -302,5 +304,18 @@ describe("regra de ouro: NADA se repete", () => {
     const a = frota.find((x) => !x.cloak)!;
     expect(normalizarFala((await gerarResposta(a, "seco", "oi tudo bem?", 1, deps))!)).not.toBe("iae");
     expect(await gerarResposta(a, "ignora", "oi", 2, deps)).toBeNull();
+  });
+});
+
+describe("o FLUXO entre os níveis: da cidadela pros lounges pelos buracos negros", () => {
+  it("da cidadela pro lounge: anda na cidadela, some no túnel e só reaparece no lounge (nunca visível no nível errado)", () => {
+    const loungeSpot = spotsDe("lounge").find((s) => nivelDoPonto(s, s.y) === "lounge")!, hub = { x: NOS.zaeon.chegada.x + 5, y: CIDADE.pisoY, z: NOS.zaeon.chegada.z };
+    for (const [de, para] of [[hub, loungeSpot], [loungeSpot, hub]] as const) {
+      const v = viagem(de, para, FLAGS_PADRAO, "teste-fluxo", false), seq: string[] = [];
+      for (let u = 0; u <= 1.0001; u += 0.002) { const p = v.em(u); const n = p.oculto ? "túnel" : nivelDoPonto(p, p.y); if (seq.at(-1) !== n) seq.push(n); }
+      const nDe = nivelDoPonto(de, de.y), nPara = nivelDoPonto(para, para.y);
+      expect(seq).toEqual([nDe, "túnel", nPara]);   // (sai do nível dele, some, aparece no outro — sem voar entre os dois)
+      const fim = v.em(1); expect(Math.hypot(fim.x - para.x, fim.z - para.z)).toBeLessThan(0.5);
+    }
   });
 });
