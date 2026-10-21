@@ -20,6 +20,30 @@ export type FiosCosmicosHandle = {
   dispose(): void;
 };
 
+const RUIDO = `float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float n2(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h2(i), h2(i + vec2(1, 0)), f.x), mix(h2(i + vec2(0, 1)), h2(i + vec2(1, 1)), f.x), f.y); }
+  float fbm(vec2 p){ float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { s += a * n2(p); p = p * 2.03 + 1.7; a *= 0.5; } return s; }
+  vec3 paleta(float x){ return 0.5 + 0.5 * cos(6.2831 * (vec3(0.0, 0.33, 0.67) + x)); }`;
+/** o DISCO DE ACREÇÃO (out/2026, o dono: "mais fluidez, cosmicalidade e psicodelia"): o redemoinho de plasma girando em
+ *  rotação DIFERENCIAL (o de dentro mais rápido), em fios de ruído, mais brilhante de um lado (o doppler), com as cores
+ *  GIRANDO na paleta cósmica e o branco quente na borda de dentro. Polar a partir da posição (o anel no plano xy) */
+function materialDisco(R: number, r0: number, r1: number, intensidade: number): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: { uT: { value: 0 }, uR0: { value: R * r0 }, uR1: { value: R * r1 }, uI: { value: intensidade }, uMatiz: { value: 0 } },
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+    vertexShader: "varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+    fragmentShader: `uniform float uT, uR0, uR1, uI, uMatiz; varying vec2 vP; ${RUIDO}
+      void main(){
+        float r = length(vP), a = atan(vP.y, vP.x), rn = clamp((r - uR0) / (uR1 - uR0), 0.0, 1.0);
+        float giro = uT * (0.9 / (0.18 + rn));
+        float n = fbm(vec2(a * 3.0 + giro, rn * 7.0 - uT * 0.25)), fio = fbm(vec2(a * 9.0 + giro * 1.7, rn * 22.0));
+        float brilho = pow(1.0 - rn, 1.5) * (0.35 + 0.9 * n + 0.5 * smoothstep(0.55, 0.9, fio)) * (0.55 + 0.6 * (0.5 + 0.5 * sin(a + 0.7)));
+        vec3 cor = mix(paleta(rn * 0.7 + n * 0.5 + uT * 0.04 + uMatiz), vec3(1.0, 0.92, 0.78), smoothstep(0.25, 0.0, rn) * 0.8);
+        float borda = smoothstep(0.0, 0.04, rn) * smoothstep(1.0, 0.75, rn);
+        gl_FragColor = vec4(cor * brilho * borda * uI, 1.0);
+      }`,
+  });
+}
 const aditivo = (cor: THREE.ColorRepresentation, op: number) => new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
 
 export function criarFiosCosmicos(o: { /** as pistas a desenhar (padrão: as do hub) */ pistas?: readonly FioCosmico[]; low: boolean; cores: Record<NomeSala, number>; starTex: THREE.Texture; /** até onde (m) a câmera enxerga: mais longe que isso, o buraco negro é trazido pra perto,
@@ -29,7 +53,7 @@ export function criarFiosCosmicos(o: { /** as pistas a desenhar (padrão: as do 
   const malha = (g: THREE.BufferGeometry, m: THREE.Material, pai: THREE.Object3D) => { geos.push(g); mats.push(m); const x = new THREE.Mesh(g, m); x.frustumCulled = false; pai.add(x); return x; };
   const halo = glowTex("rgba(255,255,255,0.9)", "rgba(150,120,255,0.18)"); texs.push(halo);
   const sprite = (cor: THREE.ColorRepresentation, op: number, escala: number, pai: THREE.Object3D) => { const m = new THREE.SpriteMaterial({ map: halo, color: cor, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false }); mats.push(m); const s = new THREE.Sprite(m); s.scale.setScalar(escala); pai.add(s); return s; };
-  type Vivo = { f: FioCosmico; disco: THREE.Group; aura: THREE.Sprite; tempestade: ReturnType<typeof criarTempestade>; tg: THREE.Group; bn: THREE.Group };
+  type Vivo = { f: FioCosmico; disco: THREE.Group; aura: THREE.Sprite; tempestade: ReturnType<typeof criarTempestade>; tg: THREE.Group; bn: THREE.Group; lente: THREE.Object3D; shaders: THREE.ShaderMaterial[]; anel: THREE.MeshBasicMaterial; poeira: THREE.ShaderMaterial; matiz: number };
   const vivos: Vivo[] = [];
 
   for (const f of o.pistas ?? fiosCosmicos()) {
@@ -40,19 +64,52 @@ export function criarFiosCosmicos(o: { /** as pistas a desenhar (padrão: as do 
     // (sem boca nem coluna de luz: o fluxo É o caminho — quem chega perto dele é levado)
     // ── o BURACO NEGRO MASSIVO do canto ──
     const bn = new THREE.Group(); bn.position.set(f.bn.x, f.bn.y, f.bn.z); g.add(bn);
-    const R = f.bn.r; malha(new THREE.SphereGeometry(R, 40, 28), new THREE.MeshBasicMaterial({ color: 0x000000 }), bn);
-    sprite(0xffe9c8, 0.9, R * 2.7, bn);
+    const R = f.bn.r, shaders: THREE.ShaderMaterial[] = [];
+    // o HORIZONTE (negro) e a borda dele acesa (o fresnel: o anel de luz contornando a silhueta, mudando de cor)
+    malha(new THREE.SphereGeometry(R, 48, 32), new THREE.MeshBasicMaterial({ color: 0x000000 }), bn);
+    const borda = new THREE.ShaderMaterial({ uniforms: { uT: { value: 0 }, uMatiz: { value: 0 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      vertexShader: "varying vec3 vN; varying vec3 vV; void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }",
+      fragmentShader: `uniform float uT, uMatiz; varying vec3 vN; varying vec3 vV; ${RUIDO}
+        void main(){ float f = pow(1.0 - abs(dot(vN, vV)), 4.0); gl_FragColor = vec4(mix(vec3(1.0, 0.9, 0.75), paleta(uT * 0.06 + uMatiz), 0.55) * f * 1.6, 1.0); }` });
+    shaders.push(borda); malha(new THREE.SphereGeometry(R * 1.06, 48, 32), borda, bn);
+    sprite(0xffe9c8, 0.75, R * 2.4, bn);
     const aura = sprite(cor, 0.5, R * 9, bn);
+    // o DISCO DE ACREÇÃO (inclinado) e o anel de FÓTONS colado no horizonte
     const disco = new THREE.Group(); disco.rotation.set(-Math.PI / 2 + 0.3, 0, 0.2); bn.add(disco);
-    for (const [a, b, c, op] of [[1.15, 3.6, 0xffe3b0, 0.5], [1.15, 2.6, 0xffb45a, 0.55], [1.15, 1.8, clara.getHex(), 0.7]] as const) malha(new THREE.RingGeometry(R * a, R * b, o.low ? 64 : 128), aditivo(c, op), disco);
+    const mDisco = materialDisco(R, 1.12, 4.4, 1.25); shaders.push(mDisco); malha(new THREE.RingGeometry(R * 1.12, R * 4.4, o.low ? 96 : 192, 6), mDisco, disco);
+    const anel = aditivo(0xfff1d6, 0.95); malha(new THREE.TorusGeometry(R * 1.1, R * 0.025, 6, 128), anel, disco);
+    // a LENTE: a luz do disco de TRÁS dobrada pela gravidade — o arco por cima e por baixo do horizonte (Interstellar),
+    // sempre de frente pra quem olha
+    const lente = new THREE.Group(); bn.add(lente);
+    const mLente = materialDisco(R, 1.04, 1.9, 0.8); shaders.push(mLente); malha(new THREE.RingGeometry(R * 1.04, R * 1.9, o.low ? 96 : 160, 3), mLente, lente);
+    // os JATOS nos polos (o plasma escapando pelo eixo), em faixas correndo pra fora
+    const mJato = new THREE.ShaderMaterial({ uniforms: { uT: { value: 0 }, uMatiz: { value: 0 } }, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
+      vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+      fragmentShader: `uniform float uT, uMatiz; varying vec2 vUv; ${RUIDO}
+        void main(){ float n = fbm(vec2(vUv.x * 6.0, vUv.y * 5.0 - uT * 1.6)); float a = vUv.y * vUv.y * (0.4 + 0.8 * n) * smoothstep(1.0, 0.92, vUv.y);   // (forte junto do horizonte, sumindo pra fora)
+          gl_FragColor = vec4(paleta((1.0 - vUv.y) * 0.5 + uT * 0.05 + uMatiz) * a * 0.6, 1.0); }` });
+    shaders.push(mJato);
+    for (const lado of [1, -1]) { const j = malha(new THREE.CylinderGeometry(R * 0.06, R * 0.5, R * 7, 24, 8, true), mJato, disco); j.rotation.x = lado > 0 ? Math.PI / 2 : -Math.PI / 2; j.position.z = lado * R * 3.6; j.scale.y = -1; }
+    // a POEIRA caindo em ESPIRAL (no shader: cada grão gira cada vez mais rápido até sumir no horizonte)
+    const N = o.low ? 500 : 1600, sem = new Float32Array(N * 3); for (let i = 0; i < N; i++) sem.set([Math.random() * 6.283, Math.random(), 0.04 + Math.random() * 0.08], i * 3);
+    const gp = new THREE.BufferGeometry(); gp.setAttribute("position", new THREE.BufferAttribute(new Float32Array(N * 3), 3)); gp.setAttribute("aSem", new THREE.BufferAttribute(sem, 3)); geos.push(gp);
+    const poeira = new THREE.ShaderMaterial({ uniforms: { uT: { value: 0 }, uR: { value: R }, uMapa: { value: o.starTex }, uMatiz: { value: 0 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      vertexShader: `attribute vec3 aSem; uniform float uT, uR; varying float vK;
+        void main(){ float k = fract(uT * aSem.z + aSem.y); float r = uR * mix(5.5, 1.05, k * k); float a = aSem.x + k * k * 9.0 + uT * 0.2;
+          vec3 p = vec3(cos(a) * r, sin(a) * r, (aSem.y - 0.5) * uR * 0.5 * (1.0 - k)); vK = k;
+          vec4 mv = modelViewMatrix * vec4(p, 1.0); gl_PointSize = clamp(2600.0 / -mv.z, 1.0, 9.0); gl_Position = projectionMatrix * mv; }`,
+      fragmentShader: `uniform sampler2D uMapa; uniform float uT, uMatiz; varying float vK; ${RUIDO}
+        void main(){ vec4 tx = texture2D(uMapa, gl_PointCoord); gl_FragColor = vec4(mix(paleta(vK * 0.6 + uT * 0.05 + uMatiz), vec3(1.0), vK * vK) * tx.a * (0.3 + 0.9 * vK), 1.0); }` });
+    shaders.push(poeira); mats.push(poeira); const pts = new THREE.Points(gp, poeira); pts.frustumCulled = false; disco.add(pts);
+    for (const m of shaders) if (!mats.includes(m)) mats.push(m);
     // ── a TEMPESTADE em volta: nuvens escuras girando e raios — fraca de longe, forte chegando ──
     const tg = new THREE.Group(); tg.position.set(f.bn.x, 0, f.bn.z); g.add(tg);
     const tempestade = criarTempestade({ low: o.low, yBase: f.bn.y - 70, yTopo: f.bn.y + 90, raioMax: FIO.espiralR + 60, alvoPonta: new THREE.Vector3(0, f.bn.y, 0), cor: cor.clone().multiplyScalar(0.35), semAbismo: true, densidade: 0.7, nuvens: o.low ? 40 : 90 });
     tg.add(tempestade.group); tempestade.definir(0.25, false);
-    vivos.push({ f, disco, aura, tempestade, tg, bn });
+    vivos.push({ f, disco, aura, tempestade, tg, bn, lente, shaders, anel, poeira, matiz: vivos.length * 0.25 });
   }
 
-  const raio = new THREE.Vector3(); let vista = (o.alcanceVista ?? 2600) * 0.72;
+  const raio = new THREE.Vector3(), lenteAlvo = new THREE.Vector3(); let vista = (o.alcanceVista ?? 2600) * 0.72;
   /** põe `obj` (de posição real `x,y,z`) a no máximo `vista` m de quem olha, encolhido na mesma proporção — e, longe,
    *  um pouco MAIOR que o real (até `realce`×: o farol no horizonte que chama pra ir até lá) */
   const aproximar = (obj: THREE.Object3D, x: number, y: number, z: number, eu: V3 | undefined, realce = 1) => {
@@ -64,8 +121,11 @@ export function criarFiosCosmicos(o: { /** as pistas a desenhar (padrão: as do 
     group, alvos,
     atualizar(dt, t, eu) {
       for (const v of vivos) {
-        v.disco.rotation.z += dt * 0.22;
+        v.disco.rotation.z += dt * 0.05;
         aproximar(v.bn, v.f.bn.x, v.f.bn.y, v.f.bn.z, eu, 2.6); aproximar(v.tg, v.f.bn.x, 0, v.f.bn.z, eu, 1.6);
+        for (const m of v.shaders) { m.uniforms.uT!.value = t; m.uniforms.uMatiz!.value = v.matiz; }
+        v.anel.color.setHSL((t * 0.03 + v.matiz) % 1, 0.6, 0.85);
+        if (eu) { v.bn.updateMatrixWorld(); lenteAlvo.set(eu.x, eu.y, eu.z); v.bn.parent?.localToWorld(lenteAlvo); v.lente.lookAt(lenteAlvo); }   // (a lente sempre de frente pra quem olha)
         // o quanto a pessoa está perto do buraco negro: a tempestade (e os raios) e a aura crescem
         const k = eu ? pertoDoBuraco(v.f, eu) : 0;
         v.tempestade.definir(0.25 + 0.75 * k, k > 0.15);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CIDADE, colisoresDaCidade, mundo } from "./ceu";
 import { VOO } from "./voo";
-import { FIO, capturaDoFluxo, fioNaBoca, fiosCosmicos, pertoDoBuraco, pistasDeSaida, pontoDoFio, uDaViagemFio, velDoFluxo } from "./fiosCosmicos";
+import { ATRACAO, FIO, capturaDoFluxo, comecarTragada, naAtracao, passoTragada, posDaTragada, fioNaBoca, fiosCosmicos, pertoDoBuraco, pistasDeSaida, pontoDoFio, uDaViagemFio, velDoFluxo } from "./fiosCosmicos";
 import { ALTURA_LOUNGE, salaEm } from "./ceu";
 import { SALAO } from "./temploCosmico";
 
@@ -59,5 +59,16 @@ describe("as pistas cósmicas (os fluxos até os buracos negros dos cantos)", ()
       // a pista não atravessa o disco da sala (contorna por fora) depois de sair da porta
       for (let u = 0.08; u <= 1; u += 0.01) { const p = pontoDoFio(f, u); expect(Math.hypot(p.x - L.x, p.z - L.z)).toBeGreaterThan(L.r - 2); }
     }
+  });
+  it("o MAGNETISMO: longe o caminho é livre; a ATRACAO.raio do horizonte ele pega e traga numa espiral que fecha e acelera", () => {
+    const f = fios[0]!, b = f.bn;
+    expect(naAtracao(fios, pontoDoFio(f, 0.1))).toBeNull();   // perto da Zaeon, na pista: livre (o fluxo automático saiu)
+    expect(naAtracao(fios, { x: b.x + b.r + ATRACAO.raio + 20, y: b.y, z: b.z })).toBeNull();
+    const p = { x: b.x + b.r + ATRACAO.raio - 30, y: b.y + 120, z: b.z }; expect(naAtracao(fios, p)?.sala).toBe(f.sala);
+    const v = comecarTragada(f, p); let t = 0, chegou = false, rAnt = v.r, vMax = 0, giro = 0, angAnt = v.ang;
+    while (!chegou && t < 60) { const r0 = v.r; chegou = passoTragada(v, 1 / 30).chegou; t += 1 / 30; vMax = Math.max(vMax, (r0 - v.r) * 30); expect(v.r).toBeLessThanOrEqual(rAnt + 1e-9); rAnt = v.r; giro += v.ang - angAnt; angAnt = v.ang; }
+    expect(chegou).toBe(true); expect(t).toBeGreaterThan(4); expect(t).toBeLessThan(25);   // uns segundos de espiral — não um teletransporte
+    expect(vMax).toBeGreaterThan(150); expect(giro).toBeGreaterThan(Math.PI);   // acelera e dá a volta
+    const q = posDaTragada(v); expect(Math.abs(q.y - b.y)).toBeLessThan(20); expect(Math.hypot(q.x - b.x, q.z - b.z)).toBeLessThan(b.r * ATRACAO.abre + 1);
   });
 });
