@@ -35,7 +35,7 @@ export type IngerirEntrada = {
 export type IngerirResultado = {
   documentoId: string;
   status: "novo" | "reaproveitado" | "erro";
-  erro?: "grande_demais" | "sem_texto" | "leitura_falhou";
+  erro?: "grande_demais" | "sem_texto" | "leitura_falhou" | "indexacao_falhou";
   trechos: number;
   paginas: number;
 };
@@ -97,7 +97,15 @@ export async function ingerirPdf(deps: IngerirDeps, e: IngerirEntrada): Promise<
     return { documentoId: doc.id, status: "erro", erro, trechos: 0, paginas };
   }
 
-  const total = await gravarTrechos(db, doc.id, trechosCortados, { turmaIds: doc.turmaIds, donoIds: doc.donoIds });
-  await deps.enfileirar(doc.id);
-  return { documentoId: doc.id, status: "novo", trechos: total, paginas };
+  try {
+    const total = await gravarTrechos(db, doc.id, trechosCortados, { turmaIds: doc.turmaIds, donoIds: doc.donoIds });
+    await deps.enfileirar(doc.id);
+    return { documentoId: doc.id, status: "novo", trechos: total, paginas };
+  } catch (err) {
+    // Sem isto o documento ficaria "indexando" para sempre e um re-upload viraria "reaproveitado".
+    // Em "erro", o re-upload apaga e reprocessa (dedupe ignora documento em erro).
+    console.warn("[rag] ingestão: falha após criar o documento", doc.id, (err as Error)?.message ?? err);
+    await marcarErro(db, doc.id, "indexacao_falhou");
+    return { documentoId: doc.id, status: "erro", erro: "indexacao_falhou", trechos: 0, paginas };
+  }
 }

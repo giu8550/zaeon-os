@@ -129,4 +129,21 @@ describe("ingerirPdf", () => {
     expect(enfileirar).not.toHaveBeenCalled();
     expect(await buscarPorHash(db, db.documentos[0].hash)).not.toBeNull();
   });
+
+  it("enfileirar rejeita => erro indexacao_falhou, documento em erro; re-upload reprocessa como novo", async () => {
+    const { deps, extrair, db } = setup();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const falha = { ...deps, enfileirar: vi.fn(async () => { throw new Error("fila fora"); }) };
+    const r = await ingerirPdf(falha, entrada("t1"));
+    expect(r).toMatchObject({ status: "erro", erro: "indexacao_falhou", trechos: 0 });
+    expect(db.documentos[0].status).toBe("erro");
+    expect(db.documentos[0].erro).toBe("indexacao_falhou");
+
+    const r2 = await ingerirPdf(deps, entrada("t1"));
+    expect(r2.status).toBe("novo");
+    expect(extrair).toHaveBeenCalledTimes(2);
+    expect(db.documentos).toHaveLength(1);
+    expect(db.documentos[0].status).toBe("indexando");
+    expect(db.documentos.find((d) => d.id === r.documentoId)).toBeUndefined();
+  });
 });
