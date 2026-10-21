@@ -3312,6 +3312,8 @@ export class CyberEngine {
     // dentro de um LOUNGE ESTUDANTIL (paredes sólidas): o som de fora chega ABAFADO
     { const y0 = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, dentro = this.noCeu && this.nivel === "lounge" && !this.jet.noAr && dentroDoEstudo(this.eu.pos, this.eu.alt - y0);
       s.abafar(dentro ? 1 : 0); this.noAndarDeCima = dentro && this.eu.alt - y0 - ALTURA_LOUNGE > ESTUDO.h + 2; }
+    // a TEMPESTADE do campus de TI: o estalo de cada raio no difusor que ele acertou (perto, alto; longe, some)
+    if (this.cidade && this.nivel === "lounge") for (const r of this.cidade.raiosCampus()) { const p = new THREE.Vector3(r.x, r.y, r.z); if (p.distanceToSquared(this.eu.pos.clone().setY(this.eu.alt)) < 90 * 90) s.tocar("raio", p, { dist: { ref: 8, max: 75, rolloff: 1, modelo: "linear" }, volume: 0.22, taxa: 1.1 + Math.random() * 0.4 }); }
     s.atualizar(dt);
   }
   /** está num andar de CIMA de um lounge estudantil (os outros precisam da altura: pela posição, seria o térreo) */
