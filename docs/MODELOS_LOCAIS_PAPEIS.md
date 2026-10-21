@@ -21,9 +21,9 @@ que o aluno vê em streaming continua no Google (Vertex global + gemini-3.5-flas
 **qwen3 4B ficou fora:** o `qwen3:4b` do Ollama é o build thinking-2507 (contexto 262k), que pensa sempre.
 Puxar `qwen3:4b-instruct-2507` na Contabo e setar `LOCAL_CURTO_MODELO=zaeon-local-mini` resolve sem deploy.
 
-**Memória da Contabo:** Ollama com `mem_limit 42g`, `MAX_LOADED_MODELS=3`, `KEEP_ALIVE=30m` (o 24h do gpt-oss no
-litellm-config não vale na prática: `ollama ps` mostra 30 min). Com o qwen3-coder do Octa (18 GB) carregado, os
-outros são despejados → frio é comum. Por isso os tetos (guard 90 s, curto 150 s) e `maxEmVoo` 2/1.
+**Memória da Contabo:** Ollama com `mem_limit 42g`, `MAX_LOADED_MODELS=3`, `KEEP_ALIVE=30m` (o 24h do gpt-oss saiu
+no #498). coder do Octa (18 GB) + gpt-oss (13 GB) + guard (5,6 GB) cabem juntos nos 3 slots; o qwen3:4b fora do
+uso libera o slot. Ocioso > 30 min = frio. Por isso os tetos (guard 90 s, curto 150 s) e `maxEmVoo` 2/1.
 
 **Fora do caminho crítico de propósito:** `classify` (intenção, antes de cada turno, teto 8 s), `planQuery`
 (12 s), plan/reason do harness (15 s). Mesmo o melhor quente do gpt-oss (17 s) não cabe; e com NUM_PARALLEL=1
