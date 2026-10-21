@@ -33,6 +33,8 @@ import { criarBuracoPortal } from "./BuracoPortal";
 import { criarFiosCosmicos } from "./FiosCosmicos";
 import { saidaDaSala } from "@/lib/cyber/fiosCosmicos";
 import { criarTrafegoCeu } from "./TrafegoCeu";
+/** o tráfego simulado (carros e motos indo e vindo dos buracos negros): desligado até o fluxo REAL de gente */
+const TRAFEGO_NO_CEU = false as boolean;
 import { NIVEIS_SEPARADOS, type IdNivel } from "@/lib/cyber/nivelAtivo";
 import { criarCoracao } from "./CoracaoZaeon";
 import { criarEstacoes } from "./EstacoesAgentes";
@@ -233,7 +235,8 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   const euLocal = { x: 0, y: -1e4, z: 0 };   // (onde a pessoa está, local da ilha — o engine conta a cada quadro)
   if (fios) { add(fios.group, ilha); alvos.push(...fios.alvos); fios.group.traverse((n) => { n.userData.semLote = true; }); }   // (anima: fora dos lotes)
   // ── o TRÁFEGO DO CÉU: carros e motos pelos anéis de voo, saindo e entrando nos buracos negros (components/cyber/TrafegoCeu) ──
-  const trafego = NIVEIS_SEPARADOS ? criarTrafegoCeu({ low, starTex }) : null;
+  // (o TRÁFEGO de mentira das pistas saiu — out/2026, o dono: "queremos fluxo real; vemos isso depois" — `TRAFEGO_NO_CEU`)
+  const trafego = NIVEIS_SEPARADOS && TRAFEGO_NO_CEU ? criarTrafegoCeu({ low, starTex }) : null;
   if (trafego) { add(trafego.group, ilha); trafego.group.traverse((n) => { n.userData.semLote = true; }); }
   // ── as SALAS (os níveis — lib/cyber/nivelAtivo): cada uma é MONTADA só quando a pessoa entra nela e DESMONTADA quando
   //    sai (com os níveis separados, só o nível da pessoa existe de verdade: carrega um de cada vez — o jogo leve em

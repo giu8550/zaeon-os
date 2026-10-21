@@ -77,7 +77,7 @@ import { criarRifleCosmico, type RifleHandle } from "./RifleCosmico";
 import { CAMERA_MOTO_PERTO } from "@/lib/cyber/camera";
 import { criarCarroHex, type CarroHandle } from "./CarroHex";
 import { definirNivel, NIVEIS_SEPARADOS, type IdNivel } from "@/lib/cyber/nivelAtivo";
-import { FIO as FIO_COSMICO, capturaDoFluxo, fiosCosmicos, noBuracoNegro, pontoDoFio, saidaDaSala, velDoFluxo, type FioCosmico } from "@/lib/cyber/fiosCosmicos";
+import { FIO as FIO_COSMICO, comecarTragada, fiosCosmicos, naAtracao, passoTragada, pertoDoBuraco, posDaTragada, saidaDaSala, type Tragada } from "@/lib/cyber/fiosCosmicos";
 import { nivelDoPonto, proximoNivel } from "@/lib/cyber/niveis";
 import { LOTES_CARRO, pisoDaVaga, posseDosCarros, vagaDoLote, vagasDeCarro, type CarroDirigido, type CarroLargado, type PosseCarro, type VagaCarro } from "@/lib/cyber/carros";
 import { criarPisoCarros, type PisoCarrosHandle } from "./EstacionamentoCarros";
@@ -685,7 +685,8 @@ export class CyberEngine {
   private carros: CarroFrota[] = [];
   /** o TECIDO CÓSMICO (lib/cyber/fiosCosmicos): a prancha levando pelo fio (k 0..1, ida ou volta), a boca armada (só
    *  pega de novo depois de sair dela), a sala armada (o buraco negro de volta) e a travessia DIRETA pedida */
-  private fio: { f: FioCosmico; u: number; abriu: boolean } | null = null; private fluxoArmado = true;
+  /** a TRAGADA do buraco negro (o magnetismo — lib/cyber/fiosCosmicos `passoTragada`): levando a pessoa (ou o veículo dela) */
+  private fio: Tragada | null = null; private fluxoArmado = true;
   private direto: { para: IdNo; pose?: { x: number; z: number; rumo: number } } | null = null;
   /** o NÍVEL em que estou (lib/cyber/nivelAtivo — só ele existe pra mim) e onde eu estava no quadro anterior (um salto
    *  grande = teleporte: o túnel, o portal do Droid) */
@@ -2031,34 +2032,60 @@ export class CyberEngine {
     if (this.moto !== null) { this.moto = null; this.motoDe = undefined; this.motoLargada = null; this.autoPouso = false; }
     this.jet.noAr = false; this.jet.vy = 0;
   }
-  /** o FLUXO: quem chega perto de uma pista (a pé na borda, de mochila, de moto, de carro) é levado por ela até o buraco
-   *  negro do fim; lá, a travessia DIRETA (a pista do hub → a sala dela; a de saída de uma sala → o hub) */
+  /** o MAGNETISMO dos buracos negros (out/2026, o dono): o caminho até eles é LIVRE (de carro, de moto, de mochila); a
+   *  `ATRACAO.raio` m do horizonte, ele puxa — uma espiral que fecha e acelera — e, no horizonte, a travessia DIRETA (o
+   *  buraco negro de uma pista do hub → a sala dela; o de saída de uma sala → o hub) */
   private atualizarFluxo(dt: number) {
     if (!NIVEIS_SEPARADOS || this.menu || this.direto || this.tunel || this.pilotando || this.bordo || this.nascendo || !this.nivel) return;
     const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, eu = this.eu;
     if (this.fio) {
-      const v = this.fio; v.u = Math.min(1, v.u + (dt * velDoFluxo(v.u)) / v.f.comprimento);
-      if (v.u >= 0.999 && !v.abriu) { v.abriu = true; this.abrirDireto(v.f.saida ? "zaeon" : v.f.sala, v.f.saida ? this.chegadaPertoDoCarro() : undefined); }
+      const v = this.fio, { chegou } = passoTragada(v, dt);
+      if (chegou && !v.abriu) { v.abriu = true; this.abrirDireto(v.f.saida ? "zaeon" : v.f.sala, v.f.saida ? this.chegadaPertoDoCarro() : undefined); }
       return;
     }
     const pistas = this.nivel === "zaeon" ? fiosCosmicos() : ehSala(this.nivel) ? [saidaDaSala(this.nivel)] : null;
     if (!pistas) return;
     const p = { x: eu.pos.x - CIDADE.centro.x, y: eu.alt - ilhaY, z: eu.pos.z - CIDADE.centro.z };
-    // voou até o HORIZONTE de um buraco negro (de carro, de moto, de mochila): ele puxa — o fluxo leva pela espiral final
-    const bn = noBuracoNegro(pistas, p);
-    if (bn) { this.fio = { f: bn, u: 0.93, abriu: false }; this.fluxoArmado = false; if (this.jet.noAr) { this.jet.noAr = false; this.jet.vy = 0; } this.alvo = null; this.alvoDepois = null; this.som.tocar("rise", eu.av.group.position, { dist: DISTANCIA.perto }); return; }
-    const pega = capturaDoFluxo(pistas, p);
-    if (!pega) { if (!capturaDoFluxo(pistas, p, FIO_COSMICO.captura * 1.5)) this.fluxoArmado = true; return; }   // (afastou: arma de novo)
-    if (!this.fluxoArmado) return;
-    this.fio = { f: pega.f, u: pega.u, abriu: false }; this.fluxoArmado = false;
+    const f = naAtracao(pistas, p);
+    if (!f) { this.fluxoArmado = true; return; }
+    if (!this.fluxoArmado) return;   // (acabou de chegar de um túnel ali perto: só depois de se afastar)
+    this.fio = comecarTragada(f, p); this.fluxoArmado = false;
     if (this.jet.noAr) { this.jet.noAr = false; this.jet.vy = 0; }
     this.alvo = null; this.alvoDepois = null; this.sitT = 0;
     this.som.tocar("rise", eu.av.group.position, { dist: DISTANCIA.perto });
   }
-  /** onde o fluxo está levando agora (MUNDO) e o rumo — a pessoa, ou o carro/a moto com ela */
+  /** onde a tragada está levando agora (MUNDO) e o rumo — a pessoa, ou o carro/a moto com ela */
   private posNoFluxo() {
-    const v = this.fio!, q = pontoDoFio(v.f, v.u), w = mundo(q), ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY;
+    const q = posDaTragada(this.fio!), w = mundo(q), ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY;
     return { x: w.x, y: ilhaY + q.y, z: w.z, rumo: q.rumo };
+  }
+  /** a DISTORÇÃO perto de um buraco negro (out/2026, o dono: "psicodelia e distorção de imagem"): a tela ondula (um
+   *  campo de ruído deslocando os pixels — filtro SVG no canvas), as cores giram e saturam; cresce chegando e no auge
+   *  quando se está sendo tragado. Longe, nenhum filtro (custo zero). No modo LEVE, só as cores */
+  private distorcao: { k: number; svg: SVGSVGElement | null; turb: SVGFETurbulenceElement | null; desl: SVGFEDisplacementMapElement | null } = { k: 0, svg: null, turb: null, desl: null };
+  private distorcaoCosmica(t: number) {
+    const D = this.distorcao, alvo = this.pertoDeBuracoNegro();
+    D.k += (alvo - D.k) * 0.06;
+    const cv = this.R.domElement;
+    if (D.k < 0.015) { if (cv.style.filter) cv.style.filter = ""; return; }
+    if (!this.o.low && !D.svg) {
+      const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg"); svg.setAttribute("width", "0"); svg.setAttribute("height", "0"); svg.style.position = "absolute";
+      const fl = document.createElementNS(ns, "filter"); fl.id = "zaeon-bn-distorce"; fl.setAttribute("x", "-5%"); fl.setAttribute("y", "-5%"); fl.setAttribute("width", "110%"); fl.setAttribute("height", "110%");
+      const turb = document.createElementNS(ns, "feTurbulence"); turb.setAttribute("type", "fractalNoise"); turb.setAttribute("numOctaves", "2"); turb.setAttribute("seed", "7");
+      const desl = document.createElementNS(ns, "feDisplacementMap"); desl.setAttribute("in", "SourceGraphic"); desl.setAttribute("xChannelSelector", "R"); desl.setAttribute("yChannelSelector", "G");
+      fl.append(turb, desl); svg.append(fl); this.o.overlay.appendChild(svg); D.svg = svg; D.turb = turb; D.desl = desl;
+    }
+    const k = D.k, onda = Math.sin(t * 0.7);
+    if (D.turb && D.desl) { D.turb.setAttribute("baseFrequency", `${(0.004 + 0.002 * Math.sin(t * 0.31)).toFixed(4)} ${(0.007 + 0.003 * Math.cos(t * 0.23)).toFixed(4)}`); D.desl.setAttribute("scale", (k * k * 46).toFixed(1)); }
+    cv.style.filter = `${D.svg ? "url(#zaeon-bn-distorce) " : ""}hue-rotate(${(k * 70 * onda).toFixed(1)}deg) saturate(${(1 + 1.3 * k).toFixed(2)}) contrast(${(1 + 0.18 * k).toFixed(2)})`;
+  }
+  /** quanto um buraco negro está PERTO agora (0..1 — a distorção da tela e a tempestade) */
+  private pertoDeBuracoNegro(): number {
+    if (!NIVEIS_SEPARADOS || !this.nivel || this.menu) return 0;
+    const pistas = this.nivel === "zaeon" ? fiosCosmicos() : ehSala(this.nivel) ? [saidaDaSala(this.nivel)] : null; if (!pistas) return 0;
+    const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, p = { x: this.eu.pos.x - CIDADE.centro.x, y: this.eu.alt - ilhaY, z: this.eu.pos.z - CIDADE.centro.z };
+    let k = 0; for (const f of pistas) k = Math.max(k, pertoDoBuraco(f, p));
+    return this.fio ? Math.max(k, 0.55 + 0.45 * (1 - (this.fio.r - this.fio.f.bn.r) / Math.max(1, this.fio.r0 - this.fio.f.bn.r))) : k;
   }
 
   viajarPeloTunel(destino: IdNo | null) {
@@ -4092,7 +4119,8 @@ export class CyberEngine {
     if (!this.visivel || document.hidden) return;
     atualizarCamuflagem(t);   // o relógio único de todos os hologramas do mapa
     const eu = this.eu, euId = this.o.eu.id; this.tAnt = this.agora; this.agora = t;
-    if (!this.menu) { this.atualizarNivel(); this.atualizarFluxo(dt); this.atualizarDuelo(dt); }   // (os NÍVEIS separados: só o meu existe — lib/cyber/niveis; e o FLUXO das pistas cósmicas)
+    if (!this.menu) { this.atualizarNivel(); this.atualizarFluxo(dt); this.atualizarDuelo(dt); }
+    this.distorcaoCosmica(t);   // (os NÍVEIS separados: só o meu existe — lib/cyber/niveis; e o FLUXO das pistas cósmicas)
 
     // MENU: segurar ESPAÇO p/ viajar; personagem fica sentado contemplando
     if (this.menu) {
@@ -4681,6 +4709,7 @@ export class CyberEngine {
   }
 
   dispose() {
+    this.distorcao.svg?.remove(); this.R.domElement.style.filter = "";
     if (this.relogioFrota) clearInterval(this.relogioFrota); this.relogioFrota = null;
     this.sairCorridaCk(); this.frota?.dispose(); this.frota = null; this.pistas?.dispose(); this.pistas = null;
     const w = window as unknown as { __cyber?: CyberEngine }; if (w.__cyber === this) delete w.__cyber;

@@ -150,6 +150,36 @@ export function capturaDoFluxo(pistas: readonly FioCosmico[], p: V3, raio: numbe
   }
   return melhor;
 }
+/** o MAGNETISMO do buraco negro (out/2026, o dono: "no começo o caminho é livre; chegando perto, ele puxa o veículo pro
+ *  centro"): a `ATRACAO.raio` m do horizonte ele te pega e te traga numa ESPIRAL que fecha e acelera até o horizonte
+ *  (aí o túnel). `p` local da ilha; devolve a pista daquele buraco negro (o destino) ou null */
+export const ATRACAO = { raio: 700, abre: 1.1 } as const;
+export function naAtracao(pistas: readonly FioCosmico[], p: V3): FioCosmico | null {
+  for (const f of pistas) if (Math.hypot(p.x - f.bn.x, p.y - f.bn.y, p.z - f.bn.z) < f.bn.r + ATRACAO.raio) return f;
+  return null;
+}
+export type Tragada = { f: FioCosmico; r0: number; r: number; ang: number; y: number; sentido: 1 | -1; abriu: boolean };
+/** começa a ser tragado de `p` (local da ilha): as coordenadas em volta do buraco negro (raio, ângulo, altura) */
+export function comecarTragada(f: FioCosmico, p: V3): Tragada {
+  const r = Math.max(f.bn.r * 1.2, Math.hypot(p.x - f.bn.x, p.z - f.bn.z)), ang = Math.atan2(p.z - f.bn.z, p.x - f.bn.x);
+  return { f, r0: r, r, ang, y: p.y, sentido: 1, abriu: false };
+}
+/** um passo da tragada: o raio fecha (devagar no começo, cada vez mais rápido), o giro acelera e a altura vai pro plano
+ *  do buraco negro. `chegou` = cruzou o horizonte (o túnel abre) */
+export function passoTragada(v: Tragada, dt: number): { chegou: boolean } {
+  const R = v.f.bn.r, k = 1 - Math.max(0, Math.min(1, (v.r - R) / Math.max(1, v.r0 - R)));
+  const vr = 22 + 360 * k * k, vt = 90 + 420 * k;
+  v.r = Math.max(R * 0.9, v.r - vr * dt);
+  v.ang += ((vt / Math.max(v.r, 1)) * dt) * v.sentido;
+  v.y += (v.f.bn.y - v.y) * Math.min(1, dt * (0.5 + 2.5 * k));
+  return { chegou: v.r <= R * ATRACAO.abre };
+}
+/** onde a tragada está (local da ilha) e pra onde se olha (o rumo: girando e caindo pra dentro) */
+export function posDaTragada(v: Tragada): V3 & { rumo: number } {
+  const c = Math.cos(v.ang), s = Math.sin(v.ang), b = v.f.bn;
+  const dx = -s * v.sentido - c * 0.6, dz = c * v.sentido - s * 0.6;
+  return { x: b.x + c * v.r, y: v.y, z: b.z + s * v.r, rumo: Math.atan2(dx, dz) };
+}
 /** voando (de carro, de moto, de mochila) PERTO DO HORIZONTE de um buraco negro: a pista dele (cai nele — o fluxo leva
  *  pela espiral até o fim); `p` local da ilha */
 export function noBuracoNegro(pistas: readonly FioCosmico[], p: V3): FioCosmico | null {
