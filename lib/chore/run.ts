@@ -16,6 +16,7 @@ import { cortarPalavras } from "@/lib/chore/tools";
 import { concluir, cursorDe, diaDe, falhar, fonteHashDe, iniciar, listar, pular, type ChoreDb, type ChoreRow, type ResultadoChore } from "@/lib/chore/store";
 import { decidir, type Decisao } from "@/lib/queue/reenfileirar";
 import type { Leitura } from "@/lib/leitor/cliente";
+import { PULSO_AGENTE_MS, type EstadoAgente } from "@/lib/canal/estadoAgente";
 
 export const CHORE_TOTAL_MS = 90_000;
 export const LINK_ROT_MAX = 20;
@@ -113,7 +114,36 @@ async function materialDigest(db: ChoreDb, row: ChoreRow, agora: Date): Promise<
   return feitas.filter((c) => c.tipo !== "digest" && c.id !== row.id && c.resultado?.texto).map((c) => `- (${c.tipo}) ${cortarPalavras(String(c.resultado!.texto), 80)}`).join("\n");
 }
 
+/** Tools que chamam o modelo: enquanto rodam, o canal vê "redigindo" (antes delas, "pesquisando"). */
+const TOOLS_LLM = new Set<ChoreToolName>(["summarize_short", "extract", "classify", "translate_short"]);
+
+/**
+ * Presença da chore no canal, igual ao turno do agente (#468): "pesquisando" lendo, "redigindo" no
+ * modelo, pulso a cada PULSO_AGENTE_MS (a tela apaga quem fica sem aviso) e "ocioso" no fim — também
+ * quando a chore falha ou é adiada. Best-effort: aviso que falha nunca derruba a chore.
+ */
+function presencaNoCanal(row: ChoreRow, deps: RunDeps) {
+  const ligado = Boolean(row.canalId && deps.avisarEstado);
+  let atual: EstadoAgente = "pesquisando";
+  const avisar = (e: EstadoAgente) => {
+    if (!ligado) return;
+    void Promise.resolve(deps.avisarEstado!(row.canalId!, row.agentKey, e)).catch(() => undefined);
+  };
+  avisar(atual);
+  const pulso = ligado ? setInterval(() => avisar(atual), PULSO_AGENTE_MS) : null;
+  return {
+    estado(e: EstadoAgente) { if (e !== atual) { atual = e; avisar(e); } },
+    parar() { if (pulso) clearInterval(pulso); avisar("ocioso"); },
+  };
+}
+
 export async function runChore(row: ChoreRow, deps: RunDeps, opts: { tentativa?: number } = {}): Promise<RunResultado> {
+  const presenca = presencaNoCanal(row, deps);
+  try { return await executarChore(row, deps, opts, presenca); }
+  finally { presenca.parar(); }
+}
+
+async function executarChore(row: ChoreRow, deps: RunDeps, opts: { tentativa?: number }, presenca: ReturnType<typeof presencaNoCanal>): Promise<RunResultado> {
   const { db } = deps;
   const ini = deps.agora();
   const prazo = ini + CHORE_TOTAL_MS;
@@ -160,6 +190,7 @@ export async function runChore(row: ChoreRow, deps: RunDeps, opts: { tentativa?:
       }
       const args = argsPara(nome, row, lido, cursorAnterior);
       if (args === PULAR) continue;
+      if (TOOLS_LLM.has(nome)) presenca.estado("redigindo");
       const r = await runChoreTool(nome, args, "ler", ctx);
       if (!r.ok) {
         if (r.causa) throw r.causa;                    // erro de LLM → decidir (G4)

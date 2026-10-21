@@ -19,6 +19,7 @@ import { limparSaidaAgente } from "@/lib/canal/saida";
 import type { Leitura, ErroLeitor } from "@/lib/leitor/cliente";
 import { podar, validarContraSchema, type SchemaMin } from "@/lib/chore/schema";
 import { rotaDaChore, type ChoreRow } from "@/lib/chore/store";
+import type { EstadoAgente } from "@/lib/canal/estadoAgente";
 
 export type FaseChore = "ler" | "agir";
 export type ChoreToolName =
@@ -40,6 +41,8 @@ export type ChoreDeps = {
   criarTarefa?: (t: { objetivo: string; fonteUrl?: string | null; agentKey: string; canalId: string | null; requesterId: string | null; idempotencyKey: string }) => Promise<{ id: string }>;
   agora(): number;
   env: Record<string, string | undefined>;
+  /** Presença no canal ("pesquisando"/"redigindo"/"ocioso" — EV_DIGITANDO). Ausente = chore muda, como antes. */
+  avisarEstado?: (canalId: string, agentKey: string, estado: EstadoAgente) => Promise<void> | void;
 };
 
 export type EstadoChore = {
@@ -229,7 +232,7 @@ const summarizeShort: ChoreToolDef = {
     const ctx = c as ChoreCtx;
     if (!String(args?.texto ?? "").trim()) return err("nada para resumir", "empty");
     const foco = args.foco ? ` Foque em: ${String(args.foco).slice(0, 160)}.` : "";
-    const r = await chamarLlm(ctx, { conteudo: args.texto, instrucao: `Resuma o conteúdo em até ${PALAVRAS_MAX} palavras, em português do Brasil, texto corrido, sem títulos, sem imagens e sem links.${foco}` });
+    const r = await chamarLlm(ctx, { conteudo: args.texto, instrucao: `Você é a Aura respondendo no canal a quem pediu o resumo desta página. Em até ${PALAVRAS_MAX} palavras, em português do Brasil, conte o que a página traz de mais útil, como quem explica pra um colega: frases curtas, tom próximo e natural, direto ao ponto. Não comece com "O texto apresenta", "A página reúne" ou parecido; vá direto ao conteúdo. Fiel à fonte: nada que ela não diga. Texto corrido, sem títulos, sem imagens e sem links.${foco}` });
     if (!r.ok) return r.falha;
     const texto = cortarPalavras(limparSaidaAgente(r.texto));
     if (!texto) return err("resumo vazio", "empty");

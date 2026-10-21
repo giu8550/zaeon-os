@@ -147,3 +147,30 @@ describe("fronteira (grep): lib/chore/** não escreve em ResearchWork/Zxiv/Memor
     }
   });
 });
+
+describe("runChore — presença no canal (EV_DIGITANDO)", () => {
+  it("resumir_link: 'pesquisando' lendo → 'redigindo' no modelo → 'ocioso' no fim", async () => {
+    const avisarEstado = vi.fn();
+    const d = deps(fakeDb(), { avisarEstado });
+    const row = await nova(d.db);
+    expect((await runChore(row, d)).status).toBe("done");
+    expect(avisarEstado.mock.calls.map((c) => c[2])).toEqual(["pesquisando", "redigindo", "ocioso"]);
+    expect(avisarEstado.mock.calls[0].slice(0, 2)).toEqual([CANAL, "aura"]);
+  });
+
+  it("chore que falha também volta pra 'ocioso' (a tela não fica presa em 'pesquisando')", async () => {
+    const avisarEstado = vi.fn();
+    const d = deps(fakeDb(), { avisarEstado, lerUrl: vi.fn(async () => { throw new Error("boom"); }) as any });
+    const row = await nova(d.db);
+    await runChore(row, d);
+    expect(avisarEstado.mock.calls.at(-1)?.[2]).toBe("ocioso");
+  });
+
+  it("sem canal na chore = nenhum aviso", async () => {
+    const avisarEstado = vi.fn();
+    const d = deps(fakeDb(), { avisarEstado });
+    const row = await nova(d.db, { destino: { canalId: null as any, parentId: null as any, modo: "thread" } as any });
+    await runChore(row, d).catch(() => undefined);
+    expect(avisarEstado).not.toHaveBeenCalled();
+  });
+});
