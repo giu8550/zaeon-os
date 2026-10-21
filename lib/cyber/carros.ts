@@ -28,8 +28,7 @@ export type LoteCarro = { nome: string; ang: number; r: number; filas: number; p
 export const LOTES_CARRO: readonly LoteCarro[] = [
   // LESTE: entre a escada do jardim (ang 0) e a doca da nave (ang ≈ 0,8–2,7)
   { nome: "leste", ang: 0.42, r: 188, filas: 2, porFila: 4, passo: 4.6, entreFilas: 8 },
-  // OESTE: entre a escada do lounge (π) e a da garagem (4π/3)
-  { nome: "oeste", ang: 3.66, r: 188, filas: 2, porFila: 4, passo: 4.6, entreFilas: 8 },
+  // (o OESTE — a cópia do leste, entre a escada do lounge e a da garagem — saiu: out/2026, o dono, "retire os repetidos")
 ];
 /** o carro da PRAÇA (o 1º que existiu — no chão, perto das motos) */
 export const CARRO_PRACA = { x: -22, z: -132, rumo: 2.01 } as const;

@@ -16,7 +16,7 @@
  */
 import { aleatorioComSemente } from "./audio";
 import { CIDADE, ESTACOES, alturaNaCidade, daSala, estacoesLocais, mundo, rotDaSala, rumoDaPista } from "./ceu";
-import { MIRANTES, MIRANTES_ESTACAO, TELOES } from "./terra";
+import { MIRANTES, MIRANTES_ESTACAO, MIRANTES_PIRAMIDE, TELOES } from "./terra";
 import { POIS, marcoNav } from "./landmarks";
 import { alturaEm, deEscada } from "./nav";
 import { pontoNaRota, rotaAPe, comprimento } from "./caminhos";
@@ -94,7 +94,7 @@ export const LUGARES: readonly Lugar[] = [
   // de frente pros telões dos mirantes 1–3 (o 0 é a Recepção, a casa da Zaeon)
   ...MIRANTES_ESTACAO.map((m, i) => { const f = telaoAFrente(i, 16); return { id: `telao-${m.id}`, atividade: "observar" as const, pos: { x: f.x, z: f.z }, rumo: f.rumo }; }),
   // meditar no alto das pirâmides dos mirantes 1–3 (chega no pé da escada; a subida é parte da atividade)
-  ...[1, 2].map((i) => { const p = peDoMirante(i), m = MIRANTES[i]!; return { id: `mirante-${i}`, atividade: "meditar" as const, pos: p, rumo: Math.atan2(m.x - p.x, m.z - p.z), mirante: i }; }),
+  ...MIRANTES_PIRAMIDE.filter((m) => m.id !== 0).map((m) => m.id).map((i) => { const p = peDoMirante(i), m = MIRANTES[i]!; return { id: `mirante-${i}`, atividade: "meditar" as const, pos: p, rumo: Math.atan2(m.x - p.x, m.z - p.z), mirante: i }; }),
   // passeios pela praça
   ...[[110, 20], [60, -140], [-150, 40], [20, 160], [-60, -180], [170, -60], [-120, -60], [140, 90], [90, -95], [-35, 115], [185, 15], [-175, -15], [30, 180], [-95, 150], [110, -160], [-10, -205]].map(([x, z], i) => ({ id: `praca-${i}`, atividade: "passear" as const, pos: { x: x!, z: z! }, rumo: Math.atan2(-x!, -z!) })),
   // as SALAS DE ESTUDO (biblioteca e jardim — de quem mora nelas): ESTUDAR sentado nos pufes (os das mesas de leitura,

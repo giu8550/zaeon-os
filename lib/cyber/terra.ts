@@ -24,9 +24,9 @@ export const MIRANTES = [45, 135, 225, 315].map((g, id) => ({ id, ang: rad(g), x
 export type Mirante = (typeof MIRANTES)[number];
 /** os mirantes com a ESTAÇÃO (telões, globo, cards, motores, cabos, supertrees e droids): só os 2 do lado do LOUNGE
  *  (oeste: 135° e 225°) — pedido do dono (out/2026, fps): eram 4 cópias; a outra ponta fica limpa */
-export const MIRANTES_ESTACAO = MIRANTES.filter((m) => m.id === 1 || m.id === 2);
+export const MIRANTES_ESTACAO = MIRANTES.filter((m) => m.id === 1);   // (out/2026, o dono: "retire os repetidos" — eram 2 estações iguais; fica a de 135°)
 /** os mirantes que têm a PIRÂMIDE: a Recepção (0, o lar da Zaeon e do tutorial) e os 2 do lado do lounge (o 3 saiu) */
-export const MIRANTES_PIRAMIDE = MIRANTES.filter((m) => m.id !== 3);
+export const MIRANTES_PIRAMIDE = MIRANTES.filter((m) => m.id === 0 || m.id === 1);   // (a do mirante 2 saiu com a estação repetida)
 /** no referencial do mirante: `u` = rumo ao CENTRO da ilha, `v` = de lado → local da ilha */
 export function noMirante(m: Mirante, u: number, v: number): P2 {
   const nx = -Math.cos(m.ang), nz = -Math.sin(m.ang), tx = -Math.sin(m.ang), tz = Math.cos(m.ang);
