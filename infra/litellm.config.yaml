@@ -71,6 +71,54 @@ model_list:
       vertex_location: os.environ/GEMINI_TEXT_LOCATION   # texto: "global" (ver docker-compose.beta.yml)
       vertex_credentials: os.environ/GOOGLE_CREDENTIALS
     model_info: { id: vertex }
+  # ── MODELOS PRÓPRIOS (Contabo: grátis, CPU, dado não sai da nossa máquina) ─────────────────────
+  # O gateway da VPS chama o LiteLLM da Contabo pela tailnet (CONTABO_LLM_URL, sem /v1) com a virtual
+  # key gateway-vps (CONTABO_LLM_KEY). litellm_proxy/ serve chat, embeddings E rerank (testado 2026-10-21).
+  # CPU = lento (6–9 tok/s; carregar modelo frio leva até ~100 s): timeout próprio de 300 s, e NÃO
+  # entram em fallback de nada — quem chama escolhe pelo nome, pra trabalho em que esperar não dói.
+  # model_info.id começa com "contabo": o ledger (lib/llm/pool alvoDe) grava alvo "contabo", custo 0.
+  - model_name: zaeon-local-geral          # gpt-oss-20b — tarefas gerais de bastidor (fica carregado 24h)
+    litellm_params:
+      model: litellm_proxy/gpt-oss-20b
+      api_base: os.environ/CONTABO_LLM_URL
+      api_key: os.environ/CONTABO_LLM_KEY
+      timeout: 300
+    model_info: { id: contabo-geral }
+  - model_name: zaeon-local-coder          # qwen3-coder 30B — código (Octa, entrega depois)
+    litellm_params:
+      model: litellm_proxy/qwen3-coder
+      api_base: os.environ/CONTABO_LLM_URL
+      api_key: os.environ/CONTABO_LLM_KEY
+      timeout: 300
+    model_info: { id: contabo-coder }
+  - model_name: zaeon-local-mini           # qwen3 4B — classificar/extrair coisa curta
+    litellm_params:
+      model: litellm_proxy/qwen3-4b
+      api_base: os.environ/CONTABO_LLM_URL
+      api_key: os.environ/CONTABO_LLM_KEY
+      timeout: 300
+    model_info: { id: contabo-mini }
+  - model_name: zaeon-local-guard          # llama-guard3 8B — moderação
+    litellm_params:
+      model: litellm_proxy/llama-guard
+      api_base: os.environ/CONTABO_LLM_URL
+      api_key: os.environ/CONTABO_LLM_KEY
+      timeout: 300
+    model_info: { id: contabo-guard }
+  - model_name: zaeon-local-embed          # Qwen3-Embedding 0.6B (1024 dim) — busca do RAG
+    litellm_params:
+      model: litellm_proxy/qwen3-embed
+      api_base: os.environ/CONTABO_LLM_URL
+      api_key: os.environ/CONTABO_LLM_KEY
+      timeout: 120
+    model_info: { id: contabo-embed, mode: embedding }
+  - model_name: zaeon-local-rerank         # bge-reranker-v2-m3 — ordenar trechos do RAG (/v1/rerank)
+    litellm_params:
+      model: litellm_proxy/bge-rerank
+      api_base: os.environ/CONTABO_LLM_URL
+      api_key: os.environ/CONTABO_LLM_KEY
+      timeout: 120
+    model_info: { id: contabo-rerank, mode: rerank }
   # GLM (Zhipu) — OFF por padrão (§5.2: provedor fora de BR/EUA; decisão de política). Descomentar = ligar,
   # e acrescentar "zaeon-pool-glm" ao fim da lista de fallbacks abaixo.
   # - model_name: zaeon-pool-glm

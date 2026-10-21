@@ -10,8 +10,9 @@
  */
 
 /** Provedor UPSTREAM que serviu a chamada. */
-export type Alvo = "vertex" | "gemini-free" | "cloudflare" | "groq" | "glm";
-export type AlvoPool = Exclude<Alvo, "vertex">;
+export type Alvo = "vertex" | "gemini-free" | "cloudflare" | "groq" | "glm" | "contabo";
+/** Provedores GRÁTIS DE TERCEIROS (com teto diário). A Contabo é nossa: grátis, sem teto de terceiro → fora. */
+export type AlvoPool = Exclude<Alvo, "vertex" | "contabo">;
 
 /** Grupo do LiteLLM. Os fallbacks (`-cf`, `-groq`, `-glm`) moram no config, não aqui. */
 export const MODELO_POOL = "zaeon-pool-lite";
@@ -33,7 +34,7 @@ export const TETOS_DIA: Record<AlvoPool, { unidade: string; teto: number; renova
 };
 
 const GRUPO_ALVO: Record<string, AlvoPool> = { "zaeon-pool-lite": "gemini-free", "zaeon-pool-cf": "cloudflare", "zaeon-pool-groq": "groq", "zaeon-pool-glm": "glm" };
-const ALVOS: readonly Alvo[] = ["vertex", "gemini-free", "cloudflare", "groq", "glm"];
+const ALVOS: readonly Alvo[] = ["vertex", "gemini-free", "cloudflare", "groq", "glm", "contabo"];
 
 /**
  * De onde veio a resposta. O header `x-litellm-model-id` é o `model_info.id` do deployment no
@@ -43,7 +44,9 @@ const ALVOS: readonly Alvo[] = ["vertex", "gemini-free", "cloudflare", "groq", "
 export function alvoDe(modelString: string | null | undefined, headerModelId?: string | null): Alvo {
   const h = String(headerModelId ?? "").trim().toLowerCase();
   if ((ALVOS as readonly string[]).includes(h)) return h as Alvo;
+  if (h.startsWith("contabo-")) return "contabo"; // model_info.id dos zaeon-local-* (litellm.config.yaml)
   const m = String(modelString ?? "").trim().toLowerCase();
+  if (m.startsWith("zaeon-local-") || m.startsWith("litellm_proxy/")) return "contabo";
   // O próprio grupo pedido (chamada que falhou antes de saber quem serviu) → o primário do grupo.
   const grupo = GRUPO_ALVO[m];
   if (grupo) return grupo;
