@@ -29,7 +29,9 @@ export const FIO = {
   /** a que distância (m) da pista o FLUXO pega quem chega (a pé na borda, de mochila, de moto ou de carro) */
   captura: 9,
   /** a pista de SAÍDA de cada sala (da porta antiga pra fora, até o buraco negro que leva de volta pro hub): comprimento */
-  saidaComprimento: 3600,
+  saidaComprimento: 480,
+  /** o buraco negro de SAÍDA de cada sala: menor que os dos cantos (e o magnetismo dele, proporcional) */
+  bnSaidaR: 60,
 } as const;
 
 /** cada sala tem a sua pista e o CANTO dela (o ângulo, local da ilha, do buraco negro) */
@@ -104,36 +106,36 @@ function montarSaida(sala: NomeSala): FioCosmico {
   const ctrl: V3[] = [{ x: porta.x, y: y0, z: porta.z }, { x: porta.x - dir.x * 30, y: y0 + 2, z: porta.z - dir.z * 30 }];
   // contorna a sala por um lado (fora do disco) e segue pra fora
   for (const [ang, rr] of [[0.6, L.r + 40], [1.4, L.r + 70], [2.2, L.r + 90]] as const) { const a = Math.atan2(-dir.z, -dir.x) + lado * ang; ctrl.push({ x: L.x + Math.cos(a) * rr, y: y0 + 10 + ang * 12, z: L.z + Math.sin(a) * rr }); }
-  const ini = ctrl[ctrl.length - 1]!, bn: V3 = { x: L.x + dir.x * (FIO.saidaComprimento + L.r), y: y0 + 240, z: L.z + dir.z * (FIO.saidaComprimento + L.r) };
+  const ini = ctrl[ctrl.length - 1]!, bn: V3 = { x: L.x + dir.x * (FIO.saidaComprimento + L.r), y: y0 + 90, z: L.z + dir.z * (FIO.saidaComprimento + L.r) };
   for (let k = 1; k <= 36; k++) {
     const t = k / 36, curva = Math.sin(t * Math.PI * 3 + fase) * 120 * Math.sin(t * Math.PI);
     ctrl.push({ x: ini.x + (bn.x - ini.x) * t * 0.82 + perp.x * curva, y: ini.y + (bn.y - ini.y) * t + Math.sin(t * Math.PI) * 120, z: ini.z + (bn.z - ini.z) * t * 0.82 + perp.z * curva });
   }
-  const ult = ctrl[ctrl.length - 1]!, angEntra = Math.atan2(ult.z - bn.z, ult.x - bn.x), sentido = r() < 0.5 ? 1 : -1, R0 = FIO.espiralR * 0.7;
-  for (let k = 1; k <= 36; k++) { const t = k / 36, ang = angEntra + sentido * t * FIO.voltas * Math.PI * 2, rr = R0 + (FIO.bnR * 1.05 - R0) * Math.pow(t, 1.4); ctrl.push({ x: bn.x + Math.cos(ang) * rr, y: ult.y + (bn.y - ult.y) * t, z: bn.z + Math.sin(ang) * rr }); }
+  const ult = ctrl[ctrl.length - 1]!, angEntra = Math.atan2(ult.z - bn.z, ult.x - bn.x), sentido = r() < 0.5 ? 1 : -1, R0 = FIO.bnSaidaR * 4;
+  for (let k = 1; k <= 36; k++) { const t = k / 36, ang = angEntra + sentido * t * FIO.voltas * Math.PI * 2, rr = R0 + (FIO.bnSaidaR * 1.05 - R0) * Math.pow(t, 1.4); ctrl.push({ x: bn.x + Math.cos(ang) * rr, y: ult.y + (bn.y - ult.y) * t, z: bn.z + Math.sin(ang) * rr }); }
   const eixo = amostrarCurva(ctrl, 2400), acum = [0];
   for (let i = 1; i < eixo.length; i++) acum.push(acum[i - 1]! + Math.hypot(eixo[i]!.x - eixo[i - 1]!.x, eixo[i]!.y - eixo[i - 1]!.y, eixo[i]!.z - eixo[i - 1]!.z));
-  return { sala, saida: true, eixo, acum, comprimento: acum[acum.length - 1]!, boca: { ...eixo[0]!, r: FIO.bocaR }, bn: { ...bn, r: FIO.bnR } };
+  return { sala, saida: true, eixo, acum, comprimento: acum[acum.length - 1]!, boca: { ...eixo[0]!, r: FIO.bocaR }, bn: { ...bn, r: FIO.bnSaidaR } };
 }
 /** a SAÍDA do Templo Cósmico (o nível do lounge — lib/cyber/temploCosmico): a boca fica no SALÃO central, perto de onde
  *  se chega, e a pista vai pra FRENTE (o +z do layout, pro lado de onde se veio), serpenteando e subindo até o buraco
  *  negro que leva de volta pro hub. Montada no referencial do layout e convertida no fim (o espelho vem junto) */
 function montarSaidaDoSalao(): FioCosmico {
   const L = CIDADE.salas.lounge, r = rng(semente("lounge:saida:salao")), fase = r() * Math.PI * 2, B = BOCA_SAIDA_SALAO;
-  const y0 = ALTURA_LOUNGE - SALAO.desce + 0.6, comp = FIO.saidaComprimento, bnL = { x: B.x, y: y0 + 240, z: B.z + comp };
+  const y0 = ALTURA_LOUNGE - SALAO.desce + 0.6, comp = FIO.saidaComprimento, bnL = { x: B.x, y: y0 + 90, z: B.z + comp };
   const ctrl: V3[] = [{ x: B.x, y: y0, z: B.z }, { x: B.x, y: y0 + 2, z: B.z + 26 }, { x: B.x, y: y0 + 10, z: B.z + 70 }];
   const ini = ctrl[ctrl.length - 1]!;
   for (let k = 1; k <= 36; k++) {
     const t = k / 36, curva = Math.sin(t * Math.PI * 3 + fase) * 120 * Math.sin(t * Math.PI) * Math.min(1, t * 4);
     ctrl.push({ x: ini.x + curva, y: ini.y + (bnL.y - ini.y) * t + Math.sin(t * Math.PI) * 120, z: ini.z + (bnL.z - ini.z) * t * 0.82 });
   }
-  const ult = ctrl[ctrl.length - 1]!, angEntra = Math.atan2(ult.z - bnL.z, ult.x - bnL.x), sentido = r() < 0.5 ? 1 : -1, R0 = FIO.espiralR * 0.7;
-  for (let k = 1; k <= 36; k++) { const t = k / 36, ang = angEntra + sentido * t * FIO.voltas * Math.PI * 2, rr = R0 + (FIO.bnR * 1.05 - R0) * Math.pow(t, 1.4); ctrl.push({ x: bnL.x + Math.cos(ang) * rr, y: ult.y + (bnL.y - ult.y) * t, z: bnL.z + Math.sin(ang) * rr }); }
+  const ult = ctrl[ctrl.length - 1]!, angEntra = Math.atan2(ult.z - bnL.z, ult.x - bnL.x), sentido = r() < 0.5 ? 1 : -1, R0 = FIO.bnSaidaR * 4;
+  for (let k = 1; k <= 36; k++) { const t = k / 36, ang = angEntra + sentido * t * FIO.voltas * Math.PI * 2, rr = R0 + (FIO.bnSaidaR * 1.05 - R0) * Math.pow(t, 1.4); ctrl.push({ x: bnL.x + Math.cos(ang) * rr, y: ult.y + (bnL.y - ult.y) * t, z: bnL.z + Math.sin(ang) * rr }); }
   const ilha = (p: V3): V3 => { const w = daSala(L, p.x, p.z); return { x: w.x, y: p.y, z: w.z }; };
   const eixo = amostrarCurva(ctrl.map(ilha), 2400), acum = [0];
   for (let i = 1; i < eixo.length; i++) acum.push(acum[i - 1]! + Math.hypot(eixo[i]!.x - eixo[i - 1]!.x, eixo[i]!.y - eixo[i - 1]!.y, eixo[i]!.z - eixo[i - 1]!.z));
   const bn = ilha(bnL);
-  return { sala: "lounge", saida: true, eixo, acum, comprimento: acum[acum.length - 1]!, boca: { ...eixo[0]!, r: FIO.bocaR }, bn: { ...bn, r: FIO.bnR } };
+  return { sala: "lounge", saida: true, eixo, acum, comprimento: acum[acum.length - 1]!, boca: { ...eixo[0]!, r: FIO.bocaR }, bn: { ...bn, r: FIO.bnSaidaR } };
 }
 let cacheSaida: FioCosmico[] | null = null;
 /** as pistas de SAÍDA (uma por sala) */
@@ -153,9 +155,11 @@ export function capturaDoFluxo(pistas: readonly FioCosmico[], p: V3, raio: numbe
 /** o MAGNETISMO do buraco negro (out/2026, o dono: "no começo o caminho é livre; chegando perto, ele puxa o veículo pro
  *  centro"): a `ATRACAO.raio` m do horizonte ele te pega e te traga numa ESPIRAL que fecha e acelera até o horizonte
  *  (aí o túnel). `p` local da ilha; devolve a pista daquele buraco negro (o destino) ou null */
-export const ATRACAO = { raio: 700, abre: 1.1 } as const;
+export const ATRACAO = { raio: 700, abre: 1.12 } as const;
+/** o alcance do magnetismo de um buraco negro: proporcional ao tamanho (o grande dos cantos: `ATRACAO.raio`) */
+export const raioDeAtracao = (f: FioCosmico) => ATRACAO.raio * (f.bn.r / FIO.bnR);
 export function naAtracao(pistas: readonly FioCosmico[], p: V3): FioCosmico | null {
-  for (const f of pistas) if (Math.hypot(p.x - f.bn.x, p.y - f.bn.y, p.z - f.bn.z) < f.bn.r + ATRACAO.raio) return f;
+  for (const f of pistas) if (Math.hypot(p.x - f.bn.x, p.y - f.bn.y, p.z - f.bn.z) < f.bn.r + raioDeAtracao(f)) return f;
   return null;
 }
 export type Tragada = { f: FioCosmico; r0: number; r: number; ang: number; y: number; sentido: 1 | -1; abriu: boolean };
@@ -164,15 +168,20 @@ export function comecarTragada(f: FioCosmico, p: V3): Tragada {
   const r = Math.max(f.bn.r * 1.2, Math.hypot(p.x - f.bn.x, p.z - f.bn.z)), ang = Math.atan2(p.z - f.bn.z, p.x - f.bn.x);
   return { f, r0: r, r, ang, y: p.y, sentido: 1, abriu: false };
 }
-/** um passo da tragada: o raio fecha (devagar no começo, cada vez mais rápido), o giro acelera e a altura vai pro plano
- *  do buraco negro. `chegou` = cruzou o horizonte (o túnel abre) */
+/** quanto da tragada já foi (0 = acabou de ser pego → 1 = no horizonte) */
+export const progressoTragada = (v: Tragada) => 1 - Math.max(0, Math.min(1, v.r / Math.max(1, v.r0)));
+/** um passo da tragada: o raio fecha (devagar no começo, cada vez mais rápido) rumo ao EIXO, o giro acelera e a altura
+ *  vai pro POLO DE CIMA (out/2026, o dono: "puxar sempre pro eixo superior" — nunca por baixo do disco): quem vem de
+ *  baixo sobe, e todo mundo cai no horizonte por cima. `chegou` = tocou o horizonte (o clarão, e o outro lado) */
 export function passoTragada(v: Tragada, dt: number): { chegou: boolean } {
-  const R = v.f.bn.r, k = 1 - Math.max(0, Math.min(1, (v.r - R) / Math.max(1, v.r0 - R)));
-  const vr = 22 + 360 * k * k, vt = 90 + 420 * k;
-  v.r = Math.max(R * 0.9, v.r - vr * dt);
-  v.ang += ((vt / Math.max(v.r, 1)) * dt) * v.sentido;
-  v.y += (v.f.bn.y - v.y) * Math.min(1, dt * (0.5 + 2.5 * k));
-  return { chegou: v.r <= R * ATRACAO.abre };
+  const R = v.f.bn.r, k = progressoTragada(v);
+  const vr = 22 + 360 * k * k, vt = 90 + 420 * k * (1 - k * 0.7);
+  v.r = Math.max(0, v.r - vr * dt);
+  v.ang += ((vt / Math.max(v.r, R * 0.5)) * dt) * v.sentido;
+  const yAlvo = v.f.bn.y + R * (1.05 + 1.6 * (1 - k));   // (bem acima do disco no começo, descendo até o polo)
+  v.y += (yAlvo - v.y) * Math.min(1, dt * (0.9 + 2.5 * k));
+  v.y = Math.max(v.y, v.f.bn.y + R * 0.4 + R * 0.65 * k);   // (nunca abaixo do eixo — e cada vez mais por cima)
+  return { chegou: Math.hypot(v.r, v.y - v.f.bn.y) <= R * ATRACAO.abre };
 }
 /** onde a tragada está (local da ilha) e pra onde se olha (o rumo: girando e caindo pra dentro) */
 export function posDaTragada(v: Tragada): V3 & { rumo: number } {

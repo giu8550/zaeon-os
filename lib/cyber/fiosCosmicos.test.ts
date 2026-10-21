@@ -64,11 +64,13 @@ describe("as pistas cósmicas (os fluxos até os buracos negros dos cantos)", ()
     const f = fios[0]!, b = f.bn;
     expect(naAtracao(fios, pontoDoFio(f, 0.1))).toBeNull();   // perto da Zaeon, na pista: livre (o fluxo automático saiu)
     expect(naAtracao(fios, { x: b.x + b.r + ATRACAO.raio + 20, y: b.y, z: b.z })).toBeNull();
-    const p = { x: b.x + b.r + ATRACAO.raio - 30, y: b.y + 120, z: b.z }; expect(naAtracao(fios, p)?.sala).toBe(f.sala);
+    const p = { x: b.x + b.r + ATRACAO.raio - 30, y: b.y - 200, z: b.z }; expect(naAtracao(fios, p)?.sala).toBe(f.sala);   // (chegando POR BAIXO)
     const v = comecarTragada(f, p); let t = 0, chegou = false, rAnt = v.r, vMax = 0, giro = 0, angAnt = v.ang;
-    while (!chegou && t < 60) { const r0 = v.r; chegou = passoTragada(v, 1 / 30).chegou; t += 1 / 30; vMax = Math.max(vMax, (r0 - v.r) * 30); expect(v.r).toBeLessThanOrEqual(rAnt + 1e-9); rAnt = v.r; giro += v.ang - angAnt; angAnt = v.ang; }
+    let abaixo = 0;
+    while (!chegou && t < 60) { const r0 = v.r; chegou = passoTragada(v, 1 / 30).chegou; t += 1 / 30; if (t > 1.5 && v.y < b.y) abaixo++; vMax = Math.max(vMax, (r0 - v.r) * 30); expect(v.r).toBeLessThanOrEqual(rAnt + 1e-9); rAnt = v.r; giro += v.ang - angAnt; angAnt = v.ang; }
     expect(chegou).toBe(true); expect(t).toBeGreaterThan(4); expect(t).toBeLessThan(25);   // uns segundos de espiral — não um teletransporte
     expect(vMax).toBeGreaterThan(150); expect(giro).toBeGreaterThan(Math.PI);   // acelera e dá a volta
-    const q = posDaTragada(v); expect(Math.abs(q.y - b.y)).toBeLessThan(20); expect(Math.hypot(q.x - b.x, q.z - b.z)).toBeLessThan(b.r * ATRACAO.abre + 1);
+    expect(abaixo).toBe(0);   // puxa pro EIXO DE CIMA: não fica por baixo do disco
+    const q = posDaTragada(v); expect(q.y - b.y).toBeGreaterThan(b.r * 0.8); expect(Math.hypot(q.x - b.x, q.z - b.z)).toBeLessThan(b.r * 0.7);   // cai pelo POLO de cima
   });
 });
