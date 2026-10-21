@@ -1418,6 +1418,8 @@ export class CyberEngine {
    *  quem ainda não escolheu veste a astronauta se tem corpo feminino, o astronauta se não, na cor dela. A do fundador:
    *  a preta */
   private vestirTraje(a: Ator) {
+    // quem tem CORPO PRÓPRIO de jogador (feito no VRoid, estilo anime — a Giulia) fica com ele: o traje cobria a skin
+    { const p = corpoProprio(this.pessoas.get(a.id), location.search); if (p && p.corpo !== CORPO_DO_FUNDADOR) { a.av.traje(false); return; } }
     const ps = this.personagemDe(a.id);
     // (o FUNDADOR: o próprio avatar sabe pelo `eu` que o servidor mandou — a lista de pessoas da sala às vezes ainda não
     //  tem a gente, e o traje piscava na cor de jogador: o amarelo perto da Zaeon)
