@@ -15,9 +15,9 @@ import { decidirClique, rotuloMonitor } from "@/lib/cyber/clique";
 import { POIS, bordaDoPOI, colisoresDosPOIs, marcoNav, naPracaPOI, poiPerto, type POI } from "@/lib/cyber/landmarks";
 import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } from "@/lib/cyber/nav";
 import { alternarModoCamera, distPerto, faixaDaDistancia, limitarPitch, olhoDoOmbro, poseDaCamera, seguirPerto, type ModoCamera } from "@/lib/cyber/camera";
-import { PISTA, rotDaSala, espelhoDe, CAPELA_NA_ZAEON, ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, bocaDaGaragem, durDaViagem, naColunaDaGaragem, salaEm, ESCADAS, FIO, alturaDoFio, naEscadaLocal, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PISO_FESTA, PALCO as PALCO_LOUNGE, naSala, daSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade } from "@/lib/cyber/ceu";
+import { PISTA, rotDaSala, espelhoDe, CAPELA_NA_ZAEON, ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, bocaDaGaragem, durDaViagem, naColunaDaGaragem, salaEm, ESCADAS, FIO, alturaDoFio, naEscadaLocal, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PISO_FESTA, PALCO as PALCO_LOUNGE, naSala, daSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade, colisoresDoAndar, dentroDoEstudo } from "@/lib/cyber/ceu";
 import { DECK, TEMPLO, curvaDaEscadaria, noTemplo } from "@/lib/cyber/templo";
-import { ALCANCE_DUELO, CUPULA, ELEVADOR_TC, barradoNaCupula, bocaDoElevadorTC, posElevadorTC } from "@/lib/cyber/temploCosmico";
+import { ALCANCE_DUELO, CUPULA, ELEVADOR_TC, ESTUDO, barradoNaCupula, bocaDoElevadorTC, posElevadorTC } from "@/lib/cyber/temploCosmico";
 import { ESPERA_S, FALA_DESAFIO } from "@/lib/cyber/dueloIngles";
 import { estadoDoShow, trovoesEntre } from "@/lib/cyber/showLounge";
 import { criarMandala, type MandalaHandle } from "./MandalaSagrada";
@@ -3309,8 +3309,13 @@ export class CyberEngine {
       if (pertoAgora && !a.perto) s.tocar("near-ping", a.av.group.position, { dist: DISTANCIA.perto });
       a.perto = pertoAgora;
     }
+    // dentro de um LOUNGE ESTUDANTIL (paredes sólidas): o som de fora chega ABAFADO
+    { const y0 = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, dentro = this.noCeu && this.nivel === "lounge" && !this.jet.noAr && dentroDoEstudo(this.eu.pos, this.eu.alt - y0);
+      s.abafar(dentro ? 1 : 0); this.noAndarDeCima = dentro && this.eu.alt - y0 - ALTURA_LOUNGE > ESTUDO.h + 2; }
     s.atualizar(dt);
   }
+  /** está num andar de CIMA de um lounge estudantil (os outros precisam da altura: pela posição, seria o térreo) */
+  private noAndarDeCima = false;
   private vozPendente = new Map<string, MediaStream>();
   /** a VOZ de alguém (WebRTC) chegou → sai pelo avatar dele (posicional); null = acabou. Se o avatar ainda não
    *  existe (a voz chegou antes da 1ª pose), espera ele aparecer. */
@@ -3927,7 +3932,7 @@ export class CyberEngine {
       this.loopsAmbiente.set(n, ls);
     }
     if (this.som && n === "lounge") {   // os LOUNGES ESTUDANTIS do Templo Cósmico: o som calmo de estudo (o da Sala do Saber)
-      const ls = c.caixasEstudo.map((obj) => { const l = this.som.loop("ambiente-biblioteca", obj, { dist: DISTANCIA.ambiente, volume: 0.5 }); this.som.volumeLoop(l, 1); return l; });
+      const ls = c.caixasEstudo.map((obj) => { const l = this.som.loop("ambiente-biblioteca", obj, { dist: DISTANCIA.ambiente, volume: 0.4, dentro: true }); this.som.volumeLoop(l, 1); return l; });   // (`dentro`: o abafado de quem está lá não pega ele)
       this.loopsAmbiente.set(n, ls);
     }
   }
@@ -4451,7 +4456,7 @@ export class CyberEngine {
         // a RECEPÇÃO e os MIRANTES ficam no piso da Zaeon: do pé da escada sobe-se pro salão; a ilha (o cone) é sólida
         for (const rc of this.marcosDaZaeon()) { const r = resolverPasso(rc.mn, false, prev, eu.pos); eu.pos.x = r.x; eu.pos.z = r.z; if (r.alto) { this.altoEm = rc.lm.poi.id; this.yNav = r.y; break; } }
         // sem parede invisível na borda: passou do piso da ilha → cai
-        const q = this.noCeu ? empurrarParaFora(resolverCidadeLivre(eu.pos), [...this.colisoresDoNivel("ceu"), ...this.colisoresDeNaves(CIDADE.pisoY), ...this.colisoresDeMotos(), ...this.colisoresDosTubos(), ...this.colisoresDeAtores()]) : { x: eu.pos.x, z: eu.pos.z }; eu.pos.x = q.x; eu.pos.z = q.z; if (this.noCeu) this.yNav = CIDADE.pisoY;
+        const q = this.noCeu ? empurrarParaFora(resolverCidadeLivre(eu.pos), [...this.colisoresDoNivel("ceu"), ...colisoresDoAndar(eu.pos, eu.alt - (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY)), ...this.colisoresDeNaves(CIDADE.pisoY), ...this.colisoresDeMotos(), ...this.colisoresDosTubos(), ...this.colisoresDeAtores()]) : { x: eu.pos.x, z: eu.pos.z }; eu.pos.x = q.x; eu.pos.z = q.z; if (this.noCeu) this.yNav = CIDADE.pisoY;
         if (!this.noCeu) { /* subiu pro pé da escada da Recepção: o resto é dela (resolverChao) */ }
         else if (!naIlhaPrincipal(q)) this.cairDaqui({ x: (q.x - prev.x) / Math.max(dt, 1e-3), z: (q.z - prev.z) / Math.max(dt, 1e-3) });
         // pisou na boca da escada de energia: ela te leva (pra cima, da central; pra baixo, do lounge)
@@ -4526,7 +4531,7 @@ export class CyberEngine {
       : this.ilhota !== null && this.cidade ? this.cidade.alturaIlhota(this.ilhota)
         : this.fio && !this.noCarro() && this.moto === null ? this.posNoFluxo().y + 0.35   // na prancha, em cima do fio
       : this.noCeu && this.viagem ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + posDaViagem(this.viagem.tipo, this.viagem.sentido, Math.min(1, this.viagem.t / durDaViagem(this.viagem.tipo)), this.viagem.sala).y   // sendo levado: a altura do caminho
-      : this.noCeu ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + alturaNaCidade(eu.pos)   // + o PALCO do lounge (escada = rampa)
+      : this.noCeu ? (() => { const y0 = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY; return y0 + alturaNaCidade(eu.pos, eu.alt - y0); })()   // + o PALCO do lounge (escada = rampa); nos ANDARES (os lounges estudantis), o piso de quem está ali
       : this.noTopo ? this.alturaTopo() : (lmAlto?.poi.base ?? CHAO) + this.yNav + (lmAlto && marcoNav(lmAlto.poi) && this.yNav >= marcoNav(lmAlto.poi)!.nav.pisoY - 1e-6 ? this.boia(lmAlto) : 0);
     if (this.nascendo) eu.alt += 0.35;   // em pé no pedestal do tubo
 
@@ -4553,7 +4558,7 @@ export class CyberEngine {
 
     // rede: eu → difusão; remotos → atores
     const desc = codificarDescanso(this.descanso && this.descanso.fase !== "indo" && this.descanso.fase !== "levantando" ? this.descanso.modo : null, this.tabletW > 0.5);
-    if (!this.menu && !this.instancia) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.naZaeon, ...(desc ? { desc } : {}), ...(this.jet.noAr ? { jet: Math.round(this.jet.y * 100) / 100 } : {}), ...(this.sobreNave || this.ilhota !== null || this.plat || this.bordo || this.viagem || this.nascendo || (this.altoEm && !this.noCeu) ? { alt: Math.round(eu.alt * 100) / 100 } : {}), ...(this.moto !== null ? { moto: { s: this.moto, y: Math.round(this.motoEst.y * 100) / 100, yaw: this.motoEst.yaw, ...(this.motoDe ? { de: this.motoDe } : {}) } } : {}), ...(this.motoLargada ? { motoLargada: this.motoLargada } : {}), ...(this.carro && this.carro.fase !== "parado" ? { carro: { c: this.carro.i, y: Math.round(this.carro.est.y * 100) / 100, yaw: this.carro.est.yaw } } : {}), ...(this.carroLargado ? { carroLargado: this.carroLargado } : {}), ...(movComRifle(this.movAgora(t), this.rifleEquipado() || this.wRifle > 0.5, this.wRifle > 0.5 && this.wMira > 0.5) ? { mov: movComRifle(this.movAgora(t), this.rifleEquipado() || this.wRifle > 0.5, this.wRifle > 0.5 && this.wMira > 0.5) } : {}), ...(this.bordo && !this.pilotando ? { bordo: { x: this.bordo.x, z: this.bordo.z, nivel: this.bordo.nivel, ...(this.bordo.esc !== undefined ? { esc: this.bordo.esc } : {}) } } : {}), ...(this.ck ? { ck: this.ck.c.meus, ...(this.ck.c.modo === "dupla" ? { cr: crDe(this.ck.c) } : {}) } : {}), ...(this.ataque ? { atk: codificarGolpe(this.ataque.seq, this.ataque.golpe.n) } : {}), ...(this.magEnviar && this.agora < this.magEnviar.ate ? { mag: this.magEnviar.v } : {}), ...(this.vida < VIDA_MAX ? { hp: this.vida } : {}), ...(this.revela > 0.5 ? { arma: 1 } : {}), ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : this.naveForaDoHangar() ? { naveParada: { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw } } : {}) });
+    if (!this.menu && !this.instancia) this.o.enviarPos?.({ x: eu.pos.x, z: eu.pos.z, facing: eu.facing, moving: eu.moving, sit: this.sitT > 0.5, topo: this.noTopo, ceu: this.naZaeon, ...(desc ? { desc } : {}), ...(this.jet.noAr ? { jet: Math.round(this.jet.y * 100) / 100 } : {}), ...(this.sobreNave || this.ilhota !== null || this.plat || this.bordo || this.viagem || this.nascendo || (this.altoEm && !this.noCeu) || this.elevTC || this.noAndarDeCima ? { alt: Math.round(eu.alt * 100) / 100 } : {}), ...(this.moto !== null ? { moto: { s: this.moto, y: Math.round(this.motoEst.y * 100) / 100, yaw: this.motoEst.yaw, ...(this.motoDe ? { de: this.motoDe } : {}) } } : {}), ...(this.motoLargada ? { motoLargada: this.motoLargada } : {}), ...(this.carro && this.carro.fase !== "parado" ? { carro: { c: this.carro.i, y: Math.round(this.carro.est.y * 100) / 100, yaw: this.carro.est.yaw } } : {}), ...(this.carroLargado ? { carroLargado: this.carroLargado } : {}), ...(movComRifle(this.movAgora(t), this.rifleEquipado() || this.wRifle > 0.5, this.wRifle > 0.5 && this.wMira > 0.5) ? { mov: movComRifle(this.movAgora(t), this.rifleEquipado() || this.wRifle > 0.5, this.wRifle > 0.5 && this.wMira > 0.5) } : {}), ...(this.bordo && !this.pilotando ? { bordo: { x: this.bordo.x, z: this.bordo.z, nivel: this.bordo.nivel, ...(this.bordo.esc !== undefined ? { esc: this.bordo.esc } : {}) } } : {}), ...(this.ck ? { ck: this.ck.c.meus, ...(this.ck.c.modo === "dupla" ? { cr: crDe(this.ck.c) } : {}) } : {}), ...(this.ataque ? { atk: codificarGolpe(this.ataque.seq, this.ataque.golpe.n) } : {}), ...(this.magEnviar && this.agora < this.magEnviar.ate ? { mag: this.magEnviar.v } : {}), ...(this.vida < VIDA_MAX ? { hp: this.vida } : {}), ...(this.revela > 0.5 ? { arma: 1 } : {}), ...(this.pilotando ? { voo: { y: this.naveEst.y, yaw: this.naveEst.yaw } } : this.naveForaDoHangar() ? { naveParada: { x: this.naveEst.x, y: this.naveEst.y, z: this.naveEst.z, yaw: this.naveEst.yaw } } : {}) });
     this.sincronizarRemotos(dt, t);
     this.atualizarNascimentoEGuia(dt);
     this.atualizarViagemNave(dt, t);   // o portal do M (o dono indo pra dentro da nave)

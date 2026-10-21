@@ -23,7 +23,7 @@ export type AudioCyberHandle = {
   /** chamar no 1º gesto (ou já, se a intro destravou) */
   ativar(): void;
   /** loop preso a um objeto (posicional) ou 2D (`obj` null). Fica na fila até os buffers chegarem. */
-  loop(nome: NomeSom, obj: THREE.Object3D | null, o?: { volume?: number; dist?: Dist }): LoopSom;
+  loop(nome: NomeSom, obj: THREE.Object3D | null, o?: { volume?: number; dist?: Dist; /** é o som DE DENTRO da sala fechada: o `abafar` não pega ele */ dentro?: boolean }): LoopSom;
   /** desliga e solta um loop (o objeto dele saiu de cena: nave remota, base) */
   soltarLoop(l: LoopSom): void;
   /** muda o alvo de volume de um loop (0..1 × o volume base do som); o fade é suave, a cada quadro (`vel` = 1/s; padrão 2,5) */
@@ -54,6 +54,9 @@ export type AudioCyberHandle = {
    *  longos (lib/cyber/audio VOZ_DROID), posicional preso a `obj`. `dur` = segundos de "fala"; `furia` = a expulsão
    *  (mais grave). false = não tocou (sem gesto, som desligado ou os arquivos ainda não chegaram) */
   vozDroid(obj: THREE.Object3D, o?: { dur?: number; furia?: boolean; dist?: Dist; volume?: number }): boolean;
+  /** ABAFA o som de fora (0..1, suave): um passa-baixa + menos volume no ouvinte — quem está numa sala de paredes
+   *  sólidas (os lounges estudantis) ouve o mundo como através delas; os loops `dentro` passam por fora */
+  abafar(k: number): void;
   /** fade dos loops (chamar a cada quadro) */
   atualizar(dt: number): void;
   dispose(): void;
@@ -121,7 +124,17 @@ export function preCarregarSons(progresso?: (feitos: number, total: number) => v
 export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; low: boolean }): AudioCyberHandle {
   let listener: THREE.AudioListener | null = null, vivo = true, entrada = 0;   // entrada: 0→1 no fade-in dos loops
   const buffers = new Map<NomeSom, AudioBuffer>();
-  const loops: { l: LoopSom; obj: THREE.Object3D | null; dist?: Dist; volBase: number }[] = [];
+  const loops: { l: LoopSom; obj: THREE.Object3D | null; dist?: Dist; volBase: number; dentro?: boolean }[] = [];
+  /** o ABAFADO: ouvinte → passa-baixa → ganho → saída; os loops de dentro vão direto pra saída (`limpo`, no volume mestre) */
+  let abafo: { lp: BiquadFilterNode; g: GainNode; limpo: GainNode } | null = null, abafaAlvo = 0, abafaAtual = 0;
+  const cadeiaAbafo = () => {
+    if (abafo || !listener) return abafo;
+    const ctx = listener.context, lp = ctx.createBiquadFilter(), g = ctx.createGain(), limpo = ctx.createGain();
+    lp.type = "lowpass"; lp.frequency.value = 20000; lp.Q.value = 0.6;
+    listener.gain.disconnect(); listener.gain.connect(lp); lp.connect(g); g.connect(ctx.destination);
+    limpo.gain.value = listener.getMasterVolume(); limpo.connect(ctx.destination);
+    return (abafo = { lp, g, limpo });
+  };
   const umaVez = new Set<{ a: THREE.Audio<GainNode | PannerNode>; holder: THREE.Object3D | null }>();
   const vozes = criarLimiteVozes(o.low ? 8 : 12);
   const vozesAoVivo = new Set<{ obj: THREE.Object3D; stream: MediaStream; a: THREE.PositionalAudio | null; el: HTMLAudioElement | null }>();
@@ -187,6 +200,7 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
       if (x.l.audio || !buffers.has(x.l.nome)) continue;
       const a = criarFonte(x.l.nome, x.obj, x.dist); if (!a) continue;
       a.setLoop(true); a.setVolume(0); x.l.audio = a; x.l.atual = 0;
+      if (x.dentro) { const c = cadeiaAbafo(); if (c) { a.gain.disconnect(); a.gain.connect(c.limpo); } }
       try { a.play(); } catch { /* contexto ainda suspenso */ }
     }
   };
@@ -217,7 +231,7 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
     },
     loop(nome, obj, op = {}) {
       const l: LoopSom = { audio: null, alvo: 0, atual: 0, nome };
-      loops.push({ l, obj, dist: op.dist, volBase: (op.volume ?? 1) * SONS[nome].volume });
+      loops.push({ l, obj, dist: op.dist, volBase: (op.volume ?? 1) * SONS[nome].volume, dentro: op.dentro });
       montarLoops();
       return l;
     },
@@ -382,9 +396,15 @@ export function criarAudioCyber(o: { camera: THREE.Camera; cena: THREE.Scene; lo
     aplicarPrefs() {
       prefs = ler();
       if (listener) listener.setMasterVolume(prefs.ligado ? prefs.volume : 0);
+      if (abafo && listener) abafo.limpo.gain.value = listener.getMasterVolume();
     },
+    abafar(k) { abafaAlvo = Math.max(0, Math.min(1, k)); },
     atualizar(dt) {
       if (!listener) return;
+      if (abafaAlvo > 0 || abafaAtual > 0.001) {   // (só monta a cadeia quando alguém entra numa sala fechada)
+        abafaAtual += (abafaAlvo - abafaAtual) * Math.min(1, dt * 2.2);
+        const c = cadeiaAbafo(); if (c) { c.lp.frequency.value = 20000 * Math.pow(520 / 20000, abafaAtual); c.g.gain.value = 1 - 0.5 * abafaAtual; }
+      }
       entrada = Math.min(1, entrada + dt / FADE_ENTRADA);
       const k = Math.min(1, dt * 2.5);   // fades suaves (~0,4 s) — nada liga/desliga seco
       for (const x of loops) {

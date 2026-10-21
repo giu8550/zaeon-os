@@ -32,6 +32,15 @@ export const PIRAMIDE = { x: SALAO.x, z: SALAO.z - 4, meia: 10, alt: 24, colR: 0
  *  de poltronas e cantos pra ler com os amigos, com o som calmo de estudo; DEPOIS delas, a ESCADA subindo pras festas
  *  (o lounge cósmico à esquerda — o −x do layout é a direita do mundo… o lado do lounge; o rasta, espelhado) */
 export const ESTUDO = { x: -112, z: 62, r: 28, h: -SALAO.desce } as const;
+/** os ANDARES dos lounges estudantis (o dono, out/2026: "um segundo e terceiro piso, a mesma dinâmica dos lustres no
+ *  teto, as paredes mais sólidas"): 3 pisos de `pe` m — o TÉRREO na altura do salão (as entradas, nas mesmas posições,
+ *  só nele) —, a parede SÓLIDA até o `teto` (a cúpula de vidro em cima) e, no meio, o ÁTRIO com a ESCADA EM CARACOL em
+ *  volta da coluna: uma volta por andar, de onde se vê o lustre grande descendo da cúpula */
+export const ANDARES_ESTUDO = { n: 3, pe: 7, teto: 21 } as const;
+/** o CARACOL (referencial do lounge estudantil da ESQUERDA — o da direita é o espelho): a coluna, o raio de fora dos
+ *  degraus (= o buraco do átrio nos andares de cima), a BOCA (rad: onde cada volta começa e acaba, virada pro corredor
+ *  entre as entradas) e a meia-abertura do guarda-corpo do átrio na boca */
+export const CARACOL = { col: 1.3, r: 5.2, boca: -1.7, abre: 0.5, grade: 0.35 } as const;
 /** a ESCADA do lounge estudantil até o pátio do lounge (sobe os `SALAO.desce` m): da borda dele à borda do lounge (raio 70) */
 export const PONTE_LOUNGE = (() => {
   const d = Math.hypot(ESTUDO.x, ESTUDO.z), ux = -ESTUDO.x / d, uz = -ESTUDO.z / d;   // (do estudo rumo ao centro do lounge)
@@ -143,6 +152,61 @@ export function naEscadariaRasta(q: P2, folga = 0): { s: number; lat: number } |
 /** a altura da escadaria rasta (acima do pátio) a `s` m do começo: sobe do PISO do disco rasta (não há deck) até a capela */
 export const alturaDaEscadariaRasta = (s: number) => ((alturaDaEscadaria(s) - DECK.h) / (TEMPLO.h - DECK.h)) * TEMPLO_RASTA.h;
 
+// ───────────── os ANDARES dos lounges estudantis ─────────────
+const ehEstudo = (p: PlatTC) => p.id === "estudoL" || p.id === "estudoR";
+/** o lounge estudantil em `q` (referencial do layout), ou null */
+export const estudoEm = (q: P2, folga = 0): PlatTC | null => PLATS.find((p) => ehEstudo(p) && naPlat(p, q, folga)) ?? null;
+/** `q` no referencial do lounge estudantil `p` (a partir do centro; o da DIREITA é espelhado: o caracol gira ao contrário) */
+export const noEstudoLocal = (p: PlatTC, q: P2): P2 => ({ x: (q.x - p.x) * (p.id === "estudoR" ? -1 : 1), z: q.z - p.z });
+/** o inverso: local do lounge estudantil → layout */
+export const doEstudoLocal = (p: PlatTC, l: P2): P2 => ({ x: p.x + l.x * (p.id === "estudoR" ? -1 : 1), z: p.z + l.z });
+/** que fração da volta do caracol (0..1) está em `l` (local): 0 na boca, crescendo no sentido de quem sobe */
+export function voltaDoCaracol(l: P2): number {
+  const v = (Math.atan2(l.z, l.x) - CARACOL.boca) / (Math.PI * 2);
+  return v - Math.floor(v);
+}
+/** os PISOS que existem num ponto do lounge estudantil `p` (acima do pátio): o térreo em todo o disco; os andares de cima
+ *  fora do átrio; e, no átrio, cada volta do caracol (uma por andar) */
+export function pisosDoEstudo(p: PlatTC, q: P2): number[] {
+  const l = noEstudoLocal(p, q), d = Math.hypot(l.x, l.z), A = ANDARES_ESTUDO, out = [p.h];
+  if (d >= CARACOL.r) for (let k = 1; k < A.n; k++) out.push(p.h + k * A.pe);
+  else if (d >= CARACOL.col) { const f = voltaDoCaracol(l); for (let k = 0; k < A.n - 1; k++) out.push(p.h + (k + f) * A.pe); }
+  return out;
+}
+/** o quanto um piso pode estar ACIMA dos pés e ainda ser "o meu" (o degrau do caracol, andando) */
+export const DEGRAU_ESTUDO = 1.1;
+/** a altura do piso de quem está em `q`, nos pés a `yRel` (acima do pátio): o piso mais alto que não passa dos pés +
+ *  um degrau — sem `yRel` (quem não sabe a altura: NPC, a frota, um teleporte), o térreo */
+export function alturaNoEstudo(p: PlatTC, q: P2, yRel?: number): number {
+  if (yRel === undefined) return p.h;
+  let m = -Infinity, menor = Infinity;
+  for (const h of pisosDoEstudo(p, q)) { if (h <= yRel + DEGRAU_ESTUDO && h > m) m = h; if (h < menor) menor = h; }
+  return m === -Infinity ? menor : m;
+}
+/** em que ANDAR (0 = térreo) de qual lounge estudantil está quem está em `q` com os pés a `yRel` — null fora */
+export function andarNoEstudo(q: P2, yRel: number): { p: PlatTC; andar: number } | null {
+  const p = estudoEm(q, 0.8); if (!p || yRel < p.h - 1.5 || yRel > p.h + ANDARES_ESTUDO.teto) return null;
+  return { p, andar: Math.max(0, Math.min(ANDARES_ESTUDO.n - 1, Math.round((yRel - p.h) / ANDARES_ESTUDO.pe))) };
+}
+/** o vão do guarda-corpo do átrio num andar (ângulos LOCAIS [de, até]): no térreo, o lado de quem SOBE; no último, o de
+ *  quem CHEGA; nos do meio, os dois */
+export function vaoDoAtrio(andar: number): [number, number] {
+  const { boca, abre } = CARACOL, ult = ANDARES_ESTUDO.n - 1;
+  return andar === 0 ? [boca, boca + abre] : andar === ult ? [boca - abre, boca] : [boca - abre, boca + abre];
+}
+/** os colisores (layout) que só valem num ANDAR do lounge estudantil: o GUARDA-CORPO do átrio (aberto só no vão do
+ *  caracol) e, nos andares de cima, a PAREDE fechando onde, no térreo, ficam as entradas (as pontes chegam embaixo) */
+export function colisoresDoAndarEstudo(p: PlatTC, andar: number): { x: number; z: number; r: number }[] {
+  const out: { x: number; z: number; r: number }[] = [], [de, ate] = vaoDoAtrio(andar), rr = CARACOL.r + CARACOL.grade, n = Math.ceil((2 * Math.PI * rr) / 0.45);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2; let d = a - de; d -= Math.floor(d / (Math.PI * 2)) * Math.PI * 2;
+    if (d < ate - de) continue;
+    out.push({ ...doEstudoLocal(p, { x: Math.cos(a) * rr, z: Math.sin(a) * rr }), r: CARACOL.grade });
+  }
+  if (andar > 0) for (const ab of aberturasDe(p)) for (let a = ab.ang - ab.meia - 0.04; a <= ab.ang + ab.meia + 0.04; a += COL.passo / p.r) out.push({ x: p.x + Math.cos(a) * p.r, z: p.z + Math.sin(a) * p.r, r: COL.r });
+  return out;
+}
+
 export const noSalao = (q: P2, folga = 0) => naPlat(PLATS[0]!, q, folga);
 export const naPonteLounge = (q: P2, folga = 0) => naPonte(PONTES[0]!, q, folga);
 /** está no complexo do Templo Cósmico FORA do disco do lounge (o salão, os braços, as pontes e a escadaria rasta)? */
@@ -150,7 +214,11 @@ export const noComplexo = (q: P2, folga = 0) => PLATS.some((p) => naPlat(p, q, f
 /** até onde (m, do centro do lounge) o complexo vai — o ceu nem calcula além disso */
 export const ALCANCE_COMPLEXO = Math.max(...PLATS.map((p) => Math.hypot(p.x, p.z) + p.r)) + 20;
 /** a altura do piso (acima do PÁTIO do lounge — negativa no salão) num ponto do complexo, ou null fora dele */
-export function alturaNoComplexo(q: P2): number | null {
+export function alturaNoComplexo(q: P2, yRel?: number): number | null {
+  // (os LOUNGES ESTUDANTIS têm andares: lá em cima ou no átrio, manda a altura dos pés — as pontes que chegam no térreo,
+  // por baixo, não contam)
+  const est = estudoEm(q);
+  if (est && yRel !== undefined && (yRel > est.h + 2 || Math.hypot(q.x - est.x, q.z - est.z) < CARACOL.r + 0.8)) return alturaNoEstudo(est, q, yRel);
   for (const p of PONTES) { const n = naPonte(p, q); if (n) return p.ha + (p.hb - p.ha) * n.u; }
   for (const p of PLATS) if (naPlat(p, q)) return p.h;
   const e = naEscadariaRasta(q); if (e) return alturaDaEscadariaRasta(e.s);
@@ -197,6 +265,7 @@ export function colisoresDoComplexo(rLounge: number): { x: number; z: number; r:
   const C = CAPELA_RASTA;
   for (let i = 0; i < C.pilares; i++) { const a = (i / C.pilares) * Math.PI * 2 + Math.PI / C.pilares; out.push({ x: TEMPLO_RASTA.x + Math.cos(a) * C.r, z: TEMPLO_RASTA.z + Math.sin(a) * C.r, r: C.pilarR + 0.2 }); }
   out.push({ x: RASTA.x, z: RASTA.z, r: ARVORE_RASTA.r });
+  for (const p of PLATS) if (ehEstudo(p)) out.push({ x: p.x, z: p.z, r: CARACOL.col });   // a COLUNA do caracol dos lounges estudantis
   out.push({ x: CYBER.x, z: CYBER.z, r: NUCLEO_CYBER.r + 0.5 });   // (lá em cima)
   // a COLUNA da torre: um ANEL de colisores no contorno (não um círculo cheio — a colisão é no plano: o cheio empurrava pra
   // fora quem está LÁ EM CIMA, no topo, que fica no mesmo xz); na base só se anda em volta
@@ -215,7 +284,16 @@ export function solidosDoComplexo(): { x: number; z: number; r: number; topo: nu
     { x: TORRE_RASTA.x, z: TORRE_RASTA.z, r: TORRE_RASTA.r + 0.5, topo: FESTAS.h + TORRE_RASTA.alt, base: FESTAS.h },
     { x: RASTA.x, z: RASTA.z, r: ARVORE_RASTA.r, topo: ARVORE_RASTA.alt, base: 0 },
     { x: CYBER.x, z: CYBER.z, r: NUCLEO_CYBER.r + 1, topo: CYBER.h + NUCLEO_CYBER.alt, base: CYBER.h },
-    { x: TORRE_TI.x, z: TORRE_TI.z, r: TORRE_TI.colR, topo: CYBER.h, base: -SALAO.desce },   // a COLUNA da torre (sólida pra quem voa; em cima, pousa no topo)   // o monumento   // a árvore (o tronco até a copa)
+    { x: TORRE_TI.x, z: TORRE_TI.z, r: TORRE_TI.colR, topo: CYBER.h, base: -SALAO.desce },
+    // os LOUNGES ESTUDANTIS: as lajes dos andares de cima, a cúpula e a PAREDE (sólida também pra quem voa — embaixo das
+    // entradas do térreo, aberta)
+    ...PLATS.filter(ehEstudo).flatMap((p) => {
+      const A = ANDARES_ESTUDO, out = [{ x: p.x, z: p.z, r: p.r + 0.6, topo: p.h + A.teto + 3, base: p.h + A.teto - 0.3 }];
+      for (let k = 1; k < A.n; k++) out.push({ x: p.x, z: p.z, r: p.r, topo: p.h + k * A.pe, base: p.h + k * A.pe - 0.6 });
+      const abs = aberturasDe(p), n = Math.ceil((2 * Math.PI * p.r) / 1.6);
+      for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; out.push({ x: p.x + Math.cos(a) * (p.r + 0.3), z: p.z + Math.sin(a) * (p.r + 0.3), r: 0.9, topo: p.h + A.teto, base: abs.some((ab) => dentroDe(a, ab)) ? p.h + 4.4 : p.h - 0.5 }); }
+      return out;
+    }),   // a COLUNA da torre (sólida pra quem voa; em cima, pousa no topo)   // o monumento   // a árvore (o tronco até a copa)
   ];
 }
 /** a curva da escadaria das raízes (no referencial do layout) — o render desenha na do lounge, num grupo espelhado */
