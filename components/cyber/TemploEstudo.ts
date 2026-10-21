@@ -35,7 +35,7 @@ export function criarLoungesEstudo(o: { low: boolean; paredeMat: THREE.Material 
     const prat: { a: number }[] = []; for (let a = 0; a < Math.PI * 2; a += 2.6 / (R - 1.6)) if (livre(a, 0.12)) prat.push({ a });
     const im = new THREE.InstancedMesh(new THREE.BoxGeometry(2.4, 2.3, 0.45), madeira, prat.length), m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), um = new THREE.Vector3(1, 1, 1), v = new THREE.Vector3();
     geos.push(im.geometry); g.add(im); alvos.push(im);
-    const porEstante = o.low ? 12 : 28, livros = new THREE.InstancedMesh(new THREE.BoxGeometry(0.11, 0.42, 0.3), new THREE.MeshStandardMaterial({ roughness: 0.8 }), prat.length * porEstante);
+    const porEstante = o.low ? 12 : 28, livros = new THREE.InstancedMesh(new THREE.BoxGeometry(0.11, 0.42, 0.3), new THREE.MeshLambertMaterial({ color: 0xffffff }), prat.length * porEstante);
     geos.push(livros.geometry); mats.push(livros.material as THREE.Material); g.add(livros);
     const cor = new THREE.Color(); let k = 0;
     prat.forEach(({ a }, i) => {

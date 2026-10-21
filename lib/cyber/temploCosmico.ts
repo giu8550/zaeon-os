@@ -57,13 +57,42 @@ export const ARVORE_RASTA = { r: 4.8, alt: 30 } as const;
 /** a TORRE (moderna, futurista) na borda do salão de festas: o pé (sólido) e a altura acima do piso dele */
 export const TORRE_RASTA = { x: FESTAS.x - 15, z: FESTAS.z + 14, r: 4, alt: 72 } as const;
 
-// ───────────── o CAMINHO DO MEIO: reto, atrás da pirâmide, e a escadaria subindo pro monumento da CYBER ROOM ─────────────
-/** o monumento (mais sinistro que a pirâmide): a plataforma dele, bem acima do lounge, na linha da pirâmide */
-export const CYBER = { x: SALAO.x, z: SALAO.z - 255, r: 30, h: 40 } as const;
+// ───────────── o CAMINHO DO MEIO: o CAMPUS DE TI e a TORRE TECNOLÓGICA (out/2026, o dono: "falta computadores, terminais,
+//    massividade — vários estudantes de TI; a torre mais longe, mais alta, com um elevador") ─────────────
+/** o CAMPUS: a praça larga atrás da pirâmide (no nível do salão), da borda do salão até o pé da torre */
+export const CAMPUS = { meia: 34, zFim: SALAO.z - 262 } as const;
+/** a TORRE: a coluna massiva no fim do campus — o anel de chão em volta dela (a base) e o topo, onde fica o monumento */
+export const TORRE_TI = { x: SALAO.x, z: SALAO.z - 302, colR: 30.5, baseR: 46 } as const;
+/** o monumento (mais sinistro que a pirâmide): a plataforma no TOPO da torre, bem alto, na linha da pirâmide */
+export const CYBER = { x: TORRE_TI.x, z: TORRE_TI.z, r: 30, h: 120 } as const;
 /** o NÚCLEO do monumento (sólido: a sala ainda está fechada — o resto do caminho do meio vem depois) */
 export const NUCLEO_CYBER = { r: 11, alt: 52 } as const;
-/** onde o caminho reto acaba e a escadaria começa (z) e a meia-largura dos dois */
-export const MEIO = { zEscada: SALAO.z - 150, meia: 5 } as const;
+/** o ELEVADOR da torre: o anel no pé (na base, virado pro campus) SOBE pela coluna de luz e entra no topo; o anel lá em
+ *  cima DESCE. `dur` = a viagem (s) */
+export const ELEVADOR_TC = { base: { x: TORRE_TI.x, z: TORRE_TI.z + 38 }, topo: { x: TORRE_TI.x, z: TORRE_TI.z + 22 }, r: 2.2, dur: 7 } as const;
+/** onde está quem anda no elevador (layout, `h` acima do pátio) na fração `k`: sobe reto colado na torre e desliza pro topo */
+export function posElevadorTC(sentido: "sobe" | "desce", k: number): { x: number; z: number; h: number } {
+  const E = ELEVADOR_TC, c = Math.max(0, Math.min(1, sentido === "sobe" ? k : 1 - k)), s = (x: number) => x * x * (3 - 2 * x), h0 = -SALAO.desce, h1 = CYBER.h;
+  if (c < 0.82) return { x: E.base.x, z: E.base.z, h: h0 + (h1 + 1.2 - h0) * s(c / 0.82) };
+  const u = s((c - 0.82) / 0.18); return { x: E.base.x + (E.topo.x - E.base.x) * u, z: E.base.z + (E.topo.z - E.base.z) * u, h: h1 + 1.2 * (1 - u) };
+}
+/** está num anel do elevador, no piso dele? `q` layout, `h` = a altura acima do pátio */
+export function bocaDoElevadorTC(q: P2, h: number): "sobe" | "desce" | null {
+  const E = ELEVADOR_TC;
+  if (Math.abs(h + SALAO.desce) < 1.5 && Math.hypot(q.x - E.base.x, q.z - E.base.z) < E.r) return "sobe";
+  if (Math.abs(h - CYBER.h) < 1.5 && Math.hypot(q.x - E.topo.x, q.z - E.topo.z) < E.r) return "desce";
+  return null;
+}
+/** as ESTAÇÕES dos estudantes de TI no campus: fileiras dos dois lados do CORREDOR do meio (livre), mesas viradas pra
+ *  torre (o −z), a cadeira atrás; `ocupada` = tem um estudante digitando ali */
+export const ESTACOES_TI: readonly { x: number; z: number; ocupada: boolean }[] = (() => {
+  const out: { x: number; z: number; ocupada: boolean }[] = [];
+  for (let z = SALAO.z - SALAO.r - 16; z >= CAMPUS.zFim + 20; z -= 9) for (const lado of [-1, 1]) for (const dx of [11, 18, 25]) {
+    const i = out.length; out.push({ x: SALAO.x + lado * dx, z, ocupada: (i * 7) % 10 < 7 });
+  }
+  return out;
+})();
+export const MESA_TI = { larg: 4.2, prof: 1.2 } as const;
 
 // ───────────── a REDE: plataformas e pontes ─────────────
 export type PlatTC = { id: string; x: number; z: number; r: number; /** piso acima do pátio do lounge */ h: number };
@@ -76,7 +105,9 @@ export const PLATS: readonly PlatTC[] = [
   { id: "capelaRasta", x: TEMPLO_RASTA.x, z: TEMPLO_RASTA.z, r: TEMPLO_RASTA.r, h: TEMPLO_RASTA.h },
   { id: "festas", x: FESTAS.x, z: FESTAS.z, r: FESTAS.r, h: FESTAS.h },
   { id: "casais", x: CASAIS.x, z: CASAIS.z, r: CASAIS.r, h: CASAIS.h },
+  // (o TOPO da torre antes da BASE: no mesmo xz, quem está dentro do raio do topo está lá em cima — embaixo, ali, é a coluna)
   { id: "cyber", x: CYBER.x, z: CYBER.z, r: CYBER.r, h: CYBER.h },
+  { id: "baseTorre", x: TORRE_TI.x, z: TORRE_TI.z, r: TORRE_TI.baseR, h: -SALAO.desce },
 ];
 /** uma ponte reta entre duas plataformas (de borda a borda, na linha dos centros) */
 function entre(id: string, p: PlatTC, q: PlatTC, meia: number): PonteTC {
@@ -90,8 +121,8 @@ export const PONTES: readonly PonteTC[] = [
   { id: "rasta", a: ESP(PONTE_LOUNGE.a), b: ESP(PONTE_LOUNGE.b), ha: -SALAO.desce, hb: 0, meia: PONTE_LOUNGE.meia },
   entre("festas", plat("capelaRasta"), plat("festas"), 4),
   entre("casais", plat("festas"), plat("casais"), 2.6),
-  { id: "meio", a: { x: SALAO.x, z: SALAO.z - SALAO.r + 1.5 }, b: { x: SALAO.x, z: MEIO.zEscada }, ha: -SALAO.desce, hb: -SALAO.desce, meia: MEIO.meia },
-  { id: "escadaMeio", a: { x: SALAO.x, z: MEIO.zEscada }, b: { x: CYBER.x, z: CYBER.z + CYBER.r - 1.5 }, ha: -SALAO.desce, hb: CYBER.h, meia: MEIO.meia },
+  // o CAMPUS DE TI: uma "ponte" larga (é uma praça retangular) do salão até a base da torre
+  { id: "meio", a: { x: SALAO.x, z: SALAO.z - SALAO.r + 1.5 }, b: { x: SALAO.x, z: TORRE_TI.z + TORRE_TI.baseR - 1.5 }, ha: -SALAO.desce, hb: -SALAO.desce, meia: CAMPUS.meia },
 ];
 const COL = { r: 0.6, passo: 1, ponte: 0.5, ponteP: 0.8 } as const;
 
@@ -166,7 +197,11 @@ export function colisoresDoComplexo(rLounge: number): { x: number; z: number; r:
   const C = CAPELA_RASTA;
   for (let i = 0; i < C.pilares; i++) { const a = (i / C.pilares) * Math.PI * 2 + Math.PI / C.pilares; out.push({ x: TEMPLO_RASTA.x + Math.cos(a) * C.r, z: TEMPLO_RASTA.z + Math.sin(a) * C.r, r: C.pilarR + 0.2 }); }
   out.push({ x: RASTA.x, z: RASTA.z, r: ARVORE_RASTA.r });
-  out.push({ x: CYBER.x, z: CYBER.z, r: NUCLEO_CYBER.r + 0.5 });   // o NÚCLEO do monumento da Cyber Room (fechado, por ora)   // o tronco da ÁRVORE DA VIDA no meio do disco rasta
+  out.push({ x: CYBER.x, z: CYBER.z, r: NUCLEO_CYBER.r + 0.5 });   // (lá em cima)
+  // a COLUNA da torre: um ANEL de colisores no contorno (não um círculo cheio — a colisão é no plano: o cheio empurrava pra
+  // fora quem está LÁ EM CIMA, no topo, que fica no mesmo xz); na base só se anda em volta
+  { const n = Math.ceil((2 * Math.PI * TORRE_TI.colR) / 0.9); for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; out.push({ x: TORRE_TI.x + Math.cos(a) * TORRE_TI.colR, z: TORRE_TI.z + Math.sin(a) * TORRE_TI.colR, r: 0.7 }); } }
+  for (const e of ESTACOES_TI) for (const k of [-1, 0, 1]) out.push({ x: e.x + k * (MESA_TI.larg / 2 - 0.6), z: e.z, r: 0.75 });   // as MESAS do campus   // o NÚCLEO do monumento da Cyber Room (fechado, por ora)   // o tronco da ÁRVORE DA VIDA no meio do disco rasta
   for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; out.push({ x: TORRE_RASTA.x + Math.cos(a) * TORRE_RASTA.r, z: TORRE_RASTA.z + Math.sin(a) * TORRE_RASTA.r, r: 0.8 }); }
   return out;
 }
@@ -179,7 +214,8 @@ export function solidosDoComplexo(): { x: number; z: number; r: number; topo: nu
     { x: TEMPLO_RASTA.x, z: TEMPLO_RASTA.z, r: CAPELA_RASTA.r + 1, topo: TEMPLO_RASTA.h + CAPELA_RASTA.altura + 12, base: TEMPLO_RASTA.h + CAPELA_RASTA.altura - 1 },   // (o teto: por baixo dele, a capela é aberta)
     { x: TORRE_RASTA.x, z: TORRE_RASTA.z, r: TORRE_RASTA.r + 0.5, topo: FESTAS.h + TORRE_RASTA.alt, base: FESTAS.h },
     { x: RASTA.x, z: RASTA.z, r: ARVORE_RASTA.r, topo: ARVORE_RASTA.alt, base: 0 },
-    { x: CYBER.x, z: CYBER.z, r: NUCLEO_CYBER.r + 1, topo: CYBER.h + NUCLEO_CYBER.alt, base: CYBER.h },   // o monumento   // a árvore (o tronco até a copa)
+    { x: CYBER.x, z: CYBER.z, r: NUCLEO_CYBER.r + 1, topo: CYBER.h + NUCLEO_CYBER.alt, base: CYBER.h },
+    { x: TORRE_TI.x, z: TORRE_TI.z, r: TORRE_TI.colR, topo: CYBER.h, base: -SALAO.desce },   // a COLUNA da torre (sólida pra quem voa; em cima, pousa no topo)   // o monumento   // a árvore (o tronco até a copa)
   ];
 }
 /** a curva da escadaria das raízes (no referencial do layout) — o render desenha na do lounge, num grupo espelhado */

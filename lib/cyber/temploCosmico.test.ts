@@ -4,7 +4,7 @@ import { NOS } from "./buracos";
 import { FIO, saidaDaSala } from "./fiosCosmicos";
 import { definirNivel } from "./nivelAtivo";
 import { nivelDoPonto } from "./niveis";
-import { ESTUDO, ALCANCE_DUELO, ARVORE_RASTA, BOCA_SAIDA_SALAO, CASAIS, CYBER, NUCLEO_CYBER, barradoNaCupula, portaDaCupula, CHEGADA_SALAO, ESP, FESTAS, PIRAMIDE, PONTES, PONTE_LOUNGE, RASTA, SALAO, TEMPLO_RASTA, alturaDaEscadariaRasta, naPiramide } from "./temploCosmico";
+import { ELEVADOR_TC, ESTACOES_TI, TORRE_TI, bocaDoElevadorTC, posElevadorTC, ESTUDO, ALCANCE_DUELO, ARVORE_RASTA, BOCA_SAIDA_SALAO, CASAIS, CYBER, NUCLEO_CYBER, barradoNaCupula, portaDaCupula, CHEGADA_SALAO, ESP, FESTAS, PIRAMIDE, PONTES, PONTE_LOUNGE, RASTA, SALAO, TEMPLO_RASTA, alturaDaEscadariaRasta, naPiramide } from "./temploCosmico";
 import { ESCADARIA, TEMPLO, curvaDaEscadaria, noTemplo } from "./templo";
 import { RotinaExaminer, lugarDeGuarda } from "./examiner";
 
@@ -85,22 +85,29 @@ describe("o Templo Cósmico: o SALÃO central e a ponte pro lounge", () => {
     const w = W(CASAIS.x, CASAIS.z); expect(nivelDoPonto(w, CIDADE.pisoY + ALTURA_LOUNGE + CASAIS.h)).toBe("lounge");
   });
 
-  it("o CAMINHO DO MEIO: na linha da chegada e da pirâmide, reto atrás dela e a escadaria subindo até o monumento da Cyber Room", () => {
+  it("o CAMINHO DO MEIO: o CAMPUS DE TI (estações dos dois lados, o corredor livre) até a TORRE alta, e o ELEVADOR até o topo", () => {
     expect(CYBER.x).toBe(PIRAMIDE.x); expect(CHEGADA_SALAO.x).toBe(PIRAMIDE.x);   // a mesma linha de quem chega
-    const cs = colisoresDaCidade(); let ant = -Infinity;
-    for (let z = PIRAMIDE.z - PIRAMIDE.meia - 3; z >= CYBER.z + CYBER.r - 2; z -= 1) {
-      const w = W(CYBER.x, z), h = alturaNaCidade(w);
-      expect(h).toBeGreaterThanOrEqual(ant - 1e-6); ant = h;
-      expect(cs.every((c) => Math.hypot(c.x - w.x, c.z - w.z) > c.r + 0.6)).toBe(true);
-      expect(salaEm(loc(w))).toBe("lounge");
+    expect(ESTACOES_TI.length).toBeGreaterThan(90); expect(ESTACOES_TI.filter((e) => e.ocupada).length).toBeGreaterThan(60);   // muitos estudantes de TI
+    expect(CYBER.h).toBeGreaterThanOrEqual(100); expect(SALAO.z - TORRE_TI.z).toBeGreaterThan(280);   // mais alta e mais longe
+    const cs = colisoresDaCidade();
+    // o corredor do meio, de trás da pirâmide até o anel do elevador: livre e no nível do salão
+    for (let z = PIRAMIDE.z - PIRAMIDE.meia - 3; z >= ELEVADOR_TC.base.z; z -= 1) {
+      const w = W(CYBER.x, z); expect(alturaNaCidade(w)).toBe(ALTURA_LOUNGE - SALAO.desce);
+      expect(cs.every((c) => Math.hypot(c.x - w.x, c.z - w.z) > c.r + 0.6), `z ${z}`).toBe(true); expect(salaEm(loc(w))).toBe("lounge");
     }
-    expect(alturaNaCidade(W(CYBER.x, CYBER.z + CYBER.r - 4))).toBe(ALTURA_LOUNGE + CYBER.h);
-    // o núcleo do monumento é sólido (a sala ainda está fechada), andando e voando
-    const n = W(CYBER.x, CYBER.z + NUCLEO_CYBER.r); expect(cs.some((c) => Math.hypot(c.x - n.x, c.z - n.z) <= c.r)).toBe(true);
+    // e entre as fileiras dá pra chegar numa estação
+    const e = ESTACOES_TI[5]!, w = W(e.x, e.z + 2); expect(cs.every((c) => Math.hypot(c.x - w.x, c.z - w.z) > c.r)).toBe(true);
+    // o ELEVADOR: o anel do pé sobe e entrega no topo (dentro do monumento? não — na plataforma, livre); o do topo desce
+    const pe = ELEVADOR_TC.base, topo = ELEVADOR_TC.topo;
+    expect(bocaDoElevadorTC(pe, -SALAO.desce)).toBe("sobe"); expect(bocaDoElevadorTC(topo, CYBER.h)).toBe("desce"); expect(bocaDoElevadorTC(pe, CYBER.h)).toBeNull();
+    const fim = posElevadorTC("sobe", 1); expect(fim.h).toBeCloseTo(CYBER.h, 6); expect(alturaNaCidade(W(fim.x, fim.z))).toBe(ALTURA_LOUNGE + CYBER.h);
+    const wt = W(topo.x, topo.z); expect(cs.every((c) => Math.hypot(c.x - wt.x, c.z - wt.z) > c.r)).toBe(true);   // (lá em cima, nada empurrando)
+    expect(posElevadorTC("desce", 1).h).toBeCloseTo(-SALAO.desce, 6);
+    // a COLUNA da torre é sólida (andando na base e voando) e o monumento lá em cima também
+    const col = W(TORRE_TI.x, TORRE_TI.z + TORRE_TI.colR); expect(cs.some((c) => Math.hypot(c.x - col.x, c.z - col.z) <= c.r)).toBe(true);   // (o contorno barra quem anda na base)
     const nc = W(CYBER.x, CYBER.z); expect(solidosDaCidade().some((o) => Math.hypot(o.x - nc.x, o.z - nc.z) < 1 && o.topo > CIDADE.pisoY + ALTURA_LOUNGE + CYBER.h + 20)).toBe(true);
     expect(nivelDoPonto(W(CYBER.x, CYBER.z + 20), CIDADE.pisoY + ALTURA_LOUNGE + CYBER.h)).toBe("lounge");
   });
-
   it("a GUARDIÃ: a Examiner monta guarda na escadaria-veia, na frente da porta da cúpula, virada pra quem sobe; a cúpula barra quem não venceu", () => {
     const g = lugarDeGuarda(), q = naSala(L, g.x, g.z), porta = portaDaCupula();
     expect(noTemplo(q, 0)).toBe(false); expect(Math.hypot(q.x - porta.x, q.z - porta.z)).toBeLessThan(ALCANCE_DUELO);
