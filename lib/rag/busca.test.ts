@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, it, expect, vi } from "vitest";
-import { buscar, executarSql, montarSql, normalizarK, K_PADRAO, type BuscaDeps } from "./busca";
+import { buscar, executarSql, montarSql, normalizarK, K_PADRAO, PALAVRAS_DE_PERGUNTA, type BuscaDeps } from "./busca";
 import { bancoDeTeste } from "./pgTeste";
 import { criarDocumento, gravarTrechos, registrarVetores, contarBase } from "./store";
 import type { RagDb } from "./pg";
@@ -51,7 +51,7 @@ describe("montarSql (puro)", () => {
     const { sql, params } = montarSql(e, "limite de função", onehot(0), 8);
     expect(sql).toContain("embedding IS NOT NULL");
     expect(sql).toContain("<=>");
-    expect(sql).toContain("websearch_to_tsquery('rag_pt'");
+    expect(sql).toContain("to_tsvector('rag_pt'");
     expect(sql).toContain("1.0 / (60 +");
     expect(sql).toContain("JOIN rag_documentos");
     // permissão aparece nos DOIS ramos
@@ -75,9 +75,18 @@ describe("montarSql (puro)", () => {
     const { sql, params } = montarSql(e, "limite", null, 8);
     expect(sql).not.toContain("<=>");
     expect(sql).not.toContain("embedding");
-    expect(sql).toContain("websearch_to_tsquery('rag_pt'");
+    expect(sql).toContain("to_tsvector('rag_pt'");
     expect(sql.match(/turma_ids && \$\d+::text\[\] OR dono_ids @> ARRAY\[\$\d+\]::text\[\]/g)).toHaveLength(1);
     expect(params).toContain("limite");
+  });
+
+  it("ramo texto: OR dos lexemas com mínimo de casados (não o AND do websearch); palavras de pergunta por parâmetro", () => {
+    const { sql, params } = montarSql(e, "limite", null, 8);
+    expect(sql).not.toContain("websearch_to_tsquery");
+    expect(sql).toContain("' | '");
+    expect(sql).toContain("length(tsv) - length(ts_delete(tsv, tq.base)) >= tq.minimo");
+    expect(params).toContain(PALAVRAS_DE_PERGUNTA);
+    expect(sql).not.toContain("apostila");
   });
 
   it("k limita o resultado final e escala os candidatos por ramo (k*4)", () => {
@@ -275,6 +284,58 @@ describe.skipIf(!banco)("buscar — Postgres real", () => {
     const r = await buscar(depsDb(db, { embed: async () => { throw new Error("x"); } }), e, "celula");
     aviso.mockRestore();
     expect(r.map((t) => t.trechoId)).toEqual([ids[0]]);
+  });
+
+  describe("pergunta em frase, só por palavra (trecho ainda sem vetor, embed fora)", () => {
+    // Trecho real (apostila de biologia indexada pelo #489), sem vetor — como logo depois do upload (F3).
+    const APOSTILA = [
+      "Apostila Celula › Apostila de Biologia Celular", "Sumario",
+      "- Capitulo 1 - Introducao Esta apostila apresenta a celula e suas organelas.",
+      "- Capitulo 2 - Membrana plasmatica e transporte entre os meios.",
+      "- Capitulo 3 - Mitocondria e a respiracao celular aerobica.",
+      "A celula e a unidade basica da vida. Todos os seres vivos sao formados por celulas, que podem ser procariontes ou " +
+        "eucariontes. As mitocondrias produzem energia na forma de ATP. O nucleo guarda o material genetico e coordena as " +
+        "atividades celulares.",
+    ].join("\n\n");
+    const semEmbed = (db: RagDb) => depsDb(db, { embed: async () => { throw new Error("embed fora"); } });
+    const soPalavra = async (db: RagDb, pergunta: string) => {
+      const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try { return await buscar(semEmbed(db), e, pergunta); } finally { aviso.mockRestore(); }
+    };
+
+    it.each([
+      "Segundo a minha apostila, do que trata o Capitulo 2?",
+      "Me explique a respiração celular aeróbica",
+      "como funciona o transporte entre os meios na membrana plasmática?",
+      "o que o texto fala sobre o núcleo?",
+    ])("acha: %s", async (pergunta) => {
+      const db = banco!.db;
+      const { ids } = await semear(db, permTurma("tA", "h1"), [{ texto: APOSTILA }, { texto: "Historia do Brasil colonial" }]);
+      const r = await soPalavra(db, pergunta);
+      expect(r.map((t) => t.trechoId)).toEqual([ids[0]]);
+      expect(r[0]).toMatchObject({ porTexto: true, similaridade: null });
+    });
+
+    it.each([
+      "quem descobriu a penicilina?",
+      // só "apostila"/"segundo" em comum — palavras de pergunta não contam como conteúdo
+      "Segundo a apostila, quem descobriu a penicilina?",
+      "qual a capital da França segundo a apostila?",
+      // minoria dos termos de conteúdo (só "mitocôndria" de 3) não basta
+      "quem descobriu a mitocôndria e a penicilina?",
+      // só palavras de pergunta ⇒ exige todas (como o AND de antes): "resuma" não está no trecho
+      "resuma a apostila",
+    ])("não acha: %s", async (pergunta) => {
+      const db = banco!.db;
+      await semear(db, permTurma("tA", "h1"), [{ texto: APOSTILA }]);
+      expect(await soPalavra(db, pergunta)).toEqual([]);
+    });
+
+    it("lexema com aspa/barra na pergunta não quebra a tsquery", async () => {
+      const db = banco!.db;
+      const { ids } = await semear(db, permTurma("tA", "h1"), [{ texto: "it's o arquivo c:\\temp\\x" }]);
+      expect((await soPalavra(db, "it's c:\\temp\\x 'a' \\")).map((t) => t.trechoId)).toEqual([ids[0]]);
+    });
   });
 
   it("embed falha: só texto + um console.warn", async () => {
