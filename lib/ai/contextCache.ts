@@ -13,7 +13,7 @@ import { GEMINI_MODEL_FLASH } from "./model";
 
 const SCOPES = ["https://www.googleapis.com/auth/cloud-platform"];
 
-async function vertexAccessToken(client_email: string, private_key: string): Promise<string | null> {
+export async function vertexAccessToken(client_email: string, private_key: string): Promise<string | null> {
   const auth = new GoogleAuth({ credentials: { client_email, private_key }, scopes: SCOPES });
   return (await auth.getAccessToken()) || null;
 }
