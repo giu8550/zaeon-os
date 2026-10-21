@@ -3,7 +3,7 @@ import { POIS, marcoNav } from "./landmarks";
 import { colisoresDoAlto, deEscada } from "./nav";
 import { dentroDeAlgum } from "./colisao";
 import { pilaresDoMarco } from "./voo";
-import { JET, chaoNoAr, passoHorizontalJet, passoVertical, resolverNoAr, tetoDoJet, type QGNoAr } from "./jet";
+import { JET, chaoNoAr, impactoDoPouso, passoHorizontalJet, passoVertical, resolverNoAr, tetoDoJet, type QGNoAr } from "./jet";
 
 const Z = POIS.find((p) => p.id === "zaeon")!;
 const mn = marcoNav(Z)!;
@@ -79,7 +79,16 @@ describe("mochila a jato", () => {
     let a = { y: 200, vy: 0 }, b = { y: 20, vy: 0 };
     for (let i = 0; i < 60; i++) { a = passoVertical(a.y, a.vy, false, 1 / 60, 400); b = passoVertical(b.y, b.vy, false, 1 / 60, 400); }
     expect(200 - a.y).toBeCloseTo(20 - b.y, 9);
-    expect(-a.vy).toBeCloseTo(JET.quedaMax, 9);
+    expect(-a.vy).toBeCloseTo(JET.gravidade, 6);   // (1 s de queda livre: a gravidade de verdade, acelerando)
+  });
+  it("QUEDA LIVRE com peso: acelera até a velocidade terminal; a bolha de GRAVIDADE ZERO quase não cai", () => {
+    let v = { y: 500, vy: 0 }; const vs: number[] = [];
+    for (let i = 0; i < 300; i++) { v = passoVertical(v.y, v.vy, false, 1 / 60, 999); vs.push(-v.vy); }
+    for (let i = 1; i < vs.length; i++) expect(vs[i]!).toBeGreaterThanOrEqual(vs[i - 1]! - 1e-9);
+    expect(vs[vs.length - 1]).toBeCloseTo(JET.quedaMax, 6); expect(vs[30]!).toBeLessThan(JET.quedaMax * 0.3);
+    let z = { y: 100, vy: JET.zeroG.sobe }; for (let i = 0; i < 60 * 3; i++) z = passoVertical(z.y, z.vy, false, 1 / 60, 999, false, JET.zeroG.g);
+    expect(z.y).toBeGreaterThan(100);   // 3 s na bolha: ainda flutuando (subiu com o empurrãozinho)
+    expect(impactoDoPouso(-JET.quedaMax)).toBe(1); expect(impactoDoPouso(-JET.quedaPlaneio)).toBeLessThan(0.3);
   });
 });
 
