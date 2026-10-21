@@ -46,13 +46,15 @@ export async function depsReais(env: Env = process.env): Promise<RunDeps> {
   const { prisma } = await import("@/src/lib/prisma");
   const { gerar } = await import("@/lib/llm/envelope");
   const { lerUrl } = await import("@/lib/leitor/cliente");
-  const { publicarPusher, EV_MENSAGEM } = await import("@/lib/canal/realtime");
+  const { publicarPusher, EV_MENSAGEM, EV_DIGITANDO } = await import("@/lib/canal/realtime");
   const db = prisma as unknown as ChoreDb;
   return {
     db, env, agora: Date.now,
     gerar: (req) => gerar(req),
     lerUrl: (url, opts) => lerUrl(url, { ...opts, env }),
     postsHoje: (canalId) => postsHoje(db, canalId),
+    // o mesmo evento do turno do agente (lib/canal/agent-turn.ts): a tela mostra "Aura está pesquisando…"
+    avisarEstado: (canalId, agentKey, estado) => publicarPusher(canalId, EV_DIGITANDO, { agentKey, estado }),
     async postar({ canalId, agentKey, texto }) {
       // CanalMensagem ainda não tem parentId (thread = Fatia 2): posta na raiz; o parentId fica no destino da chore.
       const row = await (prisma as any).canalMensagem.create({ data: { canalId, autorTipo: "agente", autorId: agentKey, texto, mencoes: [] } });
