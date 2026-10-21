@@ -45,8 +45,10 @@ export type FlagsFrota = {
 };
 export const FLAGS_PADRAO: FlagsFrota = { ativa: true, estudoPlataforma: true, estudoLounge: true, moto: true, andar: true, festa: true, corridas: true, conversas: true, cloak: true, mochila: true, responderUsuarios: true };
 
-/** a proporção do dia (o pedido do dono; out/2026: menos lounge e menos pedestre na Zaeon — eram 40/20/30/10) */
-export const PROPORCAO = { "estudo-plataforma": 57, "estudo-lounge": 8, moto: 30, andar: 5 } as const;
+/** a proporção do dia (o pedido do dono; out/2026: menos lounge e menos pedestre na Zaeon — eram 40/20/30/10; depois,
+ *  com o Templo Cósmico — os lounges estudantis, o campus de TI, o rasta —, a rotina leva a gente da cidadela PROS
+ *  LOUNGES: eram 57/8/30/5) */
+export const PROPORCAO = { "estudo-plataforma": 45, "estudo-lounge": 30, moto: 20, andar: 5 } as const;
 /** os CONTROLES POR ÁREA que o painel admin mexe (lib/cyber/frota/config `areas`): a proporção do dia, o peso de cada
  *  lugar de estudo, quantos lugares no CHÃO do lounge e quantas vagas por estacionamento. O padrão = as constantes daqui */
 export type AreasFrota = {
