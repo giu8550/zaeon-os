@@ -81,26 +81,28 @@
 - [ ] **Step 4:** `npx vitest run lib/rag/permissao.test.ts` → PASS; `npx tsc --noEmit -p .` sem erros fora de `server/colyseus`.
 - [ ] **Step 5:** Commit `feat(rag): modelos rag_documentos/rag_trechos + filtros de permissão (puro)`
 
-### Task 2: Corte por estrutura (puro)
+### Task 2: Nível dos títulos + corte por estrutura
 
-**Files:** Create `lib/rag/corte.ts`, `lib/rag/corte.test.ts`
+**Files:** Modify `pdf-loader/main.py` (`emit_block`), `lib/scholar/types.ts` (`Block`), `lib/scholar/pdf.ts` (`parseLoaderResponse`); Create `lib/rag/corte.ts`, `lib/rag/corte.test.ts`
 
 **Interfaces:**
 - Consumes: `Block` de `lib/scholar/types` (`{ type: "heading"|"paragraph"|"table"|"figure"; page?: number; text: string }`)
-- Produces: `type TrechoCortado = { ordem: number; texto: string; caminho: string; paginaIni: number; paginaFim: number }`; `const ALVO_CHARS = 3000`; `function cortarEmTrechos(blocks: Block[], titulo: string): TrechoCortado[]`
+- Produces: `Block` ganha `level?: number` (1 = mais alto); `type TrechoCortado = { ordem: number; texto: string; caminho: string; paginaIni: number; paginaFim: number }`; `const ALVO_CHARS = 3000`; `function cortarEmTrechos(blocks: Block[], titulo: string): TrechoCortado[]`
 
-O `pdf-loader` não informa nível de título: o caminho é `titulo › penúltimo título › último título` (os dois mais recentes). `texto` = `caminho + "\n\n" + conteúdo`. Fecha o trecho ao encontrar um título **ou** ao passar de `ALVO_CHARS` num limite de parágrafo; tabela entra inteira (se não couber, fecha o atual e a tabela vira trecho próprio). `figure` é ignorado. Blocos sem `page` herdam a última página vista (começa em 1).
+**Nível dos títulos:** o `opendataloader-pdf` já detecta o nível (pelo tamanho/peso da fonte) e grava `"heading level"` no JSON — o `pdf-loader` é que descartava. `emit_block` passa a incluir `"level": node.get("heading level")` nos títulos; `parseLoaderResponse` repassa `level` quando for número ≥ 1. **Caminho = árvore completa** por pilha: título de nível N desempilha os de nível ≥ N e empilha a si; caminho = `titulo › ` + pilha. **Fallback** quando o título vem sem nível (PDF mal marcado): tratar como filho do título anterior, limitando o caminho aos 3 títulos mais recentes. `texto` = `caminho + "\n\n" + conteúdo`. Fecha o trecho ao encontrar um título **ou** ao passar de `ALVO_CHARS` num limite de parágrafo; tabela entra inteira (se não couber, fecha o atual e a tabela vira trecho próprio). `figure` é ignorado. Blocos sem `page` herdam a última página vista (começa em 1).
 
 - [ ] **Step 1: Testes que falham**
-  - 2 títulos, cada um com 2 parágrafos curtos ⇒ 2 trechos; `trechos[1].caminho === "Apostila › Cap 1 › Cap 2"`; `trechos[1].texto.startsWith("Apostila › Cap 1 › Cap 2\n\n")`
+  - títulos `Cap 1 (level 1) › 1.1 (level 2) › 1.1.1 (level 3)` e depois `Cap 2 (level 1)`, cada um com 1 parágrafo ⇒ o trecho de 1.1.1 tem `caminho === "Apostila › Cap 1 › 1.1 › 1.1.1"`; o de Cap 2 tem `"Apostila › Cap 2"` (a pilha esvaziou); `texto.startsWith(caminho + "\n\n")`
+  - títulos **sem `level`** (A, B, C, D em sequência) ⇒ o trecho de D tem `caminho === "Apostila › B › C › D"` (fallback: 3 mais recentes)
+  - `parseLoaderResponse` com `{type:"heading", level:2, ...}` ⇒ `blocks[0].level === 2`; com `level: "x"` ⇒ `level` ausente
   - parágrafos de 1.200 chars nas páginas 3,3,4 sob um título ⇒ 2 trechos; o 1º `paginaIni 3 / paginaFim 3`, o 2º termina na página 4
   - **tabela de 5.000 chars** entre parágrafos ⇒ um trecho cujo texto contém a tabela inteira (`includes(tabela)`), e nenhum outro trecho contém pedaço dela *(Review Focus 3)*
   - `blocks = []` ⇒ `[]`; só `figure` ⇒ `[]`
   - `ordem` é 0,1,2… sem buracos
 - [ ] **Step 2:** `npx vitest run lib/rag/corte.test.ts` → FAIL
-- [ ] **Step 3:** Implementar `cortarEmTrechos`.
+- [ ] **Step 3:** Passar `level` no `pdf-loader/main.py` e no `parseLoaderResponse`; implementar `cortarEmTrechos`. Conferir num PDF real (Task 8) que `level` chega preenchido.
 - [ ] **Step 4:** → PASS
-- [ ] **Step 5:** Commit `feat(rag): corte por estrutura (títulos, tabela inteira, páginas, caminho)`
+- [ ] **Step 5:** Commit `feat(rag): nível dos títulos do pdf-loader + corte por estrutura (árvore de títulos, tabela inteira, páginas)`
 
 ### Task 3: Store (db injetável) + permissões
 
@@ -236,7 +238,7 @@ O `pdf-loader` não informa nível de título: o caminho é `titulo › penúlti
 **Files:** nenhum código novo — PR, deploy e verificação.
 
 - [ ] **Step 1:** Abrir o PR com o resumo das Tasks 1–7; CI (`build-test`) verde.
-- [ ] **Step 2:** Merge → deploy. `prisma db push` pelo deploy manual (`db_push=true`) pra criar as coleções/índices do Prisma.
+- [ ] **Step 2:** Merge → deploy. `prisma db push` pelo deploy manual (`db_push=true`) pra criar as coleções/índices do Prisma. **O `pdf-loader` não entra no deploy padrão** (`SERVICES` sem ele): rodar o manual com `with_voice=true` **ou** `docker compose -f docker-compose.beta.yml up -d --build pdf-loader` na VPS, e conferir que um PDF com capítulos devolve `level` nos títulos.
 - [ ] **Step 3:** O dono roda `scripts/atlas-rag-indexes.mongo.js` no Atlas (mongosh ou Atlas UI → JSON Editor). Conferir `$listSearchIndexes` em `rag_trechos` ⇒ os 2 índices `READY`.
 - [ ] **Step 4:** `.env` da VPS: `RAG_QUEUE=1`, `RAG_WORKER=1` → recriar `web`. Log: `[rag-worker] ouvindo "rag-index"`.
 - [ ] **Step 5:** Admin → Base de conhecimento → subir 2 PDFs reais numa turma de teste. Esperado: status vai a "pronto"; "testar busca" acha trecho com título + página certos; o mesmo PDF numa 2ª turma aparece na hora (reaproveitado); remover da 1ª mantém na 2ª.
