@@ -101,16 +101,37 @@ function idStr(v: unknown): string {
   return String(v ?? "");
 }
 
+/** Número do extended JSON do `$runCommandRaw`: `{ $numberDouble|$numberInt|$numberLong: "..." }` ou número/string simples. */
+function num(v: unknown): number {
+  if (v && typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    const bruto = o.$numberDouble ?? o.$numberInt ?? o.$numberLong ?? o.$numberDecimal;
+    if (bruto !== undefined) {
+      const n = Number(bruto);
+      return Number.isFinite(n) ? n : 0;
+    }
+    return 0;
+  }
+  const n = Number(v ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
 /** Embed da pergunta com prazo; qualquer falha/estouro ⇒ null. O timer é sempre limpo. */
 async function vetorDaPergunta(embed: EmbedRag, pergunta: string, prazoMs: number): Promise<number[] | null> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const prazo = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), prazoMs);
+    timer = setTimeout(() => {
+      console.warn("[rag/busca] embed falhou, seguindo só por palavra-chave:", `prazo de ${prazoMs} ms estourado`);
+      resolve(null);
+    }, prazoMs);
   });
   const chamada = (async () => {
     const [v] = await embed([pergunta], "pergunta");
     return Array.isArray(v) && v.length > 0 ? v : null;
-  })().catch(() => null); // rejeição tardia (depois do prazo) não vira unhandledRejection
+  })().catch((e) => {
+    console.warn("[rag/busca] embed falhou, seguindo só por palavra-chave:", (e as Error)?.message ?? e);
+    return null;
+  }); // rejeição tardia (depois do prazo) não vira unhandledRejection
   try {
     return await Promise.race([chamada, prazo]);
   } finally {
@@ -135,9 +156,9 @@ export async function buscar(deps: BuscaDeps, e: EscopoRag, pergunta: string, k:
       documentoId: idStr(t.documentoId),
       titulo: String(t.titulo ?? ""),
       texto: String(t.texto ?? ""),
-      paginaIni: Number(t.paginaIni ?? 0),
-      paginaFim: Number(t.paginaFim ?? 0),
-      score: Number(t.score ?? 0),
+      paginaIni: num(t.paginaIni),
+      paginaFim: num(t.paginaFim),
+      score: num(t.score),
     }));
 }
 

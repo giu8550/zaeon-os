@@ -59,9 +59,18 @@ describe("embedVertex", () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).instances[0].task_type).toBe("RETRIEVAL_QUERY");
   });
 
-  it("HTTP 429 => rejeita com embed_http_429", async () => {
-    fetchMock.mockResolvedValue(new Response("quota", { status: 429 }));
-    await expect(embedVertex(["a"], "documento")).rejects.toThrow("embed_http_429");
+  it("HTTP 429 => rejeita com embed_http_429 e o início do corpo (máx. 200 chars)", async () => {
+    fetchMock.mockResolvedValue(new Response("quota excedida " + "x".repeat(500), { status: 429 }));
+    const erro = (await embedVertex(["a"], "documento").catch((e) => e)) as Error;
+    expect(erro.message.startsWith("embed_http_429")).toBe(true);
+    expect(erro.message).toContain("quota excedida");
+    expect(erro.message.length).toBeLessThanOrEqual("embed_http_429: ".length + 200);
+  });
+
+  it("cada chamada leva AbortSignal com prazo", async () => {
+    fetchMock.mockResolvedValue(resposta(1));
+    await embedVertex(["a"], "documento");
+    expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
   });
 
   it("contagem de vetores diferente do lote => lança", async () => {

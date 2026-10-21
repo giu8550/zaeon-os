@@ -13,6 +13,9 @@ export const RAG_EMBED_DIM = 1024;
 /** Instâncias por chamada `:predict`. */
 export const LOTE_EMBED = 16;
 
+/** Prazo de cada chamada `:predict`. */
+const PRAZO_HTTP_MS = 30_000;
+
 export type EmbedRag = (textos: string[], tipo: "documento" | "pergunta") => Promise<number[][]>;
 
 export const embedVertex: EmbedRag = async (textos, tipo) => {
@@ -35,8 +38,13 @@ export const embedVertex: EmbedRag = async (textos, tipo) => {
         instances: lote.map((content) => ({ content, task_type })),
         parameters: { outputDimensionality: RAG_EMBED_DIM, autoTruncate: true },
       }),
+      // Sem prazo, um Vertex pendurado travaria o worker; abort vira erro lançado e a fila repete.
+      signal: AbortSignal.timeout(PRAZO_HTTP_MS),
     });
-    if (!res.ok) throw new Error(`embed_http_${res.status}`);
+    if (!res.ok) {
+      const corpo = await res.text().catch(() => "");
+      throw new Error(`embed_http_${res.status}${corpo ? `: ${corpo.slice(0, 200)}` : ""}`);
+    }
     const json = (await res.json()) as { predictions?: { embeddings?: { values?: number[] } }[] };
     const vetores = (json.predictions ?? []).map((p) => p.embeddings?.values);
     if (vetores.length !== lote.length || vetores.some((v) => !Array.isArray(v))) throw new Error("embed_resposta_invalida");

@@ -89,6 +89,27 @@ describe("buscar", () => {
     expect(r[0].documentoId).toBe("bbb");
   });
 
+  it("normaliza números em extended JSON ($numberDouble/$numberInt/$numberLong)", async () => {
+    const d = deps();
+    d.aggregate.mockResolvedValue([
+      achado({ score: { $numberDouble: "0.75" }, paginaIni: { $numberInt: "3" }, paginaFim: { $numberLong: "5" } }),
+    ]);
+    const r = await buscar(d, e, "limite");
+    expect(r[0].score).toBe(0.75);
+    expect(r[0].paginaIni).toBe(3);
+    expect(r[0].paginaFim).toBe(5);
+  });
+
+  it("embed rejeita: avisa (console.warn) e cai para só texto", async () => {
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const d0 = deps({ embed: vi.fn(async () => { throw new Error("embed_http_503"); }) });
+    await buscar(d0, e, "limite");
+    expect(aviso).toHaveBeenCalledTimes(1);
+    expect(aviso.mock.calls[0][0]).toContain("[rag/busca] embed falhou");
+    expect(String(aviso.mock.calls[0][1])).toContain("embed_http_503");
+    aviso.mockRestore();
+  });
+
   it("embed rejeita: cai para só texto e não lança", async () => {
     const d = deps({ embed: vi.fn(async () => { throw new Error("embed_http_500"); }) });
     const r = await buscar(d, e, "limite");
