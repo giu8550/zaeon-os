@@ -525,6 +525,9 @@ export class CyberEngine {
   private bocaDonoArmada = true;
   private colisores: Colisor[] = [];
   private pessoas = new Map<string, PessoaCyber>();
+  /** a pessoa de um id — EU: o que o servidor mandou de mim (o `eu`, com o `fundador` e o `corpo`), por cima da lista da
+   *  sala (que às vezes ainda não me tem: o corpo próprio não vinha e o traje pintava na cor de jogador) */
+  private pessoaDe(id: string): PessoaCyber | undefined { return id === this.o.eu.id ? { ...this.pessoas.get(id), ...this.o.eu } : this.pessoas.get(id); }
   /** ids na ORDEM canônica dos membros (define a base de cada um). */
   private ordem: string[] = [];
   /** marcos megalíticos (Zaeon…) e o estado "no topo da Zaeon" do dono */
@@ -1119,7 +1122,7 @@ export class CyberEngine {
   /** CORPO PRÓPRIO (VRM do VRoid): o do FOUNDER (CORPO_DO_FUNDADOR, com as asas) ou o de um jogador que o servidor
    *  marcou (lib/cyber/estiloAvatar CORPOS_DE_JOGADOR). Baixa sem travar; vale pra pessoa e pra quem a vê de fora */
   private vestirFundador(a: Ator) {
-    const proprio = corpoProprio(this.pessoas.get(a.id), location.search);
+    const proprio = corpoProprio(this.pessoaDe(a.id), location.search);
     if (a.vrm || !this.gltf || !proprio) return;
     a.vrm = true;
     if (proprio.asas) a.av.usarAsas();   // as asas negras no lugar da mochila (já, sem esperar o corpo) — só o founder
@@ -1427,7 +1430,10 @@ export class CyberEngine {
    *  a preta */
   private vestirTraje(a: Ator) {
     // quem tem CORPO PRÓPRIO de jogador (feito no VRoid, estilo anime — a Giulia) fica com ele: o traje cobria a skin
-    { const p = corpoProprio(this.pessoas.get(a.id), location.search); if (p && p.corpo !== CORPO_DO_FUNDADOR) { a.av.traje(false); return; } }
+    // quem tem CORPO PRÓPRIO feito no VRoid (estilo anime — o fundador e a Giulia) fica com ELE: a armadura de astronauta
+    // ia por cima da skin (out/2026, o dono: "meu personagem ainda veste a armadura por cima da atual, e não vejo a skin
+    // da Giulia"). A armadura é o corpo de quem NÃO tem um próprio
+    if (corpoProprio(this.pessoaDe(a.id), location.search)) { a.av.traje(false); return; }
     const ps = this.personagemDe(a.id);
     // (o FUNDADOR: o próprio avatar sabe pelo `eu` que o servidor mandou — a lista de pessoas da sala às vezes ainda não
     //  tem a gente, e o traje piscava na cor de jogador: o amarelo perto da Zaeon)
