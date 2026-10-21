@@ -27,6 +27,11 @@ export async function register() {
       const { iniciarWorkerChoresOpcional } = await import("./instrumentation-node");
       await iniciarWorkerChoresOpcional();
     }
+    // Worker da indexação RAG (RAG_WORKER=1 + RAG_QUEUE=1 + REDIS_URL); sem as envs, a indexação roda inline no web.
+    if (process.env.RAG_WORKER === "1") {
+      const { iniciarWorkerRagOpcional } = await import("./instrumentation-node");
+      await iniciarWorkerRagOpcional();
+    }
     if (process.env.SCHOLAR_WORKER === "1") {
       const { iniciarWorkers } = await import("./instrumentation-node");
       await iniciarWorkers();
