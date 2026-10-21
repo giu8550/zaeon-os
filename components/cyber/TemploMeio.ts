@@ -7,7 +7,7 @@
  * Referencial da SALA do lounge, y = 0 no pátio (vai dentro do grupo do Templo Cósmico).
  */
 import * as THREE from "three";
-import { ALTO_TI, PIRAMIDE_INV, CABINES_TORRE, CABINE_TI, CAMPUS, CYBER, DIFUSOR_TI, ESTACOES_TI, NUCLEO_CYBER, PILARES_ALTO, POCOS_TC, PONTES, SALAO, TEMPESTADE_TI, TORRE_TI, capsulaEm, difusorDe, portaDoPoco } from "@/lib/cyber/temploCosmico";
+import { RACKS_TI, ALTO_TI, PIRAMIDE_INV, CABINES_TORRE, CABINE_TI, CAMPUS, CYBER, DIFUSOR_TI, ESTACOES_TI, NUCLEO_CYBER, PILARES_ALTO, POCOS_TC, PONTES, SALAO, TEMPESTADE_TI, TORRE_TI, capsulaEm, difusorDe, portaDoPoco } from "@/lib/cyber/temploCosmico";
 
 export type MeioHandle = { group: THREE.Group; alvos: THREE.Object3D[]; /** os RAIOS que caíram desde a última leitura (onde, no MUNDO) — o engine toca o trovão */ raios(): { x: number; y: number; z: number }[]; /** a cápsula em que eu estou (a vista de DENTRO: sem o teto, o vidro quase sumido), ou null */ capsulaDentro(id: string | null): void; atualizar(dt: number, t: number): void; dispose(): void };
 
@@ -171,7 +171,7 @@ export function criarMeio(o: { low: boolean }): MeioHandle {
     if (mudou && esferas.instanceColor) esferas.instanceColor.needsUpdate = true;
   });
   // ── os RACKS DE SERVIDOR nas laterais (as luzinhas piscando) ──
-  { const zs: number[] = []; for (let z = campus.a.z - 14; z > campus.b.z + 10; z -= 7) zs.push(z);
+  { const zs = RACKS_TI.filter((r) => r.x < SALAO.x).map((r) => r.z);   // (os mesmos da colisão)
     const ledMat = new THREE.ShaderMaterial({ uniforms: { uT: { value: 0 } },
       vertexShader: "varying vec2 vUv; varying float vI; void main(){ vUv = uv; vI = float(gl_InstanceID); gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }",
       fragmentShader: `uniform float uT; varying vec2 vUv; varying float vI; float h(vec2 p){ return fract(sin(dot(p, vec2(12.9, 78.2))) * 43758.5); }
