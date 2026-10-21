@@ -71,6 +71,8 @@ export type CidadeHandle = {
   caixasLounge: THREE.Object3D[]; tocaDiscos: THREE.Object3D | null; somTocando(on: boolean, nivel?: number): void;
   /** as caixas de som discretas dos espaços de convivência (a música ambiente de cada sala sai delas) */
   caixasAmbiente: { sala: NomeSala; obj: THREE.Object3D }[];
+  /** de onde sai o som calmo dos LOUNGES ESTUDANTIS do Templo Cósmico (components/cyber/TemploEstudo) */
+  caixasEstudo: THREE.Object3D[];
   /** mostra na TV o último recado enviado (null = some) */
   mostrarRecadoNaTV(texto: string | null): void;
   /** a porta da CÚPULA da guardiã (o Templo Cósmico): aberta pra quem venceu o duelo de linguagem da Examiner */
@@ -385,7 +387,7 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
     // (as salas montam e desmontam: o que é delas vem da que está MONTADA agora)
     montarSala: (n) => { montarSala(n); }, desmontarSala, salaMontada: (n) => vivas.has(n),
     get tvLounge() { return vivaLounge()?.salas.tv ?? null; }, get plataformas() { return [...vivas.values()].flatMap((v) => v.salas.plataformas); },
-    get caixasLounge() { return vivaLounge()?.salas.caixas ?? []; }, get caixasAmbiente() { return [...vivas.values()].flatMap((v) => v.salas.ambiente); }, get tocaDiscos() { return vivaLounge()?.salas.tocaDiscos ?? null; },
+    get caixasLounge() { return vivaLounge()?.salas.caixas ?? []; }, get caixasAmbiente() { return [...vivas.values()].flatMap((v) => v.salas.ambiente); }, get caixasEstudo() { return vivaLounge()?.salao?.caixasEstudo ?? []; }, get tocaDiscos() { return vivaLounge()?.salas.tocaDiscos ?? null; },
     somTocando: (on: boolean, nivel?: number) => { for (const v of vivas.values()) v.salas.somTocando(on, nivel); }, alturaIlhota: (k: number) => ilhotas[k]?.g.position.y ?? CIDADE.pisoY, presencas: (p) => distrito.presencas(p), mostrarRecadoNaTV: (t: string | null) => { recadoAgora = t; vivaLounge()?.salas.mostrarRecado(t); }, cupulaAberta: (aberta: boolean) => { cupulaAberta = aberta; vivaLounge()?.salao?.cupula(aberta); }, vistaCosmica: (m: number) => { vistaAgora = m; fios?.vista(m); for (const v of vivas.values()) v.saida?.vista(m); },
     somDroids: observadores.emissores,
     showLounge: (e, ritual, olho) => vivaLounge()?.salas.show(e, ritual, olho),

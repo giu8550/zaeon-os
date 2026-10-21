@@ -28,7 +28,15 @@ export const SALAO = { x: -200, z: 40, r: 48, desce: 14, colR: 0.6, passo: 1 } a
 export const PIRAMIDE = { x: SALAO.x, z: SALAO.z - 4, meia: 10, alt: 24, colR: 0.7, passo: 1.4 } as const;
 /** a PONTE do salão até o pátio do lounge: sai da borda do salão (`a`) e chega na borda do lounge (`b`, no raio 70),
  *  subindo `SALAO.desce` m; `meia` = meia-largura */
-export const PONTE_LOUNGE = { a: { x: -153.5, z: 32 }, b: { x: -65, z: 26 }, meia: 4.5, colR: 0.5, passo: 0.8 } as const;
+/** os LOUNGES ESTUDANTIS (out/2026, o dono): dos dois lados do salão, na altura dele — salas de estudo modernas, cheias
+ *  de poltronas e cantos pra ler com os amigos, com o som calmo de estudo; DEPOIS delas, a ESCADA subindo pras festas
+ *  (o lounge cósmico à esquerda — o −x do layout é a direita do mundo… o lado do lounge; o rasta, espelhado) */
+export const ESTUDO = { x: -112, z: 62, r: 28, h: -SALAO.desce } as const;
+/** a ESCADA do lounge estudantil até o pátio do lounge (sobe os `SALAO.desce` m): da borda dele à borda do lounge (raio 70) */
+export const PONTE_LOUNGE = (() => {
+  const d = Math.hypot(ESTUDO.x, ESTUDO.z), ux = -ESTUDO.x / d, uz = -ESTUDO.z / d;   // (do estudo rumo ao centro do lounge)
+  return { a: { x: ESTUDO.x + ux * (ESTUDO.r - 1.5), z: ESTUDO.z + uz * (ESTUDO.r - 1.5) }, b: { x: -ux * 68.5, z: -uz * 68.5 }, meia: 4.5, colR: 0.5, passo: 0.8 } as const;
+})();
 /** onde quem chega aparece (na frente do salão, olhando pra pirâmide: o −z) e a BOCA da pista de saída (lib/cyber/
  *  fiosCosmicos — longe o bastante da chegada pra não pegar quem acabou de chegar) */
 export const CHEGADA_SALAO = { x: SALAO.x, z: SALAO.z + 33, rumo: Math.PI } as const;
@@ -63,6 +71,8 @@ export type PonteTC = { id: string; a: P2; b: P2; /** piso nas pontas */ ha: num
 export const PLATS: readonly PlatTC[] = [
   { id: "salao", x: SALAO.x, z: SALAO.z, r: SALAO.r, h: -SALAO.desce },
   { id: "rasta", x: RASTA.x, z: RASTA.z, r: RASTA.r, h: 0 },
+  { id: "estudoL", x: ESTUDO.x, z: ESTUDO.z, r: ESTUDO.r, h: ESTUDO.h },
+  { id: "estudoR", ...ESP(ESTUDO), r: ESTUDO.r, h: ESTUDO.h },
   { id: "capelaRasta", x: TEMPLO_RASTA.x, z: TEMPLO_RASTA.z, r: TEMPLO_RASTA.r, h: TEMPLO_RASTA.h },
   { id: "festas", x: FESTAS.x, z: FESTAS.z, r: FESTAS.r, h: FESTAS.h },
   { id: "casais", x: CASAIS.x, z: CASAIS.z, r: CASAIS.r, h: CASAIS.h },
@@ -75,7 +85,8 @@ function entre(id: string, p: PlatTC, q: PlatTC, meia: number): PonteTC {
 }
 const plat = (id: string) => PLATS.find((p) => p.id === id)!;
 export const PONTES: readonly PonteTC[] = [
-  { id: "lounge", a: PONTE_LOUNGE.a, b: PONTE_LOUNGE.b, ha: -SALAO.desce, hb: 0, meia: PONTE_LOUNGE.meia },
+  entre("estudoL", plat("salao"), plat("estudoL"), 6), entre("estudoR", plat("salao"), plat("estudoR"), 6),   // (do salão aos lounges estudantis: retas, no mesmo nível)
+  { id: "lounge", a: PONTE_LOUNGE.a, b: PONTE_LOUNGE.b, ha: -SALAO.desce, hb: 0, meia: PONTE_LOUNGE.meia },   // as ESCADAS subindo pras festas
   { id: "rasta", a: ESP(PONTE_LOUNGE.a), b: ESP(PONTE_LOUNGE.b), ha: -SALAO.desce, hb: 0, meia: PONTE_LOUNGE.meia },
   entre("festas", plat("capelaRasta"), plat("festas"), 4),
   entre("casais", plat("festas"), plat("casais"), 2.6),

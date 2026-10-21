@@ -82,14 +82,7 @@ export function criarFiosCosmicos(o: { /** as pistas a desenhar (padrão: as do 
     // sempre de frente pra quem olha
     const lente = new THREE.Group(); bn.add(lente);
     const mLente = materialDisco(R, 1.04, 1.9, 0.8); shaders.push(mLente); malha(new THREE.RingGeometry(R * 1.04, R * 1.9, o.low ? 96 : 160, 3), mLente, lente);
-    // os JATOS nos polos (o plasma escapando pelo eixo), em faixas correndo pra fora
-    const mJato = new THREE.ShaderMaterial({ uniforms: { uT: { value: 0 }, uMatiz: { value: 0 } }, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
-      vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
-      fragmentShader: `uniform float uT, uMatiz; varying vec2 vUv; ${RUIDO}
-        void main(){ float n = fbm(vec2(vUv.x * 6.0, vUv.y * 5.0 - uT * 1.6)); float a = vUv.y * vUv.y * (0.4 + 0.8 * n) * smoothstep(1.0, 0.92, vUv.y);   // (forte junto do horizonte, sumindo pra fora)
-          gl_FragColor = vec4(paleta((1.0 - vUv.y) * 0.5 + uT * 0.05 + uMatiz) * a * 0.6, 1.0); }` });
-    shaders.push(mJato);
-    for (const lado of [1, -1]) { const j = malha(new THREE.CylinderGeometry(R * 0.06, R * 0.5, R * 7, 24, 8, true), mJato, disco); j.rotation.x = lado > 0 ? Math.PI / 2 : -Math.PI / 2; j.position.z = lado * R * 3.6; j.scale.y = -1; }
+    // (os JATOS nos polos saíram — out/2026, o dono)
     // a POEIRA caindo em ESPIRAL (no shader: cada grão gira cada vez mais rápido até sumir no horizonte)
     const N = o.low ? 500 : 1600, sem = new Float32Array(N * 3); for (let i = 0; i < N; i++) sem.set([Math.random() * 6.283, Math.random(), 0.04 + Math.random() * 0.08], i * 3);
     const gp = new THREE.BufferGeometry(); gp.setAttribute("position", new THREE.BufferAttribute(new Float32Array(N * 3), 3)); gp.setAttribute("aSem", new THREE.BufferAttribute(sem, 3)); geos.push(gp);
@@ -104,7 +97,7 @@ export function criarFiosCosmicos(o: { /** as pistas a desenhar (padrão: as do 
     for (const m of shaders) if (!mats.includes(m)) mats.push(m);
     // ── a TEMPESTADE em volta: nuvens escuras girando e raios — fraca de longe, forte chegando ──
     const tg = new THREE.Group(); tg.position.set(f.bn.x, 0, f.bn.z); g.add(tg);
-    const tempestade = criarTempestade({ low: o.low, yBase: f.bn.y - 70, yTopo: f.bn.y + 90, raioMax: FIO.espiralR + 60, alvoPonta: new THREE.Vector3(0, f.bn.y, 0), cor: cor.clone().multiplyScalar(0.35), semAbismo: true, densidade: 0.7, nuvens: o.low ? 40 : 90 });
+    const tempestade = criarTempestade({ low: o.low, yBase: f.bn.y - 70, yTopo: f.bn.y + 90, raioMax: R * 4.7, alvoPonta: new THREE.Vector3(0, f.bn.y, 0), cor: cor.clone().multiplyScalar(0.35), semAbismo: true, densidade: 0.7, nuvens: o.low ? 40 : 90 });
     tg.add(tempestade.group); tempestade.definir(0.25, false);
     vivos.push({ f, disco, aura, tempestade, tg, bn, lente, shaders, anel, poeira, matiz: vivos.length * 0.25 });
   }
