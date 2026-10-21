@@ -70,10 +70,15 @@ export async function gravarTrechos(
     await db.ragTrecho.createMany({
       data: trechos.map((t) => ({
         documentoId, ordem: t.ordem, texto: t.texto, caminho: t.caminho, paginaIni: t.paginaIni, paginaFim: t.paginaFim,
+        // `embedding: []` explícito: no Mongo o campo precisa existir para `{ isEmpty: true }` casar.
         turmaIds: [...perm.turmaIds], donoIds: [...perm.donoIds], embedding: [],
       })),
     });
   }
+  // A permissão do DOCUMENTO no momento da escrita manda: um `acrescentarPermissao` concorrente pode ter
+  // rodado antes de existirem trechos (não os viu). Re-sincroniza os trechos com os arrays atuais do documento.
+  const atual = await carregar(db, documentoId);
+  await db.ragTrecho.updateMany({ where: { documentoId }, data: { turmaIds: [...atual.turmaIds], donoIds: [...atual.donoIds] } });
   await db.ragDocumento.update({ where: { id: documentoId }, data: { totalTrechos: trechos.length } });
   return trechos.length;
 }
@@ -87,16 +92,22 @@ async function carregar(db: RagDb, documentoId: string): Promise<RagDocumentoRow
   return doc;
 }
 
-async function gravarPermissao(db: RagDb, documentoId: string, turmaIds: string[], donoIds: string[]): Promise<void> {
-  await db.ragDocumento.update({ where: { id: documentoId }, data: { turmaIds, donoIds } });
-  await db.ragTrecho.updateMany({ where: { documentoId }, data: { turmaIds, donoIds } });
+/**
+ * Ordem das escritas: na REMOÇÃO os trechos vão primeiro (é neles que o filtro do índice olha) — se a 2ª escrita
+ * falhar, o acesso já foi cortado (falha fechada, sem vazamento entre turmas). Na INCLUSÃO, o documento primeiro
+ * (se falhar no meio, o retry idempotente completa; ninguém ganha acesso a mais do que o documento declara).
+ */
+async function gravarPermissao(db: RagDb, documentoId: string, turmaIds: string[], donoIds: string[], remocao: boolean): Promise<void> {
+  const docOp = () => db.ragDocumento.update({ where: { id: documentoId }, data: { turmaIds, donoIds } });
+  const trechosOp = () => db.ragTrecho.updateMany({ where: { documentoId }, data: { turmaIds, donoIds } });
+  if (remocao) { await trechosOp(); await docOp(); } else { await docOp(); await trechosOp(); }
 }
 
 /** Documento E todos os trechos. Idempotente (sem duplicata). */
 export async function acrescentarPermissao(db: RagDb, documentoId: string, p: Permissao): Promise<void> {
   validar(p);
   const doc = await carregar(db, documentoId);
-  await gravarPermissao(db, documentoId, com(doc.turmaIds, p.turmaId), com(doc.donoIds, p.donoId));
+  await gravarPermissao(db, documentoId, com(doc.turmaIds, p.turmaId), com(doc.donoIds, p.donoId), false);
 }
 
 /** Remove uma permissão; se era a última, apaga o documento e os trechos. */
@@ -109,7 +120,7 @@ export async function removerPermissao(db: RagDb, documentoId: string, p: Permis
     await apagarDocumento(db, documentoId);
     return "documento_apagado";
   }
-  await gravarPermissao(db, documentoId, turmaIds, donoIds);
+  await gravarPermissao(db, documentoId, turmaIds, donoIds, true);
   return "removida";
 }
 

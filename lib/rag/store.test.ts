@@ -38,7 +38,30 @@ describe("store — criar e buscar", () => {
     expect((await buscarPorHash(db, "h1"))?.totalTrechos).toBe(2);
     const ts = await db.ragTrecho.findMany({ where: { documentoId: doc.id } });
     expect(ts).toHaveLength(2);
-    expect(ts.every((t: any) => t.donoIds[0] === "u1" && t.embedding.length === 0)).toBe(true);
+    expect(ts.every((t: any) => t.donoIds[0] === "u1")).toBe(true);
+  });
+});
+
+describe("store — gravarTrechos × permissão concorrente", () => {
+  it("acrescentarPermissao(t2) ANTES de gravarTrechos(perm com só t1) => todos os trechos ficam com t1 e t2", async () => {
+    const db = fakeDb();
+    const doc = await criarDocumento(db, base("h1", { turmaId: "t1" }));
+    await acrescentarPermissao(db, doc.id, { turmaId: "t2" }); // ainda não há trechos
+    await gravarTrechos(db, doc.id, [trecho(0), trecho(1)], { turmaIds: ["t1"], donoIds: [] }); // snapshot velho
+    const ts = (await db.ragTrecho.findMany({ where: { documentoId: doc.id } })) as any[];
+    expect(ts).toHaveLength(2);
+    for (const t of ts) {
+      expect(t.turmaIds).toEqual(expect.arrayContaining(["t1", "t2"]));
+      expect(podeVer(t, { userId: "x", turmaIds: ["t2"] })).toBe(true);
+    }
+  });
+
+  it("trechos nascem com embedding: [] explícito (o campo existe para o isEmpty casar no Mongo)", async () => {
+    const db = fakeDb();
+    const doc = await criarDocumento(db, base("h1", { donoId: "u1" }));
+    await gravarTrechos(db, doc.id, [trecho(0)], { turmaIds: [], donoIds: ["u1"] });
+    const ts = (await db.ragTrecho.findMany({ where: { documentoId: doc.id } })) as any[];
+    expect(ts[0].embedding).toEqual([]);
   });
 });
 
