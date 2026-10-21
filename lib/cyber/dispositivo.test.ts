@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classificarGpu, comPreferencia, detectarPerfil, lerPreferencia, precisaGirar, proximoQuadro, qualidadeDe } from "./dispositivo";
+import { classificarGpu, comPreferencia, detectarPerfil, lerNitidez, lerPreferencia, lerSuavizar, pixelRatioDe, precisaGirar, proximoQuadro, qualidadeDe } from "./dispositivo";
 
 const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
 const ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Mobile Safari/537.36";
@@ -35,7 +35,7 @@ describe("a placa de vídeo (out/2026: notebook Intel com 8 GB travava no perfil
     expect(detectarPerfil({ ...base, gpu: "NVIDIA GeForce RTX 4070" })).toMatchObject({ leve: false, gpu: "dedicada" });
   });
   it("desktop leve: resolução da tela COM antialias (sem serrilhado no talo) e 30 fps cravados", () => {
-    expect(qualidadeDe({ movel: false, leve: true, fraco: false, gpu: "integrada" })).toEqual({ leve: true, pixelRatioMax: 1, antialias: true, fpsMax: 30 });
+    expect(qualidadeDe({ movel: false, leve: true, fraco: false, gpu: "integrada" })).toEqual({ leve: true, pixelRatioMax: 1.25, antialias: true, fpsMax: 30 });
   });
   it("a escolha nas configurações vence a detecção (leve força; completo tira — menos no celular)", () => {
     const forte = { movel: false, leve: false, fraco: false, gpu: "dedicada" as const }, fraca = { movel: false, leve: true, fraco: true, gpu: "integrada" as const };
@@ -47,9 +47,15 @@ describe("a placa de vídeo (out/2026: notebook Intel com 8 GB travava no perfil
 
 describe("qualidade por perfil", () => {
   it("desktop: cheia (até 60 fps); celular: pixel ratio 1, sem antialias, 45 fps; aparelho fraco: 30 fps", () => {
-    expect(qualidadeDe({ movel: false, leve: false, fraco: false })).toEqual({ leve: false, pixelRatioMax: 1.5, antialias: true, fpsMax: 60 });   // tela de 120/144 Hz não desenha o dobro
+    expect(qualidadeDe({ movel: false, leve: false, fraco: false })).toEqual({ leve: false, pixelRatioMax: 2, antialias: true, fpsMax: 60 });   // tela de 120/144 Hz não desenha o dobro
     expect(qualidadeDe({ movel: true, leve: true, fraco: false })).toEqual({ leve: true, pixelRatioMax: 1, antialias: false, fpsMax: 45 });
     expect(qualidadeDe({ movel: true, leve: true, fraco: true }).fpsMax).toBe(30);
+    // a CALIBRAGEM do serrilhado: a nitidez escolhida vale sem o teto da tela (superamostragem); suavizar liga/desliga o MSAA
+    const leve = { movel: false, leve: true, fraco: false } as const;
+    expect(pixelRatioDe(qualidadeDe(leve), 2)).toBe(1.25); expect(pixelRatioDe(qualidadeDe(leve), 1)).toBe(1);
+    expect(pixelRatioDe(qualidadeDe(leve, { nitidez: "2" }), 1)).toBe(2); expect(pixelRatioDe(qualidadeDe(leve, { nitidez: "0.75" }), 2)).toBe(0.75);
+    expect(qualidadeDe(leve, { suavizar: "nao" }).antialias).toBe(false); expect(qualidadeDe({ movel: true, leve: true, fraco: false }, { suavizar: "sim" }).antialias).toBe(true);
+    expect(lerNitidez("1.5")).toBe("1.5"); expect(lerNitidez("9")).toBe("auto"); expect(lerSuavizar("nao")).toBe("nao"); expect(lerSuavizar(null)).toBe("auto");
   });
   it("celular em pé pede pra girar; na horizontal (ou desktop) não", () => {
     const cel = { movel: true, leve: true, fraco: false };

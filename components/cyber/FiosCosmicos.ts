@@ -27,8 +27,10 @@ const RUIDO = `float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 
 /** o DISCO DE ACREÇÃO (out/2026, o dono: "mais fluidez, cosmicalidade e psicodelia"): o redemoinho de plasma girando em
  *  rotação DIFERENCIAL (o de dentro mais rápido), em fios de ruído, mais brilhante de um lado (o doppler), com as cores
  *  GIRANDO na paleta cósmica e o branco quente na borda de dentro. Polar a partir da posição (o anel no plano xy) */
-function materialDisco(R: number, r0: number, r1: number, intensidade: number): THREE.ShaderMaterial {
+function materialDisco(R: number, r0: number, r1: number, intensidade: number, leve = false): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
+    // (LEVE: o ruído com 2 oitavas e sem os fios finos — o disco é grande na tela e o fbm de 4 oitavas, 2× por pixel, pesava)
+    defines: leve ? { LEVE: "" } : {},
     uniforms: { uT: { value: 0 }, uR0: { value: R * r0 }, uR1: { value: R * r1 }, uI: { value: intensidade }, uMatiz: { value: 0 } },
     transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
     vertexShader: "varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
@@ -36,7 +38,11 @@ function materialDisco(R: number, r0: number, r1: number, intensidade: number): 
       void main(){
         float r = length(vP), a = atan(vP.y, vP.x), rn = clamp((r - uR0) / (uR1 - uR0), 0.0, 1.0);
         float giro = uT * (0.9 / (0.18 + rn));
+        #ifdef LEVE
+        float n = n2(vec2(a * 3.0 + giro, rn * 7.0 - uT * 0.25)) * 0.65 + n2(vec2(a * 6.0 + giro, rn * 14.0)) * 0.35, fio = 0.0;
+        #else
         float n = fbm(vec2(a * 3.0 + giro, rn * 7.0 - uT * 0.25)), fio = fbm(vec2(a * 9.0 + giro * 1.7, rn * 22.0));
+        #endif
         float brilho = pow(1.0 - rn, 1.5) * (0.35 + 0.9 * n + 0.5 * smoothstep(0.55, 0.9, fio)) * (0.55 + 0.6 * (0.5 + 0.5 * sin(a + 0.7)));
         vec3 cor = mix(paleta(rn * 0.7 + n * 0.5 + uT * 0.04 + uMatiz), vec3(1.0, 0.92, 0.78), smoothstep(0.25, 0.0, rn) * 0.8);
         float borda = smoothstep(0.0, 0.04, rn) * smoothstep(1.0, 0.75, rn);
@@ -73,18 +79,18 @@ export function criarFiosCosmicos(o: { /** as pistas a desenhar (padrão: as do 
         void main(){ float f = pow(1.0 - abs(dot(vN, vV)), 4.0); gl_FragColor = vec4(mix(vec3(1.0, 0.9, 0.75), paleta(uT * 0.06 + uMatiz), 0.55) * f * 1.6, 1.0); }` });
     shaders.push(borda); malha(new THREE.SphereGeometry(R * 1.06, 48, 32), borda, bn);
     sprite(0xffe9c8, 0.75, R * 2.4, bn);
-    const aura = sprite(cor, 0.5, R * 9, bn);
+    const aura = sprite(cor, 0.5, o.low ? R * 4.5 : R * 9, bn);   // (no leve, menor: uma aura do tamanho da tela inteira somando luz pesava)
     // o DISCO DE ACREÇÃO (inclinado) e o anel de FÓTONS colado no horizonte
     const disco = new THREE.Group(); disco.rotation.set(-Math.PI / 2 + 0.3, 0, 0.2); bn.add(disco);
-    const mDisco = materialDisco(R, 1.12, 4.4, 1.25); shaders.push(mDisco); malha(new THREE.RingGeometry(R * 1.12, R * 4.4, o.low ? 96 : 192, 6), mDisco, disco);
+    const mDisco = materialDisco(R, 1.12, 4.4, 1.25, o.low); shaders.push(mDisco); malha(new THREE.RingGeometry(R * 1.12, R * 4.4, o.low ? 64 : 192, o.low ? 3 : 6), mDisco, disco);
     const anel = aditivo(0xfff1d6, 0.95); malha(new THREE.TorusGeometry(R * 1.1, R * 0.025, 6, 128), anel, disco);
     // a LENTE: a luz do disco de TRÁS dobrada pela gravidade — o arco por cima e por baixo do horizonte (Interstellar),
     // sempre de frente pra quem olha
     const lente = new THREE.Group(); bn.add(lente);
-    const mLente = materialDisco(R, 1.04, 1.9, 0.8); shaders.push(mLente); malha(new THREE.RingGeometry(R * 1.04, R * 1.9, o.low ? 96 : 160, 3), mLente, lente);
+    if (!o.low) { const mLente = materialDisco(R, 1.04, 1.9, 0.8); shaders.push(mLente); malha(new THREE.RingGeometry(R * 1.04, R * 1.9, 160, 3), mLente, lente); }   // (no leve, sem a lente)
     // (os JATOS nos polos saíram — out/2026, o dono)
     // a POEIRA caindo em ESPIRAL (no shader: cada grão gira cada vez mais rápido até sumir no horizonte)
-    const N = o.low ? 500 : 1600, sem = new Float32Array(N * 3); for (let i = 0; i < N; i++) sem.set([Math.random() * 6.283, Math.random(), 0.04 + Math.random() * 0.08], i * 3);
+    const N = o.low ? 140 : 1600, sem = new Float32Array(N * 3); for (let i = 0; i < N; i++) sem.set([Math.random() * 6.283, Math.random(), 0.04 + Math.random() * 0.08], i * 3);
     const gp = new THREE.BufferGeometry(); gp.setAttribute("position", new THREE.BufferAttribute(new Float32Array(N * 3), 3)); gp.setAttribute("aSem", new THREE.BufferAttribute(sem, 3)); geos.push(gp);
     const poeira = new THREE.ShaderMaterial({ uniforms: { uT: { value: 0 }, uR: { value: R }, uMapa: { value: o.starTex }, uMatiz: { value: 0 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
       vertexShader: `attribute vec3 aSem; uniform float uT, uR; varying float vK;
@@ -97,7 +103,7 @@ export function criarFiosCosmicos(o: { /** as pistas a desenhar (padrão: as do 
     for (const m of shaders) if (!mats.includes(m)) mats.push(m);
     // ── a TEMPESTADE em volta: nuvens escuras girando e raios — fraca de longe, forte chegando ──
     const tg = new THREE.Group(); tg.position.set(f.bn.x, 0, f.bn.z); g.add(tg);
-    const tempestade = criarTempestade({ low: o.low, yBase: f.bn.y - 70, yTopo: f.bn.y + 90, raioMax: R * 4.7, alvoPonta: new THREE.Vector3(0, f.bn.y, 0), cor: cor.clone().multiplyScalar(0.35), semAbismo: true, densidade: 0.7, nuvens: o.low ? 40 : 90 });
+    const tempestade = criarTempestade({ low: o.low, yBase: f.bn.y - 70, yTopo: f.bn.y + 90, raioMax: R * 4.7, alvoPonta: new THREE.Vector3(0, f.bn.y, 0), cor: cor.clone().multiplyScalar(0.35), semAbismo: true, densidade: o.low ? 0.45 : 0.7, nuvens: o.low ? 14 : 90 });
     tg.add(tempestade.group); tempestade.definir(0.25, false);
     vivos.push({ f, disco, aura, tempestade, tg, bn, lente, shaders, anel, poeira, matiz: vivos.length * 0.25 });
   }
@@ -121,7 +127,7 @@ export function criarFiosCosmicos(o: { /** as pistas a desenhar (padrão: as do 
         if (eu) { v.bn.updateMatrixWorld(); lenteAlvo.set(eu.x, eu.y, eu.z); v.bn.parent?.localToWorld(lenteAlvo); v.lente.lookAt(lenteAlvo); }   // (a lente sempre de frente pra quem olha)
         // o quanto a pessoa está perto do buraco negro: a tempestade (e os raios) e a aura crescem
         const k = eu ? pertoDoBuraco(v.f, eu) : 0;
-        v.tempestade.definir(0.25 + 0.75 * k, k > 0.15);
+        v.tempestade.definir(0.25 + 0.75 * k, !o.low && k > 0.15);   // (no leve, sem os raios)
         (v.aura.material as THREE.SpriteMaterial).opacity = 0.45 + 0.4 * k;
         const caiu = v.tempestade.atualizar(t);
         if (caiu && o.aoTrovao) o.aoTrovao(raio.copy(caiu).multiplyScalar(v.tg.scale.x).add(v.tg.position));

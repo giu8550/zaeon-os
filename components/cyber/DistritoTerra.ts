@@ -242,10 +242,15 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
 
   // ── os CABOS ALIMENTADORES: dos motores até o globo e o telão, no chão, com a energia correndo por dentro ──
   const matCabo = guarda(new THREE.ShaderMaterial({
-    uniforms: { uT },
+    uniforms: { uT }, defines: low ? { SEM_PULSO: "" } : {},   // (no LEVE, sem os pulsos azuis correndo: a cor acesa, parada)
     vertexShader: /* glsl */ `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     fragmentShader: /* glsl */ `uniform float uT; varying vec2 vUv;
-      void main() { float pulso = pow(max(0.0, sin((vUv.x * 14.0 - uT * 3.0) * 3.14159)), 6.0);
+      void main() {
+        #ifdef SEM_PULSO
+        float pulso = 0.3;
+        #else
+        float pulso = pow(max(0.0, sin((vUv.x * 14.0 - uT * 3.0) * 3.14159)), 6.0);
+        #endif
         vec3 cor = mix(vec3(0.05, 0.12, 0.22), vec3(0.45, 0.9, 1.0), 0.25 + 0.75 * pulso);
         gl_FragColor = vec4(cor, 1.0); }`,
   }));

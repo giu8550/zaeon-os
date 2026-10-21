@@ -25,7 +25,7 @@ import { criarTempestade, type TempestadeHandle } from "./Tempestade";
 import { BALADA, TURBO_NAVE, brilhoDaBalada, corDoFlash, escuroDaBalada, luzDoFlash, fumacaDaTorre, noPerimetro, faseDaTempestade, intensidadeDaTempestade, passoDaEscadaria, raioNaBatida, revelacaoDaNave, ritualDesligado, sensacaoDaNave, suavizarRitual, type FaseRitual, type Ritual } from "@/lib/cyber/ritual";
 import { VOO, chaoDoVoo, passoVooSub, pilaresDoMarco, type ComandoVoo, type EstadoVoo, type Pilar } from "@/lib/cyber/voo";
 import { JET, impactoDoPouso, passoHorizontalJet, passoVertical, resolverNoAr, somDoJato, tetoDoJet, type QGNoAr } from "@/lib/cyber/jet";
-import { proximoQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
+import { pixelRatioDe, proximoQuadro, type Qualidade } from "@/lib/cyber/dispositivo";
 import { QualidadeAdaptativa } from "@/lib/cyber/qualidadeAdaptativa";
 import { DISTANCIA, PASSOS, duracaoVozDroid, cadenciaPasso, eventosNave, fatorCristais, fatorLeito, gatilhoVooInicial, gatilhosVoo, intervaloNeuronio, somNaveInicial, type Dist, type EstadoGatilhoVoo, type EstadoSomNave } from "@/lib/cyber/audio";
 import { musica } from "@/lib/audio/musica";
@@ -79,7 +79,7 @@ import { criarCarroHex, type CarroHandle } from "./CarroHex";
 import { definirNivel, NIVEIS_SEPARADOS, type IdNivel } from "@/lib/cyber/nivelAtivo";
 import { FIO as FIO_COSMICO, comecarTragada, fiosCosmicos, naAtracao, passoTragada, pertoDoBuraco, posDaTragada, progressoTragada, saidaDaSala, type Tragada } from "@/lib/cyber/fiosCosmicos";
 import { nivelDoPonto, proximoNivel } from "@/lib/cyber/niveis";
-import { LOTES_CARRO, pisoDaVaga, posseDosCarros, vagaDoLote, vagasDeCarro, type CarroDirigido, type CarroLargado, type PosseCarro, type VagaCarro } from "@/lib/cyber/carros";
+import { CARROS_NA_ZAEON, LOTES_CARRO, pisoDaVaga, posseDosCarros, vagaDoLote, vagasDeCarro, type CarroDirigido, type CarroLargado, type PosseCarro, type VagaCarro } from "@/lib/cyber/carros";
 import { criarPisoCarros, type PisoCarrosHandle } from "./EstacionamentoCarros";
 import { LOOPS_CARRO, mixDoCarro, sonsDaCabine } from "@/lib/cyber/somCarro";
 import { paletaFeminina, type Paleta } from "./CorpoAstronauta";
@@ -534,7 +534,14 @@ export class CyberEngine {
   /** a viagem na ESCADA DE ENERGIA do lounge (lib/cyber/ceu `bocaDaEscada`): sobe ou desce sozinha, surfando */
   private viagem: { tipo: "escada" | "elevador" | "garagem"; sentido: "sobe" | "desce"; t: number; sala?: NomeSala } | null = null;
   /** QUALIDADE ADAPTATIVA (lib/cyber/qualidadeAdaptativa): o pixel ratio do perfil é o teto; a escada multiplica */
-  private qa!: QualidadeAdaptativa; private prBase = 1; private ultimoDesenho = 0;
+  private qa!: QualidadeAdaptativa; private prBase = 1; private nitidezFixa = false; private ultimoDesenho = 0;
+  /** a NITIDEZ mudou nas configurações (lib/cyber/dispositivo): `null` = a do modo (e a adaptativa volta a mexer) */
+  definirNitidez(pr: number | null) {
+    const q = this.o.qualidade;
+    this.nitidezFixa = pr !== null;
+    this.prBase = pr ?? (q ? Math.min(q.pixelRatioMax, window.devicePixelRatio || 1) : this.prBase);
+    this.aplicarQualidade(); this.R.setSize(this.w, this.h, false);
+  }
   /** o alcance da câmera no degrau cheio (no leve, metade: o mapa sem os campi cabe) e o medidor de FPS (as configs) */
   private farBase = 3600; private quadrosSeg = 0; private inicioSeg = 0; private fpsAgora = 0;
   private frustum = new THREE.Frustum(); private mProj = new THREE.Matrix4(); private esfAtor = new THREE.Sphere();
@@ -775,7 +782,8 @@ export class CyberEngine {
     this.w = Math.max(1, container.clientWidth); this.h = Math.max(1, container.clientHeight);
     const q = opts.qualidade;
     this.R = new THREE.WebGLRenderer({ antialias: q ? q.antialias : !low, powerPreference: "high-performance" });
-    this.prBase = Math.min(q ? q.pixelRatioMax : low ? 1.25 : 1.5, window.devicePixelRatio || 1);   // tela retina a 2× custava ~78% mais pixels
+    this.prBase = q ? pixelRatioDe(q, window.devicePixelRatio || 1) : Math.min(low ? 1.25 : 1.5, window.devicePixelRatio || 1);   // (a nitidez escolhida nas configurações, ou o teto do modo)
+    this.nitidezFixa = q?.nitidezFixa !== undefined;
     this.R.setPixelRatio(this.prBase);
     this.R.setSize(this.w, this.h, false);
     this.fpsMax = q?.fpsMax ?? 0;
@@ -2062,7 +2070,7 @@ export class CyberEngine {
     if (!this.vinheta) { const el = document.createElement("div"); el.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:25;opacity:0;background:radial-gradient(ellipse at 50% 50%, transparent 38%, rgba(60,10,110,.55) 72%, rgba(8,0,20,.92) 100%);"; this.o.overlay.appendChild(el); this.vinheta = el; }
     const op = v ? 0.25 + 0.75 * k : 0; if (this.vinheta.style.opacity !== op.toFixed(2)) this.vinheta.style.opacity = op.toFixed(2);
     if (!v) { if (this.rastros) this.rastros.linhas.visible = false; return; }
-    const N = this.o.low ? 90 : 240, eu = new THREE.Vector3(this.eu.pos.x, this.eu.alt + 1.2, this.eu.pos.z);
+    const N = this.o.low ? 40 : 240, eu = new THREE.Vector3(this.eu.pos.x, this.eu.alt + 1.2, this.eu.pos.z);
     if (!this.rastros) {
       const pos = new Float32Array(N * 6), g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
       const linhas = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xd9c8ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
@@ -2240,7 +2248,7 @@ export class CyberEngine {
     const D = this.distorcao, alvo = this.pertoDeBuracoNegro();
     D.k += (alvo - D.k) * 0.06;
     const cv = this.R.domElement;
-    if (D.k < 0.015) { if (cv.style.filter) cv.style.filter = ""; return; }
+    if (D.k < 0.015 || this.o.low) { if (cv.style.filter) cv.style.filter = ""; return; }   // (no LEVE, sem filtro nenhum no canvas: o navegador recompõe a tela inteira a cada quadro)
     if (!this.o.low && !D.svg) {
       const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg"); svg.setAttribute("width", "0"); svg.setAttribute("height", "0"); svg.style.position = "absolute";
       const fl = document.createElementNS(ns, "filter"); fl.id = "zaeon-bn-distorce"; fl.setAttribute("x", "-5%"); fl.setAttribute("y", "-5%"); fl.setAttribute("width", "110%"); fl.setAttribute("height", "110%");
@@ -3124,7 +3132,7 @@ export class CyberEngine {
         h.group.position.set(c.est.x, c.est.y + CARRO_PAIRA, c.est.z); h.group.rotation.y = c.est.yaw; h.atualizar(t, 0, { vel: 0, ligado: false });
         this.carros.push(c);
       }
-      for (const l of LOTES_CARRO) {
+      for (const l of CARROS_NA_ZAEON ? LOTES_CARRO : []) {   // (os carros da Zaeon saíram: sem o piso do estacionamento também)
         const p = criarPisoCarros(l, { low: this.o.low }), cen = mundo(vagaDoLote(l, (l.filas - 1) / 2, (l.porFila - 1) / 2));
         p.group.position.set(cen.x, ilhaY, cen.z); p.group.rotation.y = vagaDoLote(l, 0, 0).rumo; this.cena.scene.add(p.group); this.pisosCarros.push(p);
       }
@@ -3996,7 +4004,7 @@ export class CyberEngine {
    *  (a nebulosa lê o degrau direto no desenho) — nada recompila */
   private aplicarQualidade() {
     const d = this.qa.atual;
-    this.R.setPixelRatio(this.prBase * d.dpr);
+    this.R.setPixelRatio(this.prBase * (this.nitidezFixa ? 1 : d.dpr));   // (nitidez escolhida pela pessoa: a resolução não cai)
     for (const a of [this.eu, ...this.remotos.values()]) a?.av.aura(d.aura);
     // o ALCANCE: a câmera e as IAs da frota encurtam ANTES da resolução cair (lib/cyber/qualidadeAdaptativa)
     this.cam.far = Math.max(1000, this.farBase * d.alcance); this.cam.updateProjectionMatrix();

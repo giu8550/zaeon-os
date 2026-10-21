@@ -73,8 +73,8 @@ describe("movimento e interpolação", () => {
   });
   it("presença da rede: só userId ObjectId + números; cor validada", () => {
     expect(sanitizarPresenca({ userId: "x", x: 0, z: 0, facing: 0 })).toBeNull();
-    { const u = "a".repeat(24), ok = sanitizarPresenca({ userId: u, x: 0, z: 0, facing: 0, carro: { c: 1, y: 451, yaw: 0.5 }, carroLargado: { c: 3, x: 5, y: 450, z: -500, yaw: 0 } });
-      expect(ok?.carro).toEqual({ c: 1, y: 451, yaw: 0.5 }); expect(ok?.carroLargado).toEqual({ c: 3, x: 5, y: 450, z: -500, yaw: 0 });
+    { const u = "a".repeat(24), ok = sanitizarPresenca({ userId: u, x: 0, z: 0, facing: 0, carro: { c: 0, y: 451, yaw: 0.5 }, carroLargado: { c: 0, x: 5, y: 450, z: -500, yaw: 0 } });   // (o carro 0 = o da praça — o único, sem os da Zaeon)
+      expect(ok?.carro).toEqual({ c: 0, y: 451, yaw: 0.5 }); expect(ok?.carroLargado).toEqual({ c: 0, x: 5, y: 450, z: -500, yaw: 0 });
       const lixo = sanitizarPresenca({ userId: u, x: 0, z: 0, facing: 0, carro: { c: 999, y: 1, yaw: 0 }, carroLargado: "x" });
       expect(lixo?.carro).toBeUndefined(); expect(lixo?.carroLargado).toBeUndefined(); }   // (o CARRO voador: só índice que existe)
     expect(sanitizarPresenca({ userId: OID, x: 1, z: 2, facing: 0.5, color: "red", name: "<b>" })).toMatchObject({ color: "#4aa3ff", name: "<b>" });

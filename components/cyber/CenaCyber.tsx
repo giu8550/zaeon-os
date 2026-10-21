@@ -10,7 +10,7 @@ import type { Carregando } from "@/lib/cyber/carregamento";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LAB_ENTRADA, MSG_ENTRAR_ESTUDO, ehMsgEntrarEstudo } from "@/lib/ui/loungeHub";
-import { PREF_GRAFICOS, PREF_MOSTRAR_FPS, comPreferencia, detectarPerfil, lerGpu, lerPreferencia, precisaGirar, qualidadeDe } from "@/lib/cyber/dispositivo";
+import { EVENTO_GRAFICOS, PREF_GRAFICOS, PREF_MOSTRAR_FPS, PREF_NITIDEZ, PREF_SUAVIZAR, comPreferencia, detectarPerfil, lerGpu, lerNitidez, lerPreferencia, lerSuavizar, precisaGirar, qualidadeDe } from "@/lib/cyber/dispositivo";
 import ContadorFps from "./ContadorFps";
 import { PREF_SFX, PREF_VOLUME, lerPrefs } from "@/lib/cyber/audio";
 import { tocarUI } from "./AudioCyber";
@@ -211,13 +211,18 @@ export default function CenaCyber(p: CenaCyberProps) {
   // ONDE está rodando (celular × desktop, aparelho fraco) → capas de efeito só onde precisa (lib/cyber/dispositivo)
   // (+ a PLACA DE VÍDEO: integrada → leve; e a escolha das configurações — automático, leve ou completo)
   const gpu = useMemo(() => (typeof window === "undefined" ? undefined : lerGpu()), []);
-  const prefs = useMemo(() => { try { return { graficos: lerPreferencia(localStorage.getItem(PREF_GRAFICOS)), fps: localStorage.getItem(PREF_MOSTRAR_FPS) === "1" }; } catch { return { graficos: lerPreferencia(null), fps: false }; } }, []);
+  const prefs = useMemo(() => { try { return { graficos: lerPreferencia(localStorage.getItem(PREF_GRAFICOS)), fps: localStorage.getItem(PREF_MOSTRAR_FPS) === "1", nitidez: lerNitidez(localStorage.getItem(PREF_NITIDEZ)), suavizar: lerSuavizar(localStorage.getItem(PREF_SUAVIZAR)) }; } catch { return { graficos: lerPreferencia(null), fps: false, nitidez: lerNitidez(null), suavizar: lerSuavizar(null) }; } }, []);
   const perfil = useMemo(() => typeof window === "undefined" ? { movel: false, leve: false, fraco: false } : comPreferencia(detectarPerfil({
     coarse: matchMedia("(pointer: coarse)").matches, toques: navigator.maxTouchPoints || 0, ua: navigator.userAgent, largura: innerWidth, altura: innerHeight,
     memoriaGB: (navigator as Navigator & { deviceMemory?: number }).deviceMemory, nucleos: navigator.hardwareConcurrency || undefined, gpu,
   }), prefs.graficos), [gpu, prefs.graficos]);
   const lerFps = useCallback(() => engine.current?.estatisticas() ?? null, []);
-  const qualidade = useMemo(() => qualidadeDe(perfil), [perfil]);
+  const qualidade = useMemo(() => qualidadeDe(perfil, { nitidez: prefs.nitidez, suavizar: prefs.suavizar }), [perfil, prefs.nitidez, prefs.suavizar]);
+  // a NITIDEZ mudou nas configurações: vale NA HORA (o antialias, só ao entrar de novo — é do contexto do WebGL)
+  useEffect(() => {
+    const aplicar = () => { let n = lerNitidez(null); try { n = lerNitidez(localStorage.getItem(PREF_NITIDEZ)); } catch { /* sem storage */ } engine.current?.definirNitidez(n === "auto" ? null : Number(n)); };
+    window.addEventListener(EVENTO_GRAFICOS, aplicar); return () => window.removeEventListener(EVENTO_GRAFICOS, aplicar);
+  }, []);
   const low = qualidade.leve;
   // celular: o cyberespaço é NA HORIZONTAL — em pé, pede pra girar e pausa a cena
   const [girar, setGirar] = useState(false);

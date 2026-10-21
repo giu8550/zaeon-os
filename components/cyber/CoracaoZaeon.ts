@@ -5,7 +5,8 @@
  *  - o globo BATE ("tum-tum") e o azul se PROPAGA pelas VEIAS, do coração pra fora (pelo caminho de cada uma).
  * As veias são UMA malha (fitas deitadas na superfície) com o ATRASO do pulso em cada vértice; azul sólido (mistura
  * normal — o piso é claro como as colunas, e luz somada sumiria nele). Sem luz, sem sombra: barato.
- * Com movimento reduzido: o raio não tremula. No modo leve, sem as veias. Tudo no referencial da ILHA.
+ * Com movimento reduzido: o raio não tremula. No modo leve, sem as veias, sem o raio e sem a batida acendendo (os
+ * pulsos azuis). Tudo no referencial da ILHA.
  */
 import * as THREE from "three";
 import { CORACAO, T_CORACAO, TOPO_DA_CAPELA, bateAgora, batidaNoCoracao, disparaRaio, gerarVeias } from "@/lib/cyber/coracao";
@@ -132,11 +133,14 @@ export function criarCoracao(o: { low: boolean }): CoracaoHandle {
   let tAnt = -1, idadeRaio = 99;
   return {
     group,
-    batida: () => batidaNoCoracao(uT.value),
+    // (no LEVE, sem os PULSOS AZUIS: nem o raio e o clarão no topo, nem a batida acendendo o globo e as estações — o
+    //  "tum" segue pro som)
+    batida: () => (o.low ? 0 : batidaNoCoracao(uT.value)),
     atualizar(dt, t) {
       uT.value = t;
       // o raio: cai no começo de cada ciclo
       const dispara = tAnt >= 0 && disparaRaio(tAnt, t), tum = tAnt >= 0 && bateAgora(tAnt, t); tAnt = t;
+      if (o.low) return { raio: false, tum };
       if (dispara) { raio.geometry = formatos[Math.floor(Math.random() * formatos.length)]!; raio.rotation.y = Math.random() * Math.PI * 2; idadeRaio = 0; }
       idadeRaio += dt;
       const a = idadeRaio < 0.05 ? idadeRaio / 0.05 : Math.exp(-(idadeRaio - 0.05) * 6) * (rm ? 1 : 0.75 + 0.25 * Math.sin(idadeRaio * 85));

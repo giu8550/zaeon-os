@@ -17,7 +17,7 @@ import VoicePicker from "@/components/settings/VoicePicker";
 import LanguageFlagToggle from "@/components/ui/LanguageFlagToggle";
 import { isSuperAdmin } from "@/lib/auth/roles";
 import { CHAVE_PROGRESSO, PREF_TUTORIAL, tutorialLigado } from "@/lib/cyber/onboarding";
-import { PREF_GRAFICOS, PREF_MOSTRAR_FPS, lerPreferencia, type PreferenciaGraficos } from "@/lib/cyber/dispositivo";
+import { EVENTO_GRAFICOS, PREF_GRAFICOS, PREF_MOSTRAR_FPS, PREF_NITIDEZ, PREF_SUAVIZAR, lerNitidez, lerPreferencia, lerSuavizar, type PreferenciaGraficos, type PreferenciaNitidez, type PreferenciaSuavizar } from "@/lib/cyber/dispositivo";
 
 const item = "group relative flex items-center gap-3 w-full min-h-[48px] px-3 rounded-2xl text-left text-sm font-medium text-slate-800 dark:text-white border border-slate-200/80 dark:border-white/[0.06] bg-white/50 dark:bg-white/[0.03] hover:bg-white/80 dark:hover:bg-white/[0.08] hover:border-cyan-400/50 dark:hover:border-cyan-400/30 transition-colors";
 const rotulo = "text-[9px] uppercase font-bold tracking-tighter text-slate-500 dark:text-white/50";
@@ -32,6 +32,7 @@ export default function ConfigMenu() {
   const [convite, setConvite] = useState(false);
   const [tutorial, setTutorial] = useState(false);
   const [graficos, setGraficos] = useState<PreferenciaGraficos>("auto");
+  const [nitidez, setNitidez] = useState<PreferenciaNitidez>("auto"); const [suavizar, setSuavizar] = useState<PreferenciaSuavizar>("auto");
   const [mostrarFps, setMostrarFps] = useState(false);
   const raiz = useRef<HTMLDivElement>(null);
   const botao = useRef<HTMLButtonElement>(null);
@@ -43,7 +44,7 @@ export default function ConfigMenu() {
     if (!aberto) return;
     try { setConvite(localStorage.getItem("zaeon.inviteAccessed") === "1"); } catch { /* sem storage */ }
     setTutorial(tutorialLigado((k) => localStorage.getItem(k)));
-    try { setGraficos(lerPreferencia(localStorage.getItem(PREF_GRAFICOS))); setMostrarFps(localStorage.getItem(PREF_MOSTRAR_FPS) === "1"); } catch { /* sem storage */ }
+    try { setGraficos(lerPreferencia(localStorage.getItem(PREF_GRAFICOS))); setMostrarFps(localStorage.getItem(PREF_MOSTRAR_FPS) === "1"); setNitidez(lerNitidez(localStorage.getItem(PREF_NITIDEZ))); setSuavizar(lerSuavizar(localStorage.getItem(PREF_SUAVIZAR))); } catch { /* sem storage */ }
     const fora = (e: PointerEvent) => { if (!raiz.current?.contains(e.target as Node)) setAberto(false); };
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { setAberto(false); botao.current?.focus(); } };
     document.addEventListener("pointerdown", fora);
@@ -62,6 +63,9 @@ export default function ConfigMenu() {
 
   // GRÁFICOS do cyberespaço (vale ao abrir o cyberespaço de novo): automático = pela placa de vídeo
   const mudarGraficos = (g: PreferenciaGraficos) => { setGraficos(g); try { if (g === "auto") localStorage.removeItem(PREF_GRAFICOS); else localStorage.setItem(PREF_GRAFICOS, g); } catch { /* sem storage */ } };
+  // a CALIBRAGEM do serrilhado: a NITIDEZ vale na hora (o cyberespaço ouve o evento); suavizar bordas, ao abrir de novo
+  const mudarNitidez = (n: PreferenciaNitidez) => { setNitidez(n); try { if (n === "auto") localStorage.removeItem(PREF_NITIDEZ); else localStorage.setItem(PREF_NITIDEZ, n); } catch { /* sem storage */ } window.dispatchEvent(new Event(EVENTO_GRAFICOS)); };
+  const mudarSuavizar = (v: PreferenciaSuavizar) => { setSuavizar(v); try { if (v === "auto") localStorage.removeItem(PREF_SUAVIZAR); else localStorage.setItem(PREF_SUAVIZAR, v); } catch { /* sem storage */ } };
   const mudarFps = () => { const novo = !mostrarFps; setMostrarFps(novo); try { if (novo) localStorage.setItem(PREF_MOSTRAR_FPS, "1"); else localStorage.removeItem(PREF_MOSTRAR_FPS); } catch { /* sem storage */ } };
 
   const apagarConta = async () => {
@@ -144,13 +148,36 @@ export default function ConfigMenu() {
               <span className="flex flex-col flex-1 min-w-0">
                 <span className={rotulo}>Cyberespaço</span>
                 <span>Gráficos</span>
-                <span className="text-[11px] font-normal text-slate-500 dark:text-white/45 leading-snug">{graficos === "auto" ? "Automático: leve em placa de vídeo integrada (Intel/AMD de notebook)." : graficos === "leve" ? "Leve: menos coisa ao longe, 30 fps, sem serrilhado." : "Completo: tudo no máximo (precisa de placa de vídeo)."} Vale ao abrir o cyberespaço de novo.</span>
+                <span className="text-[11px] font-normal text-slate-500 dark:text-white/45 leading-snug">{graficos === "auto" ? "Automático: leve em placa de vídeo integrada (Intel/AMD de notebook)." : graficos === "leve" ? "Leve: menos coisa ao longe e menos efeitos, 30 fps." : "Completo: tudo no máximo (precisa de placa de vídeo)."} Vale ao abrir o cyberespaço de novo.</span>
               </span>
             </span>
             <span role="radiogroup" aria-label="Gráficos do cyberespaço" className="grid grid-cols-3 gap-1 rounded-xl bg-slate-200/60 p-1 dark:bg-white/[0.06]">
               {([["auto", "Automático"], ["leve", "Leve"], ["cheio", "Completo"]] as const).map(([v, t]) => (
                 <button key={v} type="button" role="radio" aria-checked={graficos === v} onClick={() => mudarGraficos(v)}
                   className={`min-h-[34px] rounded-lg text-xs font-semibold transition-colors ${graficos === v ? "bg-white text-slate-900 shadow dark:bg-cyan-500/25 dark:text-white" : "text-slate-600 hover:text-slate-900 dark:text-white/60 dark:hover:text-white"}`}>{t}</button>
+              ))}
+            </span>
+          </div>
+          {/* o SERRILHADO: a nitidez (pixels por pixel da tela — vale na hora) e suavizar bordas (o antialias — ao abrir de novo) */}
+          <div className={`${item} flex-col !items-stretch gap-2 py-2.5`}>
+            <span className="flex flex-col min-w-0 pl-7">
+              <span>Nitidez</span>
+              <span className="text-[11px] font-normal text-slate-500 dark:text-white/45 leading-snug">Menos serrilhado = mais trabalho pra placa. 0,75× alivia; 1,5× e 2× deixam liso. Vale na hora.</span>
+            </span>
+            <span role="radiogroup" aria-label="Nitidez do cyberespaço" className="grid grid-cols-5 gap-1 rounded-xl bg-slate-200/60 p-1 dark:bg-white/[0.06]">
+              {([["auto", "Auto"], ["0.75", "0,75×"], ["1", "1×"], ["1.5", "1,5×"], ["2", "2×"]] as const).map(([v, t]) => (
+                <button key={v} type="button" role="radio" aria-checked={nitidez === v} onClick={() => mudarNitidez(v)}
+                  className={`min-h-[34px] rounded-lg text-xs font-semibold transition-colors ${nitidez === v ? "bg-white text-slate-900 shadow dark:bg-cyan-500/25 dark:text-white" : "text-slate-600 hover:text-slate-900 dark:text-white/60 dark:hover:text-white"}`}>{t}</button>
+              ))}
+            </span>
+            <span className="flex flex-col min-w-0 pl-7 pt-1">
+              <span>Suavizar bordas</span>
+              <span className="text-[11px] font-normal text-slate-500 dark:text-white/45 leading-snug">O antisserrilhado das bordas. Vale ao abrir o cyberespaço de novo.</span>
+            </span>
+            <span role="radiogroup" aria-label="Suavizar bordas" className="grid grid-cols-3 gap-1 rounded-xl bg-slate-200/60 p-1 dark:bg-white/[0.06]">
+              {([["auto", "Auto"], ["sim", "Ligado"], ["nao", "Desligado"]] as const).map(([v, t]) => (
+                <button key={v} type="button" role="radio" aria-checked={suavizar === v} onClick={() => mudarSuavizar(v)}
+                  className={`min-h-[34px] rounded-lg text-xs font-semibold transition-colors ${suavizar === v ? "bg-white text-slate-900 shadow dark:bg-cyan-500/25 dark:text-white" : "text-slate-600 hover:text-slate-900 dark:text-white/60 dark:hover:text-white"}`}>{t}</button>
               ))}
             </span>
           </div>
