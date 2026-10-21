@@ -27,7 +27,7 @@ export type PorAlvo = {
   custoEstimadoUsd: number; p50Ms: number | null; p95Ms: number | null; jsonValidoPct: number | null;
 };
 
-const ALVOS: readonly Alvo[] = ["gemini-free", "cloudflare", "groq", "glm", "vertex"];
+const ALVOS: readonly Alvo[] = ["gemini-free", "cloudflare", "groq", "glm", "contabo", "vertex"];
 export const alvoDaLinha = (r: { alvo?: string | null }): Alvo => ((ALVOS as readonly string[]).includes(String(r.alvo)) ? (r.alvo as Alvo) : "vertex");
 const r6 = (n: number) => Math.round(n * 1e6) / 1e6;
 

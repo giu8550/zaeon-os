@@ -51,6 +51,16 @@ model_list:
     model_info:
       mode: embedding
 
+  # ── Reranker (TEI / Hugging Face) ───────────────────────────────────────────
+  # Exposto no /v1/rerank (formato Cohere) pra Zaeon chamar pelo gateway como os outros — o
+  # provider "huggingface" do LiteLLM fala a API /rerank do TEI. Testado 2026-10-21.
+  - model_name: bge-rerank
+    litellm_params:
+      model: huggingface/BAAI/bge-reranker-v2-m3
+      api_base: http://tei-rerank:80
+    model_info:
+      mode: rerank
+
   # ── (opcional) cérebro "de ponta" sob demanda — NÃO deixar na rotação ────────
   # Descomente só pra teste manual exclusivo (descarregue os outros antes; ~65 GB).
   # - model_name: gpt-oss-120b

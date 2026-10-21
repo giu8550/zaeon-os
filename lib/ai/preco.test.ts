@@ -31,6 +31,7 @@ describe("preco — pool grátis (Fatia 7)", () => {
   it("custoDoAlvoUsd: alvo do pool = 0 mesmo com nome de modelo pago; vertex/null = tabela", () => {
     const u = { promptTokens: 1_000_000, completionTokens: 0, cachedTokens: 0 };
     expect(custoDoAlvoUsd("gemini-2.5-flash-lite", u, "gemini-free")).toBe(0);
+    expect(custoDoAlvoUsd("zaeon-local-coder", u, "contabo")).toBe(0); // Contabo é nossa: custo 0 no ledger
     expect(custoDoAlvoUsd("gemini-2.5-flash-lite", u, "vertex")).toBeCloseTo(USD_POR_MILHAO["gemini-2.5-flash-lite"].prompt, 6);
     expect(custoDoAlvoUsd("gemini-2.5-flash-lite", u, null)).toBeCloseTo(USD_POR_MILHAO["gemini-2.5-flash-lite"].prompt, 6);
   });

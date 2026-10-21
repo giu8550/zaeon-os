@@ -53,8 +53,10 @@ describe("infra/litellm.config.yaml — pool grátis", () => {
   it("UM deployment por grupo e UMA api_key por provedor (§8.11)", () => {
     const nomes = pool.map((d) => d.nome);
     expect(new Set(nomes).size).toBe(nomes.length);
+    // §8.11 é regra dos provedores GRÁTIS de terceiros (uma conta cada). Os zaeon-local-* (Contabo, nossa)
+    // dividem a mesma key de propósito — o teste deles está abaixo.
     const porEnv = new Map<string, number>();
-    for (const l of ativas) {
+    for (const l of pool.flatMap((d) => d.linhas)) {
       const m = /api_key:\s*os\.environ\/(\S+)/.exec(l);
       if (m) porEnv.set(m[1], (porEnv.get(m[1]) ?? 0) + 1);
     }
@@ -94,5 +96,23 @@ describe("infra/litellm.config.yaml — pool grátis", () => {
     const corpo = d!.linhas.join("\n");
     expect(corpo).toMatch(/model:\s*vertex_ai\/gemini-[\d.]+-flash-lite\s/);
     expect(corpo).toMatch(/id:\s*vertex\b/);
+  });
+
+  it("modelos próprios (Contabo): 6 zaeon-local-*, todos litellm_proxy/ com URL e key só por env, nunca Vertex", () => {
+    const locais = deps.filter((d) => d.nome.startsWith("zaeon-local-"));
+    expect(locais.map((d) => d.nome).sort()).toEqual(["zaeon-local-coder", "zaeon-local-embed", "zaeon-local-geral", "zaeon-local-guard", "zaeon-local-mini", "zaeon-local-rerank"]);
+    for (const d of locais) {
+      const corpo = d.linhas.join("\n");
+      expect(corpo, d.nome).toMatch(/model:\s*litellm_proxy\//);
+      expect(corpo, d.nome).toContain("api_base: os.environ/CONTABO_LLM_URL");
+      expect(corpo, d.nome).toContain("api_key: os.environ/CONTABO_LLM_KEY");
+      expect(corpo, d.nome).toMatch(/id:\s*contabo-/);
+      expect(corpo, d.nome).not.toMatch(/vertex_ai\/|vertex_credentials/);
+    }
+  });
+
+  it("modelos próprios fora de qualquer fallback (CPU lento: quem chama escolhe pelo nome)", () => {
+    const linha = ativas.find((l) => /^\s*fallbacks:/.test(l));
+    expect(linha).not.toMatch(/zaeon-local-/);
   });
 });
