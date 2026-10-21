@@ -34,6 +34,8 @@ function assentos(sala: NomeSala, amb: AmbienteEstudo): Spot[] {
   const out: Spot[] = [];
   // (os TRONOS do pátio ficam pras PESSOAS: a frota não enxerga quem já sentou e sentava por cima)
   for (const l of lugaresDoLounge().filter((x) => x.id.startsWith(`${sala}-`) && x.tipo !== "trono")) {
+    // (as rodas dos ANDARES dos lounges estudantis são empilhadas, no mesmo x/z: a frota fica com a do térreo)
+    if (l.assentos.some((a) => out.some((o) => Math.hypot(o.x - a.x, o.z - a.z) < 0.3))) continue;
     l.assentos.forEach((a, k) => out.push({
       id: `${l.id}#${k}`, ambiente: amb, tipo: l.tipo, x: a.x, z: a.z, y: ySala(a), rumo: l.rumo, zaeon: true,
       ...(l.tipo === "sofa" ? { par: `${l.id}#${1 - k}`, deita: { ...l.deita!, rumo: l.rumoDeitado } } : {}),

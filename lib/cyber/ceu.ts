@@ -12,7 +12,7 @@ import { escadasExistem, hubAtivo, salaAtiva } from "./nivelAtivo";
 import { empurrarParaFora, type Colisor, type P2 } from "./colisao";
 import { colisoresDoDistritoTerra } from "./terra";
 import { CHAO } from "./praca";
-import { ALCANCE_COMPLEXO, ESP, ESTUDO, RASTA, alturaNoComplexo, colisoresDoComplexo, entradaDaPonteNoLounge, noComplexo, solidosDoComplexo } from "./temploCosmico";
+import { ALCANCE_COMPLEXO, ANDARES_ESTUDO, ESP, ESTUDO, RASTA, alturaNoComplexo, andarNoEstudo, colisoresDoAndarEstudo, colisoresDoComplexo, entradaDaPonteNoLounge, noComplexo, solidosDoComplexo } from "./temploCosmico";
 import { DECK, TEMPLO, alturaDaEscadaria, alturaNoLounge, bordaDoDeck, bordasDaEscadaria, colisoresDoTemplo, noCorredorDaEscadaria, noTemplo, saidaDoLounge, GARAGEM_LOUNGE, GARAGEM_LOUNGE_EXISTE, naGaragemDoLounge } from "./templo";
 
 /** a ZAEON MEGA (out. 2026): a cidadela virou uma MEGA PLATAFORMA — 3× mais larga que antes, bem mais ALTA (450 m) e
@@ -334,7 +334,8 @@ function zonaRasta(dx: number, dz: number, cor: number, tipo: "narguile" | "fogu
 /** uma roda de leitura num LOUNGE ESTUDANTIL (`e` = a plataforma dele; `dx`/`dz` do centro): sofás em U, pufes e a
  *  mesinha, com a boca virada pro meio — no piso do lounge estudantil (abaixo do pátio) */
 function zonaEstudo(e: { x: number; z: number; h: number }, dx: number, dz: number, cor: number): Movel[] {
-  return zonaLounge(e.x + dx, e.z + dz, Math.atan2(-dx, -dz), cor, "mesinha").map((m) => ({ ...m, y: (m.y ?? 0.16) + e.h }));
+  // (uma em cada ANDAR, empilhadas: os colisores coincidem e cada andar tem a sua roda)
+  return Array.from({ length: ANDARES_ESTUDO.n }, (_, k) => zonaLounge(e.x + dx, e.z + dz, Math.atan2(-dx, -dz), cor, "mesinha").map((m) => ({ ...m, y: (m.y ?? 0.16) + e.h + k * ANDARES_ESTUDO.pe }))).flat();
 }
 /** os móveis do lounge vão em cima do DECK da festa: a elevação de cada um soma DECK.h */
 function noDeck(lista: Movel[]): Movel[] { return lista.map((m) => ({ ...m, y: (m.y ?? 0.16) + DECK.h })); }
@@ -441,8 +442,10 @@ export function naSala(s: { x: number; z: number }, x: number, z: number): { x: 
   return { x: espelhoDe(s) ? -lx : lx, z: dx * si + dz * c };
 }
 /** quanto o piso sobe aqui (m), `p` no MUNDO: 0 na plataforma central; a ESCADA do lounge é uma rampa até
- *  `ALTURA_LOUNGE`; no disco do lounge, `ALTURA_LOUNGE` + o PALCO (que tem a escadinha dele, rampa também) */
-export function alturaNaCidade(p: P2): number {
+ *  `ALTURA_LOUNGE`; no disco do lounge, `ALTURA_LOUNGE` + o PALCO (que tem a escadinha dele, rampa também). `yRel` = a
+ *  altura dos pés agora (acima do piso central): onde há ANDARES (os lounges estudantis do Templo Cósmico), escolhe o
+ *  piso de quem está ali — sem ele, o térreo */
+export function alturaNaCidade(p: P2, yRel?: number): number {
   const l = { x: p.x - CIDADE.centro.x, z: p.z - CIDADE.centro.z };
   if (noDiscoDoLounge(l)) {
     const s = CIDADE.salas.lounge, q = naSala(s, l.x, l.z), { r, z, h, escada } = PALCO;
@@ -452,7 +455,7 @@ export function alturaNaCidade(p: P2): number {
     if (Math.abs(q.x) <= escada.meia && q.z >= z0 && q.z <= z0 + escada.len) return PISO_FESTA + h * (1 - (q.z - z0) / escada.len);
     return ALTURA_LOUNGE + alturaNoLounge(q);   // o pátio, a rampa ou o deck
   }
-  if (salaAtiva("lounge") && noComplexoLocal(l)) return ALTURA_LOUNGE + (alturaNoComplexo(naSala(CIDADE.salas.lounge, l.x, l.z)) ?? 0);   // o SALÃO central (mais baixo) e as conexões subindo
+  if (salaAtiva("lounge") && noComplexoLocal(l)) return ALTURA_LOUNGE + (alturaNoComplexo(naSala(CIDADE.salas.lounge, l.x, l.z), yRel === undefined ? undefined : yRel - ALTURA_LOUNGE) ?? 0);   // o SALÃO central (mais baixo) e as conexões subindo
   if (salaEm(l)) return ALTURA_LOUNGE;   // as outras salas: piso plano
   if (naGaragemLocal(l)) return ALTURA_LOUNGE - GARAGEM_LOUNGE.desce;   // a GARAGEM do lounge (as motos), 25 m abaixo dele
   if (noTemploOuEscadaria(l)) {   // o TEMPLO e a escadaria em curva até ele
@@ -659,7 +662,7 @@ export const naIlhaPrincipal = (p: P2) => {
 /** o PISO sob quem voa de mochila na Zaeon (altura acima do piso central), ou `null` = não há piso embaixo (saiu da
  *  Zaeon: cai pro céu livre). A escada e o lounge só são piso pra quem está ACIMA deles — por baixo, passa direto. */
 export function pisoNoAr(p: P2, yRel: number): number | null {
-  const h = alturaNaCidade(p);
+  const h = alturaNaCidade(p, yRel);
   if (h > 0 && yRel >= h - 0.6) return h;
   return hubAtivo() && Math.hypot(p.x - CIDADE.centro.x, p.z - CIDADE.centro.z) <= CIDADE.bordaR + 0.1 ? 0 : null;
 }
@@ -668,6 +671,24 @@ export function pisoNoAr(p: P2, yRel: number): number | null {
  *  baixas contam a partir DELE — no lounge (88 m acima da central) o teto antigo, medido da central, puxava quem pulava
  *  pra baixo do piso do lounge e ele caía da plataforma */
 export const pisoDeVoo = (p: P2, yRel: number) => pisoNoAr(p, yRel) ?? 0;
+
+/** os colisores que só valem no ANDAR onde se está (os lounges estudantis do Templo Cósmico: o guarda-corpo do átrio e,
+ *  lá em cima, a parede fechando as entradas do térreo) — `p` no mundo, `yRel` = os pés acima do piso central; [] fora */
+const andarCache = new Map<string, Colisor[]>();
+export function colisoresDoAndar(p: P2, yRel: number): Colisor[] {
+  if (!salaAtiva("lounge")) return [];
+  const L = CIDADE.salas.lounge, q = naSala(L, p.x - CIDADE.centro.x, p.z - CIDADE.centro.z), a = andarNoEstudo(q, yRel - ALTURA_LOUNGE);
+  if (!a) return [];
+  const k = `${a.p.id}:${a.andar}`; let cs = andarCache.get(k);
+  if (!cs) { cs = colisoresDoAndarEstudo(a.p, a.andar).map((c) => ({ ...mundo(daSala(L, c.x, c.z)), r: c.r })); andarCache.set(k, cs); }
+  return cs;
+}
+/** está DENTRO de um lounge estudantil (qualquer andar, embaixo da cúpula)? — o som de fora fica abafado */
+export function dentroDoEstudo(p: P2, yRel: number): boolean {
+  if (!salaAtiva("lounge")) return false;
+  const L = CIDADE.salas.lounge, q = naSala(L, p.x - CIDADE.centro.x, p.z - CIDADE.centro.z), a = andarNoEstudo(q, yRel - ALTURA_LOUNGE);
+  return !!a && Math.hypot(q.x - a.p.x, q.z - a.p.z) < a.p.r - 0.3;
+}
 
 /** andar na Zaeon SEM a parede invisível da borda: só os colisores (quem passa da borda, cai — o engine trata) */
 export const resolverCidadeLivre = (prop: P2): P2 => empurrarParaFora(prop, colisoresDaCidade());

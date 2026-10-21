@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ALTURA_LOUNGE, CIDADE, alturaNaCidade, colisoresDaCidade, daSala, mundo, naIlhaPrincipal, naSala, rotDaSala, salaEm, solidosDaCidade } from "./ceu";
+import { ALTURA_LOUNGE, CIDADE, alturaNaCidade, colisoresDaCidade, colisoresDoAndar, daSala, mundo, naIlhaPrincipal, naSala, rotDaSala, salaEm, solidosDaCidade } from "./ceu";
 import { NOS } from "./buracos";
+import { empurrarParaFora } from "./colisao";
 import { FIO, saidaDaSala } from "./fiosCosmicos";
 import { definirNivel } from "./nivelAtivo";
 import { nivelDoPonto } from "./niveis";
-import { ELEVADOR_TC, ESTACOES_TI, TORRE_TI, bocaDoElevadorTC, posElevadorTC, ESTUDO, ALCANCE_DUELO, ARVORE_RASTA, BOCA_SAIDA_SALAO, CASAIS, CYBER, NUCLEO_CYBER, barradoNaCupula, portaDaCupula, CHEGADA_SALAO, ESP, FESTAS, PIRAMIDE, PONTES, PONTE_LOUNGE, RASTA, SALAO, TEMPLO_RASTA, alturaDaEscadariaRasta, naPiramide } from "./temploCosmico";
+import { ANDARES_ESTUDO, CARACOL, PLATS, aberturasDe, doEstudoLocal, noEstudoLocal, type PlatTC, ELEVADOR_TC, ESTACOES_TI, TORRE_TI, bocaDoElevadorTC, posElevadorTC, ESTUDO, ALCANCE_DUELO, ARVORE_RASTA, BOCA_SAIDA_SALAO, CASAIS, CYBER, NUCLEO_CYBER, barradoNaCupula, portaDaCupula, CHEGADA_SALAO, ESP, FESTAS, PIRAMIDE, PONTES, PONTE_LOUNGE, RASTA, SALAO, TEMPLO_RASTA, alturaDaEscadariaRasta, naPiramide } from "./temploCosmico";
 import { ESCADARIA, TEMPLO, curvaDaEscadaria, noTemplo } from "./templo";
 import { RotinaExaminer, lugarDeGuarda } from "./examiner";
 
@@ -135,5 +136,51 @@ describe("o Templo Cósmico: o SALÃO central e a ponte pro lounge", () => {
       }
       expect(ant).toBeGreaterThan(ALTURA_LOUNGE - 0.5);   // (chegou no pátio da festa)
     }
+  });
+});
+
+describe("os ANDARES dos lounges estudantis: o caracol, o guarda-corpo e a parede", () => {
+  beforeEach(() => definirNivel("lounge"));
+  afterEach(() => definirNivel(null));
+  const est = (id: string) => PLATS.find((p) => p.id === id)!;
+  /** anda (com a colisão de verdade e o piso pela altura dos pés) por pontos LOCAIS do lounge estudantil */
+  function andar(p: PlatTC, caminho: { x: number; z: number }[], y0: number) {
+    const cs = colisoresDaCidade(); let w = W(doEstudoLocal(p, caminho[0]!).x, doEstudoLocal(p, caminho[0]!).z), y = y0, maxQueda = 0;
+    for (let i = 1; i < caminho.length; i++) {
+      const alvo = doEstudoLocal(p, caminho[i]!), aw = W(alvo.x, alvo.z);
+      for (let s = 0; s < 600; s++) {
+        const d = Math.hypot(aw.x - w.x, aw.z - w.z); if (d < 0.02) break;
+        const k = Math.min(1, 0.05 / d), prop = { x: w.x + (aw.x - w.x) * k, z: w.z + (aw.z - w.z) * k };
+        w = empurrarParaFora(prop, [...cs, ...colisoresDoAndar(prop, y)]);
+        const ny = alturaNaCidade(w, y); maxQueda = Math.max(maxQueda, y - ny); y = ny;
+      }
+    }
+    return { w, y, l: noEstudoLocal(p, naSala(L, loc(w).x, loc(w).z)), maxQueda };
+  }
+  /** o caminho: do corredor, entra no caracol pela boca, dá `voltas` voltas subindo e sai pelo outro lado da boca */
+  const subindo = (voltas: number) => {
+    const mid = (CARACOL.col + CARACOL.r) / 2, pt = (a: number, r: number) => ({ x: Math.cos(a) * r, z: Math.sin(a) * r }), out = [pt(CARACOL.boca + 0.25, 9), pt(CARACOL.boca + 0.25, mid)];
+    for (let a = CARACOL.boca + 0.25; a <= CARACOL.boca + voltas * Math.PI * 2 - 0.25; a += 0.05) out.push(pt(a, mid));
+    out.push(pt(CARACOL.boca + voltas * Math.PI * 2 - 0.25, mid), pt(CARACOL.boca - 0.25, 9));
+    return out;
+  };
+  it("pelo CARACOL se sobe do térreo ao 2º e ao 3º andar, sem cair; e se desce de volta", () => {
+    for (const id of ["estudoL", "estudoR"]) {
+      const p = est(id), y0 = ALTURA_LOUNGE + p.h;
+      const um = andar(p, subindo(1), y0); expect(um.y).toBeCloseTo(y0 + ANDARES_ESTUDO.pe, 6); expect(Math.hypot(um.l.x, um.l.z)).toBeGreaterThan(8.5); expect(um.maxQueda).toBeLessThan(0.6);
+      const dois = andar(p, subindo(2), y0); expect(dois.y).toBeCloseTo(y0 + 2 * ANDARES_ESTUDO.pe, 6); expect(Math.hypot(dois.l.x, dois.l.z)).toBeGreaterThan(8.5);
+      const desce = andar(p, [...subindo(2)].reverse(), y0 + 2 * ANDARES_ESTUDO.pe); expect(desce.y).toBeCloseTo(y0, 6);
+    }
+  });
+  it("lá em cima o GUARDA-CORPO segura (não se cai no átrio) e a PAREDE fecha onde, no térreo, ficam as entradas", () => {
+    const p = est("estudoL"), y2 = ALTURA_LOUNGE + p.h + 2 * ANDARES_ESTUDO.pe;
+    const a = CARACOL.boca + Math.PI;   // (do lado oposto à boca)
+    const r = andar(p, [{ x: Math.cos(a) * 10, z: Math.sin(a) * 10 }, { x: 0, z: 0 }], y2); expect(r.y).toBe(y2); expect(Math.hypot(r.l.x, r.l.z)).toBeGreaterThan(CARACOL.r);
+    for (const ab of aberturasDe(p)) {   // rumo à entrada do térreo, no 3º andar: barrado na parede
+      const fora = { x: p.x + Math.cos(ab.ang) * (p.r + 4), z: p.z + Math.sin(ab.ang) * (p.r + 4) }, l = noEstudoLocal(p, fora), l0 = noEstudoLocal(p, { x: p.x + Math.cos(ab.ang) * 18, z: p.z + Math.sin(ab.ang) * 18 });
+      const s = andar(p, [l0, l], y2); expect(s.y).toBe(y2); expect(Math.hypot(s.l.x, s.l.z)).toBeLessThan(p.r);
+    }
+    // sem a altura dos pés (NPC, frota, teleporte): o térreo
+    expect(alturaNaCidade(W(p.x + 15, p.z))).toBe(ALTURA_LOUNGE + p.h);
   });
 });
