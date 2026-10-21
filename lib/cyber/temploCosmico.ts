@@ -189,6 +189,22 @@ export const difusorDe = (e: { x: number; z: number }) => daCabineTI(e, DIFUSOR_
  *  quanto em quanto tempo cai um raio (s, em média, no campus todo) */
 export const TEMPESTADE_TI = { alt: 24, cadaRaio: 0.45 } as const;
 
+// ───────────── o que o RENDER desenha e a COLISÃO usa (o mesmo lugar nos dois — out/2026, o dono: "as colisões mais bem
+//    estruturadas": o que se vê bloqueia, e nada invisível bloqueia) ─────────────
+/** o CUBO do monumento no topo da torre (o NÚCLEO): meia-aresta e altura — o que se desenha (components/cyber/TemploMeio) */
+export const CUBO_CYBER = { meia: NUCLEO_CYBER.r * Math.SQRT2 * 0.45, alt: NUCLEO_CYBER.r * Math.SQRT2 * 0.9 * 1.5 } as const;
+/** os RACKS de servidor nas laterais do campus (centro; a caixa tem 1,6 × 1,1 m, 4,2 de altura) */
+export const RACKS_TI: readonly P2[] = (() => {
+  const out: P2[] = [], z0 = SALAO.z - SALAO.r + 1.5, z1 = TORRE_TI.z + TORRE_TI.baseR - 1.5;
+  for (let z = z0 - 14; z > z1 + 10; z -= 7) for (const s of [-1, 1]) out.push({ x: SALAO.x + s * (CAMPUS.meia - 2.4), z });
+  return out;
+})();
+/** as LUMINÁRIAS de pé e as PLANTAS dos lounges estudantis (a partir do centro, sem espelho; em todos os andares) */
+export const LUMINARIAS_ESTUDO: readonly (readonly [number, number])[] = [[-20, 6], [20, 6], [-8, 21], [8, 21], [-7, 3], [7, 3]];
+export const PLANTAS_ESTUDO: readonly (readonly [number, number])[] = [[-22, 12], [22, 12], [-15, 20], [15, 20], [0, 24], [-3, -23]];
+/** as ESTANTES em arco dos lounges estudantis: o raio (do centro) e o passo angular — no térreo, fora das entradas */
+export const ESTANTES_ESTUDO = { dentro: 1.6, passo: 2.6 } as const;
+
 // ───────────── a REDE: plataformas e pontes ─────────────
 export type PlatTC = { id: string; x: number; z: number; r: number; /** piso acima do pátio do lounge */ h: number };
 export type PonteTC = { id: string; a: P2; b: P2; /** piso nas pontas */ ha: number; hb: number; meia: number };
@@ -322,7 +338,13 @@ export const entradaDaPonteNoLounge = (r: number) => ({ ang: Math.atan2(PONTE_LO
  *  capela rasta, onde a escadaria das raízes sai/chega */
 export function aberturasDe(p: PlatTC): { ang: number; meia: number }[] {
   const out: { ang: number; meia: number }[] = [];
-  for (const po of PONTES) for (const e of [po.a, po.b]) if (Math.abs(Math.hypot(e.x - p.x, e.z - p.z) - p.r) < 3) out.push({ ang: Math.atan2(e.z - p.z, e.x - p.x), meia: (po.meia + 0.9) / p.r });
+  if (p.id === "cyber") return out;   // (o deck do topo da torre não encosta em ponte nenhuma: a do campus chega na BASE)
+  for (const po of PONTES) for (const e of [po.a, po.b]) {
+    const d = Math.hypot(e.x - p.x, e.z - p.z); if (Math.abs(d - p.r) >= 3) continue;
+    // (a ponte LARGA — o campus — encosta numa corda menor que ela: a abertura é só a corda; o resto do guarda-corpo fecha)
+    const corda = Math.sqrt(Math.max(0, p.r * p.r - d * d)), larg = Math.min(po.meia + 0.9, corda > 0 ? corda + 0.4 : po.meia + 0.9);
+    out.push({ ang: Math.atan2(e.z - p.z, e.x - p.x), meia: Math.asin(Math.min(1, larg / p.r)) });
+  }
   const C = ESCADARIA.controle;
   if (p.id === "rasta") { const s = ESP(C[0]!); out.push({ ang: Math.atan2(s.z - p.z, s.x - p.x), meia: (ESCADARIA.meia + 0.9) / p.r }); }
   if (p.id === "capelaRasta") { const s = ESP(C[C.length - 2]!); out.push({ ang: Math.atan2(s.z - p.z, s.x - p.x), meia: (ESCADARIA.meia + 0.9) / p.r }); }
@@ -330,6 +352,15 @@ export function aberturasDe(p: PlatTC): { ang: number; meia: number }[] {
 }
 export const aberturasDoSalao = () => aberturasDe(PLATS[0]!);
 const dentroDe = (ang: number, ab: { ang: number; meia: number }) => { let d = ang - ab.ang; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return Math.abs(d) < ab.meia; };
+/** os PILARES da cobertura do salão de festas (no anel de dentro da borda) — menos onde a ponte da capela chega (um
+ *  ficava no meio do caminho) */
+export const PILARES_FESTAS: readonly P2[] = (() => {
+  const abs = aberturasDe(plat("festas")), out: P2[] = [];
+  for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2 + 0.31; if (abs.some((ab) => dentroDe(a, { ang: ab.ang, meia: ab.meia + 0.06 }))) continue; out.push({ x: FESTAS.x + Math.cos(a) * (FESTAS.r - 3), z: FESTAS.z + Math.sin(a) * (FESTAS.r - 3) }); }
+  return out;
+})();
+/** a abertura da CÚPULA dos casais (ângulo e meia-abertura, rad — onde a ponte das festas chega) */
+export const portaDosCasais = () => aberturasDe(plat("casais"))[0]!;
 
 /** os COLISORES (referencial do lounge) do complexo: o guarda-corpo de cada plataforma (menos as aberturas), os das
  *  pontes (dos dois lados, fora das plataformas e do lounge), a escadaria das raízes, a base da PIRÂMIDE, os pilares
@@ -348,13 +379,32 @@ export function colisoresDoComplexo(rLounge: number): { x: number; z: number; r:
       if (PLATS.some((p) => naPlat(p, c, -0.5)) || Math.hypot(c.x, c.z) < rLounge - 0.5) continue;
       out.push({ ...c, r: COL.ponte });
     }
+    // as PONTAS da ponte: o que dela fica FORA da plataforma onde encosta (a do campus é mais larga que a corda do salão e
+    // da base da torre — sobrava uma cunha sem piso nem guarda-corpo, de onde se caía)
+    for (const [e, sd] of [[po.a, 1], [po.b, -1]] as const) for (let l = -(po.meia + COL.ponte); l <= po.meia + COL.ponte + 1e-6; l += 0.4) {   // (bem juntos: espaçados, quem chega reto escorregava entre dois)
+      const c = { x: e.x + nx * l + (vx / L) * 0.6 * sd, z: e.z + nz * l + (vz / L) * 0.6 * sd };   // (um tiquinho pra DENTRO da ponte: a fresta sem piso fica toda atrás)
+      if (PLATS.some((p) => naPlat(p, c, -0.5)) || Math.hypot(c.x, c.z) < rLounge - 0.5) continue;
+      out.push({ ...c, r: COL.ponte });
+    }
   }
   for (const c of bordasDaEscadaria(RASTA.r)) out.push({ ...ESP(c), r: 0.5 });   // a escadaria das raízes (a do lounge, espelhada)
   const P = PIRAMIDE;
   for (let k = -P.meia; k <= P.meia; k += P.passo) for (const [x, z] of [[k, -P.meia], [k, P.meia], [-P.meia, k], [P.meia, k]] as const) out.push({ x: P.x + x, z: P.z + z, r: P.colR });
   const C = CAPELA_RASTA;
   for (let i = 0; i < C.pilares; i++) { const a = (i / C.pilares) * Math.PI * 2 + Math.PI / C.pilares; out.push({ x: TEMPLO_RASTA.x + Math.cos(a) * C.r, z: TEMPLO_RASTA.z + Math.sin(a) * C.r, r: C.pilarR + 0.2 }); }
-  out.push({ x: RASTA.x, z: RASTA.z, r: ARVORE_RASTA.r });
+  out.push({ x: RASTA.x, z: RASTA.z, r: ARVORE_RASTA.r + 1.2 });   // (o tronco: as raízes abrem até ~6 m no chão)
+  out.push({ ...ESP({ x: 66.5, z: -24 }), r: 0.6 });   // (o cantinho onde a escadaria das raízes sai do disco rasta)
+  for (const p of PILARES_FESTAS) out.push({ ...p, r: 0.65 });   // os PILARES do salão de festas
+  { const abs = aberturasDe(plat("casais")), rr = CASAIS.r - 1;   // a CÚPULA dos casais (aberta só na porta) e o SOFÁ redondo
+    for (let a = 0; a < Math.PI * 2; a += 0.7 / rr) if (!abs.some((ab) => dentroDe(a, { ang: ab.ang, meia: ab.meia + 0.05 }))) out.push({ x: CASAIS.x + Math.cos(a) * rr, z: CASAIS.z + Math.sin(a) * rr, r: 0.45 });
+    for (let a = 0; a <= Math.PI * 1.5 + 1e-6; a += 0.3) out.push({ x: CASAIS.x + Math.cos(a) * 3.2, z: CASAIS.z + Math.sin(a) * 3.2, r: 0.75 }); }
+  for (const r of RACKS_TI) for (const dx of [-0.4, 0.4]) out.push({ x: r.x + dx, z: r.z, r: 0.62 });   // os RACKS do campus
+  for (const p of PLATS) if (ehEstudo(p)) {   // os LOUNGES ESTUDANTIS: as estantes (no térreo, fora das entradas), as luminárias e as plantas
+    const abs = aberturasDe(p), R = p.r - ESTANTES_ESTUDO.dentro, n = Math.ceil((2 * Math.PI * R) / 0.9);
+    for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; if (abs.some((ab) => dentroDe(a, { ang: ab.ang, meia: ab.meia + 0.12 }))) continue; out.push({ x: p.x + Math.cos(a) * R, z: p.z + Math.sin(a) * R, r: 0.5 }); }
+    for (const [lx, lz] of LUMINARIAS_ESTUDO) out.push({ x: p.x + lx, z: p.z + lz, r: 0.35 });
+    for (const [lx, lz] of PLANTAS_ESTUDO) out.push({ x: p.x + lx, z: p.z + lz, r: 0.8 });
+  }
   for (const p of PLATS) if (ehEstudo(p)) out.push({ x: p.x, z: p.z, r: CARACOL.col });   // a COLUNA do caracol dos lounges estudantis
   for (const e of ESTACOES_TI) {   // as CABINES do campus (a mesa, os painéis) e o DIFUSOR do lado
     for (const x of [-0.65, 0.65]) out.push({ ...daCabineTI(e, x, CABINE_TI.mesaZ + 0.1), r: 0.75 });
@@ -369,8 +419,18 @@ export function colisoresDoComplexo(rLounge: number): { x: number; z: number; r:
  *  guarda-corpo de dentro (a pirâmide) e o de fora, e as estações */
 export function colisoresDaTorre(nivel: 0 | 1 | 2): { x: number; z: number; r: number }[] {
   const out: { x: number; z: number; r: number }[] = [], anel = (r: number, passo: number, rc: number) => { const n = Math.ceil((2 * Math.PI * r) / passo); for (let i = 0; i < n; i++) out.push({ ...noAnel(r, (i / n) * Math.PI * 2), r: rc }); };
-  if (nivel === 0) anel(TORRE_TI.colR, 0.9, 0.7);
-  if (nivel === 1) { anel(CYBER.r, COL.passo, COL.r); out.push({ x: CYBER.x, z: CYBER.z, r: NUCLEO_CYBER.r + 0.5 }, ...PILARES_ALTO); }
+  if (nivel === 0) anel(TORRE_TI.colR + 1, 0.9, 0.9);   // (a coluna desenhada abre até ~32 m no pé)
+  if (nivel === 1) {
+    anel(CYBER.r, COL.passo, COL.r); out.push(...PILARES_ALTO.map((p) => ({ ...p, r: 0.9 })));
+    const M = CUBO_CYBER.meia + 0.3;   // o CUBO (o contorno quadrado dele — o redondo antigo era uma parede invisível nos cantos)
+    for (let k = -M; k <= M + 1e-6; k += 0.9) for (const [x, z] of [[k, -M], [k, M], [-M, k], [M, k]] as const) out.push({ x: CYBER.x + x, z: CYBER.z + z, r: 0.5 });
+  }
+  // as CÁPSULAS: as quatro GUIAS do poço (desenhadas de ponta a ponta; o vidro da cápsula vai e vem — não vira parede)
+  for (const p of POCOS_TC) {
+    const nv = (h: number) => (h < CYBER.h - 4 ? 0 : h < ALTO_TI.h - 4 ? 1 : 2);
+    if (nv(p.de) !== nivel && nv(p.ate) !== nivel) continue;
+    for (let k = 0; k < 4; k++) { const a = (k / 4) * Math.PI * 2 + Math.PI / 4; out.push({ x: p.x + Math.cos(a) * (p.r + 0.4), z: p.z + Math.sin(a) * (p.r + 0.4), r: 0.25 }); }
+  }
   if (nivel === 2) { anel(ALTO_TI.rIn, 0.6, 0.45); anel(ALTO_TI.rOut, COL.passo, COL.r); }
   for (const c of CABINES_TORRE) if (c.nivel === nivel) {
     for (const x of [-0.65, 0.65]) out.push({ ...daCabineTI(c, x, CABINE_TI.mesaZ + 0.1), r: 0.75 });
@@ -388,8 +448,8 @@ export function solidosDoComplexo(): { x: number; z: number; r: number; topo: nu
     { x: TEMPLO_RASTA.x, z: TEMPLO_RASTA.z, r: CAPELA_RASTA.r + 1, topo: TEMPLO_RASTA.h + CAPELA_RASTA.altura + 12, base: TEMPLO_RASTA.h + CAPELA_RASTA.altura - 1 },   // (o teto: por baixo dele, a capela é aberta)
     { x: TORRE_RASTA.x, z: TORRE_RASTA.z, r: TORRE_RASTA.r + 0.5, topo: FESTAS.h + TORRE_RASTA.alt, base: FESTAS.h },
     { x: RASTA.x, z: RASTA.z, r: ARVORE_RASTA.r, topo: ARVORE_RASTA.alt, base: 0 },
-    { x: CYBER.x, z: CYBER.z, r: NUCLEO_CYBER.r + 1, topo: CYBER.h + NUCLEO_CYBER.alt, base: CYBER.h },
-    { x: TORRE_TI.x, z: TORRE_TI.z, r: TORRE_TI.colR, topo: CYBER.h, base: -SALAO.desce },
+    { x: CYBER.x, z: CYBER.z, r: CUBO_CYBER.meia * 1.15, topo: CYBER.h + CUBO_CYBER.alt, base: CYBER.h },   // (o cubo, do tamanho do desenhado)
+    { x: TORRE_TI.x, z: TORRE_TI.z, r: TORRE_TI.colR + 1, topo: CYBER.h, base: -SALAO.desce },
     { x: ALTO_TI.x, z: ALTO_TI.z, r: ALTO_TI.rOut, topo: ALTO_TI.h, base: ALTO_TI.h - 0.8 },   // a laje do MIRANTE
     // os LOUNGES ESTUDANTIS: as lajes dos andares de cima, a cúpula e a PAREDE (sólida também pra quem voa — embaixo das
     // entradas do térreo, aberta)

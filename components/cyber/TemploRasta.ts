@@ -11,7 +11,7 @@
  */
 import * as THREE from "three";
 import { ESCADARIA, TEMPLO, curvaDaEscadaria } from "@/lib/cyber/templo";
-import { CAPELA_RASTA, CASAIS, FESTAS, RASTA, TEMPLO_RASTA, TORRE_RASTA, X_ESPELHO_RASTA, alturaDaEscadariaRasta } from "@/lib/cyber/temploCosmico";
+import { CAPELA_RASTA, CASAIS, FESTAS, PILARES_FESTAS, RASTA, portaDosCasais, TEMPLO_RASTA, TORRE_RASTA, X_ESPELHO_RASTA, alturaDaEscadariaRasta } from "@/lib/cyber/temploCosmico";
 
 export type RastaHandle = { group: THREE.Group; alvos: THREE.Object3D[]; atualizar(dt: number, t: number): void; dispose(): void };
 
@@ -145,7 +145,7 @@ export function criarRasta(o: { low: boolean; paredeMat: THREE.Material }): Rast
   // ── o SALÃO DE FESTAS: a cobertura em anel sobre pilares e o piso de LED pulsando nas três cores ──
   { const fg = new THREE.Group(); fg.position.set(FESTAS.x, FESTAS.h, FESTAS.z); group.add(fg);
     const metal = new THREE.MeshStandardMaterial({ color: 0x1a1a22, emissive: 0x141420, emissiveIntensity: 0.5, roughness: 0.3, metalness: 0.8 }); mats.push(metal);
-    for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2 + 0.31, p = malha(new THREE.CylinderGeometry(0.4, 0.55, 14, 8), metal, fg); p.position.set(Math.cos(a) * (FESTAS.r - 3), 7, Math.sin(a) * (FESTAS.r - 3)); }
+    for (const q of PILARES_FESTAS) { const p = malha(new THREE.CylinderGeometry(0.4, 0.55, 14, 8), metal, fg); p.position.set(q.x - FESTAS.x, 7, q.z - FESTAS.z); }   // (os mesmos da colisão — sem o que ficava no caminho da ponte)
     const teto = malha(new THREE.TorusGeometry(FESTAS.r - 3, 1.4, 8, 64), metal, fg); teto.rotation.x = Math.PI / 2; teto.position.y = 14.5;
     const tela = malha(new THREE.CircleGeometry(FESTAS.r - 3, 48), aditivo(VERMELHO, 0.08), fg); tela.rotation.x = Math.PI / 2; tela.position.y = 14.4;
     const leds = [0, 1, 2, 3, 4, 5].map((k) => { const c = [VERDE, AMARELO, VERMELHO][k % 3]!, an = malha(new THREE.RingGeometry(3 + k * 3, 4.6 + k * 3, 48), aditivo(c, 0.4), fg); an.rotation.x = -Math.PI / 2; an.position.y = 0.04; an.userData.semLote = true; return an; });
@@ -154,7 +154,10 @@ export function criarRasta(o: { low: boolean; paredeMat: THREE.Material }): Rast
 
   // ── o LOUNGE PRIVATIVO dos casais: a cápsula de vidro rosada, o sofá redondo e as luzinhas ──
   { const pg = new THREE.Group(); pg.position.set(CASAIS.x, CASAIS.h, CASAIS.z); group.add(pg);
-    malha(new THREE.SphereGeometry(CASAIS.r - 1, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x2a0c22, emissive: 0x5a1846, emissiveIntensity: 0.6, roughness: 0.1, metalness: 0.2, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }), pg).scale.y = 0.55;
+    // a cúpula com a PORTA onde a ponte chega (antes fechada — e atravessável: agora o vidro bloqueia e a porta é a entrada)
+    // (no SphereGeometry: x = −cos φ, z = sen φ → o ângulo `a` é φ = π − a)
+    const pd = portaDosCasais();
+    malha(new THREE.SphereGeometry(CASAIS.r - 1, 32, 16, Math.PI - pd.ang + pd.meia, Math.PI * 2 - 2 * pd.meia, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x2a0c22, emissive: 0x5a1846, emissiveIntensity: 0.6, roughness: 0.1, metalness: 0.2, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false }), pg).scale.y = 0.55;
     const sofa = malha(new THREE.TorusGeometry(3.2, 0.7, 10, 40, Math.PI * 1.5), new THREE.MeshStandardMaterial({ color: 0x5a1838, emissive: 0x3a0820, emissiveIntensity: 0.6, roughness: 0.7 }), pg); sofa.rotation.x = Math.PI / 2; sofa.position.y = 0.6;
     const luzes = new THREE.InstancedMesh(new THREE.SphereGeometry(0.12, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffb0d8 }), 40), m = new THREE.Matrix4();
     for (let i = 0; i < 40; i++) { const a = (i / 40) * Math.PI * 2; luzes.setMatrixAt(i, m.makeTranslation(Math.cos(a) * (CASAIS.r - 1.6), 5.2 + Math.sin(a * 3) * 0.3, Math.sin(a) * (CASAIS.r - 1.6))); }

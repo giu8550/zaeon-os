@@ -41,6 +41,10 @@ describe("colisão", () => {
   it("fora do colisor não mexe", () => {
     expect(empurrarParaFora({ x: 0, z: 0 }, base)).toEqual({ x: 0, z: 0 });
   });
+  it("uma FILEIRA de círculos encostados é parede: quem anda reto pro meio entre dois não escorrega pro outro lado", () => {
+    const fila = Array.from({ length: 12 }, (_, i) => ({ x: i * 0.8, z: 0, r: 0.5 }));
+    for (const x0 of [2.0, 2.4, 3.6, 4.4]) { let p = { x: x0, z: -3 }; for (let k = 0; k < 60; k++) p = empurrarParaFora({ x: p.x, z: p.z + 0.15 }, fila); expect(p.z, `x ${x0}`).toBeLessThan(0); }
+  });
   it("dentro → vai pra borda, na mesma direção (desliza em vez de travar)", () => {
     const r = empurrarParaFora({ x: 6.5, z: -3 }, base);
     expect(Math.hypot(r.x - 6, r.z + 3)).toBeCloseTo(BASE_COLLIDER_R, 6);

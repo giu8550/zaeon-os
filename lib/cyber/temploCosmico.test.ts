@@ -5,7 +5,7 @@ import { empurrarParaFora } from "./colisao";
 import { FIO, saidaDaSala } from "./fiosCosmicos";
 import { definirNivel } from "./nivelAtivo";
 import { nivelDoPonto } from "./niveis";
-import { CABINE_TI, DIFUSOR_TI, daCabineTI, difusorDe, ANDARES_ESTUDO, CARACOL, PLATS, aberturasDe, doEstudoLocal, noEstudoLocal, type PlatTC, ESTACOES_TI, TORRE_TI, POCOS_TC, CABINES_TORRE, bocaDoPoco, capsulaEm, embarcam, ESTUDO, ALCANCE_DUELO, ARVORE_RASTA, BOCA_SAIDA_SALAO, CASAIS, CYBER, NUCLEO_CYBER, barradoNaCupula, portaDaCupula, CHEGADA_SALAO, ESP, FESTAS, PIRAMIDE, PONTES, PONTE_LOUNGE, RASTA, SALAO, TEMPLO_RASTA, alturaDaEscadariaRasta, naPiramide } from "./temploCosmico";
+import { RACKS_TI, PILARES_FESTAS, LUMINARIAS_ESTUDO, PLANTAS_ESTUDO, CUBO_CYBER, portaDosCasais, CABINE_TI, DIFUSOR_TI, daCabineTI, difusorDe, ANDARES_ESTUDO, CARACOL, PLATS, aberturasDe, doEstudoLocal, noEstudoLocal, type PlatTC, ESTACOES_TI, TORRE_TI, POCOS_TC, CABINES_TORRE, bocaDoPoco, capsulaEm, embarcam, ESTUDO, ALCANCE_DUELO, ARVORE_RASTA, BOCA_SAIDA_SALAO, CASAIS, CYBER, NUCLEO_CYBER, barradoNaCupula, portaDaCupula, CHEGADA_SALAO, ESP, FESTAS, PIRAMIDE, PONTES, PONTE_LOUNGE, RASTA, SALAO, TEMPLO_RASTA, alturaDaEscadariaRasta, naPiramide } from "./temploCosmico";
 import { ESCADARIA, TEMPLO, curvaDaEscadaria, noTemplo } from "./templo";
 import { RotinaExaminer, lugarDeGuarda } from "./examiner";
 
@@ -118,7 +118,7 @@ describe("o Templo Cósmico: o SALÃO central e a ponte pro lounge", () => {
     // sem a altura dos pés (NPC, a frota), a torre é o chão da base
     expect(alturaNaCidade(W(TORRE_TI.x, TORRE_TI.z + 40))).toBe(ALTURA_LOUNGE - SALAO.desce);
     // a COLUNA da torre é sólida (andando na base e voando) e o monumento lá em cima também
-    const col = W(TORRE_TI.x, TORRE_TI.z + TORRE_TI.colR); expect(colisoresDoAndar(col, ALTURA_LOUNGE - SALAO.desce).some((c) => Math.hypot(c.x - col.x, c.z - col.z) <= c.r)).toBe(true);   // (o contorno barra quem anda na base)
+    const col = W(TORRE_TI.x, TORRE_TI.z + TORRE_TI.colR + 1); expect(colisoresDoAndar(col, ALTURA_LOUNGE - SALAO.desce).some((c) => Math.hypot(c.x - col.x, c.z - col.z) <= c.r)).toBe(true);   // (o contorno barra quem anda na base)
     const nc = W(CYBER.x, CYBER.z); expect(solidosDaCidade().some((o) => Math.hypot(o.x - nc.x, o.z - nc.z) < 1 && o.topo > CIDADE.pisoY + ALTURA_LOUNGE + CYBER.h + 20)).toBe(true);
     expect(nivelDoPonto(W(CYBER.x, CYBER.z + 20), CIDADE.pisoY + ALTURA_LOUNGE + CYBER.h)).toBe("lounge");
   });
@@ -211,5 +211,36 @@ describe("as CÁPSULAS da torre de TI", () => {
   it("embarcam no máximo `cap` (os mesmos, em qualquer cliente)", () => {
     const p = POCOS_TC[0]!, ids = ["f", "a", "c", "e", "b", "d", "g"];
     expect(embarcam(p, ids)).toEqual(["a", "b", "c", "d", "e"]); expect(embarcam(p, [...ids].reverse())).toEqual(embarcam(p, ids));
+  });
+});
+
+describe("as COLISÕES do Templo Cósmico (o que se vê bloqueia; não se cai pelas emendas)", () => {
+  beforeEach(() => definirNivel("lounge"));
+  afterEach(() => definirNivel(null));
+  const bloqueado = (x: number, z: number, y = ALTURA_LOUNGE - SALAO.desce) => { const w = W(x, z); return [...colisoresDaCidade(), ...colisoresDoAndar(w, y)].some((c) => Math.hypot(c.x - w.x, c.z - w.z) <= c.r); };
+  it("as emendas do campus (com o salão e com a base da torre) não deixam ninguém sair pra fora do piso", () => {
+    const cs = colisoresDaCidade();
+    // de dentro do piso, andando reto pra fora pela cunha: ou é piso o caminho todo, ou bate num colisor antes
+    // (do salão rumo ao campus, do campus rumo ao salão, da base rumo ao campus e do campus rumo à base)
+    for (const [z0, dz] of [[SALAO.z - SALAO.r + 10, -1], [SALAO.z - SALAO.r - 12, 1], [TORRE_TI.z + TORRE_TI.baseR - 10, 1], [TORRE_TI.z + TORRE_TI.baseR + 12, -1]] as const) for (const dx of [13, 14, 20, 26, 32, -13, -14, -20, -26, -32]) {
+      let w = W(SALAO.x + dx, z0);
+      for (let k = 0; k < 120; k++) { const q = naSala(L, loc(w).x, loc(w).z), prox = W(q.x, q.z + 0.15 * dz); w = empurrarParaFora(prox, cs); }
+      const q = naSala(L, loc(w).x, loc(w).z); expect(alturaNaCidade(w), `dx ${dx} z0 ${z0} → ${q.x.toFixed(1)},${q.z.toFixed(1)}`).toBe(ALTURA_LOUNGE - SALAO.desce);
+    }
+  });
+  it("o que se vê bloqueia: os racks, as estantes, as luminárias e as plantas dos lounges de estudo, os pilares das festas, a cúpula dos casais", () => {
+    for (const r of RACKS_TI) expect(bloqueado(r.x, r.z)).toBe(true);
+    for (const p of PILARES_FESTAS) expect(bloqueado(p.x, p.z)).toBe(true);
+    const e = PLATS.find((p) => p.id === "estudoL")!;
+    for (const [lx, lz] of [...LUMINARIAS_ESTUDO, ...PLANTAS_ESTUDO]) expect(bloqueado(e.x + lx, e.z + lz)).toBe(true);
+    expect(bloqueado(e.x + Math.cos(2) * (e.r - 1.6), e.z + Math.sin(2) * (e.r - 1.6))).toBe(true);   // (a estante)
+    const pd = portaDosCasais(), a = pd.ang + Math.PI;   // a cúpula: barra do lado oposto à porta; a porta deixa passar
+    expect(bloqueado(CASAIS.x + Math.cos(a) * (CASAIS.r - 1), CASAIS.z + Math.sin(a) * (CASAIS.r - 1))).toBe(true);
+    expect(bloqueado(CASAIS.x + Math.cos(pd.ang) * (CASAIS.r - 1), CASAIS.z + Math.sin(pd.ang) * (CASAIS.r - 1))).toBe(false);
+  });
+  it("nada invisível no topo da torre: em volta do cubo (fora dele) e no lado do campus dá pra andar", () => {
+    const yTopo = ALTURA_LOUNGE + CYBER.h, w = W(CYBER.x, CYBER.z + CUBO_CYBER.meia + 1.6), cs = [...colisoresDaCidade(), ...colisoresDoAndar(w, yTopo)];
+    expect(cs.some((c) => Math.hypot(c.x - w.x, c.z - w.z) <= c.r)).toBe(false);
+    expect(bloqueado(CYBER.x, CYBER.z + CUBO_CYBER.meia + 0.3, yTopo)).toBe(true);
   });
 });

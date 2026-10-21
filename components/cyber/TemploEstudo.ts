@@ -10,7 +10,7 @@
  * átrio vão num grupo LOCAL (o lounge da direita é o espelho do da esquerda: o caracol gira ao contrário).
  */
 import * as THREE from "three";
-import { ANDARES_ESTUDO, CARACOL, PLATS, aberturasDe, vaoDoAtrio } from "@/lib/cyber/temploCosmico";
+import { ANDARES_ESTUDO, CARACOL, LUMINARIAS_ESTUDO, PLANTAS_ESTUDO, PLATS, aberturasDe, vaoDoAtrio } from "@/lib/cyber/temploCosmico";
 
 export type EstudoHandle = { group: THREE.Group; alvos: THREE.Object3D[]; caixas: THREE.Object3D[]; atualizar(dt: number, t: number): void; dispose(): void };
 
@@ -116,11 +116,11 @@ export function criarLoungesEstudo(o: { low: boolean; paredeMat: THREE.Material 
     // as LUMINÁRIAS de pé (junto das rodas de leitura) e as PLANTAS, em cada andar
     for (let a = 0; a < A.n; a++) {
       const y = a * A.pe;
-      for (const [lx, lz] of [[-20, 6], [20, 6], [-8, 21], [8, 21], [-7, 3], [7, 3]] as const) {
+      for (const [lx, lz] of LUMINARIAS_ESTUDO) {   // (as mesmas da colisão)
         const pe = malha(new THREE.CylinderGeometry(0.05, 0.05, 2.1, 6), metal, g); pe.position.set(lx, y + 1.05, lz);
         const cup = malha(new THREE.ConeGeometry(0.42, 0.45, 16, 1, true), quente, g); cup.position.set(lx, y + 2.15, lz); cup.rotation.x = Math.PI;
       }
-      for (const [lx, lz] of [[-22, 12], [22, 12], [-15, 20], [15, 20], [0, 24], [-3, -23]] as const) {
+      for (const [lx, lz] of PLANTAS_ESTUDO) {
         const vs = malha(new THREE.CylinderGeometry(0.5, 0.38, 0.8, 12), vaso, g); vs.position.set(lx, y + 0.4, lz);
         const fl = malha(new THREE.IcosahedronGeometry(0.9, 1), folha, g); fl.position.set(lx, y + 1.35, lz); fl.scale.set(1, 1.3, 1);
       }
