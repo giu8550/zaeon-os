@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { fakeDb } from "@/lib/rag/fakeDb";
 import { criarDocumento, gravarTrechos } from "@/lib/rag/store";
 import type { EmbedRag } from "@/lib/rag/embed";
-import { filaRagLigada, indexarDocumento, RAG_QUEUE } from "./rag";
+import { enfileirarNaFila, filaRagLigada, indexarDocumento, RAG_QUEUE, type FilaRag } from "./rag";
 
 const USER = "64b000000000000000000001";
 
@@ -75,5 +75,37 @@ describe("filaRagLigada", () => {
     expect(filaRagLigada({ RAG_QUEUE: "1" })).toBe(false);
     expect(filaRagLigada({ REDIS_URL: "redis://x" })).toBe(false);
     expect(filaRagLigada({ RAG_QUEUE: "1", REDIS_URL: "redis://x" })).toBe(true);
+  });
+});
+
+describe("enfileirarNaFila", () => {
+  const OPTS = { jobId: "rag_d1", attempts: 5, backoff: { type: "exponential", delay: 30_000 } };
+  const fila = (estado: string | null) => {
+    const remove = vi.fn(async () => undefined);
+    const add = vi.fn(async () => undefined);
+    const q: FilaRag = { getJob: vi.fn(async () => (estado ? { getState: async () => estado, remove } : null)), add };
+    return { q, add, remove };
+  };
+
+  it("sem job existente => add com as opções do brief", async () => {
+    const { q, add, remove } = fila(null);
+    expect(await enfileirarNaFila(q, "d1")).toBe("fila");
+    expect(remove).not.toHaveBeenCalled();
+    expect(add).toHaveBeenCalledWith("indexar", { documentoId: "d1" }, OPTS);
+  });
+
+  it.each(["failed", "completed"])("job %s retido => removido e depois adicionado", async (estado) => {
+    const { q, add, remove } = fila(estado);
+    expect(await enfileirarNaFila(q, "d1")).toBe("fila");
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(remove.mock.invocationCallOrder[0]).toBeLessThan(add.mock.invocationCallOrder[0]);
+    expect(add).toHaveBeenCalledWith("indexar", { documentoId: "d1" }, OPTS);
+  });
+
+  it.each(["waiting", "active", "delayed"])("job %s => não adiciona de novo", async (estado) => {
+    const { q, add, remove } = fila(estado);
+    expect(await enfileirarNaFila(q, "d1")).toBe("fila");
+    expect(add).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
   });
 });

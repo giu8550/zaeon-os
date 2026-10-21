@@ -66,15 +66,34 @@ async function depsReais(): Promise<{ db: RagDb; embed: EmbedRag }> {
   return { db: prisma as unknown as RagDb, embed: embedVertex };
 }
 
+/** Pedaço da Queue do BullMQ que usamos (injetável em teste). */
+export type FilaRag = {
+  getJob(id: string): Promise<{ getState(): Promise<string>; remove(): Promise<unknown> } | null | undefined>;
+  add(nome: string, data: { documentoId: string }, opts: Record<string, unknown>): Promise<unknown>;
+};
+
+/**
+ * Põe o documento na fila. jobId fixo e sem ":" (BullMQ recusa) => o BullMQ IGNORA em silêncio um `add` cujo id ainda
+ * existe (inclusive job concluído/falho retido por removeOnComplete/Fail). Por isso: concluído/falho é removido antes
+ * de re-adicionar; esperando/ativo/atrasado já está na fila — não adiciona de novo.
+ */
+export async function enfileirarNaFila(q: FilaRag, documentoId: string): Promise<"fila"> {
+  const jobId = "rag_" + documentoId;
+  const existente = await q.getJob(jobId);
+  if (existente) {
+    const estado = await existente.getState();
+    if (estado !== "failed" && estado !== "completed") return "fila"; // já pendente
+    await existente.remove();
+  }
+  await q.add("indexar", { documentoId }, { jobId, attempts: 5, backoff: { type: "exponential", delay: 30_000 } });
+  return "fila";
+}
+
 /** Agenda a indexação. "fila" (BullMQ) ou "inline" (segundo plano, sem aguardar). Nunca lança por falha de indexação. */
 export async function enfileirarIndexacao(documentoId: string): Promise<"fila" | "inline"> {
   try {
     const q = await getQueue();
-    if (q) {
-      // jobId sem ":" (BullMQ recusa). Mesmo id => reenvio do mesmo documento não duplica o job pendente.
-      await q.add("indexar", { documentoId }, { jobId: "rag_" + documentoId, attempts: 5, backoff: { type: "exponential", delay: 30_000 } });
-      return "fila";
-    }
+    if (q) return await enfileirarNaFila(q as FilaRag, documentoId);
   } catch (e) {
     console.warn("[rag] fila indisponível, indexando inline:", (e as Error)?.message);
   }
