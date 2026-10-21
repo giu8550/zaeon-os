@@ -7,9 +7,9 @@
  * Referencial da SALA do lounge, y = 0 no pátio (vai dentro do grupo do Templo Cósmico).
  */
 import * as THREE from "three";
-import { ALTO_TI, CABINES_TORRE, CABINE_TI, CAMPUS, CYBER, DIFUSOR_TI, ESTACOES_TI, NUCLEO_CYBER, PILARES_ALTO, POCOS_TC, PONTES, SALAO, TEMPESTADE_TI, TORRE_TI, capsulaEm, difusorDe } from "@/lib/cyber/temploCosmico";
+import { ALTO_TI, PIRAMIDE_INV, CABINES_TORRE, CABINE_TI, CAMPUS, CYBER, DIFUSOR_TI, ESTACOES_TI, NUCLEO_CYBER, PILARES_ALTO, POCOS_TC, PONTES, SALAO, TEMPESTADE_TI, TORRE_TI, capsulaEm, difusorDe, portaDoPoco } from "@/lib/cyber/temploCosmico";
 
-export type MeioHandle = { group: THREE.Group; alvos: THREE.Object3D[]; /** os RAIOS que caíram desde a última leitura (onde, no MUNDO) — o engine toca o trovão */ raios(): { x: number; y: number; z: number }[]; atualizar(dt: number, t: number): void; dispose(): void };
+export type MeioHandle = { group: THREE.Group; alvos: THREE.Object3D[]; /** os RAIOS que caíram desde a última leitura (onde, no MUNDO) — o engine toca o trovão */ raios(): { x: number; y: number; z: number }[]; /** a cápsula em que eu estou (a vista de DENTRO: sem o teto, o vidro quase sumido), ou null */ capsulaDentro(id: string | null): void; atualizar(dt: number, t: number): void; dispose(): void };
 
 const VERMELHO = 0xff2a3a;
 const aditivo = (cor: THREE.ColorRepresentation, op: number) => new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
@@ -208,32 +208,42 @@ export function criarMeio(o: { low: boolean }): MeioHandle {
     const gravura = malha(new THREE.RingGeometry(A.rIn + 2.2, A.rIn + 2.45, seg), aditivo(VERMELHO, 0.4)); gravura.rotation.x = -Math.PI / 2; gravura.position.set(A.x, A.h + 0.02, A.z);
     for (const p of PILARES_ALTO) { const pl = malha(new THREE.CylinderGeometry(p.r, p.r * 1.3, A.h - CYBER.h, 10), circTorre); pl.position.set(p.x, CYBER.h + (A.h - CYBER.h) / 2, p.z); }
   }
-  // ── as CÁPSULAS: o poço de vidro colado na torre (as guias acesas) e a cápsula subindo e descendo no relógio comum —
-  //    o anel da porta fica BRANCO quando ela está aberta (pode entrar) e VERMELHO viajando ──
+  // ── as CÁPSULAS: o poço de vidro colado na torre (as guias acesas) e a cápsula subindo e descendo no relógio comum.
+  //    Os VIDROS da porta (a metade virada pra fora da torre) abrem deslizando por trás da outra metade quando ela chega
+  //    e fecham antes de sair; o anel fica BRANCO aberta e VERMELHO viajando. Quem está DENTRO vê por dentro: o teto e o
+  //    vidro somem quase todo (a vista lá fora limpa) ──
+  const capsDentro: { id: string | null } = { id: null };
   { const vidroP = new THREE.MeshStandardMaterial({ color: 0xffd0d6, emissive: 0xff2a3a, emissiveIntensity: 0.05, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide }); mats.push(vidroP);
     const casco = new THREE.MeshStandardMaterial({ color: 0x14080c, emissive: 0x2a060c, emissiveIntensity: 0.5, roughness: 0.25, metalness: 0.85 }); mats.push(casco);
-    const caps: { p: (typeof POCOS_TC)[number]; g: THREE.Group; porta: THREE.MeshBasicMaterial; bocas: THREE.MeshBasicMaterial[] }[] = [];
+    type Cap = { p: (typeof POCOS_TC)[number]; g: THREE.Group; porta: THREE.MeshBasicMaterial; bocas: THREE.MeshBasicMaterial[]; portas: [THREE.Object3D, THREE.Object3D]; vidros: THREE.MeshStandardMaterial; teto: THREE.Object3D };
+    const caps: Cap[] = [];
     for (const p of POCOS_TC) {
-      const H = p.ate - p.de, tubo = malha(new THREE.CylinderGeometry(p.r + 0.35, p.r + 0.35, H + 4, 32, 1, true), vidroP); tubo.position.set(p.x, p.de + (H + 4) / 2, p.z);
+      // o POÇO: o tubo de vidro só ENTRE as bocas (nas bocas a cápsula fica livre pra abrir) e as guias de ponta a ponta
+      const H = p.ate - p.de, tb = H - 3.8, tubo = malha(new THREE.CylinderGeometry(p.r + 0.35, p.r + 0.35, tb, 32, 1, true), vidroP); tubo.position.set(p.x, p.de + 3.6 + tb / 2, p.z);
       for (let k = 0; k < 4; k++) { const a = (k / 4) * Math.PI * 2 + Math.PI / 4, gd = malha(new THREE.BoxGeometry(0.14, H + 4, 0.14), aditivo(VERMELHO, 0.7)); gd.position.set(p.x + Math.cos(a) * (p.r + 0.4), p.de + (H + 4) / 2, p.z + Math.sin(a) * (p.r + 0.4)); }
-      // as BOCAS (embaixo e em cima): o anel no piso, aceso na cor da porta
       const bocas = [p.de, p.ate].map((y) => { const m = aditivo(0xffffff, 0.9), an = malha(new THREE.TorusGeometry(p.r, 0.09, 6, 48), m); an.rotation.x = Math.PI / 2; an.position.set(p.x, y + 0.05, p.z); an.userData.semLote = true; return m; });
-      // a CÁPSULA: o piso, o casco de vidro, o teto e o anel da porta
+      // a CÁPSULA: o piso, a metade de trás do vidro (fixa), as DUAS folhas da porta, o teto e os anéis
       const g = new THREE.Group(); g.position.set(p.x, p.de, p.z); g.userData.semLote = true; group.add(g);
       malha(new THREE.CylinderGeometry(p.r, p.r * 0.9, 0.3, 32), casco, g).position.y = -0.15;
-      malha(new THREE.CylinderGeometry(p.r, p.r, 3, 32, 1, true), vidroP, g).position.y = 1.5;
+      const vidros = vidroP.clone(); mats.push(vidros);
+      const a = portaDoPoco(p), arco = (de: number, ate: number, r: number) => new THREE.CylinderGeometry(r, r, 3, 24, 1, true, Math.PI / 2 - ate, ate - de);
+      malha(arco(a + Math.PI / 2, a + (3 * Math.PI) / 2, p.r), vidros, g).position.y = 1.5;   // (a metade de trás, virada pra torre)
+      const folhas = [[a, a + Math.PI / 2], [a - Math.PI / 2, a]].map(([de, ate]) => { const f = new THREE.Group(); g.add(f); malha(arco(de!, ate!, p.r - 0.06), vidros, f).position.y = 1.5;
+        const bat = malha(new THREE.BoxGeometry(0.05, 3, 0.05), aditivo(VERMELHO, 0.6), f); const ab = de === a ? de : ate!; bat.position.set(Math.cos(ab) * (p.r - 0.06), 1.5, Math.sin(ab) * (p.r - 0.06)); return f; });
       const teto = malha(new THREE.SphereGeometry(p.r, 32, 10, 0, Math.PI * 2, 0, Math.PI / 2), casco, g); teto.scale.y = 0.35; teto.position.y = 3;
       const porta = aditivo(0xffffff, 0.9); for (const y of [0.05, 3]) { const an = malha(new THREE.TorusGeometry(p.r + 0.02, 0.08, 6, 48), porta, g); an.rotation.x = Math.PI / 2; an.position.y = y; }
-      malha(new THREE.CylinderGeometry(0.12, 0.12, 3, 8), aditivo(VERMELHO, 0.8), g).position.y = 1.5;   // (o eixo aceso no meio)
-      caps.push({ p, g, porta, bocas });
+      caps.push({ p, g, porta, bocas, portas: [folhas[0]!, folhas[1]!], vidros, teto });
     }
     const branco = new THREE.Color(0xffffff), verm = new THREE.Color(VERMELHO);
     anim.push(() => {
       const agora = Date.now() / 1000;
       for (const c of caps) {
         const st = capsulaEm(c.p, agora); c.g.position.y = st.h;
+        // as folhas giram em volta do eixo e escondem atrás da metade de trás (a da esquerda pra um lado, a outra pro outro)
+        c.portas[0].rotation.y = -(Math.PI / 2) * st.abre; c.portas[1].rotation.y = (Math.PI / 2) * st.abre;
         c.porta.color.copy(st.aberta ? branco : verm);
         c.bocas[0]!.color.copy(st.aberta === "baixo" ? branco : verm); c.bocas[1]!.color.copy(st.aberta === "cima" ? branco : verm);
+        const dentro = capsDentro.id === c.p.id; c.teto.visible = !dentro; c.vidros.opacity = dentro ? 0.03 : 0.1;
       }
     });
   }
@@ -253,25 +263,26 @@ export function criarMeio(o: { low: boolean }): MeioHandle {
   malha(new THREE.PlaneGeometry(4.4, 8.4), est, portal).position.y = 4.4;
   for (const [w, h, x, y] of [[0.4, 9.2, -2.4, 4.6], [0.4, 9.2, 2.4, 4.6], [5.2, 0.4, 0, 9.2]] as const) { const b = malha(new THREE.BoxGeometry(w, h, 0.3), aditivo(VERMELHO, 0.95), portal); b.position.set(x, y, 0); }
   // a pirâmide INVERTIDA flutuando por cima, com o OLHO vermelho e o anel de varredura
-  const inv = new THREE.Group(); inv.position.y = lado * 1.5 + 12; mg.add(inv);
-  const pin = malha(new THREE.ConeGeometry(lado * 0.8, 16, 4), negro, inv); pin.rotation.x = Math.PI; pin.rotation.y = Math.PI / 4;
+  const PI_ = PIRAMIDE_INV, inv = new THREE.Group(); inv.position.y = PI_.y; mg.add(inv);
+  const pin = malha(new THREE.ConeGeometry(PI_.r, PI_.alt, 4), negro, inv); pin.rotation.x = Math.PI; pin.rotation.y = Math.PI / 4;
   const arestas = new THREE.LineSegments(new THREE.EdgesGeometry(pin.geometry), new THREE.LineBasicMaterial({ color: VERMELHO, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
-  arestas.rotation.copy(pin.rotation); inv.add(arestas); geos.push(arestas.geometry); mats.push(arestas.material as THREE.Material);
-  const olho = malha(new THREE.SphereGeometry(1.6, 20, 14), new THREE.MeshBasicMaterial({ color: 0xff1a2a }), inv); olho.position.y = -9.5;
-  const iris = malha(new THREE.RingGeometry(2.2, 2.6, 40), aditivo(VERMELHO, 0.8), inv); iris.position.y = -9.5;
+  arestas.rotation.copy(pin.rotation); arestas.scale.setScalar(1.012);   // (um tiquinho por fora das faces: coladas, piscavam) inv.add(arestas); geos.push(arestas.geometry); mats.push(arestas.material as THREE.Material);
+  const olho = malha(new THREE.SphereGeometry(1.6, 20, 14), new THREE.MeshBasicMaterial({ color: 0xff1a2a }), inv); olho.position.y = -PI_.alt / 2 - 1.2;   // (o olho logo abaixo da ponta)
+  const iris = malha(new THREE.RingGeometry(2.2, 2.6, 40), aditivo(VERMELHO, 0.8), inv); iris.position.y = -PI_.alt / 2 - 1.2; iris.rotation.x = Math.PI / 2;
   const varre = malha(new THREE.TorusGeometry(lado * 0.95, 0.12, 6, 64), aditivo(VERMELHO, 0.8), mg); varre.rotation.x = Math.PI / 2;
   // os ESTILHAÇOS negros orbitando
   const NS = o.low ? 10 : 24, shard = new THREE.InstancedMesh(new THREE.TetrahedronGeometry(1, 0), negro, NS); geos.push(shard.geometry); shard.frustumCulled = false; mg.add(shard);
-  const orb = Array.from({ length: NS }, (_, i) => ({ r: lado * 1.1 + (i % 5) * 2.2, y: 6 + ((i * 37) % 30), v: 0.12 + (i % 4) * 0.05, f: i * 2.4, s: 0.6 + (i % 3) * 0.5 }));
+  // (em volta do cubo, ABAIXO do mirante: antes subiam até atravessar a laje dele)
+  const orb = Array.from({ length: NS }, (_, i) => ({ r: lado * 0.85 + (i % 4) * 1.2, y: 4 + ((i * 37) % 22), v: 0.12 + (i % 4) * 0.05, f: i * 2.4, s: 0.6 + (i % 3) * 0.4 }));
   // o feixe vermelho subindo do olho pro céu
-  const feixe = malha(new THREE.CylinderGeometry(0.5, 1.4, 200, 12, 1, true), aditivo(VERMELHO, 0.14), mg); feixe.position.y = lado * 1.5 + 12 + 108;
+  const feixe = malha(new THREE.CylinderGeometry(0.5, 1.4, 200, 12, 1, true), aditivo(VERMELHO, 0.14), mg); feixe.position.y = PI_.y + PI_.alt / 2 + 100;
   for (const x of [inv, varre, shard, feixe, olho, iris]) x.userData.semLote = true;
 
   const e = new THREE.Euler(), sc = new THREE.Vector3();
   anim.push((_, t) => {
     circ.uniforms.uT!.value = t; (est.uniforms.uT!.value as number) = t;
-    inv.rotation.y = t * 0.15; inv.position.y = lado * 1.5 + 12 + Math.sin(t * 0.6) * 1.2;
-    iris.lookAt(new THREE.Vector3(0, -9.5, 50)); (iris.material as THREE.MeshBasicMaterial).opacity = 0.5 + 0.4 * Math.sin(t * 2.3);
+    inv.rotation.y = t * 0.15; inv.position.y = PI_.y + Math.sin(t * 0.6) * 1.2;
+    iris.scale.setScalar(1 + 0.15 * Math.sin(t * 2.3)); (iris.material as THREE.MeshBasicMaterial).opacity = 0.5 + 0.4 * Math.sin(t * 2.3);
     varre.position.y = ((t * 4) % (lado * 1.5 + 4)); (varre.material as THREE.MeshBasicMaterial).opacity = 0.8 * Math.sin(Math.PI * (varre.position.y / (lado * 1.5 + 4)));
     orb.forEach((s, i) => { const a = s.f + t * s.v; q.setFromEuler(e.set(t * 0.7 + i, t * 0.5, i)); shard.setMatrixAt(i, m4.compose(v.set(Math.cos(a) * s.r, s.y + Math.sin(t * 0.8 + i) * 1.2, Math.sin(a) * s.r), q, sc.setScalar(s.s))); });
     shard.instanceMatrix.needsUpdate = true;
@@ -280,6 +291,7 @@ export function criarMeio(o: { low: boolean }): MeioHandle {
   return {
     group, alvos,
     raios() { return raios.splice(0); },
+    capsulaDentro(id) { capsDentro.id = id; },
     atualizar(dt, t) { for (const f of anim) f(dt, t); },
     dispose() { group.removeFromParent(); for (const g of geos) g.dispose(); for (const m of mats) m.dispose(); },
   };
