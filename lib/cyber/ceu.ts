@@ -12,7 +12,7 @@ import { escadasExistem, hubAtivo, salaAtiva } from "./nivelAtivo";
 import { empurrarParaFora, type Colisor, type P2 } from "./colisao";
 import { colisoresDoDistritoTerra } from "./terra";
 import { CHAO } from "./praca";
-import { ALCANCE_COMPLEXO, RASTA, alturaNoComplexo, colisoresDoComplexo, entradaDaPonteNoLounge, noComplexo, solidosDoComplexo } from "./temploCosmico";
+import { ALCANCE_COMPLEXO, ESP, ESTUDO, RASTA, alturaNoComplexo, colisoresDoComplexo, entradaDaPonteNoLounge, noComplexo, solidosDoComplexo } from "./temploCosmico";
 import { DECK, TEMPLO, alturaDaEscadaria, alturaNoLounge, bordaDoDeck, bordasDaEscadaria, colisoresDoTemplo, noCorredorDaEscadaria, noTemplo, saidaDoLounge, GARAGEM_LOUNGE, GARAGEM_LOUNGE_EXISTE, naGaragemDoLounge } from "./templo";
 
 /** a ZAEON MEGA (out. 2026): a cidadela virou uma MEGA PLATAFORMA — 3× mais larga que antes, bem mais ALTA (450 m) e
@@ -331,6 +331,11 @@ export function rodaDeTronos(cx: number, cz: number, abre: number): Movel[] {
 }
 /** uma zona do LOUNGE RASTA: `dx`/`dz` a partir do centro do disco rasta, com a boca virada pro meio dele (a árvore) */
 function zonaRasta(dx: number, dz: number, cor: number, tipo: "narguile" | "fogueira" | "mesinha"): Movel[] { return zonaLounge(RASTA.x + dx, RASTA.z + dz, Math.atan2(-dx, -dz), cor, tipo); }
+/** uma roda de leitura num LOUNGE ESTUDANTIL (`e` = a plataforma dele; `dx`/`dz` do centro): sofás em U, pufes e a
+ *  mesinha, com a boca virada pro meio — no piso do lounge estudantil (abaixo do pátio) */
+function zonaEstudo(e: { x: number; z: number; h: number }, dx: number, dz: number, cor: number): Movel[] {
+  return zonaLounge(e.x + dx, e.z + dz, Math.atan2(-dx, -dz), cor, "mesinha").map((m) => ({ ...m, y: (m.y ?? 0.16) + e.h }));
+}
 /** os móveis do lounge vão em cima do DECK da festa: a elevação de cada um soma DECK.h */
 function noDeck(lista: Movel[]): Movel[] { return lista.map((m) => ({ ...m, y: (m.y ?? 0.16) + DECK.h })); }
 export const MOVEIS: Record<NomeSala, Movel[]> = {
@@ -366,6 +371,10 @@ export const MOVEIS: Record<NomeSala, Movel[]> = {
     // reggae, em volta da árvore do meio; o caminho da ponte e o da escadaria das raízes ficam livres
     ...zonaRasta(-30, -26, 0x2fae4a, "fogueira"), ...zonaRasta(30, -24, 0xffd23f, "narguile"), ...zonaRasta(-40, 8, 0xe63946, "narguile"),
     ...zonaRasta(36, 30, 0x2fae4a, "mesinha"), ...zonaRasta(0, -46, 0xffd23f, "fogueira"), ...zonaRasta(-14, 44, 0xe63946, "fogueira"),
+    // os LOUNGES ESTUDANTIS (o Templo Cósmico): rodas de sofá e poltronas pra ler com os amigos, dos dois lados do salão
+    ...[ESTUDO, { ...ESP(ESTUDO), r: ESTUDO.r, h: ESTUDO.h }].flatMap((e) => [
+      ...zonaEstudo(e, -13, 9, 0x7fd8ff), ...zonaEstudo(e, 13, 9, 0x9fe8c8), ...zonaEstudo(e, 0, 17, 0xc9b8ff),   // (do lado de fora: o corredor da entrada até a escada fica livre)
+    ]),
   ],
   // os 3 espaços de CONVIVÊNCIA: minimalistas e sonorizados (CAIXAS de som discretas com música ambiente) — sofás,
   // pufes, plantas; NADA de estrutura de festa (sem palco, pista, treliça). O corredor do meio (da porta, +z, ao centro)
