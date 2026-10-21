@@ -11,6 +11,26 @@ export type TrechoCortado = {
   paginaFim: number;
 };
 
+/** Parte um texto longo em pedaços de até `max` chars, cortando na última fronteira de frase/linha da janela. */
+function partirTexto(texto: string, max: number): string[] {
+  const out: string[] = [];
+  let resto = texto;
+  while (resto.length > max) {
+    const janela = resto.slice(0, max + 1); // +1: enxerga o espaço logo após o limite
+    const fim = Math.max(
+      janela.lastIndexOf(". ") + 1,
+      janela.lastIndexOf("! ") + 1,
+      janela.lastIndexOf("? ") + 1,
+      janela.lastIndexOf("\n"),
+    );
+    const corte = fim > 0 && fim <= max ? fim : max; // sem fronteira na janela: corte seco
+    out.push(resto.slice(0, corte).trim());
+    resto = resto.slice(corte).trimStart();
+  }
+  if (resto) out.push(resto);
+  return out.filter(Boolean);
+}
+
 type Titulo = { level?: number; texto: string };
 
 const SEP = " › ";
@@ -80,6 +100,16 @@ export function cortarEmTrechos(blocks: Block[], titulo: string): TrechoCortado[
       if (chars + texto.length > ALVO_CHARS) fechar();
       adicionar(texto, ultimaPagina);
       if (chars > ALVO_CHARS) fechar(); // tabela maior que o alvo: trecho só dela
+      continue;
+    }
+
+    // parágrafo maior que o alvo: vira vários trechos (o embedder tem limite de entrada)
+    if (texto.length > ALVO_CHARS) {
+      fechar();
+      for (const pedaco of partirTexto(texto, ALVO_CHARS)) {
+        adicionar(pedaco, ultimaPagina);
+        fechar();
+      }
       continue;
     }
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { Block } from "@/lib/scholar/types";
 import { parseLoaderResponse } from "@/lib/scholar/pdf";
-import { cortarEmTrechos } from "./corte";
+import { ALVO_CHARS, cortarEmTrechos } from "./corte";
 
 const h = (text: string, level?: number, page = 1): Block => ({ type: "heading", level, page, text });
 const p = (text: string, page = 1): Block => ({ type: "paragraph", page, text });
@@ -54,6 +54,30 @@ describe("cortarEmTrechos — tamanho, páginas e tabelas", () => {
     expect(out.filter((t) => t.texto.includes("c".repeat(50)))).toHaveLength(1);
     expect(comTabela[0].texto).not.toContain("antes");
     expect(out).toHaveLength(3);
+  });
+
+  it("parágrafo gigante é partido em frases, sem perder texto", () => {
+    const frase = "Esta é uma frase de teste com tamanho razoável para o corte. ";
+    const longo = frase.repeat(Math.ceil(10000 / frase.length)).trim();
+    const out = cortarEmTrechos([h("T", 1, 7), p(longo, 7)], "Doc");
+    expect(out.length).toBeGreaterThanOrEqual(4);
+    for (const t of out) {
+      expect(t.texto.startsWith(t.caminho + "\n\n")).toBe(true);
+      expect(t.texto.slice(t.caminho.length + 2).length).toBeLessThanOrEqual(ALVO_CHARS);
+      expect(t.caminho).toBe("Doc › T");
+      expect(t.paginaIni).toBe(7);
+      expect(t.paginaFim).toBe(7);
+    }
+    const junto = out.map((t) => t.texto.slice(t.caminho.length + 2)).join(" ");
+    expect(junto.replace(/\s+/g, "")).toBe(longo.replace(/\s+/g, ""));
+    // cortou em fronteira de frase
+    expect(out[0].texto.endsWith(".")).toBe(true);
+  });
+
+  it("parágrafo gigante sem fronteira: corte seco em ALVO_CHARS, sem perda", () => {
+    const longo = "a".repeat(7000);
+    const out = cortarEmTrechos([p(longo)], "Doc");
+    expect(out.map((t) => t.texto.slice(t.caminho.length + 2).length)).toEqual([3000, 3000, 1000]);
   });
 
   it("blocos sem página herdam a última vista (começa em 1); figure é ignorada", () => {
