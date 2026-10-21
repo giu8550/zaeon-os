@@ -11,6 +11,7 @@
  * Referencial: +z = a FRENTE, +y = cima, y = 0 = a base da saia (o carro paira acima do chão).
  */
 import * as THREE from "three";
+import { fundirEstaticos } from "./lotes";
 import type { CorCarro } from "@/lib/cyber/carros";
 
 export type CarroHandle = {
@@ -350,6 +351,15 @@ export function criarCarroHex(o: { low: boolean; cor?: CorCarro }): CarroHandle 
       p.rotation.set(PORTA.sobe * e, 0, lado * PORTA.abre * e, "ZXY");
     }
   };
+  // ── LEVE (out/2026, o dono: "a cidadela mais leve"): eram 87 peças = 87 desenhos POR CARRO (17 carros na Zaeon). A
+  //    lataria — tudo o que não mexe — vai pra um CORPO só (é ele que boia) e é fundida por material
+  //    (components/cyber/lotes); portas e vidros (abrem), jatos e fogo (pulsam) e os pontos do motorista ficam soltos ──
+  const corpo = new THREE.Group(); corpo.name = "carro-corpo";
+  for (const c of [...group.children]) if (c !== sombra) corpo.add(c);
+  group.add(corpo);
+  for (const p of portas) p.userData.lote = "limite";
+  for (const v of vidros) v.g.userData.lote = "limite";
+  fundirEstaticos(corpo, { manter: [...portas, ...vidros.map((v) => v.g), ...jatos, ...fogos.flatMap((f) => [f.chama, f.nucleo, f.clarao]), assento, maoE, maoD, peE, peD] });
   aplicar();
   return {
     group, assento, pontos: { maoE, maoD, peE, peD }, nVidros: vidros.length,
@@ -375,6 +385,6 @@ export function criarCarroHex(o: { low: boolean; cor?: CorCarro }): CarroHandle 
       });
       (M.chama as THREE.MeshBasicMaterial).opacity = 0.55 + 0.35 * v01;
     },
-    dispose() { for (const g of geos) g.dispose(); (M.clarao as THREE.SpriteMaterial).map?.dispose(); for (const m of Object.values(M)) m.dispose(); matLogo.dispose(); matTela.dispose(); for (const x of extras) x.dispose(); group.removeFromParent(); },
+    dispose() { corpo.traverse((n) => { if (n.name === "lote") (n as THREE.Mesh).geometry?.dispose(); }); for (const g of geos) g.dispose(); (M.clarao as THREE.SpriteMaterial).map?.dispose(); for (const m of Object.values(M)) m.dispose(); matLogo.dispose(); matTela.dispose(); for (const x of extras) x.dispose(); group.removeFromParent(); },
   };
 }

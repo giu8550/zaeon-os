@@ -101,7 +101,7 @@ function estacionamentoPOI(): POI {
     footprintR: tamanhoDoLote(LOTES[0]!).r, interactR: tamanhoDoLote(LOTES[0]!).r + 3, solido: false, altura: 0, acesso: "publico",
   };
 }
-export const POIS: POI[] = [zaeonPOI(), mirantePOI(1), mirantePOI(2), heliportoPOI(), estacionamentoPOI()];   // (o mirante 3, na outra ponta, saiu — fps)
+export const POIS: POI[] = [zaeonPOI(), mirantePOI(1), heliportoPOI(), estacionamentoPOI()];   // (o mirante 3, na outra ponta, saiu — fps; o 2, cópia do 1, saiu também — out/2026)
 
 /** os marcos apoiados na PRAÇA (o piso dela é o `CHAO`; os da Zaeon têm a `base` no piso dela) */
 export const naPracaPOI = (p: POI) => p.base === undefined || p.base === CHAO;

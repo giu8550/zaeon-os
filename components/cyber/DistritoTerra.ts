@@ -133,7 +133,9 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
         vec2 gr = abs(fract(vUv * vec2(36.0, 18.0)) - 0.5); cor += vec3(0.12, 0.35, 0.55) * (1.0 - smoothstep(0.0, 0.035, min(gr.x, gr.y))) * 0.35;
         float varre = exp(-pow((vUv.x - fract(uT * 0.06)) * 40.0, 2.0)); cor += vec3(0.3, 0.8, 1.0) * varre * 0.45;
         for (int i = 0; i < ${pontos.length}; i++) {
-          vec3 p = uP[i]; vec2 d = (vUv - p.xy) * vec2(2.0, 1.0); float r = length(d);
+          vec3 p = uP[i]; vec2 d = (vUv - p.xy) * vec2(2.0, 1.0);
+          if (abs(d.x) > 0.065 || abs(d.y) > 0.065) continue;   // (LEVE: longe do ponto, nada a somar — o grosso dos pixels sai aqui)
+          float r = length(d);
           float onda = fract(uT * 0.5 + float(i) * 0.13); float anel = exp(-pow((r - onda * 0.06) * 160.0, 2.0)) * (1.0 - onda);
           vec3 c = p.z < 0.5 ? vec3(1.0, 0.25, 0.3) : (p.z < 1.5 ? vec3(0.35, 1.0, 0.55) : (p.z < 2.5 ? vec3(0.27, 0.84, 1.0) : vec3(1.0, 0.7, 0.35)));
           float forte = p.z < 0.5 ? 1.5 : 1.0;   // os PROBLEMAS pulsam mais forte
@@ -142,7 +144,9 @@ export function criarDistritoTerra(o: { low: boolean; parado?: boolean }): Distr
         // AO VIVO: os eventos reais — um losango piscando + anel de onda, na cor do tipo (os mais novos mais fortes)
         for (int i = 0; i < ${MAX_VIVO}; i++) {
           if (float(i) >= uNV) break;
-          vec4 e = uV[i]; vec2 d = (vUv - e.xy) * vec2(2.0, 1.0); float r = abs(d.x) + abs(d.y);
+          vec4 e = uV[i]; vec2 d = (vUv - e.xy) * vec2(2.0, 1.0);
+          if (abs(d.x) > 0.055 || abs(d.y) > 0.055) continue;
+          float r = abs(d.x) + abs(d.y);
           vec3 c = e.z < 0.5 ? vec3(1.0, 0.65, 0.24) : (e.z < 1.5 ? vec3(1.0, 0.36, 0.17) : (e.z < 2.5 ? vec3(0.73, 0.55, 1.0) : (e.z < 3.5 ? vec3(1.0, 0.17, 0.29) : vec3(0.88, 0.96, 1.0))));
           float pisca = 0.6 + 0.4 * sin(uT * 4.0 + float(i) * 1.7);
           float onda = fract(uT * 0.35 + float(i) * 0.21); float anel = exp(-pow((length(d) - onda * 0.05) * 170.0, 2.0)) * (1.0 - onda);

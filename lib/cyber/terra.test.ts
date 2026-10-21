@@ -22,9 +22,9 @@ describe("os MIRANTES DA TERRA nas 4 quinas (a antiga base do Andrei + 3 cópias
     MIRANTES.forEach((m, i) => { expect(Math.hypot(m.x, m.z)).toBeCloseTo(R_MIRANTE, 5); expect(((m.ang * 180) / Math.PI) % 90).toBeCloseTo(45, 5); if (i) expect(m.ang - MIRANTES[i - 1]!.ang).toBeCloseTo(Math.PI / 2, 5); });
     expect(LAR_LOCAL).toEqual({ x: MIRANTES[0]!.x, z: MIRANTES[0]!.z });
     expect(POIS.filter((p) => p.preset === "zaeon")).toHaveLength(MIRANTES_PIRAMIDE.length);   // a Recepção + os 2 do lado do lounge (o 3 saiu — fps)
-    expect(MIRANTES_PIRAMIDE.map((m) => m.id)).toEqual([0, 1, 2]);
+    expect(MIRANTES_PIRAMIDE.map((m) => m.id)).toEqual([0, 1]);   // (o 2 era a cópia do 1 — out/2026, o dono: "retire os repetidos")
     // as ESTAÇÕES (telões, globo, árvores, droids) só nos 2 do lado do LOUNGE (oeste, x < 0)
-    expect(MIRANTES_ESTACAO.map((m) => m.id)).toEqual([1, 2]); for (const m of MIRANTES_ESTACAO) expect(m.x).toBeLessThan(0);
+    expect(MIRANTES_ESTACAO.map((m) => m.id)).toEqual([1]); for (const m of MIRANTES_ESTACAO) expect(m.x).toBeLessThan(0);
     expect(POIS.filter((p) => p.acesso === "dono" && p.preset === "zaeon")).toHaveLength(1);   // só a Recepção é do dono
   });
   it("não encostam na nave, na escada do lounge, no buraco negro, no estacionamento, nas bases nem na capela", () => {
