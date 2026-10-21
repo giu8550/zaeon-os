@@ -195,7 +195,26 @@ def _heading_level(raw):
 
 
 def _flatten(node) -> str:
-    """Junta o texto de todos os descendentes (p/ o texto-resumo do bloco de tabela)."""
+    """Texto do bloco de tabela. O opendataloader grava tabela como rows[] → cells[] → kids[]
+    (não kids direto): sem descer por rows/cells a tabela saía VAZIA. Com linhas, devolve
+    tabela Markdown (uma linha por row, células separadas por " | ") — o modelo lê as colunas."""
+    rows = node.get("rows")
+    if isinstance(rows, list) and rows:
+        linhas: list[str] = []
+        for row in rows:
+            cells = row.get("cells") if isinstance(row, dict) else None
+            if not isinstance(cells, list):
+                continue
+            textos = [_texto(c).replace("|", "/") for c in cells]
+            if any(textos):
+                linhas.append("| " + " | ".join(textos) + " |")
+        if linhas:
+            return "\n".join(linhas)
+    return _texto(node, sep=" | ")
+
+
+def _texto(node, sep: str = " ") -> str:
+    """Junta o `content` de todos os descendentes (kids/children/elements/rows/cells)."""
     out: list[str] = []
 
     def rec(n):
@@ -206,8 +225,8 @@ def _flatten(node) -> str:
             c = (n.get("content") or "").strip()
             if c:
                 out.append(c)
-            for k in (n.get("kids") or n.get("children") or n.get("elements") or []):
-                rec(k)
+            for chave in ("kids", "children", "elements", "rows", "cells"):
+                rec(n.get(chave) or [])
 
-    rec(node.get("kids") or node.get("children") or node.get("elements") or [])
-    return " | ".join(out)
+    rec(node)
+    return sep.join(out)
