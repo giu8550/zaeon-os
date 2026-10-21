@@ -38,6 +38,19 @@ export const PREF_GRAFICOS = "zaeon.cyber.graficos";
 /** o contador de FPS (com o nome da placa) no canto da tela — pra quem estiver com o cyberespaço lento mandar um print */
 export const PREF_MOSTRAR_FPS = "zaeon.cyber.mostrarFps";
 export const lerPreferencia = (v: string | null | undefined): PreferenciaGraficos => (v === "leve" || v === "cheio" ? v : "auto");
+/** a CALIBRAGEM do serrilhado (out/2026, o dono: "não deixar o gráfico tão serrilhado — ou colocar opções pra calibrar"):
+ *  - NITIDEZ = quantos pixels desenhados por pixel da tela (`auto` = o do modo; 0,75 alivia a placa; 1,5/2 = mais nítido
+ *    — acima da densidade da tela é SUPERAMOSTRAGEM: o serrilhado some, a placa trabalha mais). Escolhida, a qualidade
+ *    adaptativa não mexe mais na resolução;
+ *  - SUAVIZAR BORDAS = o antialias (MSAA) do WebGL: `auto` = o do modo (vale ao entrar de novo no cyberespaço). */
+export type PreferenciaNitidez = "auto" | "0.75" | "1" | "1.5" | "2";
+export const PREF_NITIDEZ = "zaeon.cyber.nitidez";
+export const lerNitidez = (v: string | null | undefined): PreferenciaNitidez => (v === "0.75" || v === "1" || v === "1.5" || v === "2" ? v : "auto");
+export type PreferenciaSuavizar = "auto" | "sim" | "nao";
+export const PREF_SUAVIZAR = "zaeon.cyber.suavizar";
+export const lerSuavizar = (v: string | null | undefined): PreferenciaSuavizar => (v === "sim" || v === "nao" ? v : "auto");
+/** o evento que a tela de configurações dispara quando a nitidez muda (o cyberespaço aplica na hora) */
+export const EVENTO_GRAFICOS = "zaeon:graficos";
 
 const UA_MOVEL = /Android|iPhone|iPad|iPod|Mobile|Silk|Kindle|Opera Mini|IEMobile/i;
 
@@ -77,14 +90,24 @@ export type Qualidade = {
   antialias: boolean;
   /** 0 = sem limite */
   fpsMax: number;
+  /** a NITIDEZ escolhida pela pessoa (pixels por pixel da tela, sem o teto da tela) — a qualidade adaptativa não mexe nela */
+  nitidezFixa?: number;
 };
-export function qualidadeDe(p: PerfilDispositivo): Qualidade {
-  if (!p.leve) return { leve: false, pixelRatioMax: 1.5, antialias: true, fpsMax: 60 };   // tela de 120/144 Hz não desenha o dobro
-  if (p.movel) return { leve: true, pixelRatioMax: 1, antialias: false, fpsMax: p.fraco ? 30 : 45 };
-  // DESKTOP leve (placa integrada, aparelho fraco, ou escolhido): resolução da tela (×1) COM antialias — o dono não quer o
-  // serrilhado no talo — e 30 fps cravados (mais liso que oscilar entre 20 e 50)
-  return { leve: true, pixelRatioMax: 1, antialias: true, fpsMax: 30 };
+export function qualidadeDe(p: PerfilDispositivo, calibra: { nitidez?: PreferenciaNitidez; suavizar?: PreferenciaSuavizar } = {}): Qualidade {
+  // (out/2026: com os níveis separados só UMA plataforma carrega por vez — sobra placa pra resolução: o completo vai até a
+  //  densidade da tela retina e o leve de desktop sobe pra 1,25×)
+  const base: Qualidade = !p.leve ? { leve: false, pixelRatioMax: 2, antialias: true, fpsMax: 60 }   // tela de 120/144 Hz não desenha o dobro
+    : p.movel ? { leve: true, pixelRatioMax: 1, antialias: false, fpsMax: p.fraco ? 30 : 45 }
+    // DESKTOP leve (placa integrada, aparelho fraco, ou escolhido): COM antialias — o dono não quer o serrilhado no talo —
+    // e 30 fps cravados (mais liso que oscilar entre 20 e 50)
+    : { leve: true, pixelRatioMax: 1.25, antialias: true, fpsMax: 30 };
+  const q = { ...base };
+  if (calibra.nitidez && calibra.nitidez !== "auto") q.nitidezFixa = Number(calibra.nitidez);
+  if (calibra.suavizar === "sim") q.antialias = true; else if (calibra.suavizar === "nao") q.antialias = false;
+  return q;
 }
+/** o pixel ratio do renderizador: a nitidez escolhida (sem teto), ou o do modo limitado pela densidade da tela */
+export const pixelRatioDe = (q: Qualidade, dpr: number) => (q.nitidezFixa ?? Math.min(q.pixelRatioMax, dpr || 1));
 
 /** celular em pé → pede pra girar (a cena pausa até ficar na horizontal) */
 export const precisaGirar = (p: PerfilDispositivo, largura: number, altura: number) => p.movel && altura > largura;

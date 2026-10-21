@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { CIDADE, colisoresDaCidade, escadaEm } from "./ceu";
-import { CARRO_PRACA, CORES_CARRO, LOTES_CARRO, vagaDoLote, vagasDeCarro } from "./carros";
+import { CARROS_NA_ZAEON, CARRO_PRACA, CORES_CARRO, LOTES_CARRO, vagaDoLote, vagasDeCarro } from "./carros";
 
 describe("frota de carros", () => {
   const vagas = vagasDeCarro();
   it("a da praça continua sendo a 1ª, e cada lote da Zaeon tem filas × porFila vagas", () => {
     expect(vagas[0]).toMatchObject({ id: "praca", x: CARRO_PRACA.x, z: CARRO_PRACA.z, zaeon: false });
-    expect(vagas.length).toBe(1 + LOTES_CARRO.reduce((s, l) => s + l.filas * l.porFila, 0));
+    expect(vagas.length).toBe(1 + (CARROS_NA_ZAEON ? LOTES_CARRO.reduce((s, l) => s + l.filas * l.porFila, 0) : 0));   // (sem os carros na Zaeon: só o da praça)
   });
   it("as vagas da Zaeon ficam no piso andável, longe dos colisores e das escadas, sem carro em cima de carro", () => {
     const col = colisoresDaCidade();
@@ -22,7 +22,7 @@ describe("frota de carros", () => {
     const l = LOTES_CARRO[0]!, v = vagaDoLote(l, 0, 0);
     const frente = { x: Math.sin(v.rumo), z: Math.cos(v.rumo) };
     expect(frente.x * v.x + frente.z * v.z).toBeGreaterThan(0);
-    expect(new Set(vagas.map((x) => CORES_CARRO.indexOf(x.cor))).size).toBeGreaterThan(4);
+    if (CARROS_NA_ZAEON) expect(new Set(vagas.map((x) => CORES_CARRO.indexOf(x.cor))).size).toBeGreaterThan(4);
   });
 });
 
@@ -30,11 +30,11 @@ describe("carros online (presença)", () => {
   const A = "a".repeat(24), B = "b".repeat(24);
   it("saneia: só índices de carro que existem e números finitos", async () => {
     const { carroDe, carroLargadoDe, TOTAL_CARROS } = await import("./carros");
-    expect(carroDe({ c: 3, y: 450.5, yaw: 1 })).toEqual({ carro: { c: 3, y: 450.5, yaw: 1 } });
+    expect(carroDe({ c: 0, y: 450.5, yaw: 1 })).toEqual({ carro: { c: 0, y: 450.5, yaw: 1 } });   // (o da praça — o único, sem os da Zaeon)
     expect(carroDe({ c: TOTAL_CARROS, y: 1, yaw: 0 })).toEqual({});
     expect(carroDe({ c: 1.5, y: 1, yaw: 0 })).toEqual({});
-    expect(carroLargadoDe({ c: 2, x: 10, y: 450, z: -500, yaw: 0 })).toEqual({ carroLargado: { c: 2, x: 10, y: 450, z: -500, yaw: 0 } });
-    expect(carroLargadoDe({ c: 2, x: "a", y: 450, z: -500, yaw: 0 })).toEqual({});
+    expect(carroLargadoDe({ c: 0, x: 10, y: 450, z: -500, yaw: 0 })).toEqual({ carroLargado: { c: 0, x: 10, y: 450, z: -500, yaw: 0 } });
+    expect(carroLargadoDe({ c: 0, x: "a", y: 450, z: -500, yaw: 0 })).toEqual({});
   });
   it("posse: dirigir vence estacionado; empate → o menor id; carro sem ninguém não aparece", async () => {
     const { posseDosCarros } = await import("./carros");

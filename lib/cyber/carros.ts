@@ -30,6 +30,9 @@ export const LOTES_CARRO: readonly LoteCarro[] = [
   { nome: "leste", ang: 0.42, r: 188, filas: 2, porFila: 4, passo: 4.6, entreFilas: 8 },
   // (o OESTE — a cópia do leste, entre a escada do lounge e a da garagem — saiu: out/2026, o dono, "retire os repetidos")
 ];
+/** os CARROS na Zaeon (out/2026, o dono: "a cidadela não precisa ficar com os veículos — pra pesar ainda menos", nos
+ *  dois modos): desligados. O lote continua no layout (é perto dele que se chega no hub, voltando de uma sala) */
+export const CARROS_NA_ZAEON = false as boolean;
 /** o carro da PRAÇA (o 1º que existiu — no chão, perto das motos) */
 export const CARRO_PRACA = { x: -22, z: -132, rumo: 2.01 } as const;
 
@@ -46,7 +49,7 @@ export function vagaDoLote(l: LoteCarro, f: number, i: number): { x: number; z: 
 /** todas as vagas (mundo): a da praça + as dos lotes da Zaeon, cada uma com a sua cor (determinístico) */
 export function vagasDeCarro(): VagaCarro[] {
   const out: VagaCarro[] = [{ id: "praca", x: CARRO_PRACA.x, z: CARRO_PRACA.z, rumo: CARRO_PRACA.rumo, zaeon: false, cor: CORES_CARRO[0]! }];
-  for (const l of LOTES_CARRO) for (let f = 0; f < l.filas; f++) for (let i = 0; i < l.porFila; i++) {
+  for (const l of CARROS_NA_ZAEON ? LOTES_CARRO : []) for (let f = 0; f < l.filas; f++) for (let i = 0; i < l.porFila; i++) {
     const v = vagaDoLote(l, f, i), w = mundo(v);
     out.push({ id: `${l.nome}-${f}-${i}`, x: w.x, z: w.z, rumo: v.rumo, zaeon: true, cor: CORES_CARRO[(out.length) % CORES_CARRO.length]! });
   }
