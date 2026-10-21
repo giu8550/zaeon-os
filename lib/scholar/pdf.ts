@@ -30,6 +30,9 @@ export function parseLoaderResponse(json: any): StructuredText | null {
   const blocks: Block[] | undefined = Array.isArray(json.blocks)
     ? json.blocks.map((b: any) => ({
         type: VALID_BLOCK.has(b?.type) ? b.type : "paragraph",
+        ...(typeof b?.level === "number" && Number.isFinite(b.level) && b.level >= 1
+          ? { level: b.level }
+          : {}),
         page: typeof b?.page === "number" ? b.page : undefined,
         bbox:
           Array.isArray(b?.bbox) &&

@@ -9,6 +9,7 @@ export interface Paragraph {
 // Bloco estruturado (pdf-loader): tipo + posição na página → citação rastreável.
 export interface Block {
   type: "heading" | "paragraph" | "table" | "figure";
+  level?: number; // só em "heading": 1 = nível mais alto (vem do "heading level" do opendataloader)
   page?: number;
   bbox?: [number, number, number, number]; // [left, bottom, right, top] em pontos PDF
   text: string;

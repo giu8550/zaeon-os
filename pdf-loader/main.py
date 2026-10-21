@@ -143,7 +143,12 @@ def _walk(doc: dict):
     def emit_block(bt, node, text):
         page = node.get("page number")
         bbox = node.get("bounding box")
-        blocks.append({"type": bt, "page": page, "bbox": bbox, "text": text})
+        block = {"type": bt, "page": page, "bbox": bbox, "text": text}
+        if bt == "heading":
+            level = _heading_level(node.get("heading level"))
+            if level is not None:
+                block["level"] = level
+        blocks.append(block)
 
     def rec(node):
         if isinstance(node, list):
@@ -171,6 +176,22 @@ def _walk(doc: dict):
 
     rec(doc.get("kids") or doc.get("children") or doc.get("elements") or [])
     return paragraphs, blocks
+
+
+def _heading_level(raw):
+    """Nível do título (1 = mais alto) a partir do 'heading level' do opendataloader; None se inválido."""
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, str):
+        raw = raw.strip()
+        if not raw.isdigit():
+            return None
+        raw = int(raw)
+    if isinstance(raw, float) and raw.is_integer():
+        raw = int(raw)
+    if isinstance(raw, int) and raw >= 1:
+        return raw
+    return None
 
 
 def _flatten(node) -> str:
