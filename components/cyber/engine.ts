@@ -17,7 +17,7 @@ import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } fro
 import { alternarModoCamera, distPerto, faixaDaDistancia, limitarPitch, olhoDoOmbro, poseDaCamera, seguirPerto, type ModoCamera } from "@/lib/cyber/camera";
 import { PISTA, rotDaSala, espelhoDe, CAPELA_NA_ZAEON, ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, bocaDaGaragem, durDaViagem, naColunaDaGaragem, salaEm, ESCADAS, FIO, alturaDoFio, naEscadaLocal, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PISO_FESTA, PALCO as PALCO_LOUNGE, naSala, daSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade, colisoresDoAndar, dentroDoEstudo, rumoNaSala } from "@/lib/cyber/ceu";
 import { DECK, TEMPLO, curvaDaEscadaria, noTemplo } from "@/lib/cyber/templo";
-import { ALCANCE_DUELO, CABINES_TORRE, CABINE_TI, CUPULA, ESTUDO, barradoNaCupula, daCabineTI, bocaDoPoco, capsulaEm, embarcam, type PocoTC } from "@/lib/cyber/temploCosmico";
+import { ALCANCE_DUELO, TORRE_TI, CABINES_TORRE, CABINE_TI, CUPULA, ESTUDO, barradoNaCupula, daCabineTI, bocaDoPoco, capsulaEm, embarcam, type PocoTC } from "@/lib/cyber/temploCosmico";
 import { ESPERA_S, FALA_DESAFIO } from "@/lib/cyber/dueloIngles";
 import { estadoDoShow, trovoesEntre } from "@/lib/cyber/showLounge";
 import { criarMandala, type MandalaHandle } from "./MandalaSagrada";
@@ -2137,11 +2137,27 @@ export class CyberEngine {
     this.elevTC = { poco: p, dx: (q.x - p.x) * k, dz: (q.z - p.z) * k }; this.alvo = null; this.alvoDepois = null;
     this.som.tocar("rise", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 0.6 });
   }
+  /** a CÂMERA na cápsula (o dono: "se comportar melhor e ficar estática o máximo possível"): presa à cápsula — atrás de
+   *  quem está nela, junto do vidro do lado da torre, olhando pra fora — e sobe JUNTO (sem atraso); entra e sai suave */
+  private wCapsula = 0; private camCapsula: PocoTC | null = null;
+  private cameraDaCapsula(c: ReturnType<typeof poseDaCamera>, dt: number): ReturnType<typeof poseDaCamera> {
+    if (this.elevTC) this.camCapsula = this.elevTC.poco;
+    this.wCapsula += ((this.elevTC ? 1 : 0) - this.wCapsula) * Math.min(1, dt * 2.5);
+    const p = this.camCapsula; if (!p || this.wCapsula < 0.002) { if (!this.elevTC) this.camCapsula = null; return c; }
+    const L = CIDADE.salas.lounge, w = mundo(daSala(L, p.x, p.z)), tw = mundo(daSala(L, TORRE_TI.x, TORRE_TI.z));
+    let dx = w.x - tw.x, dz = w.z - tw.z; const n = Math.hypot(dx, dz) || 1; dx /= n; dz /= n;
+    const y = this.eu.alt, k = this.wCapsula * this.wCapsula * (3 - 2 * this.wCapsula);
+    const pos = { x: w.x - dx * (p.r - 0.5), y: y + 2.5, z: w.z - dz * (p.r - 0.5) }, olhar = { x: w.x + dx * 30, y: y + 0.6, z: w.z + dz * 30 };
+    if (this.elevTC) { this.camAz = Math.atan2(-dx, -dz); this.camT.set(this.eu.pos.x, 1.2 + this.eu.alt, this.eu.pos.z); }   // (saindo, a câmera de sempre já está atrás, olhando pra fora)
+    const mix = (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, z: a.z + (b.z - a.z) * k });
+    return { ...c, pos: mix(c.pos, pos), olhar: mix(c.olhar, olhar) };
+  }
   /** a viagem: o corpo vai junto com a cápsula (no relógio comum) até ela abrir na outra ponta */
   private passoElevadorTC(_dt: number): boolean {
     const v = this.elevTC; if (!v) return false;
     const st = capsulaEm(v.poco, Date.now() / 1000), L = CIDADE.salas.lounge, w = mundo(daSala(L, v.poco.x + v.dx, v.poco.z + v.dz)), ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY;
     this.eu.pos.set(w.x, 0, w.z); this.eu.alt = ilhaY + ALTURA_LOUNGE + st.h; this.alvo = null; this.alvoDepois = null;
+    { const c = mundo(daSala(L, v.poco.x, v.poco.z)), tw = mundo(daSala(L, TORRE_TI.x, TORRE_TI.z)); this.eu.facing = Math.atan2(c.x - tw.x, c.z - tw.z); }   // (virado pra fora: a vista)
     if (st.aberta) this.elevTC = null;   // (chegou e abriu: a pé de novo)
     return true;
   }
@@ -4107,6 +4123,7 @@ export class CyberEngine {
       olhoCam = { x: olhoCam.x + (om.x - olhoCam.x) * k, y: olhoCam.y + (om.y - olhoCam.y) * k, z: olhoCam.z + (om.z - olhoCam.z) * k };
     }
     let c = poseDaCamera({ olho: olhoCam, az: this.camAz, pitch: this.camPitch, dist, chaoY: this.eu.alt });
+    c = this.cameraDaCapsula(c, dt);   // numa CÁPSULA da torre: a vista de dentro, parada em relação a ela
     c = this.aplicarCena(c, dt);   // a CUTSCENE do tutorial (se houver) leva a câmera pra outro enquadramento
     this.cam.position.set(c.pos.x, c.pos.y, c.pos.z);
     this.cam.lookAt(c.olhar.x, c.olhar.y, c.olhar.z);
@@ -4288,7 +4305,7 @@ export class CyberEngine {
     if (!this.visivel || document.hidden) return;
     atualizarCamuflagem(t);   // o relógio único de todos os hologramas do mapa
     const eu = this.eu, euId = this.o.eu.id; this.tAnt = this.agora; this.agora = t;
-    if (!this.menu) { this.atualizarNivel(); this.atualizarFluxo(dt); this.atualizarDuelo(dt); this.conferirElevadorTC(); }
+    if (!this.menu) { this.atualizarNivel(); this.atualizarFluxo(dt); this.atualizarDuelo(dt); this.conferirElevadorTC(); this.cidade?.capsulaDentro(this.nivel === "lounge" ? this.elevTC?.poco.id ?? this.esperandoCapsula : null); }
     this.atualizarClarao(dt);
     this.distorcaoCosmica(t);   // (os NÍVEIS separados: só o meu existe — lib/cyber/niveis; e o FLUXO das pistas cósmicas)
 

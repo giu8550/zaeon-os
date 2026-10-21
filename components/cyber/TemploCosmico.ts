@@ -12,7 +12,7 @@ import { criarMeio } from "./TemploMeio";
 import { criarRasta } from "./TemploRasta";
 import { criarLoungesEstudo } from "./TemploEstudo";
 
-export type SalaoCosmicoHandle = { group: THREE.Group; alvos: THREE.Object3D[]; /** de onde sai o som calmo dos lounges estudantis */ caixasEstudo: THREE.Object3D[]; /** os raios do campus de TI que caíram desde a última leitura (mundo) */ raiosCampus(): { x: number; y: number; z: number }[]; atualizar(dt: number, t: number): void; /** a porta da CÚPULA da guardiã: aberta pra quem venceu o duelo */ cupula(aberta: boolean): void; dispose(): void };
+export type SalaoCosmicoHandle = { group: THREE.Group; alvos: THREE.Object3D[]; /** de onde sai o som calmo dos lounges estudantis */ caixasEstudo: THREE.Object3D[]; /** os raios do campus de TI que caíram desde a última leitura (mundo) */ raiosCampus(): { x: number; y: number; z: number }[]; /** a cápsula da torre em que eu estou (a vista de dentro) */ capsulaDentro(id: string | null): void; atualizar(dt: number, t: number): void; /** a porta da CÚPULA da guardiã: aberta pra quem venceu o duelo */ cupula(aberta: boolean): void; dispose(): void };
 
 const aditivo = (cor: THREE.ColorRepresentation, op: number) => new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
 
@@ -151,7 +151,7 @@ export function criarSalaoCosmico(o: { low: boolean; paredeMat: THREE.Material }
   for (const x of [casca, cume, feixe, ...aneis]) x.userData.semLote = true;
 
   return {
-    group, alvos, caixasEstudo: estudo.caixas, raiosCampus: () => meio.raios(),
+    group, alvos, caixasEstudo: estudo.caixas, raiosCampus: () => meio.raios(), capsulaDentro: (id) => meio.capsulaDentro(id),
     atualizar(dt, t) {
       rasta.atualizar(dt, t); meio.atualizar(dt, t); estudo.atualizar(dt, t);
       cupulaMat.uniforms.uT!.value = t; campoMat.uniforms.uT!.value = t;

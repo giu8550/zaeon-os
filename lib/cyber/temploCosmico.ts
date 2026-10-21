@@ -80,6 +80,10 @@ export const NUCLEO_CYBER = { r: 11, alt: 52 } as const;
 /** o MIRANTE da pirâmide invertida: o anel lá no alto, em volta dela (a pirâmide flutua no meio, por cima do cubo) —
  *  onde a Nina e o Téo trabalham */
 export const ALTO_TI = { x: CYBER.x, z: CYBER.z, rIn: 16, rOut: 30, h: CYBER.h + 34 } as const;
+/** a PIRÂMIDE INVERTIDA (no referencial do topo): o centro (m acima do deck), a altura e o raio — bem acima do mirante
+ *  (o dono: "mais alta, que o pátio de baixo pegue a visão da ponta": do deck do topo, a ponta aparece pelo vão do
+ *  mirante, por cima do cubo) */
+export const PIRAMIDE_INV = { y: ALTO_TI.h - CYBER.h + 24, alt: 22, r: 12.5 } as const;
 
 /** os PILARES que seguram o mirante, plantados no deck do topo (entre os anéis de estações) */
 export const PILARES_ALTO: readonly (P2 & { r: number })[] = Array.from({ length: 6 }, (_, k) => ({ ...noAnelT(27.5, Math.PI / 2 + Math.PI / 6 + (k * Math.PI) / 3), r: 0.7 }));
@@ -99,14 +103,19 @@ export const POCOS_TC: readonly PocoTC[] = [
 ];
 export const cicloDoPoco = (p: PocoTC) => 2 * (p.viagem + p.parada);
 /** a cápsula de um poço no instante `t` (s, relógio comum): o piso dela (acima do pátio), onde está ABERTA (null =
- *  viajando) e, viajando, de onde saiu e quanto falta (0..1) */
-export function capsulaEm(p: PocoTC, t: number): { h: number; aberta: "baixo" | "cima" | null; saiu: "baixo" | "cima" | null; k: number } {
+ *  viajando), quanto os vidros da porta estão abertos (0..1: abrem ao chegar e fecham antes de sair) e, viajando, de
+ *  onde saiu e quanto falta (0..1) */
+export const PORTA_CAPSULA = 0.9;
+export function capsulaEm(p: PocoTC, t: number): { h: number; aberta: "baixo" | "cima" | null; abre: number; saiu: "baixo" | "cima" | null; k: number } {
   const T = cicloDoPoco(p), u = (((t / T + p.fase) % 1) + 1) % 1 * T, sv = (x: number) => x * x * (3 - 2 * x);
-  if (u < p.parada) return { h: p.de, aberta: "baixo", saiu: null, k: 0 };
-  if (u < p.parada + p.viagem) { const k = (u - p.parada) / p.viagem; return { h: p.de + (p.ate - p.de) * sv(k), aberta: null, saiu: "baixo", k }; }
-  if (u < 2 * p.parada + p.viagem) return { h: p.ate, aberta: "cima", saiu: null, k: 0 };
-  const k = (u - 2 * p.parada - p.viagem) / p.viagem; return { h: p.ate + (p.de - p.ate) * sv(k), aberta: null, saiu: "cima", k };
+  const abre = (w: number) => sv(Math.max(0, Math.min(1, w / PORTA_CAPSULA, (p.parada - w) / PORTA_CAPSULA)));
+  if (u < p.parada) return { h: p.de, aberta: "baixo", abre: abre(u), saiu: null, k: 0 };
+  if (u < p.parada + p.viagem) { const k = (u - p.parada) / p.viagem; return { h: p.de + (p.ate - p.de) * sv(k), aberta: null, abre: 0, saiu: "baixo", k }; }
+  if (u < 2 * p.parada + p.viagem) return { h: p.ate, aberta: "cima", abre: abre(u - p.parada - p.viagem), saiu: null, k: 0 };
+  const k = (u - 2 * p.parada - p.viagem) / p.viagem; return { h: p.ate + (p.de - p.ate) * sv(k), aberta: null, abre: 0, saiu: "cima", k };
 }
+/** pra onde a PORTA de um poço abre (rad, x = cos, z = sen): pra fora da torre (de onde se chega, nas duas pontas) */
+export const portaDoPoco = (p: PocoTC) => Math.atan2(p.z - TORRE_TI.z, p.x - TORRE_TI.x);
 /** em que poço (e em que ponta) está quem está em `q` com os pés a `yRel` — null fora das bocas */
 export function bocaDoPoco(q: P2, yRel: number): { poco: PocoTC; ponta: "baixo" | "cima" } | null {
   for (const p of POCOS_TC) {
