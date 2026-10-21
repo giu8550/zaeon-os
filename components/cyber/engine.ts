@@ -77,7 +77,7 @@ import { criarRifleCosmico, type RifleHandle } from "./RifleCosmico";
 import { CAMERA_MOTO_PERTO } from "@/lib/cyber/camera";
 import { criarCarroHex, type CarroHandle } from "./CarroHex";
 import { definirNivel, NIVEIS_SEPARADOS, type IdNivel } from "@/lib/cyber/nivelAtivo";
-import { FIO as FIO_COSMICO, comecarTragada, fiosCosmicos, naAtracao, passoTragada, pertoDoBuraco, posDaTragada, saidaDaSala, type Tragada } from "@/lib/cyber/fiosCosmicos";
+import { FIO as FIO_COSMICO, comecarTragada, fiosCosmicos, naAtracao, passoTragada, pertoDoBuraco, posDaTragada, progressoTragada, saidaDaSala, type Tragada } from "@/lib/cyber/fiosCosmicos";
 import { nivelDoPonto, proximoNivel } from "@/lib/cyber/niveis";
 import { LOTES_CARRO, pisoDaVaga, posseDosCarros, vagaDoLote, vagasDeCarro, type CarroDirigido, type CarroLargado, type PosseCarro, type VagaCarro } from "@/lib/cyber/carros";
 import { criarPisoCarros, type PisoCarrosHandle } from "./EstacionamentoCarros";
@@ -1996,7 +1996,6 @@ export class CyberEngine {
     const y = id === "zaeon" ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) : ehSala(id) ? (this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY) + NOS[id].y - CIDADE.pisoY : NOS[id].y;   // (as salas: o piso da chegada — o salão do Templo Cósmico fica abaixo do lounge)
     this.eu.alt = y; this.camT.set(p.x, y + 1.2, p.z); this.portalArmado = !noDoAnel(p, y);
     if (NIVEIS_SEPARADOS) { this.mudarNivel(nivelDoPonto(p, y)); this.posNivel = { x: p.x, z: p.z, alt: y, ok: true }; }   // (chegou: já é o nível do destino)
-    this.som.tocar("rise", new THREE.Vector3(p.x, y + 1, p.z), { dist: DISTANCIA.perto });
   }
   /** o TÚNEL: o React escolheu o destino (`null` = desistiu: fica onde está, fora do túnel) */
   /** o buraco negro de CAMINHO ÚNICO: pede a travessia direta (o React mostra o túnel, sem menu) */
@@ -2004,8 +2003,58 @@ export class CyberEngine {
     if (this.direto || this.tunel) return;
     this.direto = { para, ...(pose ? { pose } : {}) }; this.alvo = null; this.alvoDepois = null; this.sitT = 0;
     this.keys = {}; this.joy = { x: 0, y: 0, on: false };
-    this.som.tocar("rise", this.eu.av.group.position, { dist: DISTANCIA.perto });
-    if (this.o.onTunelDireto) this.o.onTunelDireto({ para, nome: NOS[para].nome }); else this.viajarDireto();   // (sem o overlay: vai na hora)
+    // (sem o túnel nem o som — out/2026, o dono: "algo mais cósmico: um CLARÃO e o personagem saindo dele do outro lado")
+    this.clarao = { t: 0, trocou: false };
+  }
+  // ───────────── a ATMOSFERA de ser tragado (out/2026, o dono: "mais atmosfera ao entrarmos em colisão") ─────────────
+  private rastros: { linhas: THREE.LineSegments; pos: Float32Array; p: THREE.Vector3[] } | null = null; private vinheta: HTMLDivElement | null = null;
+  /** os RASTROS (poeira cósmica passando por você rumo ao centro, cada vez mais rápida e comprida), o TREMOR da câmera e a
+   *  VINHETA violeta fechando as bordas — tudo crescendo com a tragada; fora dela, nada */
+  private atmosferaTragada(dt: number) {
+    const v = this.fio, k = v ? progressoTragada(v) : 0;
+    if (!this.vinheta) { const el = document.createElement("div"); el.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:25;opacity:0;background:radial-gradient(ellipse at 50% 50%, transparent 38%, rgba(60,10,110,.55) 72%, rgba(8,0,20,.92) 100%);"; this.o.overlay.appendChild(el); this.vinheta = el; }
+    const op = v ? 0.25 + 0.75 * k : 0; if (this.vinheta.style.opacity !== op.toFixed(2)) this.vinheta.style.opacity = op.toFixed(2);
+    if (!v) { if (this.rastros) this.rastros.linhas.visible = false; return; }
+    const N = this.o.low ? 90 : 240, eu = new THREE.Vector3(this.eu.pos.x, this.eu.alt + 1.2, this.eu.pos.z);
+    if (!this.rastros) {
+      const pos = new Float32Array(N * 6), g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      const linhas = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xd9c8ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+      linhas.frustumCulled = false; this.cena.scene.add(linhas);
+      this.rastros = { linhas, pos, p: Array.from({ length: N }, () => new THREE.Vector3(Infinity, 0, 0)) };
+    }
+    const R = this.rastros, ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, b = v.f.bn, w = mundo(b), alvo = new THREE.Vector3(w.x, ilhaY + b.y, w.z);
+    const vel = 60 + 520 * k, len = 1.5 + 22 * k * k, dir = new THREE.Vector3();
+    R.linhas.visible = true; (R.linhas.material as THREE.LineBasicMaterial).opacity = 0.18 + 0.7 * k;
+    for (let i = 0; i < R.p.length; i++) {
+      const p = R.p[i]!;
+      if (!Number.isFinite(p.x) || p.distanceTo(eu) > 70 || p.distanceTo(alvo) < b.r) {   // (renasce em volta de quem cai, mais pra trás)
+        const a = Math.random() * Math.PI * 2, el = (Math.random() - 0.5) * 2.2, r = 6 + Math.random() * 55;
+        p.set(eu.x + Math.cos(a) * Math.cos(el) * r, eu.y + Math.sin(el) * r * 0.7, eu.z + Math.sin(a) * Math.cos(el) * r);
+      }
+      dir.copy(alvo).sub(p).normalize(); p.addScaledVector(dir, vel * dt);
+      R.pos.set([p.x, p.y, p.z, p.x - dir.x * len, p.y - dir.y * len, p.z - dir.z * len], i * 6);
+    }
+    R.linhas.geometry.attributes.position!.needsUpdate = true;
+    // o TREMOR: a câmera chacoalha (mais forte chegando)
+    const a = 0.03 + 0.42 * k * k; this.cam.position.x += (Math.random() - 0.5) * a; this.cam.position.y += (Math.random() - 0.5) * a; this.cam.position.z += (Math.random() - 0.5) * a;
+  }
+  // ───────────── a TRAVESSIA CÓSMICA: o clarão, e do outro lado o personagem SAINDO do buraco negro ─────────────
+  private clarao: { t: number; trocou: boolean } | null = null; private claraoEl: HTMLDivElement | null = null;
+  /** saindo do buraco negro do destino: de dentro dele (a boca, MUNDO) até o ponto de chegada, num arco */
+  private emergir: { de: THREE.Vector3; para: THREE.Vector3; rumo: number; t: number; dur: number } | null = null;
+  private static readonly CLARAO = { sobe: 0.32, desce: 1.25 } as const;
+  private atualizarClarao(dt: number) {
+    const c = this.clarao; if (!c) { if (this.claraoEl && this.claraoEl.style.opacity !== "0") this.claraoEl.style.opacity = "0"; return; }
+    if (!this.claraoEl) {
+      const el = document.createElement("div");
+      el.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:26;opacity:0;mix-blend-mode:screen;background:radial-gradient(circle at 50% 50%, #fff 0%, #f4e9ff 18%, #b48cff 42%, #4a1e9e 72%, #0a0218 100%);";
+      this.o.overlay.appendChild(el); this.claraoEl = el;
+    }
+    c.t += dt; const C = CyberEngine.CLARAO;
+    if (!c.trocou && c.t >= C.sobe) { c.trocou = true; this.viajarDireto(); }   // (no auge do clarão, já está do outro lado)
+    const op = c.t < C.sobe ? c.t / C.sobe : Math.max(0, 1 - (c.t - C.sobe) / C.desce);
+    this.claraoEl.style.opacity = (op * op * (3 - 2 * op)).toFixed(3);
+    if (c.t >= C.sobe + C.desce) this.clarao = null;
   }
   /** a travessia direta, com a tela COBERTA pelo túnel: chega no destino */
   viajarDireto() {
@@ -2013,7 +2062,25 @@ export class CyberEngine {
     this.direto = null; this.fio = null;
     this.largarVeiculoNoFluxo();   // (o carro/a moto que veio pelo fluxo fica: a pessoa chega a pé)
     this.irParaNo(d.para, d.pose ?? NOS[d.para].chegada);
-    this.fluxoArmado = false;   // (só pega de novo depois de se afastar das pistas)
+    this.fluxoArmado = false;   // (só pega de novo depois de se afastar do buraco negro)
+    // do outro lado: o personagem SAI do buraco negro do destino (o de saída da sala — perto dela — ou o da cidade, no hub)
+    const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY;
+    const boca = ehSala(d.para) ? (() => { const b = saidaDaSala(d.para).bn, w = mundo(b); return new THREE.Vector3(w.x, ilhaY + b.y, w.z); })()
+      : d.para === "zaeon" ? (() => { const w = mundo(CIDADE.portalTunel); return new THREE.Vector3(w.x, ilhaY + 9, w.z); })() : null;
+    if (boca) { const para = new THREE.Vector3(this.eu.pos.x, this.eu.alt, this.eu.pos.z), dur = Math.min(5.5, 1.8 + boca.distanceTo(para) / 160); this.emergir = { de: boca, para, rumo: this.eu.facing, t: 0, dur }; }
+  }
+  /** o arco de quem sai do buraco negro: sobe um pouco, voa e pousa no ponto de chegada (o corpo cresce saindo) */
+  private passoEmergir(dt: number): boolean {
+    const e = this.emergir; if (!e) return false;
+    e.t += dt; const k = Math.min(1, e.t / e.dur), u = k * k * (3 - 2 * k), eu = this.eu;
+    const alto = Math.max(e.de.y, e.para.y) + 18 + e.de.distanceTo(e.para) * 0.08;
+    const x = e.de.x + (e.para.x - e.de.x) * u, z = e.de.z + (e.para.z - e.de.z) * u;
+    const y = (1 - u) * (1 - u) * e.de.y + 2 * (1 - u) * u * alto + u * u * e.para.y;
+    eu.pos.set(x, 0, z); eu.alt = y; eu.facing = Math.atan2(e.para.x - e.de.x, e.para.z - e.de.z);
+    eu.av.group.scale.setScalar(0.25 + 0.75 * Math.min(1, k / 0.3));
+    this.alvo = null; this.alvoDepois = null;
+    if (k >= 1) { this.emergir = null; eu.av.group.scale.setScalar(1); eu.facing = e.rumo; }
+    return true;
   }
   /** voltando de uma sala (ou nascendo pra testar): aparece no HUB ao lado do ESTACIONAMENTO de carros (o leste), de
    *  frente pros carros */
@@ -2085,7 +2152,7 @@ export class CyberEngine {
     const pistas = this.nivel === "zaeon" ? fiosCosmicos() : ehSala(this.nivel) ? [saidaDaSala(this.nivel)] : null; if (!pistas) return 0;
     const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, p = { x: this.eu.pos.x - CIDADE.centro.x, y: this.eu.alt - ilhaY, z: this.eu.pos.z - CIDADE.centro.z };
     let k = 0; for (const f of pistas) k = Math.max(k, pertoDoBuraco(f, p));
-    return this.fio ? Math.max(k, 0.55 + 0.45 * (1 - (this.fio.r - this.fio.f.bn.r) / Math.max(1, this.fio.r0 - this.fio.f.bn.r))) : k;
+    return this.fio ? Math.max(k, 0.55 + 0.45 * progressoTragada(this.fio)) : k;
   }
 
   viajarPeloTunel(destino: IdNo | null) {
@@ -3728,7 +3795,9 @@ export class CyberEngine {
     if (!NIVEIS_SEPARADOS) return;
     this.quadroNivel++;
     if (this.espiando && this.quadroNivel - this.espiando.quadro > 2) { const e = this.espiando.n; this.espiando = null; this.cidade?.mostrarNivel(this.nivel); if (e !== "zaeon" && e !== this.nivel) this.desmontarSalaAqui(e); }   // (a cena acabou)
-    const e = this.eu, a = this.posNivel, saltou = !a.ok || Math.hypot(e.pos.x - a.x, e.pos.z - a.z) > 25 || Math.abs(e.alt - a.alt) > 25;
+    const e = this.eu, a = this.posNivel;
+    if (this.emergir || this.clarao) { a.x = e.pos.x; a.z = e.pos.z; a.alt = e.alt; a.ok = true; return; }   // (saindo do buraco negro: o nível é o do destino, fixo — o arco passa por fora da sala)
+    const saltou = !a.ok || Math.hypot(e.pos.x - a.x, e.pos.z - a.z) > 25 || Math.abs(e.alt - a.alt) > 25;
     const n = proximoNivel(this.nivel, e.pos, e.alt, saltou);
     a.x = e.pos.x; a.z = e.pos.z; a.alt = e.alt; a.ok = true;
     if (n !== this.nivel) this.mudarNivel(n);
@@ -4120,6 +4189,7 @@ export class CyberEngine {
     atualizarCamuflagem(t);   // o relógio único de todos os hologramas do mapa
     const eu = this.eu, euId = this.o.eu.id; this.tAnt = this.agora; this.agora = t;
     if (!this.menu) { this.atualizarNivel(); this.atualizarFluxo(dt); this.atualizarDuelo(dt); }
+    this.atualizarClarao(dt);
     this.distorcaoCosmica(t);   // (os NÍVEIS separados: só o meu existe — lib/cyber/niveis; e o FLUXO das pistas cósmicas)
 
     // MENU: segurar ESPAÇO p/ viajar; personagem fica sentado contemplando
@@ -4293,6 +4363,7 @@ export class CyberEngine {
       }
       else if (this.sitT > 0.05) { const s = this.assento(); eu.pos.x += (s.x - eu.pos.x) * Math.min(1, dt * 3); eu.pos.z += (s.z - eu.pos.z) * Math.min(1, dt * 3); eu.facing = this.rotAssento(); }
       else if (this.noTopo) { const e = this.eixoTopo()!, lim = 2.0 * this.escalaZaeon(); const dx = eu.pos.x - e.x, dz = eu.pos.z - e.z, d = Math.hypot(dx, dz); if (d > lim) { eu.pos.x = e.x + (dx / d) * lim; eu.pos.z = e.z + (dz / d) * lim; } }   // não cai da plataforma
+      else if (this.emergir && this.passoEmergir(dt)) { andando = false; }   // (saindo do buraco negro do outro lado)
       else if (this.fio) {
         // o FLUXO leva: a prancha de luz pela pista (as teclas não mexem) até o buraco negro do fim
         const q = this.posNoFluxo(); eu.pos.x = q.x; eu.pos.z = q.z; eu.facing = q.rumo; andando = false; this.alvo = null; this.alvoDepois = null;
@@ -4371,6 +4442,7 @@ export class CyberEngine {
     const lmAlto = this.altoEm ? this.lms.find((l) => l.poi.id === this.altoEm) : undefined;
     const pnAlt = this.bordo ? this.poseNave() : null;
     eu.alt = pnAlt && this.bordo ? alturaDoConves(pnAlt) + alturaNoBordo(this.bordo, rampaDaNave(pnAlt).queda)
+      : this.emergir ? eu.alt   // (saindo do buraco negro: o arco manda — passoEmergir)
       : this.noCarro() ? this.carro!.est.y + CARRO_PAIRA
       : this.moto !== null ? this.motoEst.y
       : this.pilotando ? this.naveEst.y
@@ -4550,6 +4622,7 @@ export class CyberEngine {
     for (const m of this.instMotos.values()) this.regiaoPerto(m.g, "moto");
 
     this.atualizarCamera(dt);
+    this.atmosferaTragada(dt);
     this.atualizarHudCombate();
     this.cena.atualizar({ dt, t, cam: this.cam, aspect: this.cam.aspect });
     this.atualizarHud(now);
@@ -4709,7 +4782,7 @@ export class CyberEngine {
   }
 
   dispose() {
-    this.distorcao.svg?.remove(); this.R.domElement.style.filter = "";
+    this.distorcao.svg?.remove(); this.R.domElement.style.filter = ""; this.vinheta?.remove(); this.claraoEl?.remove(); if (this.rastros) { this.rastros.linhas.removeFromParent(); this.rastros.linhas.geometry.dispose(); (this.rastros.linhas.material as THREE.Material).dispose(); }
     if (this.relogioFrota) clearInterval(this.relogioFrota); this.relogioFrota = null;
     this.sairCorridaCk(); this.frota?.dispose(); this.frota = null; this.pistas?.dispose(); this.pistas = null;
     const w = window as unknown as { __cyber?: CyberEngine }; if (w.__cyber === this) delete w.__cyber;
