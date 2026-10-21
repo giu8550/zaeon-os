@@ -52,7 +52,8 @@ export async function POST(req: Request) {
         { bytes: new Uint8Array(await f.arrayBuffer()), nomeArquivo: f.name, origem: "admin", criadoPor: usuario.id, permissao: { turmaId } },
       );
       out.push({ nomeArquivo: f.name, ...r });
-    } catch {
+    } catch (e) {
+      console.error("[rag/admin] ingestão falhou", f.name, (e as Error)?.message);
       out.push({ nomeArquivo: f.name, documentoId: "", status: "erro", erro: "leitura_falhou", trechos: 0, paginas: 0 });
     }
   }
@@ -66,6 +67,14 @@ export async function DELETE(req: Request) {
   const documentoId = sp.get("documentoId") ?? "";
   const turmaId = sp.get("turmaId") ?? "";
   if (!documentoId || !turmaId) return NextResponse.json({ error: "documentoId_e_turmaId_obrigatorios" }, { status: 400 });
-  const resultado = await removerPermissao(db, documentoId, { turmaId });
-  return NextResponse.json({ resultado });
+  try {
+    const resultado = await removerPermissao(db, documentoId, { turmaId });
+    return NextResponse.json({ resultado });
+  } catch (e) {
+    const msg = (e as Error)?.message ?? "";
+    // o store lança `documento <id> não existe` quando o documento sumiu (lista velha / outro admin removeu)
+    if (/^documento .+ não existe$/.test(msg)) return NextResponse.json({ error: "documento_inexistente" }, { status: 404 });
+    console.error("[rag/admin] remover falhou", documentoId, msg);
+    return NextResponse.json({ error: "falha_ao_remover" }, { status: 500 });
+  }
 }

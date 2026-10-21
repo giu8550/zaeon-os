@@ -72,6 +72,15 @@ describe("POST /api/admin/rag", () => {
     const j = await r.json();
     expect(j.resultados.map((x: any) => x.nomeArquivo)).toEqual(["a.pdf", "b.pdf"]);
   });
+  it("falha na ingestão => leitura_falhou para o arquivo e erro logado (sem derrubar o lote)", async () => {
+    m.ingerir.mockRejectedValueOnce(new Error("db caiu"));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const j = await (await POST(multipart("t1", [pdf("a.pdf"), pdf("b.pdf")]))).json();
+    expect(j.resultados[0]).toMatchObject({ nomeArquivo: "a.pdf", status: "erro", erro: "leitura_falhou" });
+    expect(j.resultados[1]).toMatchObject({ nomeArquivo: "b.pdf", status: "novo" });
+    expect(log).toHaveBeenCalledWith("[rag/admin] ingestão falhou", "a.pdf", "db caiu");
+    log.mockRestore();
+  });
   it("não-PDF => erro nao_pdf sem ingerir; PDF por extensão aceito", async () => {
     const r = await POST(multipart("t1", [pdf("a.txt", "text/plain"), pdf("B.PDF", "application/octet-stream")]));
     const j = await r.json();
@@ -90,6 +99,21 @@ describe("DELETE /api/admin/rag", () => {
     const r = await DELETE(new Request("http://x/api/admin/rag?documentoId=d1&turmaId=t1", { method: "DELETE" }));
     expect(await r.json()).toEqual({ resultado: "removida" });
     expect(m.remover.mock.calls[0].slice(1)).toEqual(["d1", { turmaId: "t1" }]);
+  });
+  it("documento inexistente (erro do store) => 404 documento_inexistente", async () => {
+    m.remover.mockRejectedValue(new Error("documento d1 não existe"));
+    const r = await DELETE(new Request("http://x/api/admin/rag?documentoId=d1&turmaId=t1", { method: "DELETE" }));
+    expect(r.status).toBe(404);
+    expect(await r.json()).toEqual({ error: "documento_inexistente" });
+  });
+  it("outro erro => 500 falha_ao_remover (logado)", async () => {
+    m.remover.mockRejectedValue(new Error("mongo caiu"));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const r = await DELETE(new Request("http://x/api/admin/rag?documentoId=d1&turmaId=t1", { method: "DELETE" }));
+    expect(r.status).toBe(500);
+    expect(await r.json()).toEqual({ error: "falha_ao_remover" });
+    expect(log).toHaveBeenCalled();
+    log.mockRestore();
   });
   it("sem parâmetros => 400", async () => {
     expect((await DELETE(new Request("http://x/api/admin/rag?turmaId=t1", { method: "DELETE" }))).status).toBe(400);
