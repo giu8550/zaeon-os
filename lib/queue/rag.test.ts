@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { fakeDb } from "@/lib/rag/fakeDb";
 import { criarDocumento, gravarTrechos } from "@/lib/rag/store";
 import type { EmbedRag } from "@/lib/rag/embed";
-import { enfileirarNaFila, filaRagLigada, indexarDocumento, RAG_QUEUE, type FilaRag } from "./rag";
+import { deveMarcarFalhaFinal, enfileirarNaFila, filaRagLigada, indexarDocumento, indexarInline, RAG_QUEUE, type FilaRag } from "./rag";
 
 const USER = "64b000000000000000000001";
 
@@ -107,5 +107,37 @@ describe("enfileirarNaFila", () => {
     expect(await enfileirarNaFila(q, "d1")).toBe("fila");
     expect(add).not.toHaveBeenCalled();
     expect(remove).not.toHaveBeenCalled();
+  });
+});
+
+describe("indexarInline (sem fila)", () => {
+  it("embed falha => documento vira 'erro' com indexacao_falhou (não fica 'indexando')", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const db = fakeDb();
+    const doc = await docComTrechos(db, 3);
+    await indexarInline({ db, embed: async () => { throw new Error("embed_http_500"); } }, doc.id);
+    const d = await db.ragDocumento.findUnique({ where: { id: doc.id } });
+    expect(d?.status).toBe("erro");
+    expect(d?.erro).toBe("indexacao_falhou");
+  });
+
+  it("embed ok => documento 'pronto'", async () => {
+    const db = fakeDb();
+    const doc = await docComTrechos(db, 3);
+    await indexarInline({ db, embed: embedOk }, doc.id);
+    expect((await db.ragDocumento.findUnique({ where: { id: doc.id } }))?.status).toBe("pronto");
+  });
+});
+
+describe("deveMarcarFalhaFinal", () => {
+  it("só quando as tentativas esgotaram", () => {
+    expect(deveMarcarFalhaFinal({ attemptsMade: 5, opts: { attempts: 5 } })).toBe(true);
+    expect(deveMarcarFalhaFinal({ attemptsMade: 6, opts: { attempts: 5 } })).toBe(true);
+    expect(deveMarcarFalhaFinal({ attemptsMade: 2, opts: { attempts: 5 } })).toBe(false);
+  });
+  it("sem opts.attempts vale 1; sem job => false", () => {
+    expect(deveMarcarFalhaFinal({ attemptsMade: 1 })).toBe(true);
+    expect(deveMarcarFalhaFinal({ attemptsMade: 0 })).toBe(false);
+    expect(deveMarcarFalhaFinal(undefined)).toBe(false);
   });
 });

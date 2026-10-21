@@ -50,7 +50,9 @@ describe("ingerirPdf", () => {
     expect(b.status).toBe("reaproveitado");
     expect(b.documentoId).toBe(a.documentoId);
     expect(extrair).toHaveBeenCalledTimes(1);
-    expect(enfileirar).toHaveBeenCalledTimes(1);
+    // documento ainda "indexando" (nada indexou no fake): reaproveitar re-agenda — idempotente, mesmo id
+    expect(enfileirar).toHaveBeenCalledTimes(2);
+    expect(enfileirar).toHaveBeenLastCalledWith(a.documentoId);
     expect(db.documentos).toHaveLength(1);
     expect(db.documentos[0].turmaIds.sort()).toEqual(["t1", "t2"]);
     for (const t of db.trechos) expect([...t.turmaIds].sort()).toEqual(["t1", "t2"]);
@@ -69,10 +71,18 @@ describe("ingerirPdf", () => {
     expect(db.documentos[0].erro).toBe("sem_texto");
   });
 
-  it("extrair devolve null => sem_texto", async () => {
-    const { deps } = setup(null);
+  it("extrair devolve null (pdf-loader fora/timeout/sem URL) => leitura_falhou, não sem_texto", async () => {
+    const { deps, db } = setup(null);
+    const r = await ingerirPdf(deps, entrada("t1"));
+    expect(r).toMatchObject({ status: "erro", erro: "leitura_falhou", trechos: 0 });
+    expect(db.documentos[0].erro).toBe("leitura_falhou");
+  });
+
+  it("extrair devolve resultado sem blocos => sem_texto (PDF escaneado)", async () => {
+    const { deps, db } = setup({ paragraphs: [], blocks: [], markdown: "" });
     const r = await ingerirPdf(deps, entrada("t1"));
     expect(r).toMatchObject({ status: "erro", erro: "sem_texto", trechos: 0 });
+    expect(db.documentos[0].erro).toBe("sem_texto");
   });
 
   it("extrair lança => leitura_falhou (documento marcado erro, não enfileira)", async () => {
@@ -105,6 +115,47 @@ describe("ingerirPdf", () => {
     expect(db.documentos).toHaveLength(1);
     expect(db.documentos.find((d) => d.id === ruim.documentoId)).toBeUndefined();
     expect(db.documentos[0].status).toBe("indexando");
+  });
+
+  it("reaproveitar documento 'indexando' => reenfileira o id e acrescenta a permissão", async () => {
+    const { deps, enfileirar, db } = setup();
+    const a = await ingerirPdf(deps, entrada("t1"));
+    enfileirar.mockClear();
+    expect(db.documentos[0].status).toBe("indexando");
+    const b = await ingerirPdf(deps, entrada("t2"));
+    expect(b.status).toBe("reaproveitado");
+    expect(enfileirar).toHaveBeenCalledTimes(1);
+    expect(enfileirar).toHaveBeenCalledWith(a.documentoId);
+    expect(db.documentos[0].turmaIds.sort()).toEqual(["t1", "t2"]);
+  });
+
+  it("reaproveitar documento 'pronto' => NÃO reenfileira", async () => {
+    const { deps, enfileirar, db } = setup();
+    await ingerirPdf(deps, entrada("t1"));
+    db.documentos[0].status = "pronto";
+    enfileirar.mockClear();
+    const b = await ingerirPdf(deps, entrada("t2"));
+    expect(b.status).toBe("reaproveitado");
+    expect(enfileirar).not.toHaveBeenCalled();
+  });
+
+  it("re-upload sobre 'erro' herda turmas e donos do documento apagado, além do uploader", async () => {
+    const { deps, db } = setup();
+    const ruim = await ingerirPdf({ ...deps, extrair: (async () => null) as any }, entrada("t1"));
+    // outra turma e um dono tinham o mesmo arquivo por dedupe
+    const { acrescentarPermissao } = await import("./store");
+    await acrescentarPermissao(db, ruim.documentoId, { turmaId: "t2" });
+    await acrescentarPermissao(db, ruim.documentoId, { donoId: "u7" });
+    const r = await ingerirPdf(deps, entrada("t3"));
+    expect(r.status).toBe("novo");
+    expect(db.documentos).toHaveLength(1);
+    expect([...db.documentos[0].turmaIds].sort()).toEqual(["t1", "t2", "t3"]);
+    expect(db.documentos[0].donoIds).toEqual(["u7"]);
+    expect(db.trechos.length).toBeGreaterThan(0);
+    for (const t of db.trechos) {
+      expect([...t.turmaIds].sort()).toEqual(["t1", "t2", "t3"]);
+      expect(t.donoIds).toEqual(["u7"]);
+    }
   });
 
   it("corrida: criar bate no hash único (P2002) => reaproveita o documento do vencedor", async () => {

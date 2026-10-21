@@ -44,8 +44,19 @@ const sha256 = (b: Uint8Array) => createHash("sha256").update(b).digest("hex");
 const semPdf = (nome: string) => nome.replace(/\.pdf$/i, "");
 const maiorPagina = (blocks: Block[]) => blocks.reduce((m, b) => (typeof b.page === "number" && b.page > m ? b.page : m), 0);
 
-async function reaproveitar(db: RagDb, doc: RagDocumentoRow, perm: Permissao): Promise<IngerirResultado> {
-  await acrescentarPermissao(db, doc.id, perm);
+/**
+ * `reenfileirar`: documento já existente que ficou "indexando" (job perdido, Redis limpo, worker caiu) é re-agendado —
+ * `enfileirar` é idempotente (jobId fixo; `indexarDocumento` só manda o que falta), então re-upload é a forma de destravar.
+ */
+async function reaproveitar(deps: IngerirDeps, doc: RagDocumentoRow, perm: Permissao, reenfileirar = true): Promise<IngerirResultado> {
+  await acrescentarPermissao(deps.db, doc.id, perm);
+  if (reenfileirar && doc.status === "indexando") {
+    try {
+      await deps.enfileirar(doc.id);
+    } catch (err) {
+      console.warn("[rag] reaproveitar: não consegui re-agendar a indexação", doc.id, (err as Error)?.message ?? err);
+    }
+  }
   return { documentoId: doc.id, status: "reaproveitado", trechos: doc.totalTrechos, paginas: doc.paginas };
 }
 
@@ -55,8 +66,14 @@ export async function ingerirPdf(deps: IngerirDeps, e: IngerirEntrada): Promise<
 
   const hash = sha256(e.bytes);
   const existente = await buscarPorHash(db, hash);
+  // Permissões do documento em "erro" que vai ser apagado: outras turmas/donos que o tinham por dedupe não perdem acesso.
+  let herdadas: Permissao[] = [];
   if (existente) {
-    if (existente.status !== "erro") return reaproveitar(db, existente, e.permissao);
+    if (existente.status !== "erro") return reaproveitar(deps, existente, e.permissao);
+    herdadas = [
+      ...(existente.turmaIds ?? []).map((turmaId: string) => ({ turmaId })),
+      ...(existente.donoIds ?? []).map((donoId: string) => ({ donoId })),
+    ];
     await apagarDocumento(db, existente.id); // tentativa anterior falhou: reprocessa
   }
 
@@ -69,10 +86,16 @@ export async function ingerirPdf(deps: IngerirDeps, e: IngerirEntrada): Promise<
   let trechosCortados: ReturnType<typeof cortarEmTrechos> = [];
   try {
     const r = await deps.extrair(e.bytes);
-    blocks = r?.blocks ?? [];
-    markdown = r?.markdown ?? blocks.map((b) => b.text).join("\n\n");
-    trechosCortados = blocks.length ? cortarEmTrechos(blocks, titulo) : [];
-    if (trechosCortados.length === 0) erro = "sem_texto";
+    if (r == null) {
+      // extractPdfStructured nunca lança: devolve null com PDF_LOADER_URL ausente, HTTP != 2xx ou timeout.
+      // É falha do leitor (queda/config), não PDF escaneado — não induzir o admin a culpar o arquivo.
+      erro = "leitura_falhou";
+    } else {
+      blocks = r.blocks ?? [];
+      markdown = r.markdown ?? blocks.map((b) => b.text).join("\n\n");
+      trechosCortados = blocks.length ? cortarEmTrechos(blocks, titulo) : [];
+      if (trechosCortados.length === 0) erro = "sem_texto";
+    }
   } catch {
     erro = "leitura_falhou";
   }
@@ -87,9 +110,21 @@ export async function ingerirPdf(deps: IngerirDeps, e: IngerirEntrada): Promise<
     // Upload concorrente do mesmo arquivo: o hash é único, o outro ganhou — reaproveita o dele.
     if ((err as { code?: string })?.code === "P2002") {
       const vencedor = await buscarPorHash(db, hash);
-      if (vencedor) return reaproveitar(db, vencedor, e.permissao);
+      if (vencedor) return reaproveitar(deps, vencedor, e.permissao, false); // o vencedor já agenda a própria indexação
     }
     throw err;
+  }
+
+  // Re-upload sobre "erro": o documento novo herda as permissões do apagado, além da de quem subiu.
+  if (herdadas.length > 0) {
+    try {
+      for (const p of herdadas) await acrescentarPermissao(db, doc.id, p);
+      doc = (await buscarPorHash(db, hash)) ?? doc; // arrays de permissão atualizados para copiar nos trechos
+    } catch (err) {
+      console.warn("[rag] ingestão: falha ao herdar permissões", doc.id, (err as Error)?.message ?? err);
+      await marcarErro(db, doc.id, "indexacao_falhou");
+      return { documentoId: doc.id, status: "erro", erro: "indexacao_falhou", trechos: 0, paginas };
+    }
   }
 
   if (erro) {

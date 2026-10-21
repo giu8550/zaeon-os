@@ -7,7 +7,7 @@
  * cada lote já gravado fica; a nova tentativa só manda os trechos que ainda não têm vetor.
  */
 import type { EmbedRag } from "@/lib/rag/embed";
-import { registrarVetores, trechosSemVetor, type RagDb } from "@/lib/rag/store";
+import { marcarErro, registrarVetores, trechosSemVetor, type RagDb } from "@/lib/rag/store";
 
 export const RAG_QUEUE = "rag-index";
 type Env = Record<string, string | undefined>;
@@ -89,6 +89,33 @@ export async function enfileirarNaFila(q: FilaRag, documentoId: string): Promise
   return "fila";
 }
 
+/** Marca o documento "erro/indexacao_falhou" sem nunca lançar (best-effort; só loga). */
+export async function marcarFalhaIndexacao(db: RagDb, documentoId: string): Promise<boolean> {
+  try {
+    await marcarErro(db, documentoId, "indexacao_falhou");
+    return true;
+  } catch (e) {
+    console.warn("[rag] não consegui marcar indexacao_falhou:", documentoId, (e as Error)?.message);
+    return false;
+  }
+}
+
+/** Indexação inline (sem fila): falhou ⇒ o documento vira "erro" (senão ficaria "indexando" para sempre). */
+export async function indexarInline(deps: { db: RagDb; embed: EmbedRag }, documentoId: string): Promise<void> {
+  try {
+    await indexarDocumento(deps, documentoId);
+  } catch (e) {
+    console.warn("[rag] indexação inline falhou:", documentoId, (e as Error)?.message);
+    await marcarFalhaIndexacao(deps.db, documentoId);
+  }
+}
+
+/** O job esgotou as tentativas (a próxima falha não será repetida pelo BullMQ)? */
+export function deveMarcarFalhaFinal(job: { attemptsMade?: number; opts?: { attempts?: number } } | null | undefined): boolean {
+  if (!job) return false;
+  return (job.attemptsMade ?? 0) >= (job.opts?.attempts ?? 1);
+}
+
 /** Agenda a indexação. "fila" (BullMQ) ou "inline" (segundo plano, sem aguardar). Nunca lança por falha de indexação. */
 export async function enfileirarIndexacao(documentoId: string): Promise<"fila" | "inline"> {
   try {
@@ -98,8 +125,8 @@ export async function enfileirarIndexacao(documentoId: string): Promise<"fila" |
     console.warn("[rag] fila indisponível, indexando inline:", (e as Error)?.message);
   }
   void depsReais()
-    .then((d) => indexarDocumento(d, documentoId))
-    .catch((e) => console.warn("[rag] indexação inline falhou:", documentoId, (e as Error)?.message));
+    .then((d) => indexarInline(d, documentoId))
+    .catch((e) => console.warn("[rag] indexação inline: deps indisponíveis:", documentoId, (e as Error)?.message));
   return "inline";
 }
 
@@ -116,7 +143,16 @@ export async function iniciarWorkerRag(env: Env = process.env): Promise<boolean>
     if (!documentoId) return null;
     return indexarDocumento(deps, documentoId); // lança => BullMQ aplica attempts/backoff
   }, { connection: getRedisConnection()! as any, concurrency: 2 });
-  worker.on("failed", (job: any, e: Error) => console.error("[rag-worker] job falhou:", job?.id, e?.message));
+  worker.on("failed", (job: any, e: Error) => {
+    console.error("[rag-worker] job falhou:", job?.id, e?.message);
+    // Tentativas esgotadas: sem isto o documento ficaria "indexando" para sempre (re-upload reenfileira, mas o admin não sabe).
+    if (deveMarcarFalhaFinal(job)) {
+      const documentoId = String(job?.data?.documentoId ?? "");
+      if (documentoId) void marcarFalhaIndexacao(deps.db, documentoId);
+    }
+  });
+  // Sem listener, um "error" do ioredis/BullMQ vira exceção não tratada dentro do processo web.
+  worker.on("error", (e: Error) => console.error("[rag-worker] erro", e?.message));
   console.log(`[rag-worker] ouvindo "${RAG_QUEUE}" (concurrency=2)`);
   return true;
 }
