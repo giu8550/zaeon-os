@@ -67,6 +67,8 @@ export async function DELETE(req: Request) {
   const documentoId = sp.get("documentoId") ?? "";
   const turmaId = sp.get("turmaId") ?? "";
   if (!documentoId || !turmaId) return NextResponse.json({ error: "documentoId_e_turmaId_obrigatorios" }, { status: 400 });
+  // id malformado (não é ObjectId) nem chega ao store: o Prisma lançaria erro de conversão => 500 enganoso.
+  if (!/^[a-f0-9]{24}$/i.test(documentoId)) return NextResponse.json({ error: "documento_inexistente" }, { status: 404 });
   try {
     const resultado = await removerPermissao(db, documentoId, { turmaId });
     return NextResponse.json({ resultado });

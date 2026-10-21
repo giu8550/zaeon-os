@@ -95,25 +95,32 @@ describe("POST /api/admin/rag", () => {
 });
 
 describe("DELETE /api/admin/rag", () => {
+  const DOC = "64b0000000000000000000d1";
   it("remove a permissão da turma", async () => {
-    const r = await DELETE(new Request("http://x/api/admin/rag?documentoId=d1&turmaId=t1", { method: "DELETE" }));
+    const r = await DELETE(new Request(`http://x/api/admin/rag?documentoId=${DOC}&turmaId=t1`, { method: "DELETE" }));
     expect(await r.json()).toEqual({ resultado: "removida" });
-    expect(m.remover.mock.calls[0].slice(1)).toEqual(["d1", { turmaId: "t1" }]);
+    expect(m.remover.mock.calls[0].slice(1)).toEqual([DOC, { turmaId: "t1" }]);
   });
   it("documento inexistente (erro do store) => 404 documento_inexistente", async () => {
-    m.remover.mockRejectedValue(new Error("documento d1 não existe"));
-    const r = await DELETE(new Request("http://x/api/admin/rag?documentoId=d1&turmaId=t1", { method: "DELETE" }));
+    m.remover.mockRejectedValue(new Error(`documento ${DOC} não existe`));
+    const r = await DELETE(new Request(`http://x/api/admin/rag?documentoId=${DOC}&turmaId=t1`, { method: "DELETE" }));
     expect(r.status).toBe(404);
     expect(await r.json()).toEqual({ error: "documento_inexistente" });
   });
   it("outro erro => 500 falha_ao_remover (logado)", async () => {
     m.remover.mockRejectedValue(new Error("mongo caiu"));
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
-    const r = await DELETE(new Request("http://x/api/admin/rag?documentoId=d1&turmaId=t1", { method: "DELETE" }));
+    const r = await DELETE(new Request(`http://x/api/admin/rag?documentoId=${DOC}&turmaId=t1`, { method: "DELETE" }));
     expect(r.status).toBe(500);
     expect(await r.json()).toEqual({ error: "falha_ao_remover" });
     expect(log).toHaveBeenCalled();
     log.mockRestore();
+  });
+  it.each(["d1", "xyz", "64b0000000000000000000zz", "64b00000000000000000000001"])("documentoId malformado %s => 404 sem chamar o store", async (id) => {
+    const r = await DELETE(new Request(`http://x/api/admin/rag?documentoId=${id}&turmaId=t1`, { method: "DELETE" }));
+    expect(r.status).toBe(404);
+    expect(await r.json()).toEqual({ error: "documento_inexistente" });
+    expect(m.remover).not.toHaveBeenCalled();
   });
   it("sem parâmetros => 400", async () => {
     expect((await DELETE(new Request("http://x/api/admin/rag?turmaId=t1", { method: "DELETE" }))).status).toBe(400);
