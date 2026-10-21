@@ -47,9 +47,10 @@ export type CorpoVrm = {
  *  a partir do card (public/avatars/<id>): a roupa branca do VRoid é tingida aqui */
 /** personagens que SAÍRAM do mapa do cyberespaço (pedido do dono, out/2026): o corpo continua aqui (pros crachás/
  *  escritório), mas a pré-carga do cyberespaço não baixa e o engine não põe no mundo */
-export const CORPOS_FORA_DO_MAPA: ReadonlySet<string> = new Set(["teo", "core_active", "caio", "farmacia", "quimica", "eng-civil",
+export const CORPOS_FORA_DO_MAPA: ReadonlySet<string> = new Set(["core_active", "caio", "farmacia", "quimica", "eng-civil",
   // reforma da capela (out/2026): no mapa só a Examiner (e o Scholar, DJ); a Zaeon é o holograma (retrato 2D)
-  "nina", "aura", "zenita", "zaeon", "enfermagem", "medicina"]);
+  // (a NINA e o TÉO voltaram: trabalham no mirante da torre de TI do Templo Cósmico)
+  "aura", "zenita", "zaeon", "enfermagem", "medicina"]);
 export const CORPOS_VRM: Readonly<Record<string, CorpoVrm>> = {
   nina: { url: "/avatars/nina/nina.vrm", tintas: { Tops: "#f6b9d1" }, acessorios: ["foneNoPescoco", "presilhaLapis"], pose: "feminina" },
   teo: { url: "/avatars/teo/teo.vrm", tintas: { Tops: "#3b3f46", Bottoms: "#4d72b8" }, acessorios: ["oculosRetangulares", "golaCircuito"], pose: "masculina" },

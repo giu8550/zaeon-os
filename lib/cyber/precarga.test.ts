@@ -11,7 +11,8 @@ describe("precarga do cyberespaço", () => {
     expect(faltando).toEqual([]);
     expect(urlsDosSons().length).toBeGreaterThan(15);
     expect(urlsDosCorpos().length).toBeGreaterThanOrEqual(3);   // a Examiner, o Scholar (DJ) e o founder (os que saíram do mapa não baixam)
-    for (const id of ["teo", "core_active", "caio", "farmacia", "quimica", "eng-civil"]) expect(urlsDosCorpos().some((u) => u.includes(`/avatars/${id}/`))).toBe(false);
+    for (const id of ["nina", "teo"]) expect(urlsDosCorpos().some((u) => u.includes(`/avatars/${id}/`))).toBe(true);   // (a Nina e o Téo voltaram: o mirante da torre de TI)
+    for (const id of ["core_active", "caio", "farmacia", "quimica", "eng-civil"]) expect(urlsDosCorpos().some((u) => u.includes(`/avatars/${id}/`))).toBe(false);
   });
 
   it("sintetizados não entram; o fundador entra uma vez só", () => {

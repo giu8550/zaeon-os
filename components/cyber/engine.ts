@@ -15,9 +15,9 @@ import { decidirClique, rotuloMonitor } from "@/lib/cyber/clique";
 import { POIS, bordaDoPOI, colisoresDosPOIs, marcoNav, naPracaPOI, poiPerto, type POI } from "@/lib/cyber/landmarks";
 import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } from "@/lib/cyber/nav";
 import { alternarModoCamera, distPerto, faixaDaDistancia, limitarPitch, olhoDoOmbro, poseDaCamera, seguirPerto, type ModoCamera } from "@/lib/cyber/camera";
-import { PISTA, rotDaSala, espelhoDe, CAPELA_NA_ZAEON, ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, bocaDaGaragem, durDaViagem, naColunaDaGaragem, salaEm, ESCADAS, FIO, alturaDoFio, naEscadaLocal, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PISO_FESTA, PALCO as PALCO_LOUNGE, naSala, daSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade, colisoresDoAndar, dentroDoEstudo } from "@/lib/cyber/ceu";
+import { PISTA, rotDaSala, espelhoDe, CAPELA_NA_ZAEON, ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, bocaDaGaragem, durDaViagem, naColunaDaGaragem, salaEm, ESCADAS, FIO, alturaDoFio, naEscadaLocal, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PISO_FESTA, PALCO as PALCO_LOUNGE, naSala, daSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade, colisoresDoAndar, dentroDoEstudo, rumoNaSala } from "@/lib/cyber/ceu";
 import { DECK, TEMPLO, curvaDaEscadaria, noTemplo } from "@/lib/cyber/templo";
-import { ALCANCE_DUELO, CUPULA, ELEVADOR_TC, ESTUDO, barradoNaCupula, bocaDoElevadorTC, posElevadorTC } from "@/lib/cyber/temploCosmico";
+import { ALCANCE_DUELO, CABINES_TORRE, CABINE_TI, CUPULA, ESTUDO, barradoNaCupula, daCabineTI, bocaDoPoco, capsulaEm, embarcam, type PocoTC } from "@/lib/cyber/temploCosmico";
 import { ESPERA_S, FALA_DESAFIO } from "@/lib/cyber/dueloIngles";
 import { estadoDoShow, trovoesEntre } from "@/lib/cyber/showLounge";
 import { criarMandala, type MandalaHandle } from "./MandalaSagrada";
@@ -1172,6 +1172,15 @@ export class CyberEngine {
         const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + p.cor + ";"; tag.textContent = `${p.nome} · DJ`; this.o.overlay.appendChild(tag);
         this.personagens.push({ h, tag });
       } }
+    // a NINA e o TÉO: FIXOS nas estações do MIRANTE da torre de TI (o Templo Cósmico), mexendo nos computadores
+    for (const p of PERSONAGENS_DA_TORRE) {
+      const corpo = CORPOS_VRM[p.id], cab = CABINES_TORRE.find((c) => c.quem === p.id); if (!corpo || !cab) continue;
+      const perfil = PERFIS_VIDA[p.id] ?? { id: p.id, semente: 0, lado: 0, vaga: { x: 0, z: 0, rumo: 0 } };   // (fixos: a agenda e a moto não entram)
+      const L = CIDADE.salas.lounge, assento = daCabineTI(cab, 0, CABINE_TI.assentoZ + 0.1);
+      const h = criarPersonagemVivo({ ...p, corpo, perfil, starTex: this.cena.starTex, low: this.o.low, gltf: this.gltf, cena: this.cena.scene, preparar: (obj) => this.prepararVrm(obj), fixo: { pos: mundo(daSala(L, assento.x, assento.z)), y: ALTURA_LOUNGE + cab.y, rumo: rumoNaSala(L, cab.rot), trabalha: true } });
+      const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + p.cor + ";"; tag.textContent = p.nome; this.o.overlay.appendChild(tag);
+      this.personagens.push({ h, tag });
+    }
     for (const p of PERSONAGENS_DA_CIDADELA) {
       const corpo = CORPOS_VRM[p.id]; if (!corpo) continue;
       const perfil = PERFIS_VIDA[p.id]; if (!perfil) continue;
@@ -2105,23 +2114,35 @@ export class CyberEngine {
       : d.para === "zaeon" ? (() => { const w = mundo(CIDADE.portalTunel); return new THREE.Vector3(w.x, ilhaY + 9, w.z); })() : null;
     if (boca) { const para = new THREE.Vector3(this.eu.pos.x, this.eu.alt, this.eu.pos.z), dur = Math.min(5.5, 1.8 + boca.distanceTo(para) / 160); this.emergir = { de: boca, para, rumo: this.eu.facing, t: 0, dur }; }
   }
-  // ───────────── o ELEVADOR da torre tecnológica (o Templo Cósmico — lib/cyber/temploCosmico `ELEVADOR_TC`) ─────────────
-  private elevTC: { sentido: "sobe" | "desce"; t: number } | null = null; private elevArmado = true;
-  /** pisou num anel do elevador (a pé, no nível do lounge): a viagem; e a viagem em si (subindo colado na torre) */
+  // ───────────── as CÁPSULAS da torre tecnológica (o Templo Cósmico — lib/cyber/temploCosmico `POCOS_TC`) ─────────────
+  /** viajando numa cápsula: o poço e onde eu estou dentro dela (do centro) */
+  private elevTC: { poco: PocoTC; dx: number; dz: number } | null = null;
+  /** o poço em cuja cápsula ABERTA eu estou esperando (embarco quando a porta fecha) */
+  private esperandoCapsula: string | null = null;
+  /** a pé, dentro de uma cápsula aberta (no nível do lounge): quando a porta fecha, embarca — se couber (os de dentro, por
+   *  ordem, até a capacidade: todo mundo decide igual); senão, espera a próxima */
   private conferirElevadorTC() {
     if (this.elevTC || this.nivel !== "lounge" || this.jet.noAr || this.moto !== null || this.noCarro() || this.fio || this.emergir) return;
-    const L = CIDADE.salas.lounge, ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, q = naSala(L, this.eu.pos.x - CIDADE.centro.x, this.eu.pos.z - CIDADE.centro.z);
-    const boca = bocaDoElevadorTC(q, this.eu.alt - ilhaY - ALTURA_LOUNGE);
-    if (!boca) { this.elevArmado = true; return; }
-    if (!this.elevArmado) return;
-    this.elevTC = { sentido: boca, t: 0 }; this.elevArmado = false; this.alvo = null; this.alvoDepois = null;
+    const L = CIDADE.salas.lounge, c = CIDADE.centro, ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, q = naSala(L, this.eu.pos.x - c.x, this.eu.pos.z - c.z);
+    const boca = bocaDoPoco(q, this.eu.alt - ilhaY - ALTURA_LOUNGE);
+    if (!boca) { this.esperandoCapsula = null; return; }
+    const p = boca.poco, st = capsulaEm(p, Date.now() / 1000);
+    if (st.aberta === boca.ponta) { this.esperandoCapsula = p.id; return; }
+    if (this.esperandoCapsula !== p.id || st.saiu !== boca.ponta) return;
+    this.esperandoCapsula = null;   // (a porta fechou comigo dentro: embarco — se couber)
+    const piso = boca.ponta === "baixo" ? p.de : p.ate, dentro = [this.o.eu.id];
+    for (const [id, a] of this.remotos) { const r = naSala(L, a.pos.x - c.x, a.pos.z - c.z); if (Math.hypot(r.x - p.x, r.z - p.z) < p.r && Math.abs(a.alt - ilhaY - ALTURA_LOUNGE - piso) < 1.5) dentro.push(id); }
+    if (!embarcam(p, dentro).includes(this.o.eu.id)) { this.o.onAviso?.(`Cápsula lotada (máx. ${p.cap}). Espere a próxima.`); return; }
+    const d = Math.hypot(q.x - p.x, q.z - p.z), k = d > p.r - 0.6 ? (p.r - 0.6) / d : 1;
+    this.elevTC = { poco: p, dx: (q.x - p.x) * k, dz: (q.z - p.z) * k }; this.alvo = null; this.alvoDepois = null;
     this.som.tocar("rise", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 0.6 });
   }
-  private passoElevadorTC(dt: number): boolean {
+  /** a viagem: o corpo vai junto com a cápsula (no relógio comum) até ela abrir na outra ponta */
+  private passoElevadorTC(_dt: number): boolean {
     const v = this.elevTC; if (!v) return false;
-    v.t += dt; const k = Math.min(1, v.t / ELEVADOR_TC.dur), p = posElevadorTC(v.sentido, k), L = CIDADE.salas.lounge, w = mundo(daSala(L, p.x, p.z)), ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY;
-    this.eu.pos.set(w.x, 0, w.z); this.eu.alt = ilhaY + ALTURA_LOUNGE + p.h; this.alvo = null; this.alvoDepois = null;
-    if (k >= 1) this.elevTC = null;   // (chegou no outro anel: só viaja de novo depois de sair dele)
+    const st = capsulaEm(v.poco, Date.now() / 1000), L = CIDADE.salas.lounge, w = mundo(daSala(L, v.poco.x + v.dx, v.poco.z + v.dz)), ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY;
+    this.eu.pos.set(w.x, 0, w.z); this.eu.alt = ilhaY + ALTURA_LOUNGE + st.h; this.alvo = null; this.alvoDepois = null;
+    if (st.aberta) this.elevTC = null;   // (chegou e abriu: a pé de novo)
     return true;
   }
   /** o arco de quem sai do buraco negro: sobe um pouco, voa e pousa no ponto de chegada (o corpo cresce saindo) */
@@ -4443,7 +4464,7 @@ export class CyberEngine {
       else if (this.sitT > 0.05) { const s = this.assento(); eu.pos.x += (s.x - eu.pos.x) * Math.min(1, dt * 3); eu.pos.z += (s.z - eu.pos.z) * Math.min(1, dt * 3); eu.facing = this.rotAssento(); }
       else if (this.noTopo) { const e = this.eixoTopo()!, lim = 2.0 * this.escalaZaeon(); const dx = eu.pos.x - e.x, dz = eu.pos.z - e.z, d = Math.hypot(dx, dz); if (d > lim) { eu.pos.x = e.x + (dx / d) * lim; eu.pos.z = e.z + (dz / d) * lim; } }   // não cai da plataforma
       else if (this.emergir && this.passoEmergir(dt)) { andando = false; }   // (saindo do buraco negro do outro lado)
-      else if (this.elevTC && this.passoElevadorTC(dt)) { andando = false; }   // (no ELEVADOR da torre do Templo Cósmico)   // (saindo do buraco negro do outro lado)
+      else if (this.elevTC && this.passoElevadorTC(dt)) { andando = false; }   // (numa CÁPSULA da torre do Templo Cósmico)   // (saindo do buraco negro do outro lado)
       else if (this.fio) {
         // o FLUXO leva: a prancha de luz pela pista (as teclas não mexem) até o buraco negro do fim
         const q = this.posNoFluxo(); eu.pos.x = q.x; eu.pos.z = q.z; eu.facing = q.rumo; andando = false; this.alvo = null; this.alvoDepois = null;
@@ -4523,7 +4544,7 @@ export class CyberEngine {
     const pnAlt = this.bordo ? this.poseNave() : null;
     eu.alt = pnAlt && this.bordo ? alturaDoConves(pnAlt) + alturaNoBordo(this.bordo, rampaDaNave(pnAlt).queda)
       : this.emergir ? eu.alt   // (saindo do buraco negro: o arco manda — passoEmergir)
-      : this.elevTC ? eu.alt   // (o elevador da torre manda — passoElevadorTC)
+      : this.elevTC ? eu.alt   // (a cápsula da torre manda — passoElevadorTC)
       : this.noCarro() ? this.carro!.est.y + CARRO_PAIRA
       : this.moto !== null ? this.motoEst.y
       : this.pilotando ? this.naveEst.y
@@ -4905,6 +4926,11 @@ const PERSONAGENS_DA_CIDADELA = [
   // reforma da capela (out/2026): só a EXAMINER anda pela cidadela — no altar do lounge e, com música, na pista
   // (lib/cyber/examiner). A Zaeon virou o holograma da capela; os outros saíram do mapa
   { id: "examiner", nome: "Examiner", cor: "#f87171", corMoto: "#dc2626" },
+] as const;
+/** quem trabalha no MIRANTE da torre de TI (o Templo Cósmico — lib/cyber/temploCosmico `CABINES_TORRE`, `quem`) */
+const PERSONAGENS_DA_TORRE = [
+  { id: "nina", nome: "Nina", cor: "#f472b6", corMoto: "#db2777" },
+  { id: "teo", nome: "Téo", cor: "#60a5fa", corMoto: "#2563eb" },
 ] as const;
 /** ligados por padrão; `?personagens=0` (ou NEXT_PUBLIC_CYBER_PERSONAGENS=0) desliga */
 function personagensLigados(): boolean {

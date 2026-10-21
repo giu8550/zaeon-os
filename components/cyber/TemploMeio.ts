@@ -7,7 +7,7 @@
  * Referencial da SALA do lounge, y = 0 no pátio (vai dentro do grupo do Templo Cósmico).
  */
 import * as THREE from "three";
-import { CABINE_TI, CAMPUS, CYBER, DIFUSOR_TI, ELEVADOR_TC, ESTACOES_TI, NUCLEO_CYBER, PONTES, SALAO, TEMPESTADE_TI, TORRE_TI, difusorDe } from "@/lib/cyber/temploCosmico";
+import { ALTO_TI, CABINES_TORRE, CABINE_TI, CAMPUS, CYBER, DIFUSOR_TI, ESTACOES_TI, NUCLEO_CYBER, PILARES_ALTO, POCOS_TC, PONTES, SALAO, TEMPESTADE_TI, TORRE_TI, capsulaEm, difusorDe } from "@/lib/cyber/temploCosmico";
 
 export type MeioHandle = { group: THREE.Group; alvos: THREE.Object3D[]; /** os RAIOS que caíram desde a última leitura (onde, no MUNDO) — o engine toca o trovão */ raios(): { x: number; y: number; z: number }[]; atualizar(dt: number, t: number): void; dispose(): void };
 
@@ -88,11 +88,13 @@ export function criarMeio(o: { low: boolean }): MeioHandle {
     { geo: new THREE.BoxGeometry(0.07, 0.04, 2.3), mat: acesoV, pos: [C.painelX, 1.36, 0.1] },
     { geo: new THREE.OctahedronGeometry(0.2, 0), mat: acesoV, pos: [0, 2.35, C.mesaZ] },                                     // o losango
   ];
+  // (as do campus, viradas pra torre, e as LÁ EM CIMA: o deck do topo e o mirante — lib/cyber/temploCosmico `CABINES_TORRE`)
+  const todas = [...ESTACOES_TI.map((e) => ({ x: e.x, z: e.z, y: y0, rot: Math.PI })), ...CABINES_TORRE];
   { const mC = new THREE.Matrix4(), mP = new THREE.Matrix4(), eixo = new THREE.Vector3(0, 1, 0);
     for (const p of pecas) {
       if (o.low && p.mat === vidroV) continue;
-      const im = instanciar(p.geo, p.mat, N);
-      ESTACOES_TI.forEach((e, i) => { mC.compose(v.set(e.x, y0, e.z), q.setFromAxisAngle(eixo, Math.PI), um); mP.compose(v.set(...p.pos), q.setFromAxisAngle(eixo, p.rotY ?? 0), um); im.setMatrixAt(i, mC.clone().multiply(mP)); });
+      const im = instanciar(p.geo, p.mat, todas.length);
+      todas.forEach((e, i) => { mC.compose(v.set(e.x, e.y, e.z), q.setFromAxisAngle(eixo, e.rot), um); mP.compose(v.set(...p.pos), q.setFromAxisAngle(eixo, p.rotY ?? 0), um); im.setMatrixAt(i, mC.clone().multiply(mP)); });
       fechar(im); if (p.mat === escuro && p.pos[1] < 0.1) alvos.push(im);
     }
     if (!mats.includes(vidroV)) mats.push(vidroV);
@@ -184,24 +186,55 @@ export function criarMeio(o: { low: boolean }): MeioHandle {
     anim.push((_, t) => { ledMat.uniforms.uT!.value = t; });
   }
 
-  // ── a TORRE TECNOLÓGICA: a coluna massiva (circuitos vermelhos, os anéis dos andares acesos subindo) e o ELEVADOR ──
+  // ── a TORRE TECNOLÓGICA: a coluna massiva (circuitos vermelhos, os anéis dos andares acesos) ──
   const circTorre = materialCircuito(); mats.push(circTorre);
   { const T = TORRE_TI, H = CYBER.h - y0;
     const col = malha(new THREE.CylinderGeometry(T.colR - 0.5, T.colR + 1.5, H, o.low ? 24 : 48, 8), circTorre); col.position.set(T.x, y0 + H / 2, T.z); alvos.push(col); col.userData.semLote = true;
     const aneisT: THREE.Mesh[] = [];
     for (let k = 1; k < 12; k++) { const an = malha(new THREE.TorusGeometry(T.colR + 1.2, 0.35, 6, 96), aditivo(VERMELHO, 0.75)); an.rotation.x = Math.PI / 2; an.position.set(T.x, y0 + (k / 12) * H, T.z); an.userData.semLote = true; aneisT.push(an); }
-    // o ELEVADOR: o anel no pé e no topo, e a coluna de luz entre eles (a viagem sobe colada na torre)
-    const E = ELEVADOR_TC, luz = aditivo(0x66e6ff, 0.16);
-    const coluna = malha(new THREE.CylinderGeometry(E.r + 0.4, E.r + 0.6, H + 2, 24, 1, true), luz); coluna.position.set(E.base.x, y0 + (H + 2) / 2, E.base.z); coluna.userData.semLote = true;
-    for (const [p, y] of [[E.base, y0 + 0.06], [E.topo, CYBER.h + 0.06]] as const) {
-      const an = malha(new THREE.TorusGeometry(E.r, 0.1, 6, 40), aditivo(0x66e6ff, 0.95)); an.rotation.x = Math.PI / 2; an.position.set(p.x, y, p.z);
-      const dc = malha(new THREE.CircleGeometry(E.r - 0.1, 32), aditivo(0x66e6ff, 0.2)); dc.rotation.x = -Math.PI / 2; dc.position.set(p.x, y + 0.01, p.z);
+    // o DECK do topo (a laje é a da rede — components/cyber/TemploCosmico): a borda de baixo acesa, que se vê do campus
+    const beiral = malha(new THREE.TorusGeometry(CYBER.r + 0.6, 0.4, 6, 128), aditivo(VERMELHO, 0.85)); beiral.rotation.x = Math.PI / 2; beiral.position.set(CYBER.x, CYBER.h - 2.2, CYBER.z);
+    anim.push((_, t) => { circTorre.uniforms.uT!.value = t; aneisT.forEach((an, k) => { (an.material as THREE.MeshBasicMaterial).opacity = 0.3 + 0.6 * Math.max(0, Math.sin(t * 1.4 - k * 0.5)); }); });
+  }
+  // ── o MIRANTE da pirâmide invertida: o anel lá no alto (a laje, o guarda-corpo de dentro e o de fora) e os pilares ──
+  { const A = ALTO_TI, seg = o.low ? 64 : 128, vidroT = new THREE.MeshStandardMaterial({ color: 0xff8090, emissive: 0xff2a3a, emissiveIntensity: 0.08, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }); mats.push(vidroT);
+    const piso = malha(new THREE.RingGeometry(A.rIn, A.rOut, seg), negro); piso.rotation.x = -Math.PI / 2; piso.position.set(A.x, A.h, A.z); alvos.push(piso);
+    const baixo = malha(new THREE.RingGeometry(A.rIn, A.rOut, seg), negro); baixo.rotation.x = Math.PI / 2; baixo.position.set(A.x, A.h - 0.8, A.z);
+    for (const r of [A.rIn, A.rOut]) {
+      const borda = malha(new THREE.CylinderGeometry(r, r, 0.8, seg, 1, true), negro); borda.position.set(A.x, A.h - 0.4, A.z);
+      const vid = malha(new THREE.CylinderGeometry(r, r, 1.15, seg, 1, true), vidroT); vid.position.set(A.x, A.h + 0.58, A.z);
+      for (const y of [A.h + 1.16, A.h + 0.02]) { const f = malha(new THREE.TorusGeometry(r, 0.07, 4, seg), aditivo(VERMELHO, 0.85)); f.rotation.x = Math.PI / 2; f.position.set(A.x, y, A.z); }
     }
-    const subindo: THREE.Mesh[] = []; for (let k = 0; k < 6; k++) { const an = malha(new THREE.TorusGeometry(E.r + 0.45, 0.06, 6, 40), aditivo(0xb98cff, 0.8)); an.rotation.x = Math.PI / 2; an.position.set(E.base.x, y0, E.base.z); an.userData.semLote = true; subindo.push(an); }
-    anim.push((_, t) => {
-      circTorre.uniforms.uT!.value = t;
-      aneisT.forEach((an, k) => { (an.material as THREE.MeshBasicMaterial).opacity = 0.3 + 0.6 * Math.max(0, Math.sin(t * 1.4 - k * 0.5)); });
-      subindo.forEach((an, k) => { an.position.y = y0 + ((t * 9 + (k * H) / 6) % H); });
+    const gravura = malha(new THREE.RingGeometry(A.rIn + 2.2, A.rIn + 2.45, seg), aditivo(VERMELHO, 0.4)); gravura.rotation.x = -Math.PI / 2; gravura.position.set(A.x, A.h + 0.02, A.z);
+    for (const p of PILARES_ALTO) { const pl = malha(new THREE.CylinderGeometry(p.r, p.r * 1.3, A.h - CYBER.h, 10), circTorre); pl.position.set(p.x, CYBER.h + (A.h - CYBER.h) / 2, p.z); }
+  }
+  // ── as CÁPSULAS: o poço de vidro colado na torre (as guias acesas) e a cápsula subindo e descendo no relógio comum —
+  //    o anel da porta fica BRANCO quando ela está aberta (pode entrar) e VERMELHO viajando ──
+  { const vidroP = new THREE.MeshStandardMaterial({ color: 0xffd0d6, emissive: 0xff2a3a, emissiveIntensity: 0.05, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide }); mats.push(vidroP);
+    const casco = new THREE.MeshStandardMaterial({ color: 0x14080c, emissive: 0x2a060c, emissiveIntensity: 0.5, roughness: 0.25, metalness: 0.85 }); mats.push(casco);
+    const caps: { p: (typeof POCOS_TC)[number]; g: THREE.Group; porta: THREE.MeshBasicMaterial; bocas: THREE.MeshBasicMaterial[] }[] = [];
+    for (const p of POCOS_TC) {
+      const H = p.ate - p.de, tubo = malha(new THREE.CylinderGeometry(p.r + 0.35, p.r + 0.35, H + 4, 32, 1, true), vidroP); tubo.position.set(p.x, p.de + (H + 4) / 2, p.z);
+      for (let k = 0; k < 4; k++) { const a = (k / 4) * Math.PI * 2 + Math.PI / 4, gd = malha(new THREE.BoxGeometry(0.14, H + 4, 0.14), aditivo(VERMELHO, 0.7)); gd.position.set(p.x + Math.cos(a) * (p.r + 0.4), p.de + (H + 4) / 2, p.z + Math.sin(a) * (p.r + 0.4)); }
+      // as BOCAS (embaixo e em cima): o anel no piso, aceso na cor da porta
+      const bocas = [p.de, p.ate].map((y) => { const m = aditivo(0xffffff, 0.9), an = malha(new THREE.TorusGeometry(p.r, 0.09, 6, 48), m); an.rotation.x = Math.PI / 2; an.position.set(p.x, y + 0.05, p.z); an.userData.semLote = true; return m; });
+      // a CÁPSULA: o piso, o casco de vidro, o teto e o anel da porta
+      const g = new THREE.Group(); g.position.set(p.x, p.de, p.z); g.userData.semLote = true; group.add(g);
+      malha(new THREE.CylinderGeometry(p.r, p.r * 0.9, 0.3, 32), casco, g).position.y = -0.15;
+      malha(new THREE.CylinderGeometry(p.r, p.r, 3, 32, 1, true), vidroP, g).position.y = 1.5;
+      const teto = malha(new THREE.SphereGeometry(p.r, 32, 10, 0, Math.PI * 2, 0, Math.PI / 2), casco, g); teto.scale.y = 0.35; teto.position.y = 3;
+      const porta = aditivo(0xffffff, 0.9); for (const y of [0.05, 3]) { const an = malha(new THREE.TorusGeometry(p.r + 0.02, 0.08, 6, 48), porta, g); an.rotation.x = Math.PI / 2; an.position.y = y; }
+      malha(new THREE.CylinderGeometry(0.12, 0.12, 3, 8), aditivo(VERMELHO, 0.8), g).position.y = 1.5;   // (o eixo aceso no meio)
+      caps.push({ p, g, porta, bocas });
+    }
+    const branco = new THREE.Color(0xffffff), verm = new THREE.Color(VERMELHO);
+    anim.push(() => {
+      const agora = Date.now() / 1000;
+      for (const c of caps) {
+        const st = capsulaEm(c.p, agora); c.g.position.y = st.h;
+        c.porta.color.copy(st.aberta ? branco : verm);
+        c.bocas[0]!.color.copy(st.aberta === "baixo" ? branco : verm); c.bocas[1]!.color.copy(st.aberta === "cima" ? branco : verm);
+      }
     });
   }
 
