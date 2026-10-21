@@ -12,7 +12,7 @@ import { escadasExistem, hubAtivo, salaAtiva } from "./nivelAtivo";
 import { empurrarParaFora, type Colisor, type P2 } from "./colisao";
 import { colisoresDoDistritoTerra } from "./terra";
 import { CHAO } from "./praca";
-import { ALCANCE_COMPLEXO, ANDARES_ESTUDO, ESP, ESTUDO, RASTA, alturaNoComplexo, andarNoEstudo, colisoresDoAndarEstudo, colisoresDoComplexo, entradaDaPonteNoLounge, noComplexo, solidosDoComplexo } from "./temploCosmico";
+import { ALCANCE_COMPLEXO, ANDARES_ESTUDO, ESP, ESTUDO, RASTA, alturaNoComplexo, andarNoEstudo, colisoresDaTorre, colisoresDoAndarEstudo, colisoresDoComplexo, nivelNaTorre, entradaDaPonteNoLounge, noComplexo, solidosDoComplexo } from "./temploCosmico";
 import { DECK, TEMPLO, alturaDaEscadaria, alturaNoLounge, bordaDoDeck, bordasDaEscadaria, colisoresDoTemplo, noCorredorDaEscadaria, noTemplo, saidaDoLounge, GARAGEM_LOUNGE, GARAGEM_LOUNGE_EXISTE, naGaragemDoLounge } from "./templo";
 
 /** a ZAEON MEGA (out. 2026): a cidadela virou uma MEGA PLATAFORMA — 3× mais larga que antes, bem mais ALTA (450 m) e
@@ -673,14 +673,15 @@ export function pisoNoAr(p: P2, yRel: number): number | null {
 export const pisoDeVoo = (p: P2, yRel: number) => pisoNoAr(p, yRel) ?? 0;
 
 /** os colisores que só valem no ANDAR onde se está (os lounges estudantis do Templo Cósmico: o guarda-corpo do átrio e,
- *  lá em cima, a parede fechando as entradas do térreo) — `p` no mundo, `yRel` = os pés acima do piso central; [] fora */
+ *  lá em cima, a parede fechando as entradas do térreo; e os níveis da TORRE de TI) — `p` no mundo, `yRel` = os pés acima do piso central; [] fora */
 const andarCache = new Map<string, Colisor[]>();
 export function colisoresDoAndar(p: P2, yRel: number): Colisor[] {
   if (!salaAtiva("lounge")) return [];
   const L = CIDADE.salas.lounge, q = naSala(L, p.x - CIDADE.centro.x, p.z - CIDADE.centro.z), a = andarNoEstudo(q, yRel - ALTURA_LOUNGE);
-  if (!a) return [];
-  const k = `${a.p.id}:${a.andar}`; let cs = andarCache.get(k);
-  if (!cs) { cs = colisoresDoAndarEstudo(a.p, a.andar).map((c) => ({ ...mundo(daSala(L, c.x, c.z)), r: c.r })); andarCache.set(k, cs); }
+  const t = a ? null : nivelNaTorre(q, yRel - ALTURA_LOUNGE);   // (ou a TORRE de TI: a base, o topo e o mirante)
+  if (!a && t === null) return [];
+  const k = a ? `${a.p.id}:${a.andar}` : `torre:${t}`; let cs = andarCache.get(k);
+  if (!cs) { cs = (a ? colisoresDoAndarEstudo(a.p, a.andar) : colisoresDaTorre(t!)).map((c) => ({ ...mundo(daSala(L, c.x, c.z)), r: c.r })); andarCache.set(k, cs); }
   return cs;
 }
 /** está DENTRO de um lounge estudantil (qualquer andar, embaixo da cúpula)? — o som de fora fica abafado */

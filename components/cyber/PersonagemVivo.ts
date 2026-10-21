@@ -55,7 +55,8 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
   preparar?: (o: THREE.Object3D) => Promise<void>;
   /** um personagem FIXO (sem agenda): fica em `pos` (mundo), `y` m acima do piso da ilha, virado pra `rumo` — o DJ do
    *  lounge (`dj`: fone na cabeça, mãos na controladora, no compasso) */
-  fixo?: { pos: { x: number; z: number }; y: number; rumo: number; dj?: boolean };
+  fixo?: { pos: { x: number; z: number }; y: number; rumo: number; dj?: boolean; /** sentado numa ESTAÇÃO, as mãos no
+   *  teclado (a pose de quem pilota: coxas na horizontal, mãos pra frente) — a Nina e o Téo no mirante da torre de TI */ trabalha?: boolean };
   /** um ROTEIRO próprio no lugar da agenda (a Examiner: o altar e a pista — lib/cyber/examiner); sem moto */
   roteiro?: () => Estado;
   /** as ASAS NEGRAS de anjo nas costas (a Examiner — components/cyber/AsasAnjo) */
@@ -136,7 +137,7 @@ export function criarPersonagemVivo(o: { id: string; nome: string; cor: string; 
         matrizDoAvatar(raiz, true);
         const dtA = Math.min(0.2, pulo); pulo = 0;
         av.group.position.set(f.pos.x, alt, f.pos.z); av.olharPara(f.rumo); av.poseVrm(null);
-        av.animar({ andando: false, correndo: false, dj: f.dj ? 1 : 0, dt: dtA, t });
+        av.animar({ andando: false, correndo: false, dj: f.dj ? 1 : 0, pilotando: f.trabalha ? 1 : 0, dt: dtA, t });
         return;
       }
       const e = o.roteiro ? o.roteiro() : estadoEm(agora, o.perfil, cache); if (!o.roteiro) cache = (e as ReturnType<typeof estadoEm>).bloco; estado = e;

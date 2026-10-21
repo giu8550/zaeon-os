@@ -5,7 +5,7 @@ import { empurrarParaFora } from "./colisao";
 import { FIO, saidaDaSala } from "./fiosCosmicos";
 import { definirNivel } from "./nivelAtivo";
 import { nivelDoPonto } from "./niveis";
-import { CABINE_TI, DIFUSOR_TI, daCabineTI, difusorDe, ANDARES_ESTUDO, CARACOL, PLATS, aberturasDe, doEstudoLocal, noEstudoLocal, type PlatTC, ELEVADOR_TC, ESTACOES_TI, TORRE_TI, bocaDoElevadorTC, posElevadorTC, ESTUDO, ALCANCE_DUELO, ARVORE_RASTA, BOCA_SAIDA_SALAO, CASAIS, CYBER, NUCLEO_CYBER, barradoNaCupula, portaDaCupula, CHEGADA_SALAO, ESP, FESTAS, PIRAMIDE, PONTES, PONTE_LOUNGE, RASTA, SALAO, TEMPLO_RASTA, alturaDaEscadariaRasta, naPiramide } from "./temploCosmico";
+import { CABINE_TI, DIFUSOR_TI, daCabineTI, difusorDe, ANDARES_ESTUDO, CARACOL, PLATS, aberturasDe, doEstudoLocal, noEstudoLocal, type PlatTC, ESTACOES_TI, TORRE_TI, POCOS_TC, CABINES_TORRE, bocaDoPoco, capsulaEm, embarcam, ESTUDO, ALCANCE_DUELO, ARVORE_RASTA, BOCA_SAIDA_SALAO, CASAIS, CYBER, NUCLEO_CYBER, barradoNaCupula, portaDaCupula, CHEGADA_SALAO, ESP, FESTAS, PIRAMIDE, PONTES, PONTE_LOUNGE, RASTA, SALAO, TEMPLO_RASTA, alturaDaEscadariaRasta, naPiramide } from "./temploCosmico";
 import { ESCADARIA, TEMPLO, curvaDaEscadaria, noTemplo } from "./templo";
 import { RotinaExaminer, lugarDeGuarda } from "./examiner";
 
@@ -92,7 +92,7 @@ describe("o Templo Cósmico: o SALÃO central e a ponte pro lounge", () => {
     expect(CYBER.h).toBeGreaterThanOrEqual(100); expect(SALAO.z - TORRE_TI.z).toBeGreaterThan(280);   // mais alta e mais longe
     const cs = colisoresDaCidade();
     // o corredor do meio, de trás da pirâmide até o anel do elevador: livre e no nível do salão
-    for (let z = PIRAMIDE.z - PIRAMIDE.meia - 3; z >= ELEVADOR_TC.base.z; z -= 1) {
+    for (let z = PIRAMIDE.z - PIRAMIDE.meia - 3; z >= TORRE_TI.z + TORRE_TI.baseR; z -= 1) {
       const w = W(CYBER.x, z); expect(alturaNaCidade(w)).toBe(ALTURA_LOUNGE - SALAO.desce);
       expect(cs.every((c) => Math.hypot(c.x - w.x, c.z - w.z) > c.r + 0.6), `z ${z}`).toBe(true); expect(salaEm(loc(w))).toBe("lounge");
     }
@@ -103,14 +103,22 @@ describe("o Templo Cósmico: o SALÃO central e a ponte pro lounge", () => {
       const ca = daCabineTI(e, 0, CABINE_TI.assentoZ), wc = W(ca.x, ca.z); expect(cs.every((c) => Math.hypot(c.x - wc.x, c.z - wc.z) > c.r)).toBe(true);
       const d = difusorDe(e); expect(ESTACOES_TI.every((o) => o === e || Math.abs(o.x - d.x) > CABINE_TI.larg / 2 + DIFUSOR_TI.r + 0.3 || Math.abs(o.z - d.z) > CABINE_TI.prof)).toBe(true);
     }
-    // o ELEVADOR: o anel do pé sobe e entrega no topo (dentro do monumento? não — na plataforma, livre); o do topo desce
-    const pe = ELEVADOR_TC.base, topo = ELEVADOR_TC.topo;
-    expect(bocaDoElevadorTC(pe, -SALAO.desce)).toBe("sobe"); expect(bocaDoElevadorTC(topo, CYBER.h)).toBe("desce"); expect(bocaDoElevadorTC(pe, CYBER.h)).toBeNull();
-    const fim = posElevadorTC("sobe", 1); expect(fim.h).toBeCloseTo(CYBER.h, 6); expect(alturaNaCidade(W(fim.x, fim.z))).toBe(ALTURA_LOUNGE + CYBER.h);
-    const wt = W(topo.x, topo.z); expect(cs.every((c) => Math.hypot(c.x - wt.x, c.z - wt.z) > c.r)).toBe(true);   // (lá em cima, nada empurrando)
-    expect(posElevadorTC("desce", 1).h).toBeCloseTo(-SALAO.desce, 6);
+    // as CÁPSULAS: a boca de baixo de cada poço fica no anel da base, livre (dá pra entrar), e a de cima no deck do topo
+    for (const p of POCOS_TC) {
+      expect(bocaDoPoco(p, p.de)?.ponta).toBe("baixo"); expect(bocaDoPoco(p, p.ate)?.ponta).toBe("cima"); expect(bocaDoPoco(p, (p.de + p.ate) / 2)).toBeNull();
+      const w = W(p.x, p.z);
+      expect(alturaNaCidade(w, ALTURA_LOUNGE + p.de)).toBe(ALTURA_LOUNGE + p.de); expect(alturaNaCidade(w, ALTURA_LOUNGE + p.ate)).toBe(ALTURA_LOUNGE + p.ate);
+      for (const y of [p.de, p.ate]) { const cs2 = [...cs, ...colisoresDoAndar(w, ALTURA_LOUNGE + y)]; expect(cs2.every((c) => Math.hypot(c.x - w.x, c.z - w.z) > c.r + 0.3), `${p.id} ${y}`).toBe(true); }
+    }
+    expect(POCOS_TC.filter((p) => p.de === -SALAO.desce).every((p) => p.cap === 5)).toBe(true);   // no máximo 5 por cápsula
+    // a ESTAÇÃO de cada cabine lá em cima: a cadeira livre no nível dela; e a Nina e o Téo têm a deles, no mirante
+    for (const c of CABINES_TORRE) { const a = daCabineTI(c, 0, CABINE_TI.assentoZ), w = W(a.x, a.z), cs2 = [...cs, ...colisoresDoAndar(w, ALTURA_LOUNGE + c.y)]; expect(cs2.every((o) => Math.hypot(o.x - w.x, o.z - w.z) > o.r), c.id).toBe(true); expect(alturaNaCidade(w, ALTURA_LOUNGE + c.y)).toBe(ALTURA_LOUNGE + c.y); }
+    expect(CABINES_TORRE.filter((c) => c.nivel === 1).length).toBeGreaterThan(30);
+    expect(CABINES_TORRE.find((c) => c.quem === "nina")?.nivel).toBe(2); expect(CABINES_TORRE.find((c) => c.quem === "teo")?.nivel).toBe(2);
+    // sem a altura dos pés (NPC, a frota), a torre é o chão da base
+    expect(alturaNaCidade(W(TORRE_TI.x, TORRE_TI.z + 40))).toBe(ALTURA_LOUNGE - SALAO.desce);
     // a COLUNA da torre é sólida (andando na base e voando) e o monumento lá em cima também
-    const col = W(TORRE_TI.x, TORRE_TI.z + TORRE_TI.colR); expect(cs.some((c) => Math.hypot(c.x - col.x, c.z - col.z) <= c.r)).toBe(true);   // (o contorno barra quem anda na base)
+    const col = W(TORRE_TI.x, TORRE_TI.z + TORRE_TI.colR); expect(colisoresDoAndar(col, ALTURA_LOUNGE - SALAO.desce).some((c) => Math.hypot(c.x - col.x, c.z - col.z) <= c.r)).toBe(true);   // (o contorno barra quem anda na base)
     const nc = W(CYBER.x, CYBER.z); expect(solidosDaCidade().some((o) => Math.hypot(o.x - nc.x, o.z - nc.z) < 1 && o.topo > CIDADE.pisoY + ALTURA_LOUNGE + CYBER.h + 20)).toBe(true);
     expect(nivelDoPonto(W(CYBER.x, CYBER.z + 20), CIDADE.pisoY + ALTURA_LOUNGE + CYBER.h)).toBe("lounge");
   });
@@ -187,5 +195,21 @@ describe("os ANDARES dos lounges estudantis: o caracol, o guarda-corpo e a pared
     }
     // sem a altura dos pés (NPC, frota, teleporte): o térreo
     expect(alturaNaCidade(W(p.x + 15, p.z))).toBe(ALTURA_LOUNGE + p.h);
+  });
+});
+
+describe("as CÁPSULAS da torre de TI", () => {
+  it("o ciclo: abre embaixo, sobe, abre em cima, desce — e cada poço sai numa hora (defasados)", () => {
+    const p = POCOS_TC[0]!, T = 2 * (p.viagem + p.parada), t0 = (1 - p.fase) * T;   // (o começo do ciclo dele)
+    expect(capsulaEm(p, t0 + 1).aberta).toBe("baixo"); expect(capsulaEm(p, t0 + 1).h).toBe(p.de);
+    const sub = capsulaEm(p, t0 + p.parada + p.viagem / 2); expect(sub.aberta).toBeNull(); expect(sub.saiu).toBe("baixo"); expect(sub.h).toBeCloseTo((p.de + p.ate) / 2, 6);
+    expect(capsulaEm(p, t0 + p.parada + p.viagem + 1).aberta).toBe("cima"); expect(capsulaEm(p, t0 + p.parada + p.viagem + 1).h).toBe(p.ate);
+    expect(capsulaEm(p, t0 + 2 * p.parada + p.viagem + 0.5).saiu).toBe("cima");
+    const torre = POCOS_TC.filter((x) => x.de === p.de), abertas = (t: number) => torre.filter((x) => capsulaEm(x, t).aberta === "baixo").length;
+    let algum = 0; for (let t = 0; t < T; t += 0.5) if (abertas(t) > 0) algum++; expect(algum / (T / 0.5)).toBeGreaterThan(0.6);   // quase sempre tem uma esperando embaixo
+  });
+  it("embarcam no máximo `cap` (os mesmos, em qualquer cliente)", () => {
+    const p = POCOS_TC[0]!, ids = ["f", "a", "c", "e", "b", "d", "g"];
+    expect(embarcam(p, ids)).toEqual(["a", "b", "c", "d", "e"]); expect(embarcam(p, [...ids].reverse())).toEqual(embarcam(p, ids));
   });
 });
