@@ -27,6 +27,8 @@ vi.mock("@/lib/canal/server", () => {
     sessaoUsuario: async () => state.user,
     exigirFlag: () => null,
     agentesDoCanal: async () => [{ agentKey: "aura", nome: "Aura", avatarUrl: null }, { agentKey: "medicina", nome: "Osler", avatarUrl: null }],
+    // #551: as pessoas da conversa (A = Giulia, B = Martinez)
+    pessoas: async (ids: string[]) => new Map(ids.filter((id) => id === A || id === B).map((id) => [id, { id, nome: id === A ? "Giulia" : "Martinez", avatar: null }])),
   };
 });
 vi.mock("@/lib/canal/realtime", async () => {
@@ -293,5 +295,83 @@ describe("POST /api/canal/[id]/mensagem · #466 chamar pelo nome, sem @", () => 
   it("a mensagem guarda só as @ de verdade (o nome não vira @ no texto)", async () => {
     await POST(req("aura, me explica isso"), { params: { id: CANAL } });
     expect(state.criadas[0].mencoes).toEqual([]);
+  });
+});
+
+describe("POST /api/canal/[id]/mensagem · #551 despedidas olham quem está na conversa", () => {
+  const sistema = () => state.criadas.filter((m) => m.autorTipo === "sistema").map((m) => [m.autorId, m.texto]);
+  beforeEach(() => {
+    state.criadas = []; state.disparos = []; state.publicados = []; state.atualizacoes = [];
+    // conversa de uma pessoa só (a dona A); a agente da vez é a Aura
+    state.canal = { ...canal("privado"), membros: [], agentes: ["aura", "medicina"] }; state.user = user(A);
+    state.historico = [{ autorTipo: "humano", autorId: A }, { autorTipo: "agente", autorId: "aura" }];
+  });
+
+  it("'vocês duas podem ir' tira as duas da conversa (antes ninguém saía)", async () => {
+    const j = await (await POST(req("vocês duas podem ir"), { params: { id: CANAL } })).json();
+    expect(j.dispensadas).toEqual(["aura", "medicina"]);
+    expect(state.disparos).toEqual([]);
+    expect(j.agentesNoCanal).toEqual([]);
+  });
+
+  it("'@aura e @osler podem ir embora' tira as duas (antes a Aura ficava e respondia)", async () => {
+    const j = await (await POST(req("@aura e @osler podem ir embora"), { params: { id: CANAL } })).json();
+    expect(j.dispensadas).toEqual(["aura", "medicina"]);
+    expect(state.disparos).toEqual([]);
+  });
+
+  it("'pode ir' sem nome, com as duas na barra → sai só a da vez", async () => {
+    const j = await (await POST(req("pode ir"), { params: { id: CANAL } })).json();
+    expect(j.dispensadas).toEqual(["aura"]);
+    expect(j.agentesNoCanal).toEqual(["medicina"]);
+  });
+
+  it("'tchau osler' com o Osler fora da conversa: ignorado — sem 'Osler saiu', sem resposta, sem entrar na barra", async () => {
+    state.canal = { ...state.canal, agentes: ["aura"] };
+    const j = await (await POST(req("tchau osler"), { params: { id: CANAL } })).json();
+    expect(j.dispensadas).toBeUndefined();
+    expect(sistema()).toEqual([]);
+    expect(state.disparos).toEqual([]);
+    expect(j.agentesNoCanal).toEqual(["aura"]);
+  });
+
+  it("'pode ir aura e osler' com o Osler fora: só a Aura sai, e o Osler NÃO é chamado", async () => {
+    state.canal = { ...state.canal, agentes: ["aura"] };
+    const j = await (await POST(req("pode ir aura e osler"), { params: { id: CANAL } })).json();
+    expect(j.dispensadas).toEqual(["aura"]);
+    expect(sistema()).toEqual([["aura", "Aura saiu da conversa"]]);
+    expect(state.disparos).toEqual([]);
+    expect(j.agentesNoCanal).toEqual([]);
+  });
+});
+
+describe("POST /api/canal/[id]/mensagem · #551 falando com a outra pessoa, a agente fica quieta", () => {
+  beforeEach(() => {
+    state.criadas = []; state.disparos = []; state.publicados = []; state.atualizacoes = [];
+    // conversa da Giulia (A) com o Martinez (B); a Giulia estava falando com a Aura
+    state.canal = canal("turma"); state.user = user(A);
+    state.historico = [{ autorTipo: "humano", autorId: A }, { autorTipo: "agente", autorId: "aura" }];
+  });
+  it("'tchau martinez, até amanhã' → a Aura não responde e não sai", async () => {
+    const j = await (await POST(req("tchau martinez, até amanhã"), { params: { id: CANAL } })).json();
+    expect(state.disparos).toEqual([]);
+    expect(j.dispensadas).toBeUndefined();
+    expect(j.agentesNoCanal).toEqual(["aura"]);
+  });
+  it("'martinez, viu isso?' → a Aura fica quieta", async () => {
+    await POST(req("martinez, viu isso?"), { params: { id: CANAL } });
+    expect(state.disparos).toEqual([]);
+  });
+  it("falar SOBRE o Martinez ('o martinez disse que a prova é amanhã, é verdade?') → a Aura responde", async () => {
+    await POST(req("o martinez disse que a prova é amanhã, é verdade?"), { params: { id: CANAL } });
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["aura"]);
+  });
+  it("chamando a agente junto ('martinez, a @aura explica melhor') → a Aura responde", async () => {
+    await POST(req("martinez, a @aura explica melhor"), { params: { id: CANAL } });
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["aura"]);
+  });
+  it("sem citar ninguém, a Aura continua respondendo", async () => {
+    await POST(req("e a parte 2?"), { params: { id: CANAL } });
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["aura"]);
   });
 });

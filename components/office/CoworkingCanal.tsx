@@ -230,6 +230,28 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
 
   // ─── realtime: um Pusher; assina TODOS os meus canais (não-lidas) + presença do ativo ───
   const pusherRef = useRef<PusherClient | null>(null);
+  /**
+   * Um escritório saiu da minha lista (apaguei, ou #551: o dono me tirou): para de ouvir, some da lista e, se era
+   * o aberto, abre o próximo — sem nenhum, cria o primeiro (antes, quem era removido ficava em "Abrindo o canal…").
+   */
+  const tirarDaTela = useCallback(async (id: string) => {
+    try { pusherRef.current?.unsubscribe(canalChannel(id)); pusherRef.current?.unsubscribe(presenceChannel(id)); } catch { /* ignore */ }
+    const depois = aposApagar(canaisRef.current, id, ativoRef.current);
+    canaisRef.current = depois.restantes;
+    setCanais(depois.restantes);
+    setNaoLidas((n) => { const resto = { ...n }; delete resto[id]; return resto; });
+    try { if (localStorage.getItem(LS_ULTIMO) === id) localStorage.removeItem(LS_ULTIMO); } catch { /* ignore */ }
+    if (depois.proximoAtivo) {
+      if (depois.eraAtivo) setAtivoId(depois.proximoAtivo);
+      return;
+    }
+    const n = await fetch("/api/canal", { method: "POST", headers: H, body: JSON.stringify({ titulo: "Meu escritório", acesso: "turma", agentes: ["aura"], primeiro: true }) });
+    if (n.ok) {
+      const novo: Canal = (await n.json()).canal;
+      setCanais([novo]);
+      setAtivoId(novo.id);
+    }
+  }, []);
   useEffect(() => {
     const key = process.env.NEXT_PUBLIC_PUSHER_KEY, cluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER;
     if (!key || !cluster || !canais.length) return;
@@ -248,10 +270,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       // #468: o dono me tirou deste escritório → paro de ouvir e ele some da minha lista (sem esperar o F5)
       ch.bind(EV_REMOVIDO, (d: { userId?: string }) => {
         if (!d?.userId || d.userId !== meuIdRef.current) return;
-        try { p.unsubscribe(canalChannel(c.id)); p.unsubscribe(presenceChannel(c.id)); } catch { /* ignore */ }
-        setCanais((cs) => cs.filter((x) => x.id !== c.id));
-        setNaoLidas((n) => { const resto = { ...n }; delete resto[c.id]; return resto; });
-        if (ativoRef.current === c.id) setAtivoId(null);
+        void tirarDaTela(c.id).catch((e) => setErro(String((e as Error)?.message ?? e)));
       });
       // alguém marcou/apagou horário na agenda deste canal → a bandeja (se aberta) recarrega
       ch.bind(EV_AGENDA, () => { if (c.id === ativoRef.current) setAgendaVersao((v) => v + 1); });
@@ -484,23 +503,9 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
         setErro(j?.error || `Não deu pra apagar (${r.status})`);
         return;
       }
-      try { pusherRef.current?.unsubscribe(canalChannel(c.id)); pusherRef.current?.unsubscribe(presenceChannel(c.id)); } catch { /* ignore */ }
-      const depois = aposApagar(canais, c.id, ativoId);
-      setCanais(depois.restantes);
-      setNaoLidas((n) => { const resto = { ...n }; delete resto[c.id]; return resto; });
-      try { if (localStorage.getItem(LS_ULTIMO) === c.id) localStorage.removeItem(LS_ULTIMO); } catch { /* ignore */ }
       setErro(null);
       setMenu(null);
-      if (depois.proximoAtivo) {
-        if (depois.eraAtivo) setAtivoId(depois.proximoAtivo);
-      } else {
-        const n = await fetch("/api/canal", { method: "POST", headers: H, body: JSON.stringify({ titulo: "Meu escritório", acesso: "turma", agentes: ["aura"], primeiro: true }) });
-        if (n.ok) {
-          const novo: Canal = (await n.json()).canal;
-          setCanais([novo]);
-          setAtivoId(novo.id);
-        }
-      }
+      await tirarDaTela(c.id);
     } catch (e) {
       setErro(String((e as Error)?.message ?? e));
     } finally {

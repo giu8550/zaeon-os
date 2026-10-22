@@ -62,3 +62,13 @@ describe("menções · #468 coladas", () => {
     expect(semMencoes("@aura@teo me ajudem", al)).toBe("me ajudem");
   });
 });
+
+describe("menções · #551 separadas por barra", () => {
+  const al = montarAliases([{ agentKey: "aura", nome: "Aura" }, { agentKey: "teo", nome: "Téo" }]);
+  it("'@teo/@aura o que acham?' chama as duas", () => {
+    expect(parseMentions("@teo/@aura o que acham?", al)).toEqual(["teo", "aura"]);
+  });
+  it("barra solta no texto continua como está", () => {
+    expect(separarMencoesColadas("1/2 de @aura")).toBe("1/2 de @aura");
+  });
+});

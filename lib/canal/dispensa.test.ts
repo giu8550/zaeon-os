@@ -1,6 +1,6 @@
 /** #438 · a agente entende quando é dispensada — e não confunde com tchau pra outra pessoa. */
 import { describe, it, expect } from "vitest";
-import { ehDispensa, normalizar, textoDespedida, textoSaiu, textoVoltou, agentesDepois, quemFoiDispensada } from "./dispensa";
+import { ehDispensa, normalizar, textoDespedida, textoSaiu, textoVoltou, agentesDepois, quemFoiDispensada, saidasDaMensagem } from "./dispensa";
 
 const zenita = { nomesDaAgente: ["zenita", "Zenita"], mencionada: false, humanos: 2 };
 
@@ -211,5 +211,54 @@ describe("dispensa · #468 @ colados", () => {
   it("'@aura@teo pode sair, aura continua comigo' = com espaço: só o Téo sai", () => {
     const aura = { key: "aura", nomes: ["Aura"] }, teo = { key: "teo", nomes: ["Téo", "Teo"] };
     expect(quemFoiDispensada("@aura@teo pode sair, aura continua comigo", [aura, teo], 1)).toEqual(["teo"]);
+  });
+});
+
+describe("dispensa · #551 o 'e' entre nomes não corta a frase", () => {
+  const aura = { key: "aura", nomes: ["Aura"] }, teo = { key: "teo", nomes: ["Téo", "Teo"] }, zen = { key: "zenita", nomes: ["Zenita"] };
+  it.each([
+    ["@aura e @teo podem ir embora", ["aura", "teo"]],
+    ["aura e teo podem sair", ["aura", "teo"]],
+    ["pode ir aura e zenita", ["aura", "zenita"]],
+  ] as const)("%s", (t, saem) => {
+    expect(quemFoiDispensada(t, [aura, teo, zen], 1)).toEqual(saem);
+  });
+  it("com o segundo nome mandado ficar, o 'e' continua cortando: 'pode sair teo e aura continua' → só o Téo", () => {
+    expect(quemFoiDispensada("pode sair teo e aura continua", [aura, teo], 1)).toEqual(["teo"]);
+  });
+});
+
+describe("dispensa · #551 'vocês duas', 'todas'", () => {
+  const aura = { key: "aura", nomes: ["Aura"] }, teo = { key: "teo", nomes: ["Téo", "Teo"] };
+  it.each(["vocês duas podem ir", "podem sair todas", "as duas podem ir embora", "vocês podem ir, valeu"])("tira todas: %s", (t) => {
+    expect(quemFoiDispensada(t, [aura, teo], 1, ["teo"])).toEqual(["aura", "teo"]);
+  });
+  it("'pode ir' sem nome, com as duas na conversa → sai a da vez", () => {
+    expect(quemFoiDispensada("pode ir", [aura, teo], 1, ["teo"])).toEqual(["teo"]);
+  });
+  it("sem saber a da vez, 'pode ir' com as duas → ninguém sai (como antes)", () => {
+    expect(quemFoiDispensada("pode ir", [aura, teo], 1)).toEqual([]);
+  });
+});
+
+describe("dispensa · #551 despedidas novas", () => {
+  const sozinha = { ...zenita, humanos: 1 };
+  it.each(["pode encerrar", "chega por hoje", "chega", "pode ir descansar", "zenita, pode se retirar", "pode encerrar por aqui", "vamos encerrar", "pode finalizar"])("sai: %s", (t) => {
+    expect(ehDispensa(t, sozinha)).toBe(true);
+  });
+  it.each(["chega de exemplos, me explica a teoria", "pode encerrar o assunto anterior e explicar o novo", "vamos encerrar o capítulo 2 hoje?", "quando a aula chega ao fim?", "pode ir descansando a mente enquanto lê"])("fica: %s", (t) => {
+    expect(ehDispensa(t, sozinha)).toBe(false);
+  });
+});
+
+describe("dispensa · #551 saidasDaMensagem (quem está na conversa)", () => {
+  const agentes = [{ agentKey: "aura", nome: "Aura" }, { agentKey: "teo", nome: "Téo" }];
+  it("despedida de quem não estava é ignorada e não chama ninguém", () => {
+    expect(saidasDaMensagem("tchau teo", { alvos: ["teo"], naConversa: ["aura"], agentes, humanos: 1 }))
+      .toEqual({ dispensadas: [], ignoradas: ["teo"], respondem: [], chamados: [] });
+  });
+  it("conversa normal: ninguém sai, a da vez responde e fica na barra", () => {
+    expect(saidasDaMensagem("me explica isso", { alvos: ["aura"], naConversa: ["aura", "teo"], agentes, humanos: 1 }))
+      .toEqual({ dispensadas: [], ignoradas: [], respondem: ["aura"], chamados: ["aura"] });
   });
 });

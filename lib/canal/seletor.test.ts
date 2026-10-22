@@ -63,3 +63,11 @@ describe("seletor · depois de apagar", () => {
     expect(LISTA).toEqual(copia);
   });
 });
+
+describe("seletor · #551 quem foi REMOVIDO do escritório aberto", () => {
+  it("a tela abre o próximo escritório (antes ficava em 'Abrindo o canal…' até o F5)", () => {
+    const r = aposApagar(LISTA, "a", "a");
+    expect(r.proximoAtivo).not.toBeNull();
+    expect(r.restantes.some((c) => c.id === r.proximoAtivo)).toBe(true);
+  });
+});

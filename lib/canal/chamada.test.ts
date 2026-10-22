@@ -1,6 +1,6 @@
 /** #466 · chamar uma agente pelo NOME, sem @ — só quando é chamado de verdade. */
 import { describe, it, expect } from "vitest";
-import { chamadasPeloNome } from "./chamada";
+import { chamadasPeloNome, falaComPessoa } from "./chamada";
 
 const AGENTES = [
   { agentKey: "aura", nome: "Aura" }, { agentKey: "teo", nome: "Téo" }, { agentKey: "zenita", nome: "Zenita" },
@@ -62,5 +62,39 @@ describe("chamar pelo nome · #468 nome próprio em qualquer posição", () => {
   it("'aura' (palavra comum) continua com a regra rígida", () => {
     expect(chama("aura e energia são a mesma coisa?")).toEqual([]);
     expect(chama("pode seguir em frente aura com a explicação")).toEqual([]);
+  });
+});
+
+describe("chamar pelo nome · #551 falar SOBRE a agente não chama", () => {
+  const COM_NINA = [...AGENTES, { agentKey: "nina", nome: "Nina" }];
+  it.each([
+    ["teo explicou mal, explica você", []],
+    ["minha amiga nina também estuda isso", []],
+    ["pergunta pro teo depois", []],
+    ["teo e zenita são agentes de quê?", []],
+    ["o professor teo falou isso", []],
+    ["teo foi ótimo ontem", []],
+    ["ontem a zenita respondeu rápido", []],
+  ] as const)("não chama: %s", (t, esperado) => {
+    expect(chamadasPeloNome(t, COM_NINA)).toEqual(esperado);
+  });
+  it.each([
+    ["pode seguir em frente teo com a explicação", ["teo"]],
+    ["e aí teo tudo bem?", ["teo"]],
+    ["teo me ajuda com isso", ["teo"]],
+    ["teo, explicou bem, agora o resto", ["teo"]],
+    ["teo e zenita, me ajudem", ["teo", "zenita"]],
+    ["nina tem um exemplo?", ["nina"]],
+  ] as const)("chama: %s", (t, esperado) => {
+    expect(chamadasPeloNome(t, COM_NINA)).toEqual(esperado);
+  });
+});
+
+describe("falar COM uma pessoa da conversa · #551", () => {
+  it.each(["tchau martinez, até amanhã", "martinez, viu isso?", "viu isso, martinez", "valeu martinez", "oi Martínez!", "Martinez"])("fala com ela: %s", (t) => {
+    expect(falaComPessoa(t, ["Martinez Silva"])).toBe(true);
+  });
+  it.each(["o martinez disse que a prova é amanhã, é verdade?", "me explica a parte 2", "a ana falou de martingale"])("não: %s", (t) => {
+    expect(falaComPessoa(t, ["Martinez Silva", "Ana"])).toBe(false);
   });
 });
