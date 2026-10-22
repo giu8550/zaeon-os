@@ -15,11 +15,11 @@ import { BOCA_SAIDA_SALAO, SALAO } from "./temploCosmico";
 export type V3 = { x: number; y: number; z: number };
 export const FIO = {
   /** a distância (m, do centro da Zaeon) até o buraco negro do canto e o raio dele (o horizonte) */
-  alcance: 7500, bnR: 980,   // (out/2026, o dono: "buracos negros 7× maiores — massivos; perto deles somos pequenos": era 140)
+  alcance: 8800, bnR: 650,   // (out/2026, o dono: massivos — 140 → 980 — e depois "um pouco menores e mais distantes, como reais buracos negros")
   /** a altura (m, acima do piso) em que o buraco negro fica e o teto da pista no meio do caminho */
   bnY: 260, teto: 330,
   /** a ESPIRAL final: quantas voltas e de que raio começa (fecha até o horizonte) */
-  voltas: 1.2, espiralR: 1750,   // (≈1,8× o raio — com o buraco negro 7× maior)
+  voltas: 1.2, espiralR: 1170,   // (≈1,8× o raio)
   /** as curvas da pista: quantas e de que largura (m) */
   curvas: 2, largura: 160,
   /** a boca (o anel na borda, onde se pisa) */
@@ -31,7 +31,7 @@ export const FIO = {
   /** a pista de SAÍDA de cada sala (da porta antiga pra fora, até o buraco negro que leva de volta pro hub): comprimento */
   saidaComprimento: 2300,   // (o buraco negro de saída, 7× maior, mais longe da sala: ~1,8 km do horizonte até a porta)
   /** o buraco negro de SAÍDA de cada sala: menor que os dos cantos (e o magnetismo dele, proporcional) */
-  bnSaidaR: 420,
+  bnSaidaR: 280,
 } as const;
 
 /** cada sala tem a sua pista e o CANTO dela (o ângulo, local da ilha, do buraco negro) */

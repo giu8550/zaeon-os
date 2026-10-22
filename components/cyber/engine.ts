@@ -2436,7 +2436,9 @@ export class CyberEngine {
     // só na tragada (a cutscene); chegando do outro lado, nada
     // (e depois de SAIR do outro lado: 7 s se desfazendo — `DISTORCAO_NA_CHEGADA` — e as cores voltam ao normal)
     if (!NIVEIS_SEPARADOS || this.menu) return 0;
-    if (this.fio) return naCaptura(this.fio) ? 0.3 * progressoCaptura(this.fio) : 0.45 + 0.55 * progressoTragada(this.fio);
+    // (chegando — o fim do caminho dos asteroides — a imagem começa a ondular; na captura cresce; na espiral, o auge)
+    if (this.fio) return naCaptura(this.fio) ? 0.25 + 0.25 * progressoCaptura(this.fio) : 0.5 + 0.5 * progressoTragada(this.fio);
+    if (this.aprox && this.aprox.k > 0.65) return 0.25 * (this.aprox.k - 0.65) / 0.35;
     const falta = this.distorcaoAte - this.agora;
     return falta > 0 ? 0.85 * Math.min(1, falta / CyberEngine.DISTORCAO_NA_CHEGADA) : 0;
   }

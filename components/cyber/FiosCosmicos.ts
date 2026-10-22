@@ -50,6 +50,8 @@ function materialDisco(R: number, r0: number, r1: number, intensidade: number, l
       }`,
   });
 }
+/** a que distância (m, do horizonte) o buraco negro carrega o resto (a tempestade, a poeira, a lente) */
+const LOD_PERTO = 4000;
 const aditivo = (cor: THREE.ColorRepresentation, op: number) => new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
 
 export function criarFiosCosmicos(o: { /** as pistas a desenhar (padrão: as do hub) */ pistas?: readonly FioCosmico[]; low: boolean; cores: Record<NomeSala, number>; starTex: THREE.Texture; /** até onde (m) a câmera enxerga: mais longe que isso, o buraco negro é trazido pra perto,
@@ -59,7 +61,7 @@ export function criarFiosCosmicos(o: { /** as pistas a desenhar (padrão: as do 
   const malha = (g: THREE.BufferGeometry, m: THREE.Material, pai: THREE.Object3D) => { geos.push(g); mats.push(m); const x = new THREE.Mesh(g, m); x.frustumCulled = false; pai.add(x); return x; };
   const halo = glowTex("rgba(255,255,255,0.9)", "rgba(150,120,255,0.18)"); texs.push(halo);
   const sprite = (cor: THREE.ColorRepresentation, op: number, escala: number, pai: THREE.Object3D) => { const m = new THREE.SpriteMaterial({ map: halo, color: cor, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false }); mats.push(m); const s = new THREE.Sprite(m); s.scale.setScalar(escala); pai.add(s); return s; };
-  type Vivo = { f: FioCosmico; disco: THREE.Group; aura: THREE.Sprite; tempestade: ReturnType<typeof criarTempestade>; tg: THREE.Group; bn: THREE.Group; lente: THREE.Object3D; shaders: THREE.ShaderMaterial[]; anel: THREE.MeshBasicMaterial; poeira: THREE.ShaderMaterial; matiz: number };
+  type Vivo = { f: FioCosmico; disco: THREE.Group; aura: THREE.Sprite; tempestade: ReturnType<typeof criarTempestade> | null; fazerTempestade: () => ReturnType<typeof criarTempestade>; pts: THREE.Points; tg: THREE.Group; bn: THREE.Group; lente: THREE.Object3D; shaders: THREE.ShaderMaterial[]; anel: THREE.MeshBasicMaterial; poeira: THREE.ShaderMaterial; matiz: number };
   const vivos: Vivo[] = [];
 
   for (const f of o.pistas ?? fiosCosmicos()) {
@@ -79,7 +81,8 @@ export function criarFiosCosmicos(o: { /** as pistas a desenhar (padrão: as do 
         void main(){ float f = pow(1.0 - abs(dot(vN, vV)), 4.0); gl_FragColor = vec4(mix(vec3(1.0, 0.9, 0.75), paleta(uT * 0.06 + uMatiz), 0.55) * f * 1.6, 1.0); }` });
     shaders.push(borda); malha(new THREE.SphereGeometry(R * 1.06, 48, 32), borda, bn);
     sprite(0xffe9c8, 0.75, R * 2.4, bn);
-    const aura = sprite(cor, 0.5, o.low ? R * 4.5 : R * 9, bn);   // (no leve, menor: uma aura do tamanho da tela inteira somando luz pesava)
+    // (o halo na cor da sala — a cor que se vê de longe; do tamanho do disco, pra um não encostar no outro no céu)
+    const aura = sprite(cor, 0.5, o.low ? R * 4 : R * 6.5, bn);   // (no leve, menor: uma aura do tamanho da tela inteira somando luz pesava)
     // o DISCO DE ACREÇÃO (inclinado) e o anel de FÓTONS colado no horizonte
     const disco = new THREE.Group(); disco.rotation.set(-Math.PI / 2 + 0.3, 0, 0.2); bn.add(disco);
     const mDisco = materialDisco(R, 1.12, 4.4, 1.25, o.low); shaders.push(mDisco); malha(new THREE.RingGeometry(R * 1.12, R * 4.4, o.low ? 64 : 192, o.low ? 3 : 6), mDisco, disco);
@@ -103,9 +106,10 @@ export function criarFiosCosmicos(o: { /** as pistas a desenhar (padrão: as do 
     for (const m of shaders) if (!mats.includes(m)) mats.push(m);
     // ── a TEMPESTADE em volta: nuvens escuras girando e raios — fraca de longe, forte chegando ──
     const tg = new THREE.Group(); tg.position.set(f.bn.x, 0, f.bn.z); g.add(tg);
-    const tempestade = criarTempestade({ low: o.low, yBase: f.bn.y - 70, yTopo: f.bn.y + 90, raioMax: R * 4.7, alvoPonta: new THREE.Vector3(0, f.bn.y, 0), cor: cor.clone().multiplyScalar(0.35), semAbismo: true, densidade: o.low ? 0.45 : 0.7, nuvens: o.low ? 14 : 90 });
-    tg.add(tempestade.group); tempestade.definir(0.25, false);
-    vivos.push({ f, disco, aura, tempestade, tg, bn, lente, shaders, anel, poeira, matiz: vivos.length * 0.25 });
+    // (LOD — out/2026, o dono: "de longe, não deixe-os carregados completamente": a tempestade só NASCE quando se chega
+    //  perto e é LIBERADA ao se afastar; de longe ficam a silhueta, o disco colorido e o halo)
+    const fazerTempestade = () => { const h = criarTempestade({ low: o.low, yBase: f.bn.y - 70, yTopo: f.bn.y + 90, raioMax: R * 4.7, alvoPonta: new THREE.Vector3(0, f.bn.y, 0), cor: cor.clone().multiplyScalar(0.35), semAbismo: true, densidade: o.low ? 0.45 : 0.7, nuvens: o.low ? 14 : 90 }); tg.add(h.group); h.definir(0.25, false); return h; };
+    vivos.push({ f, disco, aura, tempestade: null, fazerTempestade, tg, bn, lente, shaders, anel, poeira, pts, matiz: vivos.length * 0.25 });
   }
 
   const raio = new THREE.Vector3(), lenteAlvo = new THREE.Vector3(); let vista = (o.alcanceVista ?? 2600) * 0.72;
@@ -121,19 +125,25 @@ export function criarFiosCosmicos(o: { /** as pistas a desenhar (padrão: as do 
     atualizar(dt, t, eu) {
       for (const v of vivos) {
         v.disco.rotation.z += dt * 0.05;
-        aproximar(v.bn, v.f.bn.x, v.f.bn.y, v.f.bn.z, eu, 2.6); aproximar(v.tg, v.f.bn.x, 0, v.f.bn.z, eu, 1.6);
+        // (sem o exagero de longe — o realce 2,6× fazia o buraco negro encher o céu do hub; agora, o tamanho de verdade)
+        aproximar(v.bn, v.f.bn.x, v.f.bn.y, v.f.bn.z, eu, 1); aproximar(v.tg, v.f.bn.x, 0, v.f.bn.z, eu, 1);
+        // o LOD: perto (< 4 km do horizonte), a tempestade, a poeira e a lente; longe, só o essencial (e a memória livre)
+        const dist = eu ? Math.hypot(eu.x - v.f.bn.x, eu.y - v.f.bn.y, eu.z - v.f.bn.z) - v.f.bn.r : 0, perto = dist < LOD_PERTO;
+        if (perto && !v.tempestade) v.tempestade = v.fazerTempestade();
+        else if (!perto && v.tempestade && dist > LOD_PERTO * 1.4) { v.tempestade.dispose(); v.tempestade = null; }
+        v.pts.visible = perto; v.lente.visible = perto;
         for (const m of v.shaders) { m.uniforms.uT!.value = t; m.uniforms.uMatiz!.value = v.matiz; }
         v.anel.color.setHSL((t * 0.03 + v.matiz) % 1, 0.6, 0.85);
         if (eu) { v.bn.updateMatrixWorld(); lenteAlvo.set(eu.x, eu.y, eu.z); v.bn.parent?.localToWorld(lenteAlvo); v.lente.lookAt(lenteAlvo); }   // (a lente sempre de frente pra quem olha)
         // o quanto a pessoa está perto do buraco negro: a tempestade (e os raios) e a aura crescem
         const k = eu ? pertoDoBuraco(v.f, eu) : 0;
-        v.tempestade.definir(0.25 + 0.75 * k, !o.low && k > 0.15);   // (no leve, sem os raios)
+        v.tempestade?.definir(0.25 + 0.75 * k, !o.low && k > 0.15);   // (no leve, sem os raios)
         (v.aura.material as THREE.SpriteMaterial).opacity = 0.45 + 0.4 * k;
-        const caiu = v.tempestade.atualizar(t);
+        const caiu = v.tempestade?.atualizar(t);
         if (caiu && o.aoTrovao) o.aoTrovao(raio.copy(caiu).multiplyScalar(v.tg.scale.x).add(v.tg.position));
       }
     },
     vista(m) { vista = Math.max(600, m * 0.72); },
-    dispose() { group.removeFromParent(); for (const v of vivos) v.tempestade.dispose(); for (const g of geos) g.dispose(); for (const m of mats) m.dispose(); for (const x of texs) x.dispose(); },
+    dispose() { group.removeFromParent(); for (const v of vivos) v.tempestade?.dispose(); for (const g of geos) g.dispose(); for (const m of mats) m.dispose(); for (const x of texs) x.dispose(); },
   };
 }
