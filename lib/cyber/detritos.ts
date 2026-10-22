@@ -13,17 +13,19 @@ export type V3 = { x: number; y: number; z: number };
 
 export const DETRITOS = {
   /** o PONTO DOCE: a que distância do CENTRO do buraco negro (× o raio dele) ele puxa sozinho */
-  doce: 2.4,
+  doce: 4.5,
   /** quantos asteroides no campo (na borda da zona → chegando no ponto doce); no modo leve, `leve` × isso */
-  n: [8, 50] as const, leve: 0.6,
+  n: [4, 18] as const, leve: 0.8,
   /** o TÚNEL: o raio em volta do eixo e até onde vai na frente (m) */
   tunelR: 48, fundo: 340, perto: 18,
   /** a velocidade (m/s) com que vêm (na borda → perto) e o raio (m) — a maior parte pequena, uns grandes */
-  vel: [38, 115] as const, raio: [1.4, 9] as const,
+  vel: [45, 110] as const, raio: [1.8, 8] as const,
   /** a fração dos que vêm MIRADOS em você (no começo do caminho → chegando) */
-  mirados: [0.03, 0.16] as const,
+  mirados: [0.55, 0.85] as const,
   /** a zona começa a quantos metros DEPOIS da boca da pista (saiu da Zaeon rumo ao buraco negro: já começa) */
   depoisDaBoca: 40,
+  /** no hub, a zona começa a quantos metros DEPOIS DA BORDA da cidadela (em qualquer direção — o buraco negro mais perto) */
+  depoisDaCidadela: 100,
   /** o meu raio (m) e o que conta como raspão (m além do contato) */
   euR: 1.7, raspao: 5,
   /** a batida: o empurrão (m/s) e o dano */
@@ -41,9 +43,9 @@ const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 export const inicioDaZona = (boca: V3, bn: V3) => Math.hypot(boca.x - bn.x, boca.y - bn.y, boca.z - bn.z) - DETRITOS.depoisDaBoca;
 /** onde estou na ZONA de um buraco negro (começa a `inicio` m do centro): `k` 0 no começo → 1 no ponto doce (ou null
  *  fora); `doce` = já chegou */
-export function naZona(p: V3, bn: V3, R: number, inicio: number): { k: number; d: number; doce: boolean } | null {
+export function naZona(p: V3, bn: V3, R: number, inicio: number, jaDentro = false): { k: number; d: number; doce: boolean } | null {
   const d = Math.hypot(p.x - bn.x, p.y - bn.y, p.z - bn.z), fora = inicio, dentro = R * DETRITOS.doce;
-  if (d > fora) return null;
+  if (d > fora && !jaDentro) return null;   // (`jaDentro`: o chamador já sabe que está no caminho — o k fica 0 até chegar no início)
   const k = Math.max(0, Math.min(1, (fora - d) / Math.max(1, fora - dentro)));
   return { k, d, doce: d <= dentro };
 }

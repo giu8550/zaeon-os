@@ -175,7 +175,8 @@ export const progressoTragada = (v: Tragada) => 1 - Math.max(0, Math.min(1, v.r 
  *  baixo sobe, e todo mundo cai no horizonte por cima. `chegou` = tocou o horizonte (o clarão, e o outro lado) */
 export function passoTragada(v: Tragada, dt: number): { chegou: boolean } {
   const R = v.f.bn.r, k = progressoTragada(v);
-  const vr = 22 + 360 * k * k, vt = 90 + 420 * k * (1 - k * 0.7);
+  // (out/2026, o dono: "mais tempo na cutscene" — fecha mais devagar, sobretudo no começo: ~10 s desde o ponto doce)
+  const vr = 16 + 260 * k * k, vt = 70 + 330 * k * (1 - k * 0.7);
   v.r = Math.max(0, v.r - vr * dt);
   v.ang += ((vt / Math.max(v.r, R * 0.5)) * dt) * v.sentido;
   const yAlvo = v.f.bn.y + R * (1.05 + 1.6 * (1 - k));   // (bem acima do disco no começo, descendo até o polo)

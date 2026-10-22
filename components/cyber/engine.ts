@@ -2122,7 +2122,7 @@ export class CyberEngine {
     if (v) {
       // (out/2026, o dono: "o psicodélico pra quando o personagem ATRAVESSAR" — as fachadas só no fim da tragada, no
       //  horizonte; antes, a atmosfera de sempre: os rastros, a vinheta, o tremor)
-      if (!this.travessia && k > 0.8) { this.travessia = criarTravessia({ low: this.o.low }); this.cena.scene.add(this.travessia.grupo); this.estourouBN = false; this.proxRaioBN = 0.5; }
+      if (!this.travessia && k > 0.3) { this.travessia = criarTravessia({ low: this.o.low }); this.cena.scene.add(this.travessia.grupo); this.estourouBN = false; this.proxRaioBN = 0.5; }
       const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, b = v.f.bn, w = mundo(b);
       this.tmpBN.set(w.x, ilhaY + b.y, w.z); this.tmpEu.set(this.eu.pos.x, this.eu.alt + 1, this.eu.pos.z);
       this.travessia?.atualizar(dt, performance.now() / 1000, k, this.tmpEu, this.tmpBN, b.r);
@@ -2164,7 +2164,8 @@ export class CyberEngine {
     const pu = puxaoDaZona(eu, bn, k); this.empurrarVeiculo({ x: pu.x * dt, y: pu.y * dt, z: pu.z * dt });
     // o campo: enche até o tamanho de agora (na entrada, espalhado pela profundidade toda; depois, nascendo lá no fundo)
     const quer = tamanhoDoCampo(k, this.o.low);
-    while (a.lista.length < quer) a.lista.push(novoAsteroide(Math.random, a.id++, eu, vel, bn, k, nova ? DETRITOS.perto + 20 + Math.random() * (DETRITOS.fundo - 40) : DETRITOS.fundo * (0.85 + 0.15 * Math.random())));
+    // (sempre LÁ NA FRENTE — o dono: "surgem muito perto do jogador"; na entrada, espalhados só pela metade de trás do túnel)
+    while (a.lista.length < quer) a.lista.push(novoAsteroide(Math.random, a.id++, eu, vel, bn, k, nova ? DETRITOS.fundo * (0.45 + 0.55 * Math.random()) : DETRITOS.fundo * (0.85 + 0.15 * Math.random())));
     const perigo = new Set<number>(); let raspou = false;
     a.lista = a.lista.filter((d) => {
       const r = passoAsteroide(d, dt, eu, b.f);
@@ -2264,7 +2265,9 @@ export class CyberEngine {
     const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY;
     const boca = ehSala(d.para) ? (() => { const b = saidaDaSala(d.para).bn, w = mundo(b); return new THREE.Vector3(w.x, ilhaY + b.y, w.z); })()
       : d.para === "zaeon" ? (() => { const w = mundo(CIDADE.portalTunel); return new THREE.Vector3(w.x, ilhaY + 9, w.z); })() : null;
-    if (boca) { const para = new THREE.Vector3(this.eu.pos.x, this.eu.alt, this.eu.pos.z), dur = Math.min(5.5, 1.8 + boca.distanceTo(para) / 160); this.emergir = { de: boca, para, rumo: this.eu.facing, t: 0, dur }; }
+    // (a cutscene de SAÍDA mais lenta — o dono, out/2026; e a distorção ainda 7 s, se desfazendo)
+    if (boca) { const para = new THREE.Vector3(this.eu.pos.x, this.eu.alt, this.eu.pos.z), dur = Math.min(10, 4 + boca.distanceTo(para) / 90); this.emergir = { de: boca, para, rumo: this.eu.facing, t: 0, dur }; }
+    this.distorcaoAte = this.agora + CyberEngine.DISTORCAO_NA_CHEGADA;
   }
   // ───────────── as CÁPSULAS da torre tecnológica (o Templo Cósmico — lib/cyber/temploCosmico `POCOS_TC`) ─────────────
   /** viajando numa cápsula: o poço e onde eu estou dentro dela (do centro) */
@@ -2372,7 +2375,12 @@ export class CyberEngine {
     // (out/2026, o dono) o CAMINHO: assim que se sai rumo a um buraco negro (passou da boca da pista), o CAMPO DE
     // ASTEROIDES — fácil no começo, cada vez pior; só no PONTO DOCE ele te puxa sozinho
     let f: (typeof pistas)[number] | null = null, z: ReturnType<typeof naZona> = null;
-    for (const q of pistas) { const zz = naZona(p, q.bn, q.bn.r, inicioDaZona(q.boca, q.bn)); if (zz && (!z || zz.d < z.d)) { f = q; z = zz; } }
+    if (this.nivel === "zaeon") {   // (no hub: 100 m depois da borda da cidadela, em QUALQUER direção — o buraco negro mais perto)
+      if (Math.hypot(p.x, p.z) > CIDADE.bordaR + DETRITOS.depoisDaCidadela) for (const q of pistas) {
+        const inicio = Math.hypot(q.bn.x, q.bn.z) - CIDADE.bordaR - DETRITOS.depoisDaCidadela, zz = naZona(p, q.bn, q.bn.r, inicio, true);
+        if (zz && (!z || zz.d < z.d)) { f = q; z = zz; }
+      }
+    } else for (const q of pistas) { const zz = naZona(p, q.bn, q.bn.r, inicioDaZona(q.boca, q.bn)); if (zz && (!z || zz.d < z.d)) { f = q; z = zz; } }
     if (!f || !z) { this.fluxoArmado = true; this.fimDaAproximacao(); return; }
     if (!this.fluxoArmado) return;   // (acabou de chegar de um túnel ali perto: só depois de se afastar)
     if (!z.doce) { this.passoAproximacao(f, z.k, dt); return; }
@@ -2415,13 +2423,17 @@ export class CyberEngine {
     cv.style.filter = `${D.svg ? "url(#zaeon-bn-distorce) " : ""}hue-rotate(${(k * 70 * onda).toFixed(1)}deg) saturate(${(1 + 1.3 * k).toFixed(2)}) contrast(${(1 + 0.18 * k).toFixed(2)})`;
   }
   /** quanto um buraco negro está PERTO agora (0..1 — a distorção da tela e a tempestade) */
+  private distorcaoAte = -Infinity; private static readonly DISTORCAO_NA_CHEGADA = 7;
   private pertoDeBuracoNegro(): number {
-    if (!NIVEIS_SEPARADOS || !this.nivel || this.menu) return 0;
-    const pistas = this.nivel === "zaeon" ? fiosCosmicos() : ehSala(this.nivel) ? [saidaDaSala(this.nivel)] : null; if (!pistas) return 0;
-    const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, p = { x: this.eu.pos.x - CIDADE.centro.x, y: this.eu.alt - ilhaY, z: this.eu.pos.z - CIDADE.centro.z };
-    let k = 0; for (const f of pistas) k = Math.max(k, pertoDoBuraco(f, p));
-    return this.fio ? Math.max(k, 0.55 + 0.45 * progressoTragada(this.fio)) : k;
+    // (out/2026, o dono: "o distorcido depois de sairmos do buraco negro não deve ficar — o efeito é todo ao ENTRARMOS"):
+    // só na tragada (a cutscene); chegando do outro lado, nada
+    // (e depois de SAIR do outro lado: 7 s se desfazendo — `DISTORCAO_NA_CHEGADA` — e as cores voltam ao normal)
+    if (!NIVEIS_SEPARADOS || this.menu) return 0;
+    if (this.fio) return 0.45 + 0.55 * progressoTragada(this.fio);
+    const falta = this.distorcaoAte - this.agora;
+    return falta > 0 ? 0.85 * Math.min(1, falta / CyberEngine.DISTORCAO_NA_CHEGADA) : 0;
   }
+
 
   viajarPeloTunel(destino: IdNo | null) {
     if (!this.tunel) return;
