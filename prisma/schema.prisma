@@ -1515,3 +1515,22 @@ model OctaEvento {
   @@unique([turnoId, seq])
   @@map("octa_eventos")
 }
+
+// 👍/👎 das respostas da Aura (lib/chat/feedbackDataset) — ANONIMIZADO: sem userId, só um hash salgado pra o mesmo
+// aluno trocar/desfazer o voto. Exportado em JSONL pro dataset privado do Hugging Face (lib/hf/exportarFeedback).
+model ChatFeedback {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  criadoEm    DateTime  @default(now())
+  atualizadoEm DateTime @updatedAt
+  usuarioHash String
+  msgId       String
+  voto        String    // "up" | "down"
+  sala        String    // "estudos" | "pesquisa"
+  modelo      String?
+  pergunta    String
+  resposta    String
+  exportadoEm DateTime?
+
+  @@index([usuarioHash, msgId])
+  @@index([exportadoEm])
+}
