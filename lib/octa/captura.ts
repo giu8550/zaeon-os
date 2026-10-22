@@ -34,11 +34,15 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-export type ErroCaptura = "sem_index" | "chromium_ausente" | "tempo_esgotado" | "falha_render";
+export type ErroCaptura = "sem_index" | "chromium_ausente" | "tempo_esgotado" | "falha_render" | "projeto_grande" | "fila_cheia";
 export type ResultadoCaptura =
-  | { ok: true; jpegBase64: string; largura: number; altura: number }
+  | {
+    ok: true; jpegBase64: string; largura: number; altura: number;
+    /** Só com `miniatura: true`: JPEG de 480 px de largura, ≤ MINIATURA_MAX_BYTES (ausente se não coube). */
+    miniaturaBase64?: string;
+  }
   | { ok: false; erro: ErroCaptura };
-export type OpcoesCaptura = { largura?: number; altura?: number; timeoutMs?: number };
+export type OpcoesCaptura = { largura?: number; altura?: number; timeoutMs?: number; miniatura?: boolean };
 
 export const HOST_PROJETO = "projeto.octa.invalid";
 const ORIGEM_PROJETO = `http://${HOST_PROJETO}`;
@@ -51,6 +55,13 @@ const OCIOSO_MS = 60_000;
 const QUALIDADE_JPEG = 70;
 const LARGURA_MAX = 1600;
 const VIEWPORT_PADRAO = { largura: 1280, altura: 800 };
+/** Teto do texto somado dos arquivos do projeto: acima disso nem abre o navegador. */
+export const MAX_BYTES_PROJETO = 2 * 1024 * 1024;
+/** Mais que isto esperando na fila → `fila_cheia` na hora (em vez de esperar N × 15 s). */
+export const MAX_NA_FILA = 3;
+/** Miniatura pra IDE (evento `captura`): 480 px de largura, JPEG ≤ 60 KB. */
+export const MINIATURA_LARGURA = 480;
+export const MINIATURA_MAX_BYTES = 60 * 1024;
 
 /** Onde procurar o binário quando OCTA_CHROMIUM_PATH não está definido (Debian/Ubuntu, runner do CI, Mac). */
 const CAMINHOS_CONHECIDOS = [
@@ -245,8 +256,14 @@ export async function encerrarCaptura(): Promise<void> {
 // ─────────────────────────── fila (uma captura por vez) ───────────────────────────
 
 let fila: Promise<unknown> = Promise.resolve();
-function naFila<T>(fn: () => Promise<T>): Promise<T> {
-  const r = fila.then(fn, fn);
+/** Pedidos que entraram na fila e ainda não começaram. */
+let esperando = 0;
+/** `null` = fila cheia (quem chamou devolve `fila_cheia` sem esperar). */
+function naFila<T>(fn: () => Promise<T>): Promise<T> | null {
+  if (esperando >= MAX_NA_FILA) return null;
+  esperando++;
+  const comecar = () => { esperando--; return fn(); };
+  const r = fila.then(comecar, comecar);
   fila = r.catch(() => undefined);
   return r;
 }
@@ -279,6 +296,9 @@ export async function capturarComDiagnostico(
   const mapa = new Map<string, string>();
   for (const [k, v] of Object.entries(arquivos ?? {})) if (typeof v === "string") mapa.set(normalizar(k), v);
   if (!mapa.has("index.html")) return { ok: false, erro: "sem_index" };
+  let bytes = 0;
+  for (const v of mapa.values()) bytes += Buffer.byteLength(v, "utf8");
+  if (bytes > MAX_BYTES_PROJETO) return { ok: false, erro: "projeto_grande" };
   const caminho = caminhoChromium();
   if (!caminho) return { ok: false, erro: "chromium_ausente" };
 
@@ -286,7 +306,7 @@ export async function capturarComDiagnostico(
   const altura = limitar(opts.altura, 320, 4000, VIEWPORT_PADRAO.altura);
   const timeoutMs = limitar(opts.timeoutMs, 1, 60_000, TIMEOUT_PADRAO_MS);
 
-  return naFila(async () => {
+  const naVez = naFila(async () => {
     if (timerOcioso) { clearTimeout(timerOcioso); timerOcioso = null; }
     capturando = true;
     let contexto: any = null;
@@ -337,12 +357,13 @@ export async function capturarComDiagnostico(
       }
       if (estourou) return { ok: false, erro: "tempo_esgotado" };
       const buf: Uint8Array = await page.screenshot({ type: "jpeg", quality: QUALIDADE_JPEG, fullPage: false });
+      const miniaturaBase64 = opts.miniatura ? await tirarMiniatura(page, largura, altura) : undefined;
       if (diag) {
         diag.urlFinal = page.url();
         diag.quadros = page.frames().map((f: any) => f.url() as string);
         diag.html = await page.content().catch(() => undefined);
       }
-      return { ok: true, jpegBase64: Buffer.from(buf).toString("base64"), largura, altura };
+      return { ok: true, jpegBase64: Buffer.from(buf).toString("base64"), largura, altura, ...(miniaturaBase64 ? { miniaturaBase64 } : {}) };
     })();
 
     try {
@@ -365,4 +386,18 @@ export async function capturarComDiagnostico(
       if (navegador) agendarFechamento();
     }
   });
+  return naVez ?? { ok: false, erro: "fila_cheia" };
+}
+
+/**
+ * Miniatura da mesma tela, sem 2º render: screenshot com `clip.scale` (o Chromium reduz) e qualidade caindo
+ * até caber em MINIATURA_MAX_BYTES. Não coube nem na pior qualidade → sem miniatura (a captura vale igual).
+ */
+async function tirarMiniatura(page: any, largura: number, altura: number): Promise<string | undefined> {
+  const scale = Math.min(1, MINIATURA_LARGURA / largura);
+  for (const quality of [60, 40, 25]) {
+    const buf: Uint8Array = await page.screenshot({ type: "jpeg", quality, clip: { x: 0, y: 0, width: largura, height: altura, scale } });
+    if (buf.length <= MINIATURA_MAX_BYTES) return Buffer.from(buf).toString("base64");
+  }
+  return undefined;
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { vi } from "vitest";
-import { rodarAgenteOcta, ferramentasGateway, FERRAMENTAS_GATEWAY, MARCADOR_ESTILO, type ChamarModelo, type RespostaModelo, type TurnoOcta } from "./agente";
+import { rodarAgenteOcta, ferramentasGateway, FERRAMENTAS_GATEWAY, MARCADOR_ESTILO, semImagens, CAPTURA_OMITIDA, type ChamarModelo, type RespostaModelo, type TurnoOcta } from "./agente";
 import { carregarIndice, candidatosPorDescricao, lerDesignMd } from "./design/indice";
 import { PROPS_MINIMAS } from "./secoes/tipos";
 import type { ResultadoPublicar } from "./publicar";
@@ -323,5 +323,192 @@ describe("octa · agente (fluxo landing)", () => {
     expect(eventos[2]).toEqual({ tipo: "resultado", dados: { tool: "octa_ler", ok: true } });
     expect(eventos[6]).toEqual({ tipo: "arquivo", dados: { path: "src/soma.ts", acao: "gravado" } });
     expect(JSON.stringify(eventos)).not.toContain("a - b");
+  });
+});
+
+// ───────────────────────────── octa_ver_pagina ─────────────────────────────
+/** JPEG de mentira (começa com o cabeçalho FF D8 FF = "/9j/" em base64). */
+const JPEG = "/9j/" + "QUJD".repeat(3000);
+const MINI = "/9j/" + "WFla".repeat(500);
+const capturaOk = (over: Record<string, unknown> = {}) => vi.fn(async (_a: Record<string, string>, o: any = {}) => ({
+  ok: true as const, jpegBase64: JPEG, largura: o.largura ?? 1280, altura: o.altura ?? 800, miniaturaBase64: MINI, ...over,
+}));
+const comImagem = (msgs: any[]) => msgs.filter((m) => Array.isArray(m.content) && m.content.some((p: any) => p.type === "image_url"));
+
+describe("octa · agente (octa_ver_pagina)", () => {
+  const ws = { "index.html": "<body><h1>oi</h1></body>", "styles.css": "h1{color:red}" };
+
+  it("o modelo pede a captura: a próxima chamada recebe a imagem (data:image/jpeg) numa mensagem user", async () => {
+    const capturar = capturaOk();
+    const m = roteiro([
+      { content: null, tool_calls: [call("v1", "octa_ver_pagina", {})] },
+      { content: "vi e está bom" },
+    ]);
+    const r = await rodarAgenteOcta(landing({ workspace: ws }), m, { sessionId: "vp1", capturar });
+    expect(capturar).toHaveBeenCalledTimes(1);
+    expect(capturar.mock.calls[0][0]).toEqual(ws);
+    expect(capturar.mock.calls[0][1]).toMatchObject({ largura: 1280, altura: 800, miniatura: true });
+    const vistos = m.vistos[1];
+    const tool = vistos.find((x: any) => x.role === "tool");
+    expect(tool.content).toContain("captura anexada: desktop 1280×800");
+    expect(tool.content).not.toContain(JPEG);
+    const img = comImagem(vistos);
+    expect(img).toHaveLength(1);
+    expect(img[0].role).toBe("user");
+    expect(vistos.indexOf(img[0])).toBe(vistos.length - 1); // depois das respostas das tools
+    const partes = img[0].content;
+    expect(partes[0]).toMatchObject({ type: "text" });
+    expect(partes[0].text).toMatch(/Avalie o layout contra o DESIGN\.md: contraste, alinhamento, espaçamento, hierarquia; corrija o que estiver ruim\./);
+    expect(partes[1]).toEqual({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${JPEG}` } });
+    expect(r.resposta).toBe("vi e está bom");
+  });
+
+  it("tela celular = 390×844", async () => {
+    const capturar = capturaOk();
+    const m = roteiro([{ content: null, tool_calls: [call("v1", "octa_ver_pagina", { tela: "celular" })] }, { content: "ok" }]);
+    await rodarAgenteOcta(landing({ workspace: ws }), m, { sessionId: "vp2", capturar });
+    expect(capturar.mock.calls[0][1]).toMatchObject({ largura: 390, altura: 844 });
+    expect(m.vistos[1].find((x: any) => x.role === "tool").content).toContain("captura anexada: celular 390×844");
+  });
+
+  it("captura vê o workspace vivo (depois da edição do mesmo turno)", async () => {
+    const capturar = capturaOk();
+    const m = roteiro([
+      { content: null, tool_calls: [call("e", "octa_escrever", { path: "index.html", conteudo: "<p>novo</p>" }), call("v", "octa_ver_pagina", {})] },
+      { content: "ok" },
+    ]);
+    await rodarAgenteOcta(landing({ workspace: ws }), m, { sessionId: "vp3", capturar });
+    expect(capturar.mock.calls[0][0]["index.html"]).toBe("<p>novo</p>");
+  });
+
+  it("4ª captura no turno → limite (sem chamar a captura)", async () => {
+    const capturar = capturaOk();
+    const m = roteiro([
+      ...[1, 2, 3, 4].map((i) => ({ content: null, tool_calls: [call(`v${i}`, "octa_ver_pagina", {})] })),
+      { content: "fim" },
+    ]);
+    const r = await rodarAgenteOcta(landing({ workspace: ws }), m, { sessionId: "vp4", capturar });
+    expect(capturar).toHaveBeenCalledTimes(3);
+    const quarta = m.vistos[4].find((x: any) => x.role === "tool" && x.tool_call_id === "v4");
+    expect(quarta.content).toContain("limite de capturas neste turno");
+    expect(r.resposta).toBe("fim");
+  });
+
+  it("só a captura mais recente vai como imagem; as antigas viram texto", async () => {
+    const capturar = capturaOk();
+    const m = roteiro([
+      { content: null, tool_calls: [call("v1", "octa_ver_pagina", {})] },
+      { content: null, tool_calls: [call("v2", "octa_ver_pagina", { tela: "celular" })] },
+      { content: "ok" },
+    ]);
+    await rodarAgenteOcta(landing({ workspace: ws }), m, { sessionId: "vp5", capturar });
+    expect(comImagem(m.vistos[2])).toHaveLength(1);
+    expect(JSON.stringify(m.vistos[2])).toContain(CAPTURA_OMITIDA);
+  });
+
+  it("falha de captura → texto de erro curto pro modelo, sem imagem, e o turno segue", async () => {
+    const capturar = vi.fn(async () => ({ ok: false as const, erro: "tempo_esgotado" as const }));
+    const eventos: any[] = [];
+    const m = roteiro([
+      { content: null, tool_calls: [call("v1", "octa_ver_pagina", {})] },
+      { content: null, tool_calls: [call("e1", "octa_escrever", { path: "index.html", conteudo: "<p>x</p>" })] },
+      { content: "segui sem a captura" },
+    ]);
+    const r = await rodarAgenteOcta(landing({ workspace: ws }), m, { sessionId: "vp6", capturar, onEvento: async (e) => { eventos.push(e); } });
+    const tool = m.vistos[1].find((x: any) => x.role === "tool");
+    expect(tool.content).toMatch(/captura|demor/i);
+    expect(tool.content.length).toBeLessThan(800);
+    expect(comImagem(m.vistos[1])).toHaveLength(0);
+    expect(r.edicoes).toEqual({ "index.html": "<p>x</p>" });
+    expect(r.resposta).toBe("segui sem a captura");
+    expect(eventos.find((e) => e.tipo === "resultado" && e.dados.tool === "octa_ver_pagina").dados).toEqual({ tool: "octa_ver_pagina", ok: false, codigo: "tempo_esgotado" });
+    expect(eventos.some((e) => e.tipo === "captura")).toBe(false);
+  });
+
+  it("captura que lança também vira erro pro modelo (o turno não cai)", async () => {
+    const capturar = vi.fn(async () => { throw new Error("chromium explodiu /home/segredo"); });
+    const m = roteiro([{ content: null, tool_calls: [call("v1", "octa_ver_pagina", {})] }, { content: "segui" }]);
+    const r = await rodarAgenteOcta(landing({ workspace: ws }), m, { sessionId: "vp7", capturar });
+    expect(r.resposta).toBe("segui");
+    expect(JSON.stringify(m.vistos[1])).not.toContain("segredo");
+  });
+
+  it("evento captura com miniatura ≤ 60 KB; resultado sem imagem", async () => {
+    const eventos: any[] = [];
+    const m = roteiro([{ content: null, tool_calls: [call("v1", "octa_ver_pagina", {})] }, { content: "ok" }]);
+    await rodarAgenteOcta(landing({ workspace: ws }), m, { sessionId: "vp8", capturar: capturaOk(), onEvento: async (e) => { eventos.push(e); } });
+    const cap = eventos.find((e) => e.tipo === "captura");
+    expect(cap.dados).toEqual({ tool: "octa_ver_pagina", tela: "desktop", largura: 1280, altura: 800, miniatura: MINI });
+    expect(Buffer.from(cap.dados.miniatura, "base64").length).toBeLessThanOrEqual(60 * 1024);
+    const res = eventos.find((e) => e.tipo === "resultado");
+    expect(res.dados).toEqual({ tool: "octa_ver_pagina", ok: true });
+    expect(JSON.stringify(eventos.filter((e) => e.tipo !== "captura"))).not.toContain("/9j/");
+    expect(JSON.stringify(eventos)).not.toContain(JPEG);
+  });
+
+  it("miniatura grande demais ou que não é JPEG não vai no evento", async () => {
+    for (const miniaturaBase64 of ["/9j/" + "A".repeat(90_000), "iVBORw0KGgo" + "A".repeat(100), "/9j/<script>"]) {
+      const eventos: any[] = [];
+      const m = roteiro([{ content: null, tool_calls: [call("v1", "octa_ver_pagina", {})] }, { content: "ok" }]);
+      await rodarAgenteOcta(landing({ workspace: ws }), m, { sessionId: "vp9", capturar: capturaOk({ miniaturaBase64 }), onEvento: async (e) => { eventos.push(e); } });
+      const cap = eventos.find((e) => e.tipo === "captura");
+      expect(cap.dados.miniatura).toBeUndefined();
+    }
+  });
+
+  it("captura que não é JPEG nunca vai pro modelo", async () => {
+    const m = roteiro([{ content: null, tool_calls: [call("v1", "octa_ver_pagina", {})] }, { content: "ok" }]);
+    await rodarAgenteOcta(landing({ workspace: ws }), m, { sessionId: "vp10", capturar: capturaOk({ jpegBase64: "PHN2Zz4=" }) });
+    expect(comImagem(m.vistos[1])).toHaveLength(0);
+  });
+
+  it("fora do fluxo landing a tool não existe", async () => {
+    const capturar = capturaOk();
+    expect(ferramentasGateway().map((t) => t.function.name)).not.toContain("octa_ver_pagina");
+    expect(ferramentasGateway("landing").map((t) => t.function.name)).toContain("octa_ver_pagina");
+    const r = await rodarAgenteOcta(base(), roteiro([{ content: null, tool_calls: [call("v1", "octa_ver_pagina", {})] }, { content: "ok" }]), { sessionId: "vp11", capturar });
+    expect(capturar).not.toHaveBeenCalled();
+    expect(r.negados[0]).toEqual({ tool: "octa_ver_pagina", motivo: "tool_fora_do_fluxo" });
+  });
+
+  it("prompt do landing manda olhar a página antes de terminar", async () => {
+    const m = roteiro([{ content: "ok" }]);
+    await rodarAgenteOcta(landing(), m, { sessionId: "vp12", capturar: capturaOk() });
+    expect(m.vistos[0][0].content).toMatch(/depois de montar ou editar a página, use octa_ver_pagina pelo menos uma vez antes de terminar/i);
+  });
+
+  it("parou pedindo aprovação no mesmo lote: msgs sem base64, e a contagem de capturas continua na retomada", async () => {
+    const capturar = capturaOk();
+    const pub = vi.fn(async () => OK_PUB);
+    const t = landing({ workspace: ws });
+    const r1 = await rodarAgenteOcta(t, roteiro([
+      { content: null, tool_calls: [call("v1", "octa_ver_pagina", {})] },
+      { content: null, tool_calls: [call("v2", "octa_ver_pagina", {}), call("p", "octa_publicar", {})] },
+    ]), { sessionId: "vp13", capturar, permissao: "antes_de_publicar", octaPublicar: pub });
+    expect(r1.pendente?.tool).toBe("octa_publicar");
+    // nada entre a resposta da v2 e a da pendente (a retomada responde "p" logo em seguida)
+    expect(r1.msgs[r1.msgs.length - 1]).toMatchObject({ role: "tool", tool_call_id: "v2" });
+    expect((r1.msgs[r1.msgs.length - 1] as any).content).toContain(CAPTURA_OMITIDA);
+    const limpo = semImagens(r1.msgs);
+    expect(JSON.stringify(limpo)).not.toContain("/9j/");
+    expect(JSON.stringify(limpo)).toContain(CAPTURA_OMITIDA);
+    const m2 = roteiro([{ content: null, tool_calls: [call("v3", "octa_ver_pagina", {})] }, { content: null, tool_calls: [call("v4", "octa_ver_pagina", {})] }, { content: "fim" }]);
+    await rodarAgenteOcta(t, m2, { sessionId: "vp13", capturar, permissao: "antes_de_publicar", octaPublicar: pub, retomar: { msgs: limpo, aprovado: true } });
+    expect(capturar).toHaveBeenCalledTimes(3);
+    const papeis = m2.vistos[0].map((x: any) => x.tool_call_id ?? x.role);
+    expect(papeis.slice(-2)).toEqual(["v2", "p"]);
+    expect(m2.vistos[2].find((x: any) => x.tool_call_id === "v4").content).toContain("limite de capturas neste turno");
+  });
+
+  it("semImagens: troca a parte imagem pelo texto fixo e não mexe no resto", () => {
+    const msgs: any[] = [
+      { role: "system", content: "s" },
+      { role: "user", content: [{ type: "text", text: "olhe" }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${JPEG}` } }] },
+      { role: "tool", tool_call_id: "1", content: "x" },
+    ];
+    const r = semImagens(msgs);
+    expect(r[1]).toEqual({ role: "user", content: `olhe\n${CAPTURA_OMITIDA}` });
+    expect(r[0]).toBe(msgs[0]);
+    expect(msgs[1].content[1].type).toBe("image_url"); // não muta a entrada
   });
 });

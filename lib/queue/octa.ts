@@ -8,7 +8,9 @@
  * Regras:
  * - Todo turno daqui é `fluxo: "landing"`, `modo: "change"`, `liberados: ["**"]` (o projeto é inteiro do aluno) e
  *   a `permissao` vem do PROJETO (OctaProjeto.permissao), nunca do pedido.
- * - O estado para retomar (msgs + a tool pendente) mora SÓ no OctaTurno. Aprovar = o cliente manda `{ aprovado }`;
+ * - O estado para retomar (msgs + a tool pendente) mora SÓ no OctaTurno, e SEM imagem: a captura de tela que o modelo
+ *   viu vira "[captura de tela omitida]" antes de gravar (semImagens). O evento `captura` leva só a miniatura (≤ 60 KB).
+ * - Aprovar = o cliente manda `{ aprovado }`;
  *   só um turno `aguardando_aprovacao` aceita (troca atômica de status → aprovar 2× dá `nao_aguardando`).
  * - Eventos (OctaEvento, seq crescente por turno) nunca levam segredo: vêm do onEvento do laço (nome de tool,
  *   caminho, código, resumo já redigido) ou são códigos fixos daqui. Mensagem crua de erro (gateway, octokit) não entra.
@@ -19,7 +21,7 @@
  *   `@@unique([turnoId, seq])` impede dois eventos com o mesmo seq; colisão = essa execução para.
  */
 import { createHash, randomUUID } from "node:crypto";
-import { rodarAgenteOcta, ferramentasGateway, type ChamarModelo, type MsgModelo, type PendenteOcta, type TipoEventoOcta, type Workspace } from "@/lib/octa/agente";
+import { rodarAgenteOcta, ferramentasGateway, semImagens, type CapturarOcta, type ChamarModelo, type MsgModelo, type PendenteOcta, type TipoEventoOcta, type Workspace } from "@/lib/octa/agente";
 import { lerProjeto, salvarArquivos, type Arquivos, type ProjetosDb } from "@/lib/octa/projetos";
 import { publicarProjeto, type ResultadoPublicar } from "@/lib/octa/publicar";
 
@@ -73,6 +75,8 @@ export type DepsTurno = {
   agora?: () => Date;
   /** null = inline; ausente = BullMQ se OCTA_QUEUE=1 + REDIS_URL, senão inline. */
   fila?: FilaTurno | null;
+  /** Captura de tela pro octa_ver_pagina (ausente = lib/octa/captura real). */
+  capturar?: CapturarOcta;
 };
 
 export type CodigoErroOcta = "projeto_inexistente" | "turno_ativo" | "turno_inexistente" | "nao_aguardando";
@@ -270,7 +274,7 @@ export async function processarTurno(deps: DepsTurno, turnoId: string): Promise<
       { historico: anteriores, pedido: t.pedido, workspace: base, modo: "change", liberados: ["**"], fluxo: "landing" },
       chamar,
       {
-        sessionId: `octa-turno-${t.id}`, userId: t.userId, permissao: projeto.permissao, octaPublicar,
+        sessionId: `octa-turno-${t.id}`, userId: t.userId, permissao: projeto.permissao, octaPublicar, capturar: deps.capturar,
         retomar: t.estado?.msgs ? { msgs: t.estado.msgs, aprovado: t.estado.aprovado === true } : undefined,
         onEvento: async (e, ws) => {
           // grava ANTES de anunciar: quem relê o projeto ao ver o evento já encontra o arquivo
@@ -287,7 +291,7 @@ export async function processarTurno(deps: DepsTurno, turnoId: string): Promise<
     if (r.pendente) {
       const ok = await db.octaTurno.updateMany({
         where: { id: t.id, status: "rodando", runId },
-        data: { status: "aguardando_aprovacao", runId: null, estado: { msgs: r.msgs }, pendente: r.pendente, resposta: r.resposta },
+        data: { status: "aguardando_aprovacao", runId: null, estado: { msgs: semImagens(r.msgs) }, pendente: r.pendente, resposta: r.resposta },
       });
       if (!ok.count) throw new TurnoInterrompido();
       return; // o evento "aprovacao" já saiu do laço

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { passosDoTurno, pedidoDeAprovacao, textoErroPublicar, textoErroTurno, type EventoTurno } from "./passos";
+import { miniaturaSegura, passosDoTurno, pedidoDeAprovacao, textoErroPublicar, textoErroTurno, type EventoTurno } from "./passos";
 
 let n = 0;
 const ev = (tipo: EventoTurno["tipo"], dados: Record<string, unknown> = {}): EventoTurno => ({ seq: ++n, tipo, dados });
@@ -74,5 +74,32 @@ describe("textos fixos", () => {
     expect(textoErroPublicar("marca_no_conteudo", "Nintendo")).toMatch(/troque|edite/i);
     expect(textoErroPublicar("marca_no_conteudo")).not.toBe(textoErroPublicar("???"));
     for (const c of ["falha_modelo", "budget", "projeto_inexistente", "tempo_esgotado"]) expect(textoErroTurno(c)).not.toBe(textoErroTurno("???"));
+  });
+});
+
+describe("passosDoTurno — captura de tela (octa_ver_pagina)", () => {
+  const MINI = "/9j/" + "WFla".repeat(100);
+
+  it("o evento captura põe a miniatura no passo da tool", () => {
+    const passos = passosDoTurno([
+      ev("tool", { tool: "octa_ver_pagina" }),
+      ev("resultado", { tool: "octa_ver_pagina", ok: true }),
+      ev("captura", { tool: "octa_ver_pagina", tela: "celular", largura: 390, altura: 844, miniatura: MINI }),
+    ], true);
+    expect(passos).toHaveLength(1);
+    expect(passos[0]).toMatchObject({ tipo: "tool", rotulo: "Olhando a página", estado: "ok", miniatura: MINI, tela: "celular" });
+  });
+
+  it("miniatura que não é JPEG, com caractere estranho ou maior que 60 KB é ignorada", () => {
+    for (const miniatura of ["iVBORw0KGgo", "/9j/\"><script>", "/9j/" + "A".repeat(90_000), 42, undefined]) {
+      const passos = passosDoTurno([ev("tool", { tool: "octa_ver_pagina" }), ev("resultado", { tool: "octa_ver_pagina", ok: true }), ev("captura", { tool: "octa_ver_pagina", miniatura })], true);
+      expect((passos[0] as any).miniatura).toBeUndefined();
+    }
+    expect(miniaturaSegura(MINI)).toBe(MINI);
+  });
+
+  it("falha da captura vira motivo legível", () => {
+    const passos = passosDoTurno([ev("tool", { tool: "octa_ver_pagina" }), ev("resultado", { tool: "octa_ver_pagina", ok: false, codigo: "limite_capturas" })], true);
+    expect(passos[0]).toMatchObject({ estado: "falhou", motivo: "limite de capturas do turno" });
   });
 });

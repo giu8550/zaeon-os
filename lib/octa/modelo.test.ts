@@ -185,6 +185,29 @@ describe("octa · escolha do modelo no fluxo landing", () => {
     expect((await criarChamadorOcta(falha.g, e)(msgs)).content).toBe("contabo");
   });
 
+  it("captura de tela: o Google recebe a imagem; a reserva da Contabo (qwen3-coder, sem visão) recebe só o texto", async () => {
+    const url = "data:image/jpeg;base64,/9j/QUJD";
+    const comImg: MsgModelo[] = [{ role: "user", content: "faz a landing" }, { role: "user", content: [{ type: "text", text: "olhe" }, { type: "image_url", image_url: { url } }] }];
+    const vistos: Record<string, MsgModelo[]> = {};
+    const g: ChamarGateway = async (modelo, m) => {
+      vistos[modelo] = m;
+      if (modelo.startsWith("vertex_ai/")) throw new Error("429");
+      return resp("contabo");
+    };
+    const e = escolhaModeloOcta({ ...PROD, OCTA_MODELO_LOCAL: "1" }, "landing");
+    expect(e.reservaSemImagem).toBe(true);
+    expect((await criarChamadorOcta(g, e)(comImg)).content).toBe("contabo");
+    expect(JSON.stringify(vistos["vertex_ai/gemini-3.5-flash"])).toContain(url);
+    expect(JSON.stringify(vistos["zaeon-local-coder"])).not.toContain("base64");
+    expect(vistos["zaeon-local-coder"][1]).toEqual({ role: "user", content: "olhe\n[captura de tela omitida]" });
+    // sem a flag do local, a reserva é o Google "forte" (lê imagem): vai inteira
+    _resetPausaOcta();
+    const e2 = escolhaModeloOcta(PROD, "landing");
+    expect(e2.reservaSemImagem).toBe(false);
+    await criarChamadorOcta(g, e2)(comImg).catch(() => undefined);
+    expect(JSON.stringify(vistos["vertex_ai/gemini-2.5-pro"])).toContain(url);
+  });
+
   it("Google caindo no landing não pausa a Contabo dos turnos normais", async () => {
     const env = { ...PROD, OCTA_MODELO_LOCAL: "1" };
     const { g, chamados } = gateway({

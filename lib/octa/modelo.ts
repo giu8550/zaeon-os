@@ -21,9 +21,12 @@
  * (o kill switch vale aqui também): fica o Google "forte". Diferenças do chamador no landing:
  *   - não gruda: cada passo tenta o Google de novo (a não ser que ele esteja em pausa por uma falha recente);
  *   - a reserva tem teto por passo (OCTA_LOCAL_TIMEOUT_MS) e o tempo dela conta no orçamento do turno
- *     (OCTA_LOCAL_ORCAMENTO_MS); orçamento gasto = o passo falha com erro claro em vez de esperar o CPU.
+ *     (OCTA_LOCAL_ORCAMENTO_MS); orçamento gasto = o passo falha com erro claro em vez de esperar o CPU;
+ *   - captura de tela (octa_ver_pagina): o Google lê a imagem; a reserva da Contabo (qwen3-coder) NÃO é multimodal, então
+ *     quando ela responde um passo a imagem vira o texto "[captura de tela omitida]" (`reservaSemImagem`). O passo segue
+ *     só com o texto, em vez de falhar o turno.
  */
-import type { ChamarModelo, MsgModelo, RespostaModelo } from "@/lib/octa/agente";
+import { semImagens, type ChamarModelo, type MsgModelo, type RespostaModelo } from "@/lib/octa/agente";
 import { modeloReal } from "@/lib/octa/litellm";
 
 type Env = Record<string, string | undefined>;
@@ -38,6 +41,8 @@ export type EscolhaOcta = {
   pausaMs: number;
   /** Fluxo landing: primário = Google, sem grudar na reserva; `orcamentoMs` vale pra RESERVA (ver topo). */
   landing?: true;
+  /** A reserva não lê imagem (qwen3-coder): as capturas viram texto antes de chamá-la. */
+  reservaSemImagem?: boolean;
 };
 
 const SEM_TETO = Number.MAX_SAFE_INTEGER;
@@ -53,6 +58,7 @@ export function escolhaModeloOcta(env: Env = process.env, fluxo?: "landing"): Es
       maxPromptTok: SEM_TETO,
       pausaMs: num(env.OCTA_LOCAL_PAUSA_MS, 120_000),
       landing: true,
+      reservaSemImagem: ligado,
     };
   }
   return {
@@ -66,9 +72,13 @@ export function escolhaModeloOcta(env: Env = process.env, fluxo?: "landing"): Es
   };
 }
 
+/** Caracteres "equivalentes" de uma imagem na estimativa (≈1 000 tokens). */
+const CHARS_POR_IMAGEM = 3_500;
+const charsDe = (c: MsgModelo["content"]) =>
+  typeof c === "string" ? c.length : Array.isArray(c) ? c.reduce((n, p) => n + (p.type === "text" ? p.text.length : CHARS_POR_IMAGEM), 0) : 0;
 /** Estimativa barata de tokens do prompt (≈3,5 caracteres/token em pt/código). */
 export const tokensDe = (msgs: MsgModelo[]) =>
-  Math.ceil(msgs.reduce((n, m) => n + (m.content?.length ?? 0) + ("tool_calls" in m ? JSON.stringify(m.tool_calls ?? []).length : 0), 0) / 3.5);
+  Math.ceil(msgs.reduce((n, m) => n + charsDe(m.content) + ("tool_calls" in m ? JSON.stringify(m.tool_calls ?? []).length : 0), 0) / 3.5);
 
 /** Uma chamada ao gateway. `modeloId` = header x-litellm-model-id (ex.: "contabo-coder", "vertex-real"). */
 export type ChamarGateway = (modelo: string, msgs: MsgModelo[], signal?: AbortSignal) => Promise<RespostaModelo & { modeloId?: string | null }>;
@@ -148,7 +158,7 @@ export function criarChamadorOcta(
     if (resta <= 0) throw new Error(`reserva esgotada neste turno: o modelo principal falhou (${motivo}) e o tempo da reserva acabou`);
     const t1 = agora();
     try {
-      const r = await chamar(escolha.reserva, msgs, AbortSignal.timeout(Math.min(escolha.timeoutMs, resta)));
+      const r = await chamar(escolha.reserva, escolha.reservaSemImagem ? semImagens(msgs) : msgs, AbortSignal.timeout(Math.min(escolha.timeoutMs, resta)));
       servidos.push({ modelo: escolha.reserva, modeloId: r.modeloId, ms: agora() - t1, motivo });
       return r;
     } finally { gastoReserva += agora() - t1; }

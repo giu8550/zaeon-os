@@ -460,4 +460,31 @@ describe("lib/queue/octa · turno em job", () => {
     expect(await reapTurnosPresos(db as unknown as TurnosDb, agora)).toBe(0);
     expect(turno(id)!.status).toBe("rodando");
   });
+  it("captura no turno: o modelo recebe a imagem, mas o estado.msgs gravado e os eventos não guardam base64", async () => {
+    db.octaProjeto.rows[0].permissao = "antes_de_publicar";
+    const JPEG = "/9j/" + "QUJD".repeat(2000);
+    const MINI = "/9j/" + "WFla".repeat(100);
+    const capturar = vi.fn(async () => ({ ok: true as const, jpegBase64: JPEG, largura: 1280, altura: 800, miniaturaBase64: MINI }));
+    const vistos: any[][] = [];
+    const passos: RespostaModelo[] = [
+      { content: null, tool_calls: [call("v1", "octa_ver_pagina", {})] },
+      { content: null, tool_calls: [call("p1", "octa_publicar", {})] },
+    ];
+    let i = 0;
+    modelo = async (msgs) => { vistos.push(structuredClone(msgs)); return passos[Math.min(i++, passos.length - 1)]; };
+    const id = await novoTurno("olha e publica");
+    await processarTurno({ ...deps, capturar }, id);
+
+    expect(capturar).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(vistos[1])).toContain(`data:image/jpeg;base64,${JPEG}`);
+    expect(turno(id)!.status).toBe("aguardando_aprovacao");
+    const gravado = JSON.stringify(turno(id)!.estado);
+    expect(gravado).not.toContain("/9j/");
+    expect(gravado).not.toContain("base64");
+    expect(gravado).toContain("[captura de tela omitida]");
+    const evs = eventos(id);
+    const cap = evs.find((e) => e.tipo === "captura")!;
+    expect(cap.dados).toMatchObject({ tool: "octa_ver_pagina", tela: "desktop", miniatura: MINI });
+    expect(JSON.stringify(evs)).not.toContain(JPEG);
+  });
 });

@@ -2,7 +2,7 @@
 /**
  * PassosTurno — os passos de um turno do Octa na janela do agente, um por linha, como no Claude Code:
  * bolinha de estado (rodando pulsa · ✓ · ✗ · esperando você), o que está fazendo, o arquivo, e embaixo (⎿) o resumo e
- * os arquivos gravados. CartaoAprovacao = quando o nível de permissão do projeto pede o "sim" do aluno.
+ * os arquivos gravados (e, no octa_ver_pagina, a miniatura da captura que o agente olhou). CartaoAprovacao = quando o nível de permissão do projeto pede o "sim" do aluno.
  */
 import { Loader2, ShieldAlert } from "lucide-react";
 import { passosDoTurno, pedidoDeAprovacao, type EventoTurno } from "@/lib/octa/passos";
@@ -42,6 +42,14 @@ export function PassosTurno({ eventos, vivo, onAbrirArquivo }: {
             {(p.resumo || p.motivo) && (
               <div className="pl-4 flex gap-1.5" style={{ color: p.motivo ? Z.erro : Z.apagado }}>
                 <span aria-hidden>⎿</span><span className="font-sans text-[11.5px] break-words min-w-0">{p.motivo ?? p.resumo}</span>
+              </div>
+            )}
+            {p.miniatura && (
+              <div className="pl-4 flex gap-1.5" style={{ color: Z.apagado }}>
+                <span aria-hidden>⎿</span>
+                {/* miniatura já validada em passos.miniaturaSegura (JPEG base64 ≤ 60 KB) */}
+                <img src={`data:image/jpeg;base64,${p.miniatura}`} alt={`Captura da página (${p.tela ?? "desktop"})`}
+                  className="max-w-[240px] w-full h-auto rounded" style={{ border: `1px solid ${Z.borda}` }} />
               </div>
             )}
             {!!p.arquivos.length && (

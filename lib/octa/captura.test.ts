@@ -1,6 +1,6 @@
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import {
-  CHAVES_ENV_CHROMIUM, capturaDisponivel, capturarComDiagnostico, capturarPagina, decidirPedido, encerrarCaptura,
+  CHAVES_ENV_CHROMIUM, MAX_BYTES_PROJETO, MINIATURA_MAX_BYTES, capturaDisponivel, capturarComDiagnostico, capturarPagina, decidirPedido, encerrarCaptura,
   matarProcesso, opcoesDeLancamento, tipoPorExtensao, type Diagnostico,
 } from "./captura";
 
@@ -12,6 +12,18 @@ const pagina = (corpo: string, head = "") =>
   `<!doctype html><html><head><meta charset="utf-8">${head}<style>body{margin:0;background:#fff;font:24px sans-serif}</style></head><body>${corpo}</body></html>`;
 
 const novoDiag = (): Diagnostico => ({ pedidos: [] });
+
+/** Largura × altura de um JPEG (marcador SOF0/SOF2). */
+function dimensoesJpeg(b64: string): [number, number] {
+  const b = Buffer.from(b64, "base64");
+  for (let i = 2; i < b.length - 9;) {
+    if (b[i] !== 0xff) { i++; continue; }
+    const m = b[i + 1];
+    if (m === 0xc0 || m === 0xc2) return [b.readUInt16BE(i + 7), b.readUInt16BE(i + 5)];
+    i += 2 + b.readUInt16BE(i + 2);
+  }
+  return [0, 0];
+}
 
 describe("captura — sempre (sem navegador)", () => {
   const envOriginal = process.env.OCTA_CHROMIUM_PATH;
@@ -54,6 +66,11 @@ describe("captura — sempre (sem navegador)", () => {
     expect(proc.kill).toHaveBeenCalledWith("SIGKILL");
 
     expect(() => matarProcesso(null, matar)).not.toThrow();
+  });
+
+  it("projeto acima de 2 MB de texto → projeto_grande (nem abre o navegador)", async () => {
+    const r = await capturarPagina({ "index.html": pagina("oi"), "grande.css": "a".repeat(MAX_BYTES_PROJETO) });
+    expect(r).toEqual({ ok: false, erro: "projeto_grande" });
   });
 
   it("content-type pela extensão", () => {
@@ -169,6 +186,22 @@ describe.skipIf(!CHROMIUM)("captura — com Chromium", () => {
     expect(r).toEqual({ ok: false, erro: "tempo_esgotado" });
     const depois = await capturarPagina({ "index.html": pagina("<h1>de novo</h1>") });
     expect(depois.ok).toBe(true);
+  }, 60_000);
+
+  it("miniatura: JPEG de 480 px de largura, ≤ 60 KB, junto da captura", async () => {
+    const r = await capturarPagina({ "index.html": pagina(`<h1>Miniatura</h1><div style="height:600px;background:linear-gradient(#f80,#08f)"></div>`) }, { miniatura: true });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.miniaturaBase64?.startsWith("/9j/")).toBe(true);
+    expect(Buffer.from(r.miniaturaBase64!, "base64").length).toBeLessThanOrEqual(MINIATURA_MAX_BYTES);
+    expect(dimensoesJpeg(r.miniaturaBase64!)[0]).toBe(480);
+    expect(dimensoesJpeg(r.jpegBase64)[0]).toBe(1280);
+  }, 30_000);
+
+  it("fila longa → fila_cheia na hora, sem esperar a vez", async () => {
+    const rs = await Promise.all([1, 2, 3, 4, 5].map((i) => capturarPagina({ "index.html": pagina(`<h1>${i}</h1>`) })));
+    expect(rs.filter((r) => !r.ok).map((r) => !r.ok && r.erro)).toEqual(["fila_cheia", "fila_cheia"]);
+    expect(rs.filter((r) => r.ok)).toHaveLength(3);
   }, 60_000);
 
   it("capturas simultâneas entram na fila e todas terminam", async () => {
