@@ -48,6 +48,10 @@ export type HarnessOpts = {
   transformarSystem?: (system: string) => string;
   /** RAG: a base (turma/pessoal) deste turno. Viaja à parte — o systemContext é cortado em 4000 caracteres. */
   baseConhecimento?: import("@/lib/rag/turno").BaseDoTurno | null;
+  /** Modelo Google escolhido pelo aluno (id do Vertex, já validado em lib/chat/modelos): vale pra TODAS as fases. */
+  modelo?: string;
+  /** Quem serviu cada chamada (o envelope pode cair na reserva): o turno mostra o da resposta no selo. */
+  onModelo?: (m: { modelo: string; alvo?: string; phase?: string }) => void;
 };
 
 type Observation = { tool: string; code?: string; error?: string };
@@ -70,6 +74,7 @@ function envelopeGenJson(opts: HarnessOpts, medido: { total: number }): GenJson 
       ctx: { ...ledger, phase: o?.phase ?? ledger.phase ?? null },
     });
     medido.total += res.usage.totalTokens;
+    try { opts.onModelo?.({ modelo: res.modelo, alvo: res.alvo, phase: o?.phase }); } catch { /* selo é enfeite */ }
     return valor;
   };
 }
@@ -260,7 +265,7 @@ export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): Harn
   const genJson = opts.genJson ?? envelopeGenJson(opts, medido);
   const runTool = opts.runToolImpl ?? runToolByName;
   const retryDelay = opts.retryDelayMs ?? 400;
-  const modelFor = (heavy: boolean) => (opts.deepThink && heavy ? GEMINI_MODEL_PRO : GEMINI_MODEL_FLASH);
+  const modelFor = (heavy: boolean) => opts.modelo || (opts.deepThink && heavy ? GEMINI_MODEL_PRO : GEMINI_MODEL_FLASH);
   const observations: Observation[] = []; // A1 · buffer de erros-como-observação
   let livrosAchados: LivroAchado[] = [];  // book_search (buscar_livro): vai inteiro pro fim do nucleo
   const preamble = preambleBlock(opts); // systemContext + histórico (paridade com o legado)

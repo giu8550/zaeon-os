@@ -12,13 +12,20 @@
  * Contrato do `emit`: recebe pedaços de PROTOCOLO (eventos @@PROGRESS@@\n). O payload final
  * NÃO passa por ele — volta como retorno (HarnessOutput), e quem chamou decide onde escrever
  * (outputToWire no stream; `answer` no ChatTurn). Assim o parcial persistido nunca contém
- * a resposta pela metade.
+ * a resposta pela metade — EXCETO no modelo local (lib/agent/turnoLocal): lá a resposta vem em
+ * streaming pelo próprio `emit` (o aluno a vê nascer) e o payload final é texto vazio; quem
+ * reengata recebe `partial + wire`, que é a resposta inteira.
+ *
+ * Modelo escolhido pelo aluno (`modelo`, id de lib/chat/modelos): Google → o harness inteiro com
+ * esse modelo; Zaeon (local) → o caminho enxuto, e se o local não começar a responder, o Google
+ * responde. No fim sai um evento "quem respondeu" (serializarModelo) com o que o SERVIDOR usou.
  */
 import { buildHarnessDeps, resolveHarnessOutput, type HarnessOutput } from "@/lib/agent/aura-harness";
 import { surfaceLedger } from "@/lib/llm/ledger";
 import { runTrajectoryTraced } from "@/lib/agent/trajectory";
 import * as mem from "@/lib/agent/memory-provider";
-import { serializarProgresso } from "@/lib/agent/progresso";
+import { serializarProgresso, serializarModelo } from "@/lib/agent/progresso";
+import { modeloDoId, nomeDoModeloServido } from "@/lib/chat/modelos";
 import { markRunning, saveDone, saveError } from "@/lib/agent/chat-turn-store";
 import type { Wing } from "@/lib/agent/memory";
 
@@ -34,6 +41,8 @@ export type ChatTurnParams = {
   /** World-state do cliente (AgentContext). Só JSON: atravessa a fila. */
   agentContext?: Record<string, unknown> | null;
   mentor?: { slug: string; wing: Wing } | null;
+  /** Modelo escolhido no composer (id de lib/chat/modelos; o route já validou). Ausente = padrão. */
+  modelo?: string;
 };
 
 export async function runChatTurn(
@@ -74,6 +83,32 @@ export async function runChatTurn(
       mentor: mentor?.slug,
       wing: mentor?.wing.label,
     };
+    const escolhido = modeloDoId(params.modelo);
+    const ledgerTurno = { agentKey: mentor?.slug ?? "aura", mentorSlug: mentor?.slug ?? null, userId: userId ?? null, surface: surfaceLedger(surface ?? hctx.activeTab), scopeId: typeof ac.cartolinaScopeId === "string" ? ac.cartolinaScopeId : null };
+    // MODELO LOCAL (Zaeon/Contabo): caminho enxuto em streaming. Não começou → segue pelo Google, abaixo.
+    if (escolhido?.provedor === "zaeon" && escolhido.grupo) {
+      narrar(serializarProgresso({ fase: "draft", rotulo: `${escolhido.nome} pensando no servidor Zaeon` }));
+      try {
+        const [{ turnoLocal }, { blocoDaBase }] = await Promise.all([import("@/lib/agent/turnoLocal"), import("@/lib/rag/citar")]);
+        const s = await turnoLocal({
+          prompt, history: params.history, systemContext: params.systemContext,
+          base: blocoDaBase(await basePromise) || undefined, grupo: escolhido.grupo, ctx: ledgerTurno,
+        }, (pedaco) => narrar(pedaco));
+        if (s.interrompido) narrar("\n\n_(a resposta local foi interrompida aqui)_");
+        narrar(serializarModelo(nomeDoModeloServido(escolhido.grupo, "contabo")));
+        const outLocal: HarnessOutput = { mode: "text", text: "" };
+        if (userId) {
+          void import("@/lib/llm/guarda").then((g) => g.auditarEntrada({ userId, surface: ledgerTurno.surface, prompt })).catch(() => null);
+          void Promise.all([import("@/lib/canal/usage"), import("@/src/lib/prisma")])
+            .then(([u, { prisma }]) => u.registrarUso(prisma as any, mentor?.slug ?? "aura", userId)).catch(() => null);
+        }
+        if (turnId) await saveDone(turnId, outLocal, narrado);
+        return outLocal;
+      } catch (e: any) {
+        console.warn("[chat] modelo local não respondeu — Google responde:", String(e?.message ?? e).slice(0, 160));
+        narrar(serializarProgresso({ fase: "draft", rotulo: "Servidor local ocupado — respondendo pelo Google" }));
+      }
+    }
     // Só anuncia quando é verdade: sem dono do turno não há memória pra reler.
     if (userId) narrar(serializarProgresso({ fase: "memoria", rotulo: "Retomando a conversa" }));
     // wakeUp (L3, A8): recall + perfil pinado → systemContext. Best-effort; "" se o L3 não ligou.
@@ -99,12 +134,16 @@ export async function runChatTurn(
     const skillBlock = userId && skillTopic
       ? await import("@/lib/skilltree/progress").then((m) => m.treeContextBlock(userId, skillTopic, skillNodeId)).catch(() => "")
       : "";
+    // Quem serviu (o envelope pode cair na reserva): fica o da resposta (draft) se houver, senão o último.
+    let servido: { modelo: string; alvo?: string; phase?: string } | null = null;
     const deps = buildHarnessDeps(hctx, {
+      modelo: escolhido?.provedor === "google" ? escolhido.vertex : undefined,
+      onModelo(m) { if (!servido || servido.phase !== "draft" || m.phase === "draft") servido = m; },
       systemContext: [params.systemContext, memBlock, cartolinaBlock, tccBlock, skillBlock].filter(Boolean).join("\n\n") || undefined,
       history: params.history,
       baseConhecimento: await basePromise,
       // C5: cada chamada do turno grava no TokenLedger com quem/onde (mentor em agentKey E mentorSlug, como o registrarUso).
-      ledger: { agentKey: mentor?.slug ?? "aura", mentorSlug: mentor?.slug ?? null, userId: userId ?? null, surface: surfaceLedger(surface ?? hctx.activeTab), scopeId: typeof ac.cartolinaScopeId === "string" ? ac.cartolinaScopeId : null },
+      ledger: ledgerTurno,
       // O CANAL DE PROGRESSO: cada fase do trajectory (plan → reason → draft…) vira um
       // evento. Uma falha do canal nunca derruba a resposta.
       onStep(step) {
@@ -155,6 +194,8 @@ export async function runChatTurn(
         .then((m) => m.assessAndUpdate({ userId, topicSlug: skillTopic, nodeId: skillNodeId, message: prompt }))
         .catch(() => null);
     }
+    const quem = servido as { modelo: string; alvo?: string } | null;
+    if (quem) narrar(serializarModelo(nomeDoModeloServido(quem.modelo, quem.alvo)));
     if (turnId) await saveDone(turnId, out, narrado);
     return out;
   } catch (e: any) {

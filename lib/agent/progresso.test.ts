@@ -126,3 +126,15 @@ describe("a fase é peneirada — o campo não aceita recado humano", () => {
     expect(eventos[0].fase).toBe("memoria");
   });
 });
+
+describe("evento de modelo (quem respondeu)", () => {
+  it("não vira fase; modeloDoTurno lê o último", async () => {
+    const { serializarModelo, modeloDoTurno, faseCorrente: fc, separarProgresso: sp, serializarProgresso: spr } = await import("./progresso");
+    const fio = spr({ fase: "draft", rotulo: "Escrevendo" }) + "Olá" + serializarModelo("Qwen3 30B · local");
+    const { limpo, eventos } = sp(fio);
+    expect(limpo).toBe("Olá");
+    expect(fc(eventos)?.rotulo).toBe("Escrevendo");
+    expect(modeloDoTurno(eventos)).toBe("Qwen3 30B · local");
+    expect(modeloDoTurno(sp(spr({ fase: "plan", rotulo: "x" })).eventos)).toBeNull();
+  });
+});

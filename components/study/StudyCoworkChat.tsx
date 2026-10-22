@@ -79,6 +79,7 @@ import { typeStep, safeCut } from "@/lib/ui/typewriter";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
 import { esperarTurno } from "@/lib/chat/turnoRetomavel";
 import { pedirAura } from "@/lib/chat/auraClient";
+import { SeletorModelo, SeloModelo, useModeloEscolhido } from "@/components/chat/SeletorModelo";
 import { criarEstudo, gerarArtefato } from "@/lib/studio/studioClient";
 import type { SkillNodeState } from "@/lib/skilltree/types";
 import type { SkillTreeData } from "@/components/study/SkillTreePanel";
@@ -117,6 +118,7 @@ type Msg = {
   desenhando?: string;             // aviso enquanto um artefato demorado sai (diagrama ~20 s, aula 1–3 min)
   answer?: StructuredAnswer;
   fase?: string;             // fase que o harness está narrando agora (só enquanto chega)
+  modelo?: string;           // quem respondeu DE VERDADE (nome vindo do servidor) — o selo debaixo da resposta
   streaming?: boolean;       // B2: resposta ainda chegando → cursor piscando
   fresh?: boolean;           // B2: resposta estruturada recém-chegada → datilografa o núcleo
   // Fase 3 (CHAT_BG): turno rodando no worker. Persistido de propósito — é o que deixa sair
@@ -207,6 +209,10 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   // MODO PESQUISA (chat único): por conversa, lembrado no aparelho. Ligado, o turno vai como a Sala de Pesquisa ia
   // (superfície "pesquisa" → academicMode enforced: fonte acadêmica, citação, rigor).
   const [modoPesquisa, setModoPesquisa] = useState(false);
+  // MODELO escolhido no composer (lib/chat/modelos): Google = harness inteiro; Zaeon = local, enxuto, em streaming
+  const [modeloEscolhido, escolherModelo] = useModeloEscolhido();
+  const modeloRef = useRef(modeloEscolhido.id);
+  modeloRef.current = modeloEscolhido.id;
   const modoPesquisaRef = useRef(false);
   modoPesquisaRef.current = modoPesquisa;
   useEffect(() => {
@@ -903,8 +909,10 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           cartolinaMsgId: asstId,
         },
         mentor: activeMentor ?? undefined,   // slug do mentor ativo → Aura com a voz da área
+        modelo: modeloRef.current,           // o servidor só aceita ids do catálogo (lib/chat/modelos)
         ...(lendo ? { fileData: lendo.dataUrl } : {}),
       }, {
+        onModelo: (nome) => setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, modelo: nome } : m))),
         // CHAT_BG: o turno roda no worker; o id fica na mensagem pra reengatar se o aluno sair.
         // Este send() É o dono do turno enquanto estiver vivo: o reengate não pega o mesmo
         // turno em paralelo (aplicaria o fim duas vezes — transcrição/artefato duplicados).
@@ -983,6 +991,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     let pergunta = -1;
     for (let j = i - 1; j >= 0; j--) if (messages[j].role === "user") { pergunta = j; break; }
     return (
+      <>
+      {m.modelo && <div className="mt-1 -mb-0.5"><SeloModelo nome={m.modelo} /></div>}
       <AcoesResposta
         msgId={m.id}
         texto={texto}
@@ -990,6 +1000,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         onRegenerar={m.id === ultimaResposta && pergunta >= 0 ? () => reenviar(pergunta, messages[pergunta].text ?? "") : undefined}
         onAprofundar={abaAtiva ? () => novaSub(abaAtiva, texto.slice(-1500)) : undefined}
       />
+      </>
     );
   };
 
@@ -1378,6 +1389,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
               {/* ⟁ Aura ▾ — seletor: Aura base ou um mentor plugado */}
               <div className="flex items-center gap-2">
                 <MentorPill value={activeMentor} onChange={(slug) => setActiveMentor(slug)} />
+                {/* MODELO: com quem o aluno fala de verdade (Google ou o servidor da Zaeon) */}
+                <SeletorModelo valor={modeloEscolhido} onChange={escolherModelo} desabilitado={sending} />
                 {/* MODO PESQUISA (chat único): o harness de pesquisa da antiga Sala de Pesquisa, ligado nesta conversa */}
                 {CHAT_UNICO && (
                   <button

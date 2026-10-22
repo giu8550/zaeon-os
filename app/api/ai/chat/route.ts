@@ -129,7 +129,10 @@ export async function POST(req: Request) {
         const rl = await guard(req, "ai-chat", "ai-heavy");
         if (!rl.ok) return rl.response;
         // 🔥 NOVO: Recebendo userData + history + agentContext do frontend
-        const { prompt, agent, systemContext: rawSystemContext, fileData, userData, voiceMode, history, agentContext, cacheName, stream, surface, mentor, mentorId } = await req.json();
+        const { prompt, agent, systemContext: rawSystemContext, fileData, userData, voiceMode, history, agentContext, cacheName, stream, surface, mentor, mentorId, modelo: modeloPedido } = await req.json();
+        // Modelo escolhido no composer: só ids do catálogo (lib/chat/modelos) — nome solto do cliente é ignorado.
+        const { modeloDoId } = await import("@/lib/chat/modelos");
+        const modelo = modeloDoId(modeloPedido)?.id;
         const agentKey = agent?.toLowerCase() || DEFAULT_AGENT_ID;
 
         // MENTOR ativo — `mentor:"farmacia"` (slug = a chave; `mentorId` ObjectId só como fallback).
@@ -290,6 +293,7 @@ export async function POST(req: Request) {
                 history: (chatHistory as any[]).map((h) => ({ role: h.role, text: h?.parts?.[0]?.text ?? "" })),
                 agentContext: (agentContext && typeof agentContext === "object") ? agentContext : null,
                 mentor: activeMentor ? { slug: activeMentor.slug, wing: activeMentor.wing } : null,
+                ...(modelo ? { modelo } : {}),
             });
 
             // ── FASE 3: MODO BACKGROUND (CHAT_BG=1) ─────────────────────────────────────
