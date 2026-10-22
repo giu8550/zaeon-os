@@ -191,8 +191,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   // está ABERTO no editor por cima do chat (null = nenhum). No chat único são vários; fora dele, no máximo um.
   const [trabalhosPorAba, setTrabalhosPorAba] = useState<Record<string, TrabalhoResumo[]>>({});
   const [trabalhoAberto, setTrabalhoAberto] = useState<string | null>(null);
-  const trabalhoAbertoRef = useRef<string | null>(null);
-  trabalhoAbertoRef.current = trabalhoAberto;
+  // o trabalho em FOCO por conversa: o último aberto no editor — voltar pra conversa e pedir "continue a
+  // metodologia" mexe nele (o editor não precisa estar à mostra)
+  const focoPorAbaRef = useRef<Record<string, string>>({});
   const abaAtivaRef = useRef<string | null>(null);
   abaAtivaRef.current = abaAtiva;
   /** Põe (ou atualiza no lugar) um trabalho na lista da conversa `aba`. */
@@ -223,6 +224,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const cerebro = useCerebro(abaAtiva, { aberto: cerebroAberto });
   const conferirCerebro = useRef(cerebro.conferirDepoisDoTurno); conferirCerebro.current = cerebro.conferirDepoisDoTurno;
   useEffect(() => { setCerebroAberto(false); }, [abaAtiva]);
+  useEffect(() => { if (trabalhoAberto && abaAtiva) focoPorAbaRef.current[abaAtiva] = trabalhoAberto; }, [trabalhoAberto, abaAtiva]);
   const trabalhosDaAba = TCC_CROSS_ON && abaAtiva ? trabalhosPorAba[abaAtiva] ?? [] : [];
   // Trocar de aba fecha o trabalho aberto (ele é DAQUELA conversa) e descobre os trabalhos da nova aba.
   useEffect(() => {
@@ -889,7 +891,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         agentContext: {
           activeTab: pesquisa ? "pesquisa" : "sala-de-estudos",
           // chat único: a conversa tem VÁRIOS trabalhos; o aberto no editor é o que "continue a metodologia" edita
-          ...(CHAT_UNICO ? { chatUnico: true, trabalhoAbertoId: trabalhoAbertoRef.current ?? undefined } : {}),
+          ...(CHAT_UNICO ? { chatUnico: true, trabalhoAbertoId: (abaAtivaRef.current && focoPorAbaRef.current[abaAtivaRef.current]) || undefined } : {}),
           currentStudyId: focusIds[0],
           focusedStudyIds: focusIds,
           // posição do aluno na árvore de habilidades → o mentor sabe onde você está (harness)
@@ -1158,7 +1160,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
             // os TRABALHOS da conversa (abrem no editor; nascem do "escreva um artigo/TCC sobre…" ou do card na cartolina)
             ...trabalhosDaAba.map((w): Pasta => ({
               id: `trab:${w.id}`, rotulo: CHAT_UNICO ? w.titulo : "TCC", titulo: `${w.tipo}: ${w.titulo}`, icone: <GraduationCap size={13} />,
-              ...(CHAT_UNICO ? { onFechar: () => { setTrabalhosPorAba((p) => ({ ...p, [abaAtiva!]: (p[abaAtiva!] ?? []).filter((x) => x.id !== w.id) })); if (trabalhoAberto === w.id) setTrabalhoAberto(null); } } : {}),
+              ...(CHAT_UNICO ? { onFechar: () => { setTrabalhosPorAba((p) => ({ ...p, [abaAtiva!]: (p[abaAtiva!] ?? []).filter((x) => x.id !== w.id) })); if (trabalhoAberto === w.id) setTrabalhoAberto(null); if (focoPorAbaRef.current[abaAtiva!] === w.id) delete focoPorAbaRef.current[abaAtiva!]; } } : {}),
             })),
             // a cartolina da conversa (o board abre por cima; tap num card → volta à resposta)
             ...(CARTOLINA_ON && abaAtiva ? [{ id: "cartolina", rotulo: "Cartolina", titulo: "Cartolina desta conversa", icone: <FileText size={13} /> }] : []),
