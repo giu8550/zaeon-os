@@ -87,7 +87,12 @@ export async function runChatTurn(
     // TCC cross-sala: se a conversa já tem TCC, a Aura sabe (e edita por seção). "" com TCC_CROSS
     // off / sem TCC. O scope é o mesmo da cartolina (a aba do chat).
     const tccMod = await import("@/lib/tcc/turno");
-    const tccBlock = await tccMod.tccContextoParaTurno(userId, ac.cartolinaScopeId);
+    // CHAT ÚNICO (o cliente manda `chatUnico`): a conversa pode ter VÁRIOS trabalhos — a Aura vê todos, com o
+    // aberto no editor marcado, e o roteador sabe que "agora outro sobre Y" é pedido de trabalho.
+    const multi = ac.chatUnico === true;
+    const trabalhos = multi ? await tccMod.trabalhosParaTurno(userId, ac.cartolinaScopeId, ac.trabalhoAbertoId) : null;
+    if (trabalhos?.total) hctx.trabalhos = { total: trabalhos.total, kind: trabalhos.kind };
+    const tccBlock = multi ? trabalhos!.bloco : await tccMod.tccContextoParaTurno(userId, ac.cartolinaScopeId);
     // Árvore de habilidades: posição do aluno no tópico + guardrail pedagógico. Best-effort.
     const skillTopic = typeof ac.skillTopic === "string" && ac.skillTopic.trim() ? String(ac.skillTopic).trim() : null;
     const skillNodeId = typeof ac.skillNodeId === "string" && ac.skillNodeId.trim() ? String(ac.skillNodeId).trim() : null;
@@ -110,11 +115,11 @@ export async function runChatTurn(
       },
     });
     const { answer, state } = await runTrajectoryTraced(prompt, hctx, deps);
-    const out = resolveHarnessOutput(state, answer, surface, prompt);
+    const out = resolveHarnessOutput(state, answer, surface, prompt, { trabalhoNoEditor: multi });
     // TCC cross-sala: "crie um TCC sobre X" cria o TCC da conversa; nos turnos seguintes
     // `work.sections` vira operação por seção. AGUARDADO (é só banco, sem modelo) porque o cliente
     // precisa do workId pra abrir a aba — e best-effort: null nunca derruba o turno.
-    const tcc = await tccMod.tccDoTurno({ userId, scopeId: ac.cartolinaScopeId, surface, intent: state.intent, kind: state.kind, prompt, answer });
+    const tcc = await tccMod.tccDoTurno({ userId, scopeId: ac.cartolinaScopeId, surface, intent: state.intent, kind: state.kind, prompt, answer, multi, abertoId: ac.trabalhoAbertoId });
     // O texto das seções mora na ABA do TCC (e a Aura relê as seções pela bússola do TCC): a bolha
     // do chat leva só o núcleo + o aviso `tcc`, sem repetir o documento.
     if (tcc && out.mode === "structured") out.answer = { ...out.answer, work: undefined, tcc };

@@ -21,6 +21,9 @@ import {
   type WorkKind,
 } from "@/lib/agent/contracts";
 
+/** O que o turno sabe dos trabalhos já escritos na conversa (chat único; runChatTurn preenche). */
+type CtxRoteador = AgentContext & { trabalhos?: { total: number; kind?: WorkKind } };
+
 export type RouterResult = {
   intent: IntentId;
   mode: Mode;
@@ -36,7 +39,11 @@ const norm = (s: string) =>
 
 /** verbos de geração ("gere/cria/escreva um…") — palavra inteira p/ não casar substring. */
 const GEN_VERB_RE =
-  /(^|\s)(gere|gerar|gera|crie|criar|cria|faca|fazer|faz|monte|montar|produza|produzir|escreva|escrever|redija|redigir|elabore|elaborar|desenvolva|desenvolver|quero (?:um|uma)|preciso de (?:um|uma))(\s|$)/;
+  /(^|\s)(gere|gerar|gera|crie|criar|cria|faca|fazer|faz|monte|montar|produza|produzir|escreva|escrever|redija|redigir|elabore|elaborar|desenvolva|desenvolver|quero (?:um|uma)|preciso de (?:um|uma)|write|draft)(\s|$)/;
+
+/** "agora outro sobre Y" / "mais um sobre Z" — com trabalho já escrito na conversa, é pedido de OUTRO trabalho. */
+const OUTRO_TRABALHO_RE = /(^|\s)(outr[oa]|mais uma?|uma? nov[oa]|another one|one more)(\s+\w+)?\s+(sobre|acerca|a respeito|on|about)\s+\S/;
+const pedeOutroTrabalho = (t: string, ctx: CtxRoteador) => (ctx.trabalhos?.total ?? 0) > 0 && OUTRO_TRABALHO_RE.test(t);
 
 /** saudações / small talk — palavra inteira (evita "coisa"→"oi"). */
 const GREETING_RE =
@@ -88,7 +95,7 @@ function modeFor(intent: IntentId, t: string): Mode {
  * Classificação SEM rede — fallback determinístico e testável (o gate do PR02).
  * Precedência: criação forte → busca/revisão → geração genérica → explicação → curto → default.
  */
-export function classifyHeuristic(objective: string, ctx: AgentContext): RouterResult {
+export function classifyHeuristic(objective: string, ctx: CtxRoteador): RouterResult {
   const academicMode = academicModeForSurface(ctx.activeTab);
   const t = norm(objective);
   const genVerb = GEN_VERB_RE.test(t);
@@ -108,6 +115,8 @@ export function classifyHeuristic(objective: string, ctx: AgentContext): RouterR
   if (pedeGraficoMatematico(objective)) return decide("explicar_conceito");
   // 1) trabalho acadêmico completo — "escreva um artigo sobre X"
   if (genVerb && has(t, WORK_NOUNS)) return decide("criar_trabalho", workKindFrom(t) ?? "artigo");
+  // 1.1) mais um trabalho na mesma conversa — "agora outro sobre Y" (o tipo é o do último, se o texto não diz)
+  if (pedeOutroTrabalho(t, ctx)) return decide("criar_trabalho", workKindFrom(t) ?? ctx.trabalhos?.kind ?? "artigo");
   // 2) artefato de estudo — "crie um mapa mental sobre X"
   if (genVerb && has(t, STUDIO_NOUNS)) return decide("gerar_artefato");
   // 3) fontes / bibliografia
@@ -135,7 +144,7 @@ const SYSTEM = [
   "- duvida_rapida: pergunta objetiva e curta.",
   "- explicar_conceito: pedir explicação / entendimento de um tema — inclui 'quero aprender/entender X', 'como funciona X' e 'faz engenharia reversa de X'.",
   "- gerar_artefato: pedir artefato de estudo (mapa mental, diagrama, esquema, fluxograma, flashcards, resumo, timeline, podcast, vídeo, quiz) — e também pedir uma AULA ('me dá uma aula sobre X', 'explica a fundo'),",
-  "- criar_trabalho: pedir trabalho acadêmico completo (artigo, TCC, monografia, relatório, redação).",
+  "- criar_trabalho: pedir trabalho acadêmico completo (artigo, TCC, monografia, relatório, redação) — inclusive MAIS UM quando a conversa já tem trabalho ('agora outro sobre Y', 'mais um sobre Z').",
   "- pesquisar_fontes: pedir fontes / referências / bibliografia / papers.",
   "- revisar: pedir revisão / crítica / correção de algo do usuário.",
   "- buscar_livro: pedir um LIVRO específico — achar, link, PDF, baixar, onde ler ('me manda o pdf do livro X').",
@@ -146,7 +155,7 @@ const SYSTEM = [
  * classify (§11.2): 1 chamada Flash barata (JSON forçado) com heurística de fallback.
  * `academicMode` vem SEMPRE da sala (§8.8), nunca do modelo.
  */
-export async function classify(objective: string, ctx: AgentContext): Promise<RouterResult> {
+export async function classify(objective: string, ctx: CtxRoteador): Promise<RouterResult> {
   const fallback = classifyHeuristic(objective, ctx);
   const text = (objective || "").trim();
   if (!text) return fallback;
@@ -155,17 +164,19 @@ export async function classify(objective: string, ctx: AgentContext): Promise<Ro
     const { geminiJson } = await import("@/lib/scholar/gemini");
     const out = await geminiJson<{ intent?: string; kind?: string }>(
       SYSTEM,
-      `Sala="${ctx.activeTab ?? "?"}". Pedido:\n${text}`,
+      `Sala="${ctx.activeTab ?? "?"}".${ctx.trabalhos?.total ? ` A conversa já tem ${ctx.trabalhos.total} trabalho(s) escrito(s) (último: ${ctx.trabalhos.kind ?? "artigo"}).` : ""} Pedido:\n${text}`,
       { temperature: 0, timeoutMs: 8000 },
     );
     const cand = out?.intent;
     // Pedido explícito de aula manda mais que o palpite do modelo (que às vezes lê "aula" como trabalho escrito).
     // Gráfico de função/geometria manda mais que o palpite do modelo (que lê "gráfico" como artefato de imagem).
-    const intent: IntentId = pedeAula(norm(text)) ? "gerar_artefato" : pedeLivro(text) ? "buscar_livro" : pedeGraficoMatematico(text) ? "explicar_conceito" : isIntentId(cand) ? cand : fallback.intent;
     const nt = norm(text);
+    // "agora outro sobre Y" com trabalho na conversa manda mais que o palpite (o modelo lê como conversa).
+    const outro = pedeOutroTrabalho(nt, ctx);
+    const intent: IntentId = pedeAula(norm(text)) ? "gerar_artefato" : pedeLivro(text) ? "buscar_livro" : pedeGraficoMatematico(text) ? "explicar_conceito" : outro ? "criar_trabalho" : isIntentId(cand) ? cand : fallback.intent;
     const kind =
       intent === "criar_trabalho"
-        ? normalizeKind(out?.kind) ?? workKindFrom(nt) ?? "artigo"
+        ? normalizeKind(out?.kind) ?? workKindFrom(nt) ?? (outro ? ctx.trabalhos?.kind : undefined) ?? "artigo"
         : undefined;
     return { intent, mode: modeFor(intent, nt), academicMode: academicModeForSurface(ctx.activeTab), kind };
   } catch {

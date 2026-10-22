@@ -97,6 +97,15 @@ export function novasSecoes(itens: { titulo: string; corpo?: string }[]): Secao[
 
 /** Esqueleto ABNT de TCC — os mesmos títulos do `ABNT_TEMPLATE` do editor da Sala de Pesquisa. */
 export const ESQUELETO_TCC = ["INTRODUÇÃO", "REFERENCIAL TEÓRICO", "METODOLOGIA", "RESULTADOS E DISCUSSÃO", "CONCLUSÃO", "REFERÊNCIAS"];
+export const ESQUELETO_ARTIGO = ["RESUMO", "INTRODUÇÃO", "REFERENCIAL TEÓRICO", "METODOLOGIA", "RESULTADOS E DISCUSSÃO", "CONSIDERAÇÕES FINAIS", "REFERÊNCIAS"];
+export const ESQUELETO_RELATORIO = ["INTRODUÇÃO", "DESENVOLVIMENTO", "RESULTADOS", "CONCLUSÃO", "REFERÊNCIAS"];
+
+/** O esqueleto ABNT pelo tipo do trabalho ("TCC" | "Artigo" | "Relatório"). */
+export function esqueletoDe(workType: string | null | undefined): string[] {
+  if (workType === "TCC") return ESQUELETO_TCC;
+  if (workType === "Relatório") return ESQUELETO_RELATORIO;
+  return ESQUELETO_ARTIGO;
+}
 
 // ───────────────────────────── markdown ⇄ seções ─────────────────────────────
 

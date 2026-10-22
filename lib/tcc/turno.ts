@@ -13,12 +13,17 @@
  */
 import type { IntentId, StructuredAnswer, WorkKind } from "@/lib/agent/contracts";
 import { sanitizeScopeId } from "@/lib/cartolina/route-auth";
-import { aplicarNoTcc, criarTcc, findTccDoEscopo, tccCrossOn, type TccView } from "@/lib/tcc/store";
-import { ESQUELETO_TCC, opsDeWork, palavras } from "@/lib/tcc/secoes";
+import { aplicarNoTcc, criarTcc, findTccDoEscopo, listarTrabalhosDoEscopo, tccCrossOn, type TccView } from "@/lib/tcc/store";
+import { ESQUELETO_TCC, chaveTitulo, esqueletoDe, opsDeWork, palavras } from "@/lib/tcc/secoes";
+import { researchWorkType } from "@/lib/agent/tools";
 import { cartolinaMemoriaOn, createBoard, findOwnBoard, patchBoard } from "@/lib/cartolina/store";
 import { fundirNoBoard } from "@/lib/cartolina/fromStructured";
 
-export type TccTurno = { workId: string; titulo: string; criado: boolean; alteradas: number; gerando?: boolean };
+export type TccTurno = {
+  workId: string; titulo: string; criado: boolean; alteradas: number; gerando?: boolean;
+  /** chat único: "TCC" | "Artigo" | "Relatório" — o rótulo da pasta do trabalho no topo do chat */
+  tipo?: string;
+};
 
 const MAX_CONTEXTO = 1200;
 
@@ -36,6 +41,51 @@ export function ehPedidoDeTcc(intent: IntentId | undefined, kind: WorkKind | und
   if (kind === "tcc") return true;
   const t = String(prompt || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
   return /\btcc\b|monografia|trabalho de conclusao/.test(t);
+}
+
+const semAcento = (s: string) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+/** CHAT ÚNICO: qualquer trabalho escrito (artigo, TCC, relatório, pesquisa) — aula é artefato, não trabalho. */
+export function ehPedidoDeTrabalho(intent: IntentId | undefined, kind: WorkKind | undefined): boolean {
+  return intent === "criar_trabalho" && kind !== "aula";
+}
+
+/** "outro / mais um / um novo … sobre Y" — pede um trabalho a MAIS, não mexer no que está aberto. */
+const OUTRO_RE = /(^|\s)(outr[oa]|mais uma?|uma? nov[oa]|segund[oa]|another|new)(\s|$)/;
+/** fala de uma parte do trabalho aberto (ou de mexer nele) — é edição, não trabalho novo. */
+const PARTE_RE = /(introducao|metodologia|conclus|consideracoes finais|resumo|abstract|referencia|referencial|resultado|discussao|justificativa|objetivo|secao|capitulo|paragrafo|continu|termin|complet|revis|reescrev|melhor|ajust|expand|aument|encurt|corrij)/;
+const TEMA_RE = /\b(sobre|acerca de|a respeito de|com o tema|tema:?|about|on)\s+\S/;
+
+/**
+ * Num pedido de trabalho com um trabalho já aberto na conversa: é um trabalho NOVO ou é pra mexer no
+ * aberto? Sem trabalho → novo. "outro/mais um sobre Y" → novo. Fala de seção/revisão → edição.
+ * Senão, tema diferente do aberto → novo; mesmo tema → edição (o "escreva o artigo" de novo).
+ */
+export function pedeNovoTrabalho(prompt: string, aberto: Pick<TccView, "titulo"> | null): boolean {
+  if (!aberto) return true;
+  const t = semAcento(prompt);
+  if (OUTRO_RE.test(t) && (TEMA_RE.test(t) || /(artigo|paper|tcc|relatorio|trabalho|pesquisa|monografia|ensaio)/.test(t))) return true;
+  if (PARTE_RE.test(t)) return false;
+  if (!TEMA_RE.test(t)) return false;
+  return chaveTitulo(temaDoPedido(prompt)) !== chaveTitulo(aberto.titulo);
+}
+
+/** O bloco do CHAT ÚNICO: todos os trabalhos da conversa, com o que está aberto no editor marcado. */
+export function contextoDosTrabalhos(lista: TccView[], abertoId?: string | null): string {
+  if (!lista.length) return "";
+  const aberto = lista.find((w) => w.id === abertoId) ?? lista[0];
+  const linhas = lista.map((w, i) =>
+    `${i + 1}) "${w.titulo}" (${w.workType || "Trabalho"}, ${w.secoes.length} seções, ${w.secoes.reduce((n, s) => n + palavras(s.corpo), 0)} palavras)${w.id === aberto.id ? " ← ABERTO NO EDITOR" : ""}`);
+  const bloco = [
+    `TRABALHOS ESCRITOS NESTA CONVERSA (o aluno os vê no editor, cada um numa pasta no topo do chat):`,
+    ...linhas,
+    `Seções do aberto ("${aberto.titulo}"): ${aberto.secoes.map((s) => s.titulo).join(" · ") || "(nenhuma)"}.`,
+    "Pedido para escrever/continuar/mudar o trabalho ABERTO: devolva `work.sections` só com as seções que mudam",
+    "(MESMO título substitui a seção; título novo vira seção nova), corpo completo, rigor acadêmico.",
+    "Pedido de um trabalho NOVO ('agora outro sobre Y', 'um artigo sobre Z'): escreva-o INTEIRO em `work.sections`",
+    "— ele vira um documento NOVO (os anteriores ficam como estão). Conversa que não é sobre trabalho: sem `work`.",
+  ].join("\n");
+  return bloco.length > MAX_CONTEXTO * 2 ? bloco.slice(0, MAX_CONTEXTO * 2 - 1) + "…" : bloco;
 }
 
 /** O bloco que a Aura lê quando a conversa já tem TCC ("" se desligado / sem TCC). */
@@ -61,12 +111,34 @@ export async function tccContextoParaTurno(userId: string | null, scopeId: unkno
   } catch { return ""; }
 }
 
+/**
+ * CHAT ÚNICO: o bloco de TODOS os trabalhos da conversa + o resumo que o roteador usa ("agora outro
+ * sobre Y" só é pedido de trabalho se já existe um). Best-effort: vazio em qualquer falha.
+ */
+export async function trabalhosParaTurno(userId: string | null, scopeId: unknown, abertoId?: unknown): Promise<{ bloco: string; total: number; kind?: WorkKind }> {
+  const scope = sanitizeScopeId(scopeId);
+  if (!tccCrossOn() || !userId || !scope) return { bloco: "", total: 0 };
+  try {
+    const lista = await listarTrabalhosDoEscopo(userId, scope);
+    if (!lista.length) return { bloco: "", total: 0 };
+    const aberto = lista.find((w) => w.id === abertoId) ?? lista[0];
+    return { bloco: contextoDosTrabalhos(lista, aberto.id), total: lista.length, kind: kindDoTipo(aberto.workType) };
+  } catch { return { bloco: "", total: 0 }; }
+}
+
+const kindDoTipo = (t: string | null): WorkKind => (t === "TCC" ? "tcc" : t === "Relatório" ? "relatorio" : "artigo");
+
 export async function tccDoTurno(input: {
   userId: string | null; scopeId: unknown; surface?: string | null; intent?: IntentId; kind?: WorkKind;
   prompt: string; answer: StructuredAnswer;
   /** dispara a geração do esqueleto (injetável pra teste; padrão = lib/tcc/gerar em background) */
   gerar?: (workId: string, userId: string, topic: string) => void;
+  /** CHAT ÚNICO: vários trabalhos por conversa (de qualquer tipo), inclusive no modo pesquisa */
+  multi?: boolean;
+  /** o trabalho aberto no editor (é nele que "continue a metodologia" mexe); ausente = o mais recente */
+  abertoId?: unknown;
 }): Promise<TccTurno | null> {
+  if (input.multi) return trabalhoDoTurno(input);
   const scope = sanitizeScopeId(input.scopeId);
   // A Sala de Pesquisa não escreve por aqui: lá tudo nasce como sugestão (POST /api/tcc/:id/revisar).
   if (!tccCrossOn() || !input.userId || !scope || input.surface === "pesquisa") return null;
@@ -109,6 +181,55 @@ export async function tccDoTurno(input: {
   }
 }
 
+const disparoPadrao = (id: string, uid: string, topic: string) => {
+  void import("@/lib/tcc/gerar").then((m) => m.gerarTccEmBackground(id, uid, topic)).catch(() => {});
+};
+
+/** As seções que o modelo escreveu (title/body), sem as vazias. */
+const secoesDoModelo = (sections: unknown) => (Array.isArray(sections) ? sections : [])
+  .map((s: any) => ({ titulo: String(s?.title ?? s?.titulo ?? ""), corpo: String(s?.body ?? s?.corpo ?? "") }))
+  .filter((s) => s.titulo.trim() && s.corpo.trim());
+
+/**
+ * CHAT ÚNICO — VÁRIOS trabalhos por conversa. Um pedido de trabalho NOVO ("escreva um artigo sobre X",
+ * "agora outro sobre Y") cria mais um documento; o resto (`work.sections` sem pedido novo) edita o
+ * ABERTO no editor (ou o mais recente). Vale nos dois modos do chat (o modo pesquisa só põe rigor).
+ */
+async function trabalhoDoTurno(input: Parameters<typeof tccDoTurno>[0]): Promise<TccTurno | null> {
+  const scope = sanitizeScopeId(input.scopeId);
+  if (!tccCrossOn() || !input.userId || !scope) return null;
+  try {
+    const sections = input.answer.work?.sections;
+    const lista = await listarTrabalhosDoEscopo(input.userId, scope);
+    const aberto = lista.find((w) => w.id === input.abertoId) ?? lista[0] ?? null;
+
+    if (ehPedidoDeTrabalho(input.intent, input.kind) && pedeNovoTrabalho(input.prompt, aberto)) {
+      const tipo = researchWorkType(input.kind ?? input.answer.work?.kind ?? "artigo");
+      const titulo = temaDoPedido(input.prompt);
+      const doModelo = secoesDoModelo(sections);
+      const gerando = doModelo.length === 0;
+      const t = await criarTcc({
+        userId: input.userId, scopeId: scope, titulo, origem: "estudos", workType: tipo,
+        secoes: gerando ? esqueletoDe(tipo).map((titulo) => ({ titulo })) : doModelo,
+        status: gerando ? "gerando" : "pronto",
+      });
+      void fixarCardTcc(input.userId, scope, resumoDoCard(t), tipo);
+      if (gerando) (input.gerar ?? disparoPadrao)(t.id, input.userId, titulo);
+      return { workId: t.id, titulo: t.titulo, criado: true, alteradas: t.secoes.filter((s) => s.corpo.trim()).length, gerando, tipo };
+    }
+
+    if (!aberto || !Array.isArray(sections) || !sections.length) return null;
+    const r = await aplicarNoTcc(aberto.id, input.userId, (t) => opsDeWork(t.secoes, sections), "estudos");
+    if (!r.ok || !r.efeitos.length) return null;
+    const tipo = aberto.workType || "TCC";
+    void fixarCardTcc(input.userId, scope, resumoDoCard(r.tcc), tipo);
+    return { workId: aberto.id, titulo: r.tcc.titulo, criado: false, alteradas: r.efeitos.length, tipo };
+  } catch (e: any) {
+    console.warn("[tcc] trabalhoDoTurno falhou:", e?.message ?? e); // o trabalho é opcional; a resposta segue
+    return null;
+  }
+}
+
 const resumoDoCard = (t: TccView) => ({
   workId: t.id, titulo: t.titulo, secoes: t.secoes.length,
   palavras: t.secoes.reduce((n, s) => n + palavras(s.corpo), 0),
@@ -121,11 +242,11 @@ export const cardIdDoTcc = (workId: string) => `tcc:${workId}`;
  * O card "TCC — em construção" na cartolina da conversa (abre a aba do TCC). Best-effort e só com
  * a cartolina ligada (CARTOLINA_MEMORIA): sem cartolina, o TCC vive só na aba.
  */
-export async function fixarCardTcc(userId: string, scopeId: string, t: { workId: string; titulo: string; secoes?: number; palavras?: number }): Promise<void> {
+export async function fixarCardTcc(userId: string, scopeId: string, t: { workId: string; titulo: string; secoes?: number; palavras?: number }, tipo = "TCC"): Promise<void> {
   if (!cartolinaMemoriaOn()) return;
   try {
     const card = {
-      id: cardIdDoTcc(t.workId), tipo: "nota" as const, titulo: "TCC — em construção",
+      id: cardIdDoTcc(t.workId), tipo: "nota" as const, titulo: `${tipo} — em construção`,
       corpo: `${t.titulo}${t.secoes ? ` · ${t.secoes} seções` : ""}${t.palavras ? ` · ${t.palavras} palavras` : ""}`,
     };
     const board = await findOwnBoard(userId, "estudos", scopeId);

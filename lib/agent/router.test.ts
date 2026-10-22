@@ -109,3 +109,19 @@ describe("router · isQuickPrompt", () => {
     expect(isQuickPrompt("   ")).toBe(false);
   });
 });
+
+describe("router · chat único: mais um trabalho na mesma conversa", () => {
+  const comTrabalho = { activeTab: "pesquisa", trabalhos: { total: 1, kind: "tcc" as const } } as any;
+  it("'agora outro sobre Y' com trabalho na conversa = criar_trabalho do tipo do último", () => {
+    expect(classifyHeuristic("agora outro sobre a mitose", comTrabalho)).toMatchObject({ intent: "criar_trabalho", kind: "tcc", academicMode: "enforced" });
+    expect(classifyHeuristic("mais um sobre ética na IA", comTrabalho).intent).toBe("criar_trabalho");
+    expect(classifyHeuristic("now another one on black holes", comTrabalho).intent).toBe("criar_trabalho");
+    expect(classifyHeuristic("agora outro artigo sobre redes neurais", comTrabalho)).toMatchObject({ intent: "criar_trabalho", kind: "artigo" });
+  });
+  it("sem trabalho na conversa, 'outro sobre Y' não vira trabalho", () => {
+    expect(classifyHeuristic("agora outro sobre a mitose", { activeTab: "sala-de-estudos" }).intent).not.toBe("criar_trabalho");
+  });
+  it("'write a paper on X' (inglês) = criar_trabalho", () => {
+    expect(classifyHeuristic("write a paper on photosynthesis", { activeTab: "pesquisa" })).toMatchObject({ intent: "criar_trabalho", kind: "artigo" });
+  });
+});

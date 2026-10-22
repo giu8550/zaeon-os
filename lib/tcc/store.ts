@@ -15,7 +15,9 @@ import {
   secoesParaMarkdown, chaveTitulo, rebasearOps, type Efeito, type OpSecao, type Origem, type Secao,
 } from "@/lib/tcc/secoes";
 
-export const tccCrossOn = () => process.env.TCC_CROSS === "1";
+/** Liga as rotas/ponte do TCC. O CHAT ÚNICO (CHAT_UNICO=1) também liga: lá o modo pesquisa escreve os
+ *  trabalhos (vários por conversa) no editor ao lado da conversa — é o mesmo motor de seções. */
+export const tccCrossOn = () => process.env.TCC_CROSS === "1" || process.env.CHAT_UNICO === "1";
 
 export type TccStatus = "gerando" | "pronto" | "erro";
 export type FonteVerificada = { abnt: string; titulo?: string; url?: string; doi?: string };
@@ -98,6 +100,19 @@ export async function findTccDoEscopo(userId: string, scopeId: string): Promise<
   return row && Array.isArray(row.secoes) ? view(row, "dono") : null;
 }
 
+/**
+ * TODOS os trabalhos do dono naquela conversa (o chat único escreve vários: "um artigo sobre X",
+ * "agora outro sobre Y"), do mais recente pro mais antigo. Só os que têm seções (motor do TCC).
+ */
+export async function listarTrabalhosDoEscopo(userId: string, scopeId: string, limite = 12): Promise<TccView[]> {
+  const rows = await prisma.researchWork.findMany({
+    where: { userId, scopeId },
+    orderBy: { createdAt: "desc" }, // a ordem em que nasceram na conversa (editar o antigo não o promove)
+    take: limite,
+  });
+  return rows.filter((r: any) => Array.isArray(r.secoes)).map((r: any) => view(r, "dono"));
+}
+
 /** Grava as linhas de histórico de uma aplicação (best-effort em lote). */
 async function gravarRevisoes(workId: string, autorId: string, origem: Origem, efeitos: Efeito[], extra?: { op?: string; nota?: string }) {
   if (!efeitos.length) return;
@@ -113,12 +128,14 @@ async function gravarRevisoes(workId: string, autorId: string, origem: Origem, e
 export async function criarTcc(input: {
   userId: string; scopeId: string | null; titulo: string; secoes: { titulo: string; corpo?: string }[];
   origem: Origem; status?: TccStatus;
+  /** "TCC" (padrão) | "Artigo" | "Relatório" — o tipo que o editor mostra e o export ABNT recebe. */
+  workType?: string;
 }): Promise<TccView> {
   const secoes = novasSecoes(input.secoes);
   const row = await prisma.researchWork.create({
     data: {
       userId: input.userId, scopeId: input.scopeId, title: input.titulo.slice(0, 200) || "TCC",
-      workType: "TCC", secoes: secoes as any, content: secoesParaMarkdown(secoes),
+      workType: input.workType || "TCC", secoes: secoes as any, content: secoesParaMarkdown(secoes),
       tccStatus: input.status ?? "pronto",
     },
   });
