@@ -120,9 +120,26 @@ function primeiraCor(cores: Record<string, string | Record<string, string>>, cha
 }
 
 /**
- * Pilha de fontes segura para CSS a partir do `fontFamily` do DESIGN.md.
- * Anti-marca: família cujo nome contém a marca (ex.: "Linear Display") é descartada — o nome
- * da marca nunca pode chegar na página do aluno.
+ * Famílias que carregam numa página estática sem os arquivos da marca: Google Fonts (a página
+ * liga via <link>) e fontes de sistema comuns. Qualquer outra (proprietária) é descartada.
+ */
+export const FONTES_ABERTAS = new Set(
+  [
+    "Inter", "Open Sans", "IBM Plex Sans", "IBM Plex Mono", "DM Sans", "Rubik", "Geist", "Geist Mono", "Roboto", "Roboto Mono",
+    "JetBrains Mono", "Titillium Web", "Poppins", "Montserrat", "Lato", "Manrope", "Space Grotesk", "Space Mono", "Playfair Display",
+    "Merriweather", "Source Sans 3", "Work Sans", "Nunito", "Outfit", "Sora", "Plus Jakarta Sans", "Lora", "Fraunces", "DM Serif Display",
+    "Fira Sans", "Fira Code", "Instrument Serif", "Bricolage Grotesque",
+    "Arial", "Helvetica", "Times New Roman", "Georgia", "Verdana", "Courier New",
+  ].map((f) => f.toLowerCase()),
+);
+
+/** "Inter Variable" / "Inter VF" → "inter". */
+const baseDaFamilia = (f: string) => f.replace(/\s+(variable|vf)$/i, "").trim().toLowerCase();
+
+/**
+ * Pilha de fontes segura para CSS a partir do `fontFamily` do DESIGN.md. Só passa família da
+ * lista aberta. Anti-marca: também descarta família cujo nome (minúsculo, sem espaços) contém
+ * qualquer palavra da marca com 3+ letras ("BMWTypeNextLatin" com marca "Bmw M").
  */
 function pilhaDeFonte(bruto: string | undefined, marca?: string): string | null {
   if (!bruto) return null;
@@ -130,11 +147,15 @@ function pilhaDeFonte(bruto: string | undefined, marca?: string): string | null 
     .split(",")
     .map((f) => f.trim().replace(/^["']|["']$/g, ""))
     .filter((f) => f && /^[\w\s.-]+$/.test(f));
-  const m = marca?.trim().toLowerCase();
-  const genericas = new Set(["system-ui", "sans-serif", "serif", "monospace", "ui-sans-serif", "ui-serif", "ui-monospace"]);
-  const boa = familias.find((f) => !genericas.has(f.toLowerCase()) && !(m && f.toLowerCase().includes(m)));
+  const palavras = (marca ?? "").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3);
+  const boa = familias.find((f) => {
+    const base = baseDaFamilia(f);
+    if (!FONTES_ABERTAS.has(base)) return false;
+    const colado = base.replace(/\s+/g, "");
+    return !palavras.some((w) => colado.includes(w));
+  });
   if (!boa) return null;
-  return `"${boa}", ${PILHA_SISTEMA}`;
+  return `"${boa.replace(/\s+(variable|vf)$/i, "")}", ${PILHA_SISTEMA}`;
 }
 
 function aPartirDoFrontmatter(sec: Secoes, marca?: string): Parcial {

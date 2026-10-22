@@ -46,8 +46,8 @@
         "borda": "#dddddd"
       },
       "fontes": {
-        "titulo": "\"Circular\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Circular\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "\"Roboto\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "14px",
       "espaco": "12px",
@@ -75,8 +75,8 @@
         "borda": "#dddddd"
       },
       "fontes": {
-        "titulo": "\"Haas Groot Disp\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Haas\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "10px",
       "espaco": "16px",
@@ -130,8 +130,8 @@
         "borda": "#e0e0e0"
       },
       "fontes": {
-        "titulo": "\"SF Pro Display\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"SF Pro Text\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "11px",
       "espaco": "17px",
@@ -188,7 +188,7 @@
         "borda": "#e6e6e6"
       },
       "fontes": {
-        "titulo": "\"-apple-system\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "titulo": "\"Roboto\", system-ui, \"Segoe UI\", Roboto, sans-serif",
         "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
@@ -218,8 +218,8 @@
         "borda": "#3c3c3c"
       },
       "fontes": {
-        "titulo": "\"BMWTypeNextLatin\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"BMWTypeNextLatin Light\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "6px",
       "espaco": "16px",
@@ -308,8 +308,8 @@
         "borda": "#e6dfd8"
       },
       "fontes": {
-        "titulo": "\"Copernicus\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"StyreneB\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "16px",
@@ -336,7 +336,7 @@
         "borda": "#e5e5e5"
       },
       "fontes": {
-        "titulo": "\"Plain Black\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
         "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "12px",
@@ -452,8 +452,8 @@
         "borda": "#222222"
       },
       "fontes": {
-        "titulo": "\"abcDiatype\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"abcDiatype\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "20px",
@@ -566,7 +566,7 @@
         "borda": "#e7e5e4"
       },
       "fontes": {
-        "titulo": "\"Waldenburg\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
         "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
@@ -682,8 +682,8 @@
         "borda": "#262626"
       },
       "fontes": {
-        "titulo": "\"GT Walsheim Medium\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Inter Variable\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "10px",
       "espaco": "15px",
@@ -740,8 +740,8 @@
         "borda": "#e8e8e8"
       },
       "fontes": {
-        "titulo": "\"Forma DJR Micro\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Forma DJR Micro\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "4px",
       "espaco": "16px",
@@ -799,8 +799,8 @@
         "borda": "#d3cec6"
       },
       "fontes": {
-        "titulo": "\"Saans\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Saans\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "16px",
@@ -886,8 +886,8 @@
         "borda": "#ffc000"
       },
       "fontes": {
-        "titulo": "\"LamboType\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"LamboType\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "0px",
       "espaco": "16px",
@@ -944,8 +944,8 @@
         "borda": "#1c1c1c"
       },
       "fontes": {
-        "titulo": "\"Camera Plain Variable\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Camera Plain Variable\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "16px",
@@ -973,8 +973,8 @@
         "borda": "#141413"
       },
       "fontes": {
-        "titulo": "\"MarkForMC\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"MarkForMC\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "16px",
@@ -1002,7 +1002,7 @@
       },
       "fontes": {
         "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"arcadia\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "12px",
       "espaco": "16px",
@@ -1029,8 +1029,8 @@
         "borda": "#ced0d4"
       },
       "fontes": {
-        "titulo": "\"Optimistic VF\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Optimistic VF\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "6px",
       "espaco": "12px",
@@ -1118,8 +1118,8 @@
         "borda": "#e0e2e8"
       },
       "fontes": {
-        "titulo": "\"Roobert PRO\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Roobert PRO\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "16px",
@@ -1148,7 +1148,7 @@
         "borda": "#e5e5e5"
       },
       "fontes": {
-        "titulo": "\"PP Editorial Old\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
         "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
@@ -1177,8 +1177,8 @@
         "borda": "#e1e5e8"
       },
       "fontes": {
-        "titulo": "\"Euclid Circular A\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Euclid Circular A\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "16px",
@@ -1207,8 +1207,8 @@
         "borda": "#dfe1e4"
       },
       "fontes": {
-        "titulo": "\"Averta CY\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Averta CY\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "12px",
@@ -1237,8 +1237,8 @@
         "borda": "#ebebec"
       },
       "fontes": {
-        "titulo": "\"Gotham\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Gotham\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "6px",
       "espaco": "16px",
@@ -1265,7 +1265,7 @@
       },
       "fontes": {
         "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Helvetica Now Text\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "24px",
       "espaco": "12px",
@@ -1380,7 +1380,7 @@
         "borda": "#e5e5e5"
       },
       "fontes": {
-        "titulo": "\"SF Pro Rounded\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
         "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
@@ -1410,8 +1410,8 @@
         "borda": "#646262"
       },
       "fontes": {
-        "titulo": "\"Berkeley Mono\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Berkeley Mono\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "4px",
       "espaco": "12px",
@@ -1466,7 +1466,7 @@
       },
       "fontes": {
         "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"AkkuratLL\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "12px",
       "espaco": "16px",
@@ -1494,8 +1494,8 @@
         "borda": "#dadad3"
       },
       "fontes": {
-        "titulo": "\"Pin Sans\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Pin Sans\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "16px",
       "espaco": "12px",
@@ -1553,8 +1553,8 @@
         "borda": "#bfc1b7"
       },
       "fontes": {
-        "titulo": "\"IBM Plex Sans Variable\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"IBM Plex Sans Variable\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "\"IBM Plex Sans\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"IBM Plex Sans\", system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "6px",
       "espaco": "12px",
@@ -1608,8 +1608,8 @@
         "borda": "#f2f2f2"
       },
       "fontes": {
-        "titulo": "\"NouvelR\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"NouvelR\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "4px",
       "espaco": "16px",
@@ -1637,8 +1637,8 @@
         "borda": "#202020"
       },
       "fontes": {
-        "titulo": "\"rb-freigeist-neue\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"basier-square\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "10px",
       "espaco": "12px",
@@ -1665,8 +1665,8 @@
         "borda": "#27272a"
       },
       "fontes": {
-        "titulo": "\"Domaine Display\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"ABC Favorit\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "12px",
@@ -1694,7 +1694,7 @@
         "borda": "#191c1f"
       },
       "fontes": {
-        "titulo": "\"Aeonik Pro\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
         "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "12px",
@@ -1724,8 +1724,8 @@
         "borda": "#27272a"
       },
       "fontes": {
-        "titulo": "\"abcNormal\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"abcNormal\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "16px",
@@ -1754,8 +1754,8 @@
         "borda": "#353535"
       },
       "fontes": {
-        "titulo": "\"waldenburgNormal\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"waldenburgNormal\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "16px",
@@ -1783,7 +1783,7 @@
       },
       "fontes": {
         "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"72 Brand Variable\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "9px",
@@ -1839,8 +1839,8 @@
         "borda": "#1e2c31"
       },
       "fontes": {
-        "titulo": "\"NeueHaasGrotesk Display\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Inter Variable\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "\"Helvetica\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "12px",
@@ -1866,8 +1866,8 @@
         "borda": "#e6e6e6"
       },
       "fontes": {
-        "titulo": "\"Salesforce-Avant-Garde\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Salesforce-Sans\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "12px",
@@ -1896,8 +1896,8 @@
         "borda": "#e5e7eb"
       },
       "fontes": {
-        "titulo": "\"D-DIN-Bold\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"D-DIN\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "\"Arial\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Arial\", system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "16px",
       "espaco": "16px",
@@ -1951,8 +1951,8 @@
         "borda": "#edebe9"
       },
       "fontes": {
-        "titulo": "\"SoDoSans\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"SoDoSans\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "\"Helvetica\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Helvetica\", system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "16px",
@@ -1979,8 +1979,8 @@
         "borda": "#e3e8ee"
       },
       "fontes": {
-        "titulo": "\"sohne-var\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"sohne-var\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "12px",
@@ -2008,8 +2008,8 @@
         "borda": "#dfdfdf"
       },
       "fontes": {
-        "titulo": "\"Circular\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Circular\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "\"Helvetica\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Helvetica\", system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "12px",
@@ -2035,8 +2035,8 @@
         "borda": "#e8e4dd"
       },
       "fontes": {
-        "titulo": "\"Super Sans VF\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Super Sans VF\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "\"Roboto\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Roboto\", system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "12px",
@@ -2065,8 +2065,8 @@
         "borda": "#eeeeee"
       },
       "fontes": {
-        "titulo": "\"Universal Sans Display\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Universal Sans Display\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "4px",
       "espaco": "16px",
@@ -2121,8 +2121,8 @@
         "borda": "#959494"
       },
       "fontes": {
-        "titulo": "\"The Future\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"The Future\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "12px",
@@ -2148,8 +2148,8 @@
         "borda": "#e5e7eb"
       },
       "fontes": {
-        "titulo": "\"Helvetica Neue\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Helvetica Neue\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "\"Arial\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Arial\", system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "12px",
@@ -2204,8 +2204,8 @@
         "borda": "#e5e7eb"
       },
       "fontes": {
-        "titulo": "\"Helvetica Neue\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Helvetica Neue\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "\"Arial\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Arial\", system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "6px",
       "espaco": "12px",
@@ -2291,8 +2291,8 @@
         "borda": "#d8d8d8"
       },
       "fontes": {
-        "titulo": "\"WF Visual Sans Variable\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"WF Visual Sans Variable\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "12px",
@@ -2320,7 +2320,7 @@
       },
       "fontes": {
         "titulo": "\"Times New Roman\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"Apercu\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "corpo": "\"Helvetica\", system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "12px",
@@ -2377,8 +2377,8 @@
         "borda": "#212327"
       },
       "fontes": {
-        "titulo": "\"universalSans\", system-ui, \"Segoe UI\", Roboto, sans-serif",
-        "corpo": "\"universalSans\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "8px",
       "espaco": "12px",
@@ -2404,7 +2404,7 @@
         "borda": "#e5e7eb"
       },
       "fontes": {
-        "titulo": "\"Degular Display\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
         "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
       },
       "raio": "12px",

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { FONTES_ABERTAS } from "./tokens";
 import { carregarIndice, lerDesignMd, candidatosPorDescricao } from "./indice";
 
 describe("carregarIndice / lerDesignMd", () => {
@@ -44,5 +45,28 @@ describe("candidatosPorDescricao", () => {
 
   it("nome da marca na descrição puxa o estilo", () => {
     expect(candidatosPorDescricao("quero algo estilo stripe", ind, 1)[0].id).toBe("stripe");
+  });
+});
+
+describe("anti-marca no índice real", () => {
+  const ind = carregarIndice();
+
+  it("nenhuma palavra (3+ letras) da marca aparece nos tokens de nenhum estilo", () => {
+    for (const e of ind) {
+      const json = JSON.stringify(e.tokens).toLowerCase();
+      for (const w of e.marca.toLowerCase().split(/[^a-z0-9]+/).filter((p) => p.length >= 3)) {
+        expect(json, `${e.id} vaza "${w}"`).not.toContain(w);
+      }
+    }
+  });
+
+  it("toda família de fonte nos tokens está na lista aberta (ou é do sistema)", () => {
+    for (const e of ind) {
+      for (const pilha of Object.values(e.tokens.fontes)) {
+        const primeira = pilha.split(",")[0].trim().replace(/^"|"$/g, "").toLowerCase();
+        const ok = primeira === "system-ui" || FONTES_ABERTAS.has(primeira);
+        expect(ok, `${e.id}: ${primeira}`).toBe(true);
+      }
+    }
   });
 });
