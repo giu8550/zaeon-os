@@ -284,6 +284,20 @@ export async function POST(req: Request) {
         // com PDF/imagem (fileData) seguem pelo caminho legado (multimodal). Responde no
         // MESMO protocolo (datilografia + sentinelas @@STUDIO_ACTION@@/@@RESEARCH_ACTION@@).
         // =================================================================
+        // VÍDEO DE UM PDF ANEXADO ("faz um vídeo desse PDF" — lib/videodoc): o PDF entra na Minha base da pessoa e a
+        // Zaeon prepara o vídeo; a resposta vai no protocolo @@STRUCTURED@@ com o card ▶ (flag VIDEO_DOC).
+        if (stream === true && agentKey === "aura" && fileData && typeof fileData === "string" && ledgerUserId) {
+            const vd = await import("@/lib/videodoc/server");
+            const anexo = await import("@/lib/videodoc/anexo-server");
+            // só PDF de verdade (imagem anexada segue o caminho normal) e só pedido explícito de vídeo
+            if (vd.videoDocOn() && anexo.bytesDoPdf(fileData) && (await import("@/lib/videodoc/pedido")).pedidoDeVideo(String(prompt || ""))) {
+                const scope = agentContext && typeof agentContext === "object" && typeof (agentContext as any).cartolinaScopeId === "string" ? (agentContext as any).cartolinaScopeId as string : null;
+                const v = await anexo.videoDoAnexo({ userId: ledgerUserId, fileData, prompt: String(prompt || ""), scopeId: scope }).catch(() => ({ titulo: "", motivo: "pdf_falhou" }));
+                const { STRUCTURED_SENTINEL } = await import("@/lib/agent/chat-turn-wire");
+                return new Response(STRUCTURED_SENTINEL + JSON.stringify(anexo.respostaDoVideo(v)), { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
+            }
+        }
+
         if (stream === true && agentKey === "aura" && process.env.AURA_HARNESS !== "0" && !fileData) {
             const encoder = new TextEncoder();
             const turnParams = () => ({
