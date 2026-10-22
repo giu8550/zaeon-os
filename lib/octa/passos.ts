@@ -139,6 +139,7 @@ export const textoErroTurno = (codigo: string) => ERROS_TURNO[codigo] ?? "O Octa
 
 const ERROS_PUBLICAR: Record<string, string> = {
   github_reconectar: "Conecte (ou reconecte) seu GitHub para publicar.",
+  github_sem_permissao: "O app Zaeon Code no seu GitHub ainda não pode criar repositórios nem ligar o Pages. Em github.com/settings/installations, abra o Zaeon Code e aceite as permissões novas (Administration e Pages).",
   aviso_publico_pendente: "Aceite o aviso de repositório público para publicar.",
   limite_publicacoes: "Você chegou ao limite de 10 publicações por hoje. Amanhã libera de novo.",
   limite_repos: "Você chegou ao limite de 3 repositórios novos por hoje. Amanhã libera de novo.",

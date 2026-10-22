@@ -104,11 +104,12 @@ export async function createRepo(octokit: AnyOctokit, p: { name: string; isPriva
   } catch (e: any) {
     const status = e?.status;
     if (status === 403 || status === 404) {
-      throw new Error(
+      // status 403 nos dois casos: quem chama (Octa) distingue "falta permissão" de "GitHub fora"
+      throw Object.assign(new Error(
         "O GitHub App não tem permissão para criar repositórios nesta conta. " +
         "Para criar: instale o App numa ORG e dê 'Administration: write', ou use a integração OAuth por usuário. " +
         "Por ora, crie o repo no GitHub e selecione-o aqui.",
-      );
+      ), { status: 403 });
     }
     throw e;
   }

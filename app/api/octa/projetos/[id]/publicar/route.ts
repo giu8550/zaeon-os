@@ -23,6 +23,7 @@ type Ctx = { params: { id: string } };
 const STATUS: Record<Exclude<ErroPublicar, "projeto_inexistente">, number> = {
   aviso_publico_pendente: 409,
   github_reconectar: 409,
+  github_sem_permissao: 409,
   sem_arquivos_publicaveis: 409,
   limite_publicacoes: 429,
   limite_repos: 429,

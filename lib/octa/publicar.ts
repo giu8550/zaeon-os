@@ -35,7 +35,7 @@ const MENSAGEM_PADRAO = "Publicado pelo Octa (Zaeon)";
 const MAX_TENTATIVAS_NOME = 20; // slug, slug-2 … slug-20
 
 export type ErroPublicar =
-  | "github_reconectar" | "limite_publicacoes" | "limite_repos" | "aviso_publico_pendente" | "falha_github"
+  | "github_reconectar" | "github_sem_permissao" | "limite_publicacoes" | "limite_repos" | "aviso_publico_pendente" | "falha_github"
   | "projeto_inexistente" | "sem_arquivos_publicaveis" | "marca_no_conteudo" | "tipo_nao_publicavel";
 
 export type ResultadoPublicar =
@@ -174,9 +174,10 @@ export async function publicarProjeto(
     return { ok: true, repoUrl: `https://github.com/${fullName}`, pagesUrl: pages.url, status: pages.status, ignorados };
   } catch (e) {
     const status = statusHttp(e);
-    // 401 = token revogado/vencido no meio do caminho → o aluno reconecta
-    const erro: ErroPublicar = status === 401 ? "github_reconectar" : "falha_github";
-    if (erro === "falha_github") console.warn("[octa/publicar] falha no GitHub", { status: status ?? null });
+    // 401 = token revogado/vencido no meio do caminho → o aluno reconecta.
+    // 403 = o App instalado na conta dele não tem Administration/Pages (permissões novas não aceitas).
+    const erro: ErroPublicar = status === 401 ? "github_reconectar" : status === 403 ? "github_sem_permissao" : "falha_github";
+    if (erro !== "github_reconectar") console.warn("[octa/publicar] falha no GitHub", { status: status ?? null });
     try { await registrarPublicacao(db, { userId: p.userId, projetoId: projeto.id, ok: false, repoNovo, em: agora }); } catch { /* registro é melhor-esforço */ }
     return { ok: false, erro };
   }
