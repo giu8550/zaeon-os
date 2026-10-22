@@ -11,15 +11,15 @@ describe("conferirProva — o servidor confere o artefato", () => {
     expect(await conferirProva(c({ tipoProva: "link" }), "http://127.0.0.1/x")).toMatchObject({ ok: false });
   });
   it("repo sem push depois de aberto o crítico = recusado (não vale colar repo famoso)", async () => {
-    const r = await conferirProva(c(), "https://github.com/solana-program/token-2022", { repoInfo: async () => ({ nome: "solana-program/token-2022", publico: true, pushedAt: 500 }) });
+    const r = await conferirProva(c(), "https://github.com/solana-program/token-2022", { repoInfo: async () => ({ nome: "solana-program/token-2022", publico: true, pushedAt: 500, criadoEm: 0 }) });
     expect(r).toMatchObject({ ok: false, motivo: expect.stringContaining("depois que o crítico foi aberto") });
   });
   it("repo privado = recusado; inexistente = recusado", async () => {
-    expect(await conferirProva(c(), "https://github.com/a/b", { repoInfo: async () => ({ nome: "a/b", publico: false, pushedAt: 2000 }) })).toMatchObject({ ok: false, motivo: expect.stringContaining("público") });
+    expect(await conferirProva(c(), "https://github.com/a/b", { repoInfo: async () => ({ nome: "a/b", publico: false, pushedAt: 2000, criadoEm: 900 }) })).toMatchObject({ ok: false, motivo: expect.stringContaining("público") });
     expect(await conferirProva(c(), "https://github.com/a/b", { repoInfo: async () => null })).toMatchObject({ ok: false });
   });
   it("repo público com push novo = entrega", async () => {
-    const r = await conferirProva(c(), "https://github.com/voce/privado", { repoInfo: async () => ({ nome: "voce/privado", publico: true, pushedAt: 2000 }), agora: 3000 });
+    const r = await conferirProva(c(), "https://github.com/voce/privado", { repoInfo: async () => ({ nome: "voce/privado", publico: true, pushedAt: 2000, criadoEm: 900 }), agora: 3000 });
     expect(r).toMatchObject({ ok: true, entrega: { url: "https://github.com/voce/privado", em: 3000 } });
   });
   it("link/demo: vale se responde", async () => {
@@ -66,5 +66,40 @@ describe("provarEAvaliar — prova conferida → Zaeon avalia → fase avança",
     const antes = JSON.stringify(linhas[0]!.cards);
     const r = await provarEAvaliar({ id: linha.id, userId: dono, criticoId: "r1", url: "https://github.com/a/b", db, conferir: async () => ({ ok: false, motivo: "não" }) });
     expect(r).toEqual({ ok: false, motivo: "não" }); expect(JSON.stringify(linhas[0]!.cards)).toBe(antes);
+  });
+});
+
+describe("anti-cópia e corrida", () => {
+  const info = (o: Partial<{ publico: boolean; pushedAt: number; criadoEm: number }> = {}) => async () => ({ nome: "x/y", publico: true, pushedAt: 9e12, criadoEm: 9e12, ...o });
+  it("repositório famoso, criado anos antes do estudo, não prova (mesmo com push de hoje)", async () => {
+    const r = await conferirProva(c({ abertoEm: 1.7e12 }), "https://github.com/torvalds/linux", { repoInfo: info({ criadoEm: 1.1e12, pushedAt: 1.8e12 }), inicioEstudo: 1.7e12 });
+    expect(r).toMatchObject({ ok: false, motivo: expect.stringContaining("criado depois") });
+  });
+  it("a mesma URL não prova dois críticos", async () => {
+    const r = await conferirProva(c({ tipoProva: "link" }), "https://demo.example.org/", { vivo: async () => true, usadas: ["https://demo.example.org"] });
+    expect(r).toMatchObject({ ok: false, motivo: expect.stringContaining("já provou") });
+  });
+  it("crítico que sumiu durante a conferência: não diz que provou", async () => {
+    const { bancoFalso } = await import("./__teste__/banco");
+    const { provarEAvaliar } = await import("./provas-server");
+    const { db, linhas } = bancoFalso(); const dono = "d".repeat(24);
+    const linha = await db.cartolina.create({ data: { ownerId: dono, surface: "blueprint", scopeId: "t1", titulo: "X", cards: { ...docVazio("X", 0), fase: 2, criticos: [c()] } as never } });
+    const conferir = async (_k: Critico, url: string) => { (linhas[0]!.cards as { criticos: unknown[] }).criticos = []; return { ok: true as const, entrega: { url, em: 5, detalhe: "" } }; };
+    const r = await provarEAvaliar({ id: linha.id, userId: dono, criticoId: "r1", url: "https://github.com/voce/x", db, conferir });
+    expect(r.ok).toBe(false); expect(r.motivo).toContain("recompôs");
+  });
+  it("avaliação que falhou pode ser pedida de novo; reprovada traz críticos novos", async () => {
+    const { bancoFalso } = await import("./__teste__/banco");
+    const { pedirAvaliacao, provarEAvaliar } = await import("./provas-server");
+    const { db } = bancoFalso(); const dono = "d".repeat(24);
+    const linha = await db.cartolina.create({ data: { ownerId: dono, surface: "blueprint", scopeId: "t1", titulo: "X", cards: { ...docVazio("X", 0), fase: 2, criticos: [c()] } as never } });
+    const conferir = async (_k: Critico, url: string) => ({ ok: true as const, entrega: { url, em: 5, detalhe: "" } });
+    const falha = await provarEAvaliar({ id: linha.id, userId: dono, criticoId: "r1", url: "https://github.com/voce/x", db, conferir, gen: async () => { throw new Error("vertex"); } });
+    expect(falha.motivo).toContain("falhou");
+    const recompor = vi.fn(async () => "composto" as const);
+    const reprova = await pedirAvaliacao({ id: linha.id, userId: dono, db, recompor, gen: async <T,>() => ({ rigor: 20, originalidade: 20, usabilidade: 20, viabilidade: 20, impacto: 20, parecer: "não roda" }) as T });
+    expect(reprova.avaliacao).toMatchObject({ aprovada: false }); expect(reprova.view!.doc.fase).toBe(2);
+    expect(recompor).toHaveBeenCalledWith(expect.objectContaining({ prompt: expect.stringContaining("REPROVOU") }));
+    expect(await pedirAvaliacao({ id: linha.id, userId: dono, db })).toMatchObject({ ok: false });
   });
 });

@@ -41,14 +41,14 @@ export async function buscarRepos(termos: string[], o: { fetch?: FetchLike; toke
 
 const RE_REPO = /^https:\/\/github\.com\/([\w.-]{1,100})\/([\w.-]{1,100})(?:[/?#].*)?$/i;
 /** o repositório de uma prova: existe? é público? quando foi o último push? (null = não é repo do GitHub ou não existe) */
-export async function repoInfo(url: string, o: { fetch?: FetchLike; token?: string } = {}): Promise<{ nome: string; publico: boolean; pushedAt: number } | null> {
+export async function repoInfo(url: string, o: { fetch?: FetchLike; token?: string } = {}): Promise<{ nome: string; publico: boolean; pushedAt: number; criadoEm: number } | null> {
   const m = RE_REPO.exec(url.trim()); if (!m) return null;
   const nome = `${m[1]}/${m[2]!.replace(/\.git$/i, "")}`;
   try {
     const r = await (o.fetch ?? fetch)(`https://api.github.com/repos/${nome}`, { headers: cabecalhos(o.token ?? process.env.GITHUB_TOKEN ?? undefined), signal: AbortSignal.timeout(TIMEOUT_MS) });
     if (!r.ok) return null;
-    const j = (await r.json()) as { full_name?: string; private?: boolean; pushed_at?: string };
-    const pushedAt = Date.parse(j.pushed_at ?? "");
-    return { nome: j.full_name ?? nome, publico: j.private !== true, pushedAt: Number.isFinite(pushedAt) ? pushedAt : 0 };
+    const j = (await r.json()) as { full_name?: string; private?: boolean; pushed_at?: string; created_at?: string };
+    const pushedAt = Date.parse(j.pushed_at ?? ""), criadoEm = Date.parse(j.created_at ?? "");
+    return { nome: j.full_name ?? nome, publico: j.private !== true, pushedAt: Number.isFinite(pushedAt) ? pushedAt : 0, criadoEm: Number.isFinite(criadoEm) ? criadoEm : 0 };
   } catch { return null; }
 }

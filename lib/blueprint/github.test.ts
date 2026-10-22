@@ -35,9 +35,9 @@ describe("repoInfo", () => {
   it("só github.com/<dono>/<repo>", async () => {
     const f = vi.fn(); expect(await repoInfo("https://gitlab.com/a/b", { fetch: f })).toBeNull(); expect(f).not.toHaveBeenCalled();
   });
-  it("lê público e o último push", async () => {
-    const f = vi.fn(async (u: string) => { expect(u).toBe("https://api.github.com/repos/voce/privado"); return resp({ full_name: "voce/privado", private: false, pushed_at: "2026-10-22T10:00:00Z" }); });
-    expect(await repoInfo("https://github.com/voce/privado/tree/main", { fetch: f })).toEqual({ nome: "voce/privado", publico: true, pushedAt: Date.parse("2026-10-22T10:00:00Z") });
+  it("lê público, o último push e a criação", async () => {
+    const f = vi.fn(async (u: string) => { expect(u).toBe("https://api.github.com/repos/voce/privado"); return resp({ full_name: "voce/privado", private: false, pushed_at: "2026-10-22T10:00:00Z", created_at: "2026-10-15T09:00:00Z" }); });
+    expect(await repoInfo("https://github.com/voce/privado/tree/main", { fetch: f })).toEqual({ nome: "voce/privado", publico: true, pushedAt: Date.parse("2026-10-22T10:00:00Z"), criadoEm: Date.parse("2026-10-15T09:00:00Z") });
   });
   it("404 = null", async () => { expect(await repoInfo("https://github.com/x/y", { fetch: async () => resp({}, 404) })).toBeNull(); });
 });

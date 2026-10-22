@@ -20,12 +20,14 @@ export function useBlueprint(inicialId?: string | null) {
   const [atual, setAtual] = useState<BlueprintCliente | null>(null);
   const [recompondo, setRecompondo] = useState(false);
   const idAtual = useRef<string | null>(inicialId ?? null);
-  const ocupado = useRef(0);   // escrita em voo: não sobrescreve o otimista com uma leitura velha
+  const ocupado = useRef<Record<string, number>>({});   // escritas em voo POR blueprint: não sobrescreve o otimista com uma leitura velha
+  const emVoo = (id: string) => (ocupado.current[id] ?? 0) > 0;
+  const voo = (id: string, d: number) => { ocupado.current[id] = (ocupado.current[id] ?? 0) + d; };
 
   const abrir = useCallback(async (id: string) => {
     idAtual.current = id;
     const r = await json<{ blueprint: BlueprintCliente }>(`/api/blueprint/${id}`);
-    if (r?.blueprint && idAtual.current === id && !ocupado.current) setAtual(r.blueprint);
+    if (r?.blueprint && idAtual.current === id && !emVoo(id)) setAtual(r.blueprint);
   }, []);
 
   const recarregar = useCallback(async () => {
@@ -45,13 +47,14 @@ export function useBlueprint(inicialId?: string | null) {
   }, [recarregar]);
 
   const patch = useCallback(async (corpo: unknown, otimista: (d: DocBlueprint) => DocBlueprint) => {
-    const a = atual; if (!a) return;
-    setAtual({ ...a, doc: otimista(a.doc) });
-    ocupado.current++;
-    const r = await json<{ blueprint: BlueprintCliente }>(`/api/blueprint/${a.id}`, { method: "PATCH", body: JSON.stringify(corpo) });
-    ocupado.current--;
-    if (r?.blueprint && idAtual.current === a.id) setAtual(r.blueprint);
-  }, [atual]);
+    const id = idAtual.current; if (!id) return;
+    setAtual((a) => (a && a.id === id ? { ...a, doc: otimista(a.doc) } : a));
+    voo(id, 1);
+    const r = await json<{ blueprint: BlueprintCliente }>(`/api/blueprint/${id}`, { method: "PATCH", body: JSON.stringify(corpo) });
+    voo(id, -1);
+    // com outra escrita ainda em voo, a resposta desta é velha pra ela: mantém o otimista
+    if (r?.blueprint && idAtual.current === id && !emVoo(id)) setAtual(r.blueprint);
+  }, []);
 
   const fixar = useCallback((modulo: string, x: number, y: number) =>
     patch({ fixos: { set: { [modulo]: { x: Math.round(x), y: Math.round(y) } } } }, (d) => ({ ...d, fixos: { ...d.fixos, [modulo]: { x: Math.round(x), y: Math.round(y) } } })), [patch]);
@@ -65,12 +68,14 @@ export function useBlueprint(inicialId?: string | null) {
     if (r?.blueprint && idAtual.current === a.id) setAtual(r.blueprint);
   }, [atual, recompondo]);
 
-  /** a PROVA de um crítico: o servidor confere; a última da fase dispara a avaliação da Zaeon. Devolve o motivo da recusa */
-  const enviarProva = useCallback(async (criticoId: string, url: string): Promise<{ ok: boolean; motivo?: string; avaliacao?: Avaliacao | null }> => {
+  /** a PROVA de um crítico: o servidor confere; a última da fase dispara a avaliação da Zaeon. Devolve o motivo da recusa.
+   *  Sem crítico (null) = "pedir a avaliação de novo" (a anterior falhou) */
+  const enviarProva = useCallback(async (criticoId: string | null, url: string): Promise<{ ok: boolean; motivo?: string; avaliacao?: Avaliacao | null }> => {
     const a = atual; if (!a) return { ok: false };
-    ocupado.current++;
-    const r = await json<{ ok: boolean; motivo?: string; blueprint: BlueprintCliente | null; avaliacao: Avaliacao | null }>(`/api/blueprint/${a.id}/prova`, { method: "POST", body: JSON.stringify({ criticoId, url }) });
-    ocupado.current--;
+    voo(a.id, 1);
+    const corpo = criticoId ? { criticoId, url } : { reavaliar: true };
+    const r = await json<{ ok: boolean; motivo?: string; blueprint: BlueprintCliente | null; avaliacao: Avaliacao | null }>(`/api/blueprint/${a.id}/prova`, { method: "POST", body: JSON.stringify(corpo) });
+    voo(a.id, -1);
     if (!r) return { ok: false, motivo: "não deu pra enviar agora — tente de novo" };
     if (r.blueprint && idAtual.current === a.id) setAtual(r.blueprint);
     if (r.ok) void recarregar();

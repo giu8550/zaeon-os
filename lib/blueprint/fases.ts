@@ -19,6 +19,17 @@ export function prontaPraAvaliar(doc: DocBlueprint): boolean {
   return !doc.aguardandoMentor && daFase.length > 0 && daFase.every((c) => c.status === "provado");
 }
 
+/** pronta E ainda sem veredito válido: nenhuma avaliação desta fase, ou a última reprovou ANTES de uma prova nova
+ *  (a avaliação que falhou por erro do modelo não grava nada — então dá pra pedir de novo) */
+export function precisaAvaliar(doc: DocBlueprint): boolean {
+  if (!prontaPraAvaliar(doc)) return false;
+  const daFase = doc.avaliacoes.filter((a) => a.fase === doc.fase);
+  if (daFase.some((a) => a.aprovada)) return false;
+  const ultima = daFase[daFase.length - 1];
+  const ultimaProva = Math.max(0, ...doc.criticos.filter((c) => c.fase === doc.fase).map((c) => c.entrega?.em ?? 0));
+  return !ultima || ultimaProva > ultima.em;
+}
+
 /** marca o crítico da fase ATUAL como provado com a entrega conferida (idempotente: o primeiro registro vale) */
 export function registrarEntrega(doc: DocBlueprint, criticoId: string, e: Entrega): DocBlueprint {
   const alvo = doc.criticos.find((c) => c.id === criticoId);

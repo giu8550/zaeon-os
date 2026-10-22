@@ -35,7 +35,9 @@ function view(row: any, papel: Papel): BoardView {
 export async function getBoardForUser(id: string, userId: string): Promise<BoardView | null> {
   if (!isObjectId(id)) return null;
   const row = await prisma.cartolina.findUnique({ where: { id } });
-  if (!row) return null;
+  // o BLUEPRINT PRÁTICO (lib/blueprint) também mora em Cartolina, mas o `cards` dele é um documento, não cards: as rotas
+  // genéricas da cartolina (e o coworking por cima delas) não podem lê-lo nem gravá-lo — gravariam `cards: []` por cima
+  if (!row || row.surface === "blueprint") return null;
   let papelMembro: string | null = null;
   if (row.ownerId !== userId) {
     const m = await prisma.cartolinaMembro.findUnique({

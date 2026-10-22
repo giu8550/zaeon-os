@@ -12,7 +12,7 @@
  */
 import { MENTOR_SEED } from "@/lib/agent/mentors";
 import {
-  AREAS, MAX_CRITICOS, NOME_FASE, faseDe, sanitizarCritico, sanitizarDoc, sanitizarParticipante, sanitizarPasso, sanitizarPeca,
+  AREAS, MAX_ABERTOS_POR_FASE, MAX_CRITICOS, NOME_FASE, faseDe, sanitizarCritico, sanitizarDoc, sanitizarParticipante, sanitizarPasso, sanitizarPeca,
   type Area, type Critico, type DocBlueprint, type Participante,
 } from "./tipos";
 
@@ -80,6 +80,7 @@ export function lerPlano(raw: unknown): PlanoComposto | null {
   const criticos = (Array.isArray(o.criticos) ? o.criticos : [])
     .map((c) => sanitizarCritico({ ...(c as object), abertoEm: 0, status: "aberto" }))
     .filter((c): c is Critico => !!c && !vistos.has(c.id) && !!vistos.add(c.id))
+    .filter((c, _i, todos) => todos.filter((k) => k.fase === c.fase).indexOf(c) < MAX_ABERTOS_POR_FASE)
     .slice(0, MAX_CRITICOS)
     .map(({ abertoEm: _a, status: _s, entrega: _e, ...c }) => {
       void _a; void _s; void _e;
@@ -112,7 +113,7 @@ export function mesclarComposicao(doc: DocBlueprint, plano: PlanoComposto, agora
     passos: plano.passos, pecas: plano.pecas, ligacoes: plano.ligacoes, proximos: plano.proximos,
     termosRepo: plano.termosRepo.length ? plano.termosRepo : doc.termosRepo,
     participantes: plano.participantes.length ? plano.participantes : doc.participantes,
-    criticos: [...provados, ...novos].slice(0, MAX_CRITICOS),
+    criticos: [...provados, ...novos.slice(0, MAX_CRITICOS)],
     compostoEm: agora, turnos: doc.turnos + 1,
   };
   if (!proximo.produto) delete proximo.produto;

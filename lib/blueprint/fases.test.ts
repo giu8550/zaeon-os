@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aplicarAvaliacao, aprovada, criticosAbertos, prontaPraAvaliar, registrarEntrega } from "./fases";
+import { aplicarAvaliacao, aprovada, criticosAbertos, precisaAvaliar, prontaPraAvaliar, registrarEntrega } from "./fases";
 import { docVazio, type Critico, type DocBlueprint, type Rubrica } from "./tipos";
 
 const c = (id: string, o: Partial<Critico> = {}): Critico => ({ id, fase: 2, titulo: id, prova: "p", tipoProva: "repo", abertoEm: 0, status: "aberto", ...o });
@@ -33,5 +33,17 @@ describe("fases — só destrava com entrega real + Zaeon", () => {
   });
   it("aprovada na fase 4 → aguardando mentor (fase continua 4)", () => {
     expect(aplicarAvaliacao(doc({ fase: 4 }), { fase: 4, em: 1, nota: nota(80), parecer: "pronto" })).toMatchObject({ fase: 4, aguardandoMentor: true });
+  });
+});
+
+describe("precisaAvaliar — a fase nunca fica presa", () => {
+  const provada = (em: number) => c("r1", { status: "provado", entrega: { ...entrega, em } });
+  it("todas provadas e sem veredito: precisa (ex.: a chamada da Zaeon falhou)", () => {
+    expect(precisaAvaliar(doc({ criticos: [provada(5)] }))).toBe(true);
+  });
+  it("reprovada: só volta a avaliar depois de uma prova nova", () => {
+    const reprovada = { fase: 2 as const, em: 10, nota: nota(30), parecer: "falta", aprovada: false };
+    expect(precisaAvaliar(doc({ criticos: [provada(5)], avaliacoes: [reprovada] }))).toBe(false);
+    expect(precisaAvaliar(doc({ criticos: [provada(5), c("r2", { status: "provado", entrega: { ...entrega, em: 20 } })], avaliacoes: [reprovada] }))).toBe(true);
   });
 });
