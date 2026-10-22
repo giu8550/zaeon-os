@@ -1451,3 +1451,35 @@ model OctaEvalRun {
   @@index([agente, em])
   @@map("octa_eval_runs")
 }
+
+// Projeto do Octa no servidor (landing → GitHub Pages): arquivos do site estático, design escolhido,
+// permissão do agente e o repositório que o Octa criou na conta do aluno (um projeto ↔ um repositório).
+model OctaProjeto {
+  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId              String
+  nome                String
+  slug                String
+  arquivos            Json
+  designId            String?
+  permissao           String   @default("auto") // auto | antes_de_publicar | antes_de_escrever
+  avisoPublicoAceito  Boolean  @default(false)
+  repoFullName        String?
+  repoCriadoPeloOcta  Boolean  @default(false)
+  pagesUrl            String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  @@index([userId])
+  @@map("octa_projetos")
+}
+
+// Uma tentativa de publicação — só as ok:true contam nos limites diários (10 publicações / 3 repositórios novos).
+model OctaPublicacao {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String
+  projetoId String
+  ok        Boolean
+  repoNovo  Boolean
+  em        DateTime @default(now())
+  @@index([userId, em])
+  @@map("octa_publicacoes")
+}
