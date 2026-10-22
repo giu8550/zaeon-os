@@ -66,7 +66,8 @@ export async function runChatTurn(
     // (não soma latência); import lazy pra o load do módulo nunca tocar o pg. O módulo já não
     // rejeita, mas se rejeitar (ou o import falhar) loga e vira null — a base nunca derruba o turno.
     const basePromise = import("@/lib/rag/turno")
-      .then((m) => m.baseParaTurno({ userId, pergunta: prompt }))
+      // + as bases por área (lib/rag/areas): a do mentor ativo e a geral (ENEM, conceitos)
+      .then(async (m) => m.baseParaTurno({ userId, pergunta: prompt, areas: (await import("@/lib/rag/areas")).areasDoTurno(mentor?.slug) }))
       .catch((e) => {
         console.error("[rag/chat] base do turno falhou:", (e as Error)?.message ?? String(e));
         return null;

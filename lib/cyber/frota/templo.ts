@@ -48,7 +48,10 @@ function noCaminho(q: P2): boolean {
 
 /** as RODAS de uma área: sorteia centros (`ponto`) e põe 2–5 lugares em volta, virados pro centro; vale a roda inteira
  *  se todos os lugares estiverem livres (`ok`) */
-function rodas(id: string, no: NoTemplo, n: number, ponto: (r: () => number) => P2, ok: (q: P2) => boolean, sentaChance = 0.55): Spot[] {
+/** a chance de uma roda ser SENTADA estudando (no chão com o tablet) — out/2026, o dono: "ao menos 80% da frota
+ *  estudando constantemente, tem muitos personagens ociosos": as rodas de pé conversando viraram exceção */
+export const SENTA_TEMPLO = 0.9;
+function rodas(id: string, no: NoTemplo, n: number, ponto: (r: () => number) => P2, ok: (q: P2) => boolean, sentaChance = SENTA_TEMPLO): Spot[] {
   const r = acasoDe("templo-rodas", id), out: Spot[] = [], centros: P2[] = [];
   for (let t = 0, feitas = 0; t < n * 14 && feitas < n; t++) {
     const c = ponto(r); if (centros.some((o) => Math.hypot(o.x - c.x, o.z - c.z) < ENTRE_RODAS)) continue;
@@ -71,15 +74,18 @@ function cabine(id: string, e: { x: number; z: number; rot?: number }, no: NoTem
   return { id: `templo-${id}`, ambiente: "lounge", tipo: "cabine", x: w.x, z: w.z, y: w.y, rumo: rumoNaSala(sala, Math.atan2(m.x - q.x, m.z - q.z)), zaeon: true, templo: { ...no, q } };
 }
 
+/** quantas rodas no salão da pirâmide */
+export const SALAO_RODAS = 4;
 let cache: Spot[] | null = null;
 /** todos os lugares da frota no Templo Cósmico (fora o disco do lounge — lib/cyber/frota/lugares) */
 export function spotsDoTemplo(): Spot[] {
   if (cache) return cache;
   const cs = colisoresBase(), out: Spot[] = [];
   const basico = (q: P2) => livreDe(q, cs) && !noCaminho(q);
-  // o SALÃO: em volta da pirâmide — longe da chegada e da boca de saída do buraco negro
+  // o SALÃO: só ALGUMAS rodas, coladas em volta da pirâmide (out/2026, o dono: "lá não é lugar pra ter muito fluxo") —
+  // longe da chegada e da boca de saída do buraco negro
   const salao = plat("salao");
-  out.push(...rodas("salao", { sala: "salao", yRel: salao.h, andar: 0 }, 26, noAnel(SALAO, 15, SALAO.r - 3), (q) => basico(q) && !naPiramide(q, 3) && Math.hypot(q.x - SALAO.x, q.z - SALAO.z) < SALAO.r - 2
+  out.push(...rodas("salao", { sala: "salao", yRel: salao.h, andar: 0 }, SALAO_RODAS, noAnel(SALAO, 15, 22), (q) => basico(q) && !naPiramide(q, 3) && Math.hypot(q.x - SALAO.x, q.z - SALAO.z) < SALAO.r - 2
     && Math.hypot(q.x - CHEGADA_SALAO.x, q.z - CHEGADA_SALAO.z) > 9 && Math.hypot(q.x - BOCA_SAIDA_SALAO.x, q.z - BOCA_SAIDA_SALAO.z) > 8));
   // os LOUNGES ESTUDANTIS: os 3 andares (no de cima e no do meio, fora do átrio e do guarda-corpo dele)
   for (const p of PLATS.filter((x) => x.id === "estudoL" || x.id === "estudoR")) for (let k = 0; k < ANDARES_ESTUDO.n; k++) {
@@ -88,8 +94,8 @@ export function spotsDoTemplo(): Spot[] {
       (q) => basico(q) && livreDe(q, doAndar) && Math.hypot(q.x - p.x, q.z - p.z) > CARACOL.r + 2 && Math.hypot(q.x - p.x, q.z - p.z) < p.r - 2.6));
   }
   // o disco RASTA (em volta da árvore), a CAPELA rasta, o salão de FESTAS e os CASAIS (de dois em dois, no sofá redondo não)
-  const em = (p: PlatTC, r0: number, r1: number, n: number, sentar = 0.55) => out.push(...rodas(p.id, { sala: p.id as SalaTemplo, yRel: p.h, andar: 0 }, n, noAnel(p, r0, r1), (q) => basico(q) && Math.hypot(q.x - p.x, q.z - p.z) < p.r - 2.4, sentar));
-  em(plat("rasta"), 12, RASTA.r - 4, 30); em(plat("capelaRasta"), 6, CAPELA_RASTA.r - 3, 8, 0.7); em(plat("festas"), 5, FESTAS.r - 4, 9, 0.3); em(plat("casais"), 4.6, CASAIS.r - 2.4, 2, 1);
+  const em = (p: PlatTC, r0: number, r1: number, n: number, sentar = SENTA_TEMPLO) => out.push(...rodas(p.id, { sala: p.id as SalaTemplo, yRel: p.h, andar: 0 }, n, noAnel(p, r0, r1), (q) => basico(q) && Math.hypot(q.x - p.x, q.z - p.z) < p.r - 2.4, sentar));
+  em(plat("rasta"), 12, RASTA.r - 4, 30); em(plat("capelaRasta"), 6, CAPELA_RASTA.r - 3, 8); em(plat("festas"), 5, FESTAS.r - 4, 9, 0.6); em(plat("casais"), 4.6, CASAIS.r - 2.4, 2, 1);
   void TEMPLO_RASTA;
   // a TORRE: rodas na BASE (em volta da coluna) e no DECK do topo (fora do cubo, dos pilares e das bocas das cápsulas)
   const fora = (q: P2, y: number) => POCOS_TC.every((po) => (po.de !== y && po.ate !== y) || Math.hypot(q.x - po.x, q.z - po.z) > po.r + 3.5);
@@ -264,6 +270,17 @@ export function pousoPerto(l: LugarNoTemplo | undefined, r: () => number): Lugar
     default: p = l && l.sala !== "salao" ? tenta(noSalaoPara(l.q), y0, "salao") : null;
   }
   return p ?? pousoNoSalao(r);
+}
+/** a altura (acima do pátio) em que a moto CRUZA o Templo de `a` até `b`: acima de tudo que fica no caminho (a torre, as
+ *  cúpulas, as lajes — com folga), e nunca abaixo de 22 m sobre o mais alto dos dois pontos */
+export function cruzeiroNoTemplo(a: P2, b: P2, yA: number, yB: number): number {
+  let topo = Math.max(yA, yB) + 22;
+  const L = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+  for (const o of solidosDoComplexo()) {
+    const u = Math.max(0, Math.min(1, ((o.x - a.x) * (b.x - a.x) + (o.z - a.z) * (b.z - a.z)) / (L * L)));
+    if (Math.hypot(a.x + (b.x - a.x) * u - o.x, a.z + (b.z - a.z) * u - o.z) < o.r + 6) topo = Math.max(topo, o.topo + 14);
+  }
+  return topo;
 }
 /** um ponto do mundo no layout do Templo */
 export const noLayout = (w: P2): P2 => naSala(sala, w.x - CIDADE.centro.x, w.z - CIDADE.centro.z);

@@ -82,7 +82,7 @@ export type StructuredAnswer = {
   livros?: { titulo: string; autores: string[]; ano: number | null; acesso: string; pdfUrl: string | null; lerUrl: string | null; paginaUrl: string; fonte: string; licenca: string | null }[];
   provenance?: ProvenanceRecord;                    // origem rastreável (open-science)
   /** RAG: documentos da base (turma/pessoal) que a resposta citou — só trechos que a busca devolveu. `paginas` = "4" ou "4–5". */
-  fontesBase?: { documentoId: string; titulo: string; paginas: string }[];
+  fontesBase?: { documentoId: string; titulo: string; paginas: string; publico?: boolean }[];
   /** TCC cross-sala (TCC_CROSS): o turno criou/editou o TCC desta conversa → o cliente abre a aba. */
   /** o VÍDEO do documento pedido no chat (lib/videodoc) — o card com ▶ abre o player com a Zaeon holograma */
   videoDoc?: { videoId?: string; titulo: string; motivo?: string };

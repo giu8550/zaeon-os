@@ -1018,6 +1018,9 @@ function PainelPublicacao({ pub, onFechar, onAceitar, onConectar }: {
           {pub.erro === "github_reconectar" && (
             <button type="button" onClick={onConectar} className="flex items-center gap-1.5 h-7 px-3 rounded-md" style={{ border: `1px solid ${Z.borda}` }}><Github className="w-3.5 h-3.5" /> Conectar GitHub</button>
           )}
+          {pub.erro === "github_sem_permissao" && (
+            <a href="https://github.com/settings/installations" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 h-7 px-3 rounded-md w-fit" style={{ border: `1px solid ${Z.borda}` }}><Github className="w-3.5 h-3.5" /> Abrir permissões no GitHub</a>
+          )}
         </>
       )}
     </div>
