@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { publicarProjeto, LIMITES } from "./publicar";
+import { publicarProjeto, caminhoPublicavel, LIMITES } from "./publicar";
 import type { ProjetosDb } from "./projetos";
 
 const ID = "a".repeat(24);
@@ -35,9 +35,12 @@ function dbFalso(projeto: Partial<any> = {}, pubs: Pub[] = []) {
 type Chamada = { rota: string; params: any };
 
 // octokit dublê: grava as chamadas e responde como a API do GitHub
-function octoFalso(o: { existentes?: string[]; pages409?: { status: string } ; falhar?: (rota: string, params: any) => any } = {}) {
+// `arvores`: o que já está no repo (por "owner/repo"); repo novo nasce com o README.md do auto_init.
+// Cada commit aplica a árvore enviada (sha null = apaga), como o git data API com base_tree.
+function octoFalso(o: { existentes?: string[]; arvores?: Record<string, string[]>; pages409?: { status: string } ; falhar?: (rota: string, params: any) => any } = {}) {
   const chamadas: Chamada[] = [];
   const existentes = new Set(o.existentes ?? []);
+  const arvores = new Map<string, Set<string>>(Object.entries(o.arvores ?? {}).map(([k, v]) => [k, new Set(v)]));
   let n = 0;
   const request = async (rota: string, params: any = {}) => {
     chamadas.push({ rota, params });
@@ -51,11 +54,19 @@ function octoFalso(o: { existentes?: string[]; pages409?: { status: string } ; f
         throw Object.assign(new Error("Not Found"), { status: 404 });
       case "POST /user/repos":
         existentes.add(`aluno/${params.name}`);
+        arvores.set(`aluno/${params.name}`, new Set(["README.md"]));
         return { data: { full_name: `aluno/${params.name}`, default_branch: "main", html_url: `https://github.com/aluno/${params.name}` } };
       case "GET /repos/{owner}/{repo}/git/ref/{ref}": return { data: { object: { sha: "c0" } } };
       case "GET /repos/{owner}/{repo}/git/commits/{commit_sha}": return { data: { tree: { sha: "t0" } } };
       case "POST /repos/{owner}/{repo}/git/blobs": return { data: { sha: `b${++n}` } };
-      case "POST /repos/{owner}/{repo}/git/trees": return { data: { sha: "t1" } };
+      case "GET /repos/{owner}/{repo}/git/trees/{tree_sha}":
+        return { data: { tree: [...(arvores.get(full) ?? [])].map((path) => ({ path, type: "blob", size: 1 })) } };
+      case "POST /repos/{owner}/{repo}/git/trees": {
+        const a = arvores.get(full) ?? new Set<string>();
+        for (const t of params.tree) { if (t.sha === null) a.delete(t.path); else a.add(t.path); }
+        arvores.set(full, a);
+        return { data: { sha: "t1" } };
+      }
       case "POST /repos/{owner}/{repo}/git/commits": return { data: { sha: "c1" } };
       case "PATCH /repos/{owner}/{repo}/git/refs/{ref}": return { data: {} };
       case "POST /repos/{owner}/{repo}/pages":
@@ -66,7 +77,7 @@ function octoFalso(o: { existentes?: string[]; pages409?: { status: string } ; f
       default: throw new Error(`rota inesperada: ${rota}`);
     }
   };
-  return { octokit: { request }, chamadas };
+  return { octokit: { request }, chamadas, arvores };
 }
 
 const P = { userId: "u1", email: "a@b.c", projetoId: ID };
@@ -81,14 +92,16 @@ describe("publicarProjeto", () => {
     const { db, projetos, pubs } = dbFalso();
     const { octokit, chamadas } = octoFalso();
     const r = await publicarProjeto(deps(db, octokit), P);
-    expect(r).toEqual({ ok: true, repoUrl: "https://github.com/aluno/confeitaria", pagesUrl: "https://aluno.github.io/confeitaria/", status: "publicando" });
+    expect(r).toEqual({ ok: true, repoUrl: "https://github.com/aluno/confeitaria", pagesUrl: "https://aluno.github.io/confeitaria/", status: "publicando", ignorados: [] });
 
     const criar = chamadas.find((c) => c.rota === "POST /user/repos")!;
     expect(criar.params).toMatchObject({ name: "confeitaria", private: false, auto_init: true });
     const blobs = chamadas.filter((c) => c.rota === "POST /repos/{owner}/{repo}/git/blobs").map((c) => c.params.content);
     expect(blobs.sort()).toEqual(["<h1>oi</h1>", "h1{}"]);
     const arvore = chamadas.find((c) => c.rota === "POST /repos/{owner}/{repo}/git/trees")!;
-    expect(arvore.params.tree.map((t: any) => t.path).sort()).toEqual(["estilo.css", "index.html"]);
+    expect(arvore.params.tree.filter((t: any) => t.sha).map((t: any) => t.path).sort()).toEqual(["estilo.css", "index.html"]);
+    // o repo espelha o projeto: o README.md do auto_init sai (o projeto não tem um)
+    expect(arvore.params.tree.filter((t: any) => t.sha === null).map((t: any) => t.path)).toEqual(["README.md"]);
     expect(chamadas.find((c) => c.rota === "POST /repos/{owner}/{repo}/git/commits")!.params.message).toBe("Publicado pelo Octa (Zaeon)");
     expect(chamadas.find((c) => c.rota === "PATCH /repos/{owner}/{repo}/git/refs/{ref}")!.params).toMatchObject({ owner: "aluno", repo: "confeitaria", ref: "heads/main" });
     expect(chamadas.find((c) => c.rota === "POST /repos/{owner}/{repo}/pages")!.params).toMatchObject({ source: { branch: "main", path: "/" } });
@@ -133,12 +146,60 @@ describe("publicarProjeto", () => {
     expect(projetos[0].repoFullName).toBe("aluno/confeitaria-2");
   });
 
+  it("republicar sem um arquivo: o segundo commit apaga o que saiu do projeto", async () => {
+    const { db, projetos } = dbFalso({ arquivos: { "index.html": "<h1>oi</h1>", "a.css": "h1{}" } });
+    const { octokit, chamadas, arvores } = octoFalso();
+    expect(await publicarProjeto(deps(db, octokit), P)).toMatchObject({ ok: true });
+    expect([...arvores.get("aluno/confeitaria")!].sort()).toEqual(["a.css", "index.html"]);
+
+    projetos[0].arquivos = { "index.html": "<h1>tchau</h1>" };
+    chamadas.length = 0;
+    expect(await publicarProjeto(deps(db, octokit), P)).toMatchObject({ ok: true });
+    const arvore = chamadas.find((c) => c.rota === "POST /repos/{owner}/{repo}/git/trees")!;
+    expect(arvore.params.tree).toContainEqual({ path: "a.css", mode: "100644", type: "blob", sha: null });
+    expect([...arvores.get("aluno/confeitaria")!]).toEqual(["index.html"]);
+  });
+
+  it("README.md do projeto é mantido no repo", async () => {
+    const { db } = dbFalso({ arquivos: { "index.html": "x", "README.md": "# meu site" } });
+    const { octokit, arvores } = octoFalso();
+    await publicarProjeto(deps(db, octokit), P);
+    expect([...arvores.get("aluno/confeitaria")!].sort()).toEqual(["README.md", "index.html"]);
+  });
+
+  it("caminhos perigosos nunca chegam ao octokit e voltam em ignorados", async () => {
+    const perigosos = [".github/workflows/x.yml", "../x.html", "/etc/x", "a/.env", ".env", "a//b.html", "a\\b.html", "x.sh", "semext", "a/" + "b".repeat(200) + ".html"];
+    const arquivos: Record<string, string> = { "index.html": "ok", "img/logo.svg": "<svg/>" };
+    for (const c of perigosos) arquivos[c] = "on: push";
+    const { db } = dbFalso({ arquivos });
+    const { octokit, chamadas } = octoFalso();
+    const r = await publicarProjeto(deps(db, octokit), P);
+    expect(r).toMatchObject({ ok: true });
+    expect((r as any).ignorados.sort()).toEqual([...perigosos].sort());
+    const tocados = JSON.stringify(chamadas);
+    for (const c of [".github", "../x.html", "/etc/x", ".env", "on: push", "x.sh"]) expect(tocados).not.toContain(c);
+    const arvore = chamadas.find((c) => c.rota === "POST /repos/{owner}/{repo}/git/trees")!;
+    expect(arvore.params.tree.filter((t: any) => t.sha).map((t: any) => t.path).sort()).toEqual(["img/logo.svg", "index.html"]);
+  });
+
+  it("projeto só com caminhos não publicáveis: sem_arquivos_publicaveis, zero GitHub", async () => {
+    const { db } = dbFalso({ arquivos: { ".github/workflows/x.yml": "on: push" } });
+    const fabrica = vi.fn(async () => octoFalso().octokit);
+    expect(await publicarProjeto({ db, octokitDoAluno: fabrica, agora: () => AGORA }, P)).toEqual({ ok: false, erro: "sem_arquivos_publicaveis" });
+    expect(fabrica).not.toHaveBeenCalled();
+  });
+
+  it("caminhoPublicavel: lista de extensões e regras de segmento", () => {
+    for (const ok of ["index.html", "css/a.css", "js/app.mjs", "img/a.JPG", "fonts/x.woff2", "site.webmanifest", "sobre/index.htm"]) expect(caminhoPublicavel(ok)).toBe(true);
+    for (const ruim of ["", ".github/workflows/x.yml", "../x.html", "/etc/x", "a/.env", "a/../b.html", "a/b.exe", "x.php", "a\u0000.html"]) expect(caminhoPublicavel(ruim)).toBe(false);
+  });
+
   it("Pages 409: usa a URL do GET; status no_ar se built, senão publicando", async () => {
     for (const [st, esperado] of [["built", "no_ar"], ["building", "publicando"]] as const) {
       const { db } = dbFalso();
       const { octokit, chamadas } = octoFalso({ pages409: { status: st } });
       const r = await publicarProjeto(deps(db, octokit), P);
-      expect(r).toEqual({ ok: true, repoUrl: "https://github.com/aluno/confeitaria", pagesUrl: "https://aluno.github.io/confeitaria/", status: esperado });
+      expect(r).toEqual({ ok: true, repoUrl: "https://github.com/aluno/confeitaria", pagesUrl: "https://aluno.github.io/confeitaria/", status: esperado, ignorados: [] });
       expect(chamadas.some((c) => c.rota === "GET /repos/{owner}/{repo}/pages")).toBe(true);
     }
   });

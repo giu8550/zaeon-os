@@ -4,13 +4,17 @@
  *
  * Regras que esta função garante:
  * - Nunca escreve num repositório que o Octa não criou (nome ocupado → slug-2, slug-3…).
+ * - O repositório espelha o projeto: cada publicação remove do repo o que não está no projeto
+ *   (inclusive o README.md do auto_init), senão arquivo apagado continuaria no site público.
+ * - Só caminhos de site estático vão para o GitHub (caminhoPublicavel): nada de `.github/workflows`,
+ *   dotfiles, `..` ou extensão fora da lista. Os pulados voltam em `ignorados` (só os caminhos).
  * - Limites por aluno por dia (LIMITES); publicação que falha não conta.
  * - O token do aluno só existe dentro do octokit que `octokitDoAluno` devolve. Nada daqui o lê;
  *   erro do GitHub vira um código fixo e o log leva só o status HTTP — a mensagem/objeto do erro
  *   (que pode ecoar header/URL com o token) nunca sai daqui.
  */
 import { lerProjeto, contarPublicacoesHoje, gravarDestinoPublicado, registrarPublicacao, type ProjetosDb } from "./projetos";
-import { createRepo, commitFiles, habilitarPages, repoExiste } from "@/lib/projects/github-service";
+import { createRepo, commitChanges, habilitarPages, readRepoTree, repoExiste } from "@/lib/projects/github-service";
 
 type AnyOctokit = any;
 
@@ -21,10 +25,10 @@ const MAX_TENTATIVAS_NOME = 20; // slug, slug-2 … slug-20
 
 export type ErroPublicar =
   | "github_reconectar" | "limite_publicacoes" | "limite_repos" | "aviso_publico_pendente" | "falha_github"
-  | "projeto_inexistente";
+  | "projeto_inexistente" | "sem_arquivos_publicaveis";
 
 export type ResultadoPublicar =
-  | { ok: true; repoUrl: string; pagesUrl: string; status: "publicando" | "no_ar" }
+  | { ok: true; repoUrl: string; pagesUrl: string; status: "publicando" | "no_ar"; ignorados: string[] }
   | { ok: false; erro: ErroPublicar };
 
 export type DepsPublicar = {
@@ -32,6 +36,26 @@ export type DepsPublicar = {
   octokitDoAluno: (email: string) => Promise<AnyOctokit | null>;
   agora?: () => Date;
 };
+
+const EXTENSOES_SITE = new Set([
+  "html", "htm", "css", "js", "mjs", "json", "svg", "png", "jpg", "jpeg", "gif", "webp", "ico",
+  "txt", "md", "xml", "webmanifest", "woff", "woff2",
+]);
+const MAX_CAMINHO = 200;
+
+/**
+ * Caminho que pode virar arquivo do repositório público: relativo, sem `..`, sem segmento que
+ * comece com "." (`.github/`, `.env`, dotfiles), sem segmento vazio, sem `\` nem caractere de
+ * controle, até 200 caracteres e com extensão de site estático.
+ */
+export function caminhoPublicavel(caminho: string): boolean {
+  if (typeof caminho !== "string" || !caminho || caminho.length > MAX_CAMINHO) return false;
+  if (/[\\\x00-\x1f\x7f]/.test(caminho)) return false;
+  const segmentos = caminho.split("/");
+  if (segmentos.some((s) => !s || s.startsWith("."))) return false; // pega "/x", "a//b", "..", ".env"
+  const ext = segmentos[segmentos.length - 1].split(".");
+  return ext.length > 1 && EXTENSOES_SITE.has(ext[ext.length - 1].toLowerCase());
+}
 
 function statusHttp(e: unknown): number | undefined {
   const s = (e as any)?.status;
@@ -67,6 +91,14 @@ export async function publicarProjeto(
   if (!projeto) return { ok: false, erro: "projeto_inexistente" };
   if (!projeto.avisoPublicoAceito) return { ok: false, erro: "aviso_publico_pendente" };
 
+  const files: { path: string; content: string }[] = [];
+  const ignorados: string[] = [];
+  for (const [path, content] of Object.entries(projeto.arquivos ?? {})) {
+    if (caminhoPublicavel(path)) files.push({ path, content: String(content) });
+    else ignorados.push(path);
+  }
+  if (!files.length) return { ok: false, erro: "sem_arquivos_publicaveis" };
+
   // só o repositório que o próprio Octa criou para este projeto é reaproveitado
   const repoDoOcta = projeto.repoCriadoPeloOcta && projeto.repoFullName ? projeto.repoFullName : null;
   const hoje = await contarPublicacoesHoje(db, p.userId, agora);
@@ -92,14 +124,17 @@ export async function publicarProjeto(
       await gravarDestinoPublicado(db, p.userId, projeto.id, { repoFullName: fullName, repoCriadoPeloOcta: true, pagesUrl: null });
     }
 
-    const files = Object.entries(projeto.arquivos ?? {}).map(([path, content]) => ({ path, content: String(content) }));
     const mensagem = String(p.mensagem ?? "").trim().slice(0, 200) || MENSAGEM_PADRAO;
-    await commitFiles(octokit, { repo: fullName, branch, message: mensagem, files });
+    // espelho: o que está no repo e não está no que publicamos agora sai no mesmo commit
+    const publicados = new Set(files.map((f) => f.path));
+    const noRepo = await readRepoTree(octokit, { repo: fullName, ref: branch });
+    const deletes = noRepo.map((f) => f.path).filter((path) => !publicados.has(path));
+    await commitChanges(octokit, { repo: fullName, branch, message: mensagem, upserts: files, deletes });
 
     const pages = await habilitarPages(octokit, { repo: fullName, branch });
     await gravarDestinoPublicado(db, p.userId, projeto.id, { pagesUrl: pages.url });
     await registrarPublicacao(db, { userId: p.userId, projetoId: projeto.id, ok: true, repoNovo, em: agora });
-    return { ok: true, repoUrl: `https://github.com/${fullName}`, pagesUrl: pages.url, status: pages.status };
+    return { ok: true, repoUrl: `https://github.com/${fullName}`, pagesUrl: pages.url, status: pages.status, ignorados };
   } catch (e) {
     const status = statusHttp(e);
     // 401 = token revogado/vencido no meio do caminho → o aluno reconecta
