@@ -161,6 +161,17 @@ function contentsDe(req: GerarReq): Mensagem[] {
   return out;
 }
 
+/**
+ * Id do Gemini que o app usa → apelido do gateway que as virtual keys dos agentes liberam. ESPELHA o model_list de
+ * infra/litellm.config.yaml (zaeon-flash/zaeon-pro): mandar o id cru dava 403 key_model_access_denied e o turno do
+ * canal (Escritório) quebrava. Id fora da tabela segue cru.
+ */
+export const APELIDO_GATEWAY: Readonly<Record<string, string>> = { "gemini-3.5-flash": "zaeon-flash", "gemini-2.5-pro": "zaeon-pro" };
+export const apelidoNoGateway = (modelo: string): string => APELIDO_GATEWAY[modelo] ?? modelo;
+
+/** 403 do LiteLLM "modelo não liberado pra esta key" — o Vertex direto atende (não é auth quebrada). */
+const keySemModelo = (e: unknown): boolean => /key_model_access_denied|not available for this api key/i.test(`${(e as any)?.message ?? ""} ${(e as any)?.body ?? ""}`);
+
 /** Gateway caiu de um jeito que o Vertex direto resolve? (teto/cota/auth-de-agente NÃO: são declaráveis/nossos.) */
 const caiParaVertex = (classe: ClasseErroLlm): boolean => classe === "provedor_fora" || classe === "timeout" || classe === "resposta_nao_json" || classe === "modelo_inexistente";
 
@@ -206,7 +217,7 @@ export async function gerar(req: GerarReq, deps: Deps = {}): Promise<GerarRes> {
 
   if (rota === "gateway") {
     try {
-      const r = await viaGateway(req, modelo, env.GATEWAY_URL!.trim(), key!, deps.fetchImpl ?? fetch);
+      const r = await viaGateway(req, apelidoNoGateway(modelo), env.GATEWAY_URL!.trim(), key!, deps.fetchImpl ?? fetch);
       const alvo = alvoDe(r.modelo, r.modelId), jv = jsonValido(r.texto);
       gravar("litellm", "gateway", r.usage, true, null, r.modelo, alvo, jv);
       const { modelId: _id, ...resto } = r;
@@ -217,7 +228,7 @@ export async function gerar(req: GerarReq, deps: Deps = {}): Promise<GerarRes> {
       if (pool && (classe === "rate_limit" || classe === "cota_esgotada") && (e as any)?.retryAfter) classe = "pool_esgotado";
       gravar("litellm", "gateway", USAGE_VAZIO, false, classe, modelo, alvoDe(modelo));
       if (classe === "pool_esgotado") throw new PoolEsgotadoError(retryAfterDoPool(e, req.tentativa), poolConfigurado(env), e);
-      if (pool || local || !caiParaVertex(classe)) throw new ErroLlm(classe, "litellm", e);
+      if (pool || local || !(caiParaVertex(classe) || keySemModelo(e))) throw new ErroLlm(classe, "litellm", e);
       console.warn(`[llm] gateway ${classe} — caindo para o Vertex direto (${req.ctx.agentKey})`);
     }
   }

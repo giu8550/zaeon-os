@@ -5,6 +5,9 @@
  *   Sem fila → a indexação roda INLINE em segundo plano (não bloqueia o upload; erro só loga).
  * Retry: attempts 5 com backoff exponencial (30 s…). `indexarDocumento` é idempotente e retomável:
  * cada lote já gravado fica; a nova tentativa só manda os trechos que ainda não têm vetor.
+ * Ritmo: o embedding do Vertex é a MESMA cota da pergunta do chat e da memória L3. O worker limita a
+ * RAG_INDEX_POR_MIN documentos/min (padrão 20) e, num 429, pausa a fila inteira 60 s SEM gastar tentativa
+ * (carga grande, como as bases por área, virava 1.149 429 em 30 min e documento marcado como erro).
  */
 import type { EmbedRag } from "@/lib/rag/embed";
 import type { RagDb } from "@/lib/rag/pg";
@@ -111,6 +114,18 @@ export async function indexarInline(deps: { db: RagDb; embed: EmbedRag }, docume
   }
 }
 
+/** 429 do Vertex (cota de embedding) — espera a fila, não é falha do documento. */
+export const ehCotaEmbed = (e: unknown): boolean => /embed_http_429\b/.test((e as Error)?.message ?? String(e));
+
+/** Documentos por minuto do worker (RAG_INDEX_POR_MIN, padrão 20; inválido ⇒ padrão). */
+export function ritmoIndexacao(env: Env = process.env): number {
+  const n = Number(env.RAG_INDEX_POR_MIN);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 20;
+}
+
+/** Pausa da fila inteira depois de um 429. */
+export const PAUSA_COTA_MS = 60_000;
+
 /** O job esgotou as tentativas (a próxima falha não será repetida pelo BullMQ)? */
 export function deveMarcarFalhaFinal(job: { attemptsMade?: number; opts?: { attempts?: number } } | null | undefined): boolean {
   if (!job) return false;
@@ -136,14 +151,23 @@ export async function iniciarWorkerRag(env: Env = process.env): Promise<boolean>
   if (env.RAG_WORKER !== "1" || !filaRagLigada(env)) return false;
   const bull = await loadBullmq();
   if (!bull) return false;
-  const { Worker } = bull as { Worker: new (n: string, p: (job: any) => Promise<unknown>, o: Record<string, unknown>) => { on(ev: string, fn: (...a: any[]) => void): void } };
+  type W = { on(ev: string, fn: (...a: any[]) => void): void; rateLimit(ms: number): Promise<void> };
+  const { Worker } = bull as { Worker: (new (n: string, p: (job: any) => Promise<unknown>, o: Record<string, unknown>) => W) & { RateLimitError: () => Error } };
   const { getRedisConnection } = await import("@/lib/queue/scholar");
   const deps = await depsReais();
-  const worker = new Worker(RAG_QUEUE, async (job) => {
+  const porMin = ritmoIndexacao(env);
+  const worker: W = new Worker(RAG_QUEUE, async (job) => {
     const documentoId = String(job.data?.documentoId ?? "");
     if (!documentoId) return null;
-    return indexarDocumento(deps, documentoId); // lança => BullMQ aplica attempts/backoff
-  }, { connection: getRedisConnection()! as any, concurrency: 2 });
+    try {
+      return await indexarDocumento(deps, documentoId); // lança => BullMQ aplica attempts/backoff
+    } catch (e) {
+      if (!ehCotaEmbed(e)) throw e;
+      // Cota: a fila toda espera e o job volta sem contar tentativa (RateLimitError do BullMQ).
+      await worker.rateLimit(PAUSA_COTA_MS);
+      throw Worker.RateLimitError();
+    }
+  }, { connection: getRedisConnection()! as any, concurrency: 2, limiter: { max: porMin, duration: 60_000 } });
   worker.on("failed", (job: any, e: Error) => {
     console.error("[rag-worker] job falhou:", job?.id, e?.message);
     // Tentativas esgotadas: sem isto o documento ficaria "indexando" para sempre (re-upload reenfileira, mas o admin não sabe).
@@ -154,6 +178,6 @@ export async function iniciarWorkerRag(env: Env = process.env): Promise<boolean>
   });
   // Sem listener, um "error" do ioredis/BullMQ vira exceção não tratada dentro do processo web.
   worker.on("error", (e: Error) => console.error("[rag-worker] erro", e?.message));
-  console.log(`[rag-worker] ouvindo "${RAG_QUEUE}" (concurrency=2)`);
+  console.log(`[rag-worker] ouvindo "${RAG_QUEUE}" (concurrency=2, ${porMin} docs/min)`);
   return true;
 }

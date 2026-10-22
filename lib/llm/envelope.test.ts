@@ -303,3 +303,24 @@ describe("gerar — reserva Hugging Face (Vertex falhou)", () => {
     expect(f.mock.calls.every((c: any) => !String(c[0]).includes("huggingface"))).toBe(true);
   });
 });
+
+describe("gerar — id do Gemini no gateway (Escritório)", () => {
+  const envK = { GATEWAY_URL: "http://g", GATEWAY_KEY_DEFAULT: "k" };
+  it("gemini-3.5-flash vai como zaeon-flash (o apelido que a key do agente libera)", async () => {
+    const f = vi.fn(async (_u: string, init: any) => resposta(200, { ...okGateway, model: JSON.parse(init.body).model }));
+    await gerar({ user: "oi", model: "gemini-3.5-flash", rota: "gateway", ctx }, deps({ fetchImpl: f as any, env: envK }));
+    expect(JSON.parse((f.mock.calls[0] as any)[1].body).model).toBe("zaeon-flash");
+  });
+  it("403 key_model_access_denied cai no Vertex direto com o id real", async () => {
+    const f = vi.fn(async () => resposta(403, { error: { message: "The requested model 'gemini-2.5-flash' is not available for this API key", type: "key_model_access_denied" } }));
+    const v = vi.fn(vertexOk!);
+    const r = await gerar({ user: "oi", model: "gemini-2.5-flash", rota: "gateway", ctx }, deps({ fetchImpl: f as any, vertex: v as any, env: envK }));
+    expect(r.provedor).toBe("vertex");
+    expect((v.mock.calls[0] as any)[1]).toBe("gemini-2.5-flash");
+  });
+  it("401 de verdade (key inválida) continua erro de auth", async () => {
+    const f = vi.fn(async () => resposta(401, { error: { message: "Authentication Error, Invalid proxy server token passed" } }));
+    const e = await gerar({ user: "oi", model: "gemini-3.5-flash", rota: "gateway", ctx }, deps({ fetchImpl: f as any, env: envK })).catch((x) => x);
+    expect(e.classe).toBe("auth");
+  });
+});

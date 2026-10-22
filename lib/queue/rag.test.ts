@@ -156,3 +156,19 @@ describe("deveMarcarFalhaFinal", () => {
     expect(deveMarcarFalhaFinal(undefined)).toBe(false);
   });
 });
+
+describe("ritmo da indexação (cota de embedding compartilhada com o chat)", () => {
+  it("429 do embed é cota; outros erros não", async () => {
+    const { ehCotaEmbed } = await import("./rag");
+    expect(ehCotaEmbed(new Error("embed_http_429: {quota}"))).toBe(true);
+    expect(ehCotaEmbed(new Error("embed_http_500"))).toBe(false);
+    expect(ehCotaEmbed(new Error("embed_http_4290"))).toBe(false);
+  });
+  it("RAG_INDEX_POR_MIN: padrão 20, inválido cai no padrão", async () => {
+    const { ritmoIndexacao } = await import("./rag");
+    expect(ritmoIndexacao({})).toBe(20);
+    expect(ritmoIndexacao({ RAG_INDEX_POR_MIN: "45" })).toBe(45);
+    expect(ritmoIndexacao({ RAG_INDEX_POR_MIN: "0" })).toBe(20);
+    expect(ritmoIndexacao({ RAG_INDEX_POR_MIN: "abc" })).toBe(20);
+  });
+});
