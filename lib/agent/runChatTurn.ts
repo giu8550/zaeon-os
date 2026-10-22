@@ -165,9 +165,19 @@ export async function runChatTurn(
     // ponto de escrita por turno. Fire-and-forget. Seções que foram pro TCC não viram notas soltas.
     if (userId) void cartolina.fixarTurno({ userId, scopeId: ac.cartolinaScopeId, prompt, answer: tcc ? { ...answer, work: undefined } : answer, msgId: ac.cartolinaMsgId });
     // GATEKEEPER do cérebro (§2): barato, decide se a conversa é estudável (bolinha azul). Fire-and-forget.
+    // Em seguida o BLUEPRINT PRÁTICO (lib/blueprint): conversa válida cria o estudo na Sala de Estudos e cada turno
+    // seguinte o recompõe (flag BLUEPRINT_PRATICO; também fire-and-forget).
     if (userId) {
+      const scopeId = typeof ac.cartolinaScopeId === "string" ? ac.cartolinaScopeId : null;
       void import("@/lib/map/gatekeeper")
-        .then((g) => g.gatekeeperDoTurno({ userId, scopeId: typeof ac.cartolinaScopeId === "string" ? ac.cartolinaScopeId : null, prompt, history: params.history, answer }))
+        .then((g) => g.gatekeeperDoTurno({ userId, scopeId, prompt, history: params.history, answer }))
+        .catch(() => null)
+        .then(async (sinal) => {
+          const [{ blueprintOn }, { textoDaResposta }] = await Promise.all([import("@/lib/blueprint/tipos"), import("@/lib/blueprint/patch")]);
+          if (!blueprintOn()) return;
+          const { blueprintDoTurno } = await import("@/lib/blueprint/server");
+          await blueprintDoTurno({ userId, scopeId, sinal, prompt, answerTexto: textoDaResposta(answer), history: params.history });
+        })
         .catch(() => null);
     }
     // L3 write (A7, fire-and-forget): deriva o turno em drawers verbatim. Nunca bloqueia.
