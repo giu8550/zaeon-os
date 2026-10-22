@@ -1,6 +1,6 @@
 /** #466 · chamar uma agente pelo NOME, sem @ — só quando é chamado de verdade. */
 import { describe, it, expect } from "vitest";
-import { chamadasPeloNome } from "./chamada";
+import { chamadasPeloNome, falaComPessoa } from "./chamada";
 
 const AGENTES = [
   { agentKey: "aura", nome: "Aura" }, { agentKey: "teo", nome: "Téo" }, { agentKey: "zenita", nome: "Zenita" },
@@ -87,5 +87,14 @@ describe("chamar pelo nome · #551 falar SOBRE a agente não chama", () => {
     ["nina tem um exemplo?", ["nina"]],
   ] as const)("chama: %s", (t, esperado) => {
     expect(chamadasPeloNome(t, COM_NINA)).toEqual(esperado);
+  });
+});
+
+describe("falar COM uma pessoa da conversa · #551", () => {
+  it.each(["tchau martinez, até amanhã", "martinez, viu isso?", "viu isso, martinez", "valeu martinez", "oi Martínez!", "Martinez"])("fala com ela: %s", (t) => {
+    expect(falaComPessoa(t, ["Martinez Silva"])).toBe(true);
+  });
+  it.each(["o martinez disse que a prova é amanhã, é verdade?", "me explica a parte 2", "a ana falou de martingale"])("não: %s", (t) => {
+    expect(falaComPessoa(t, ["Martinez Silva", "Ana"])).toBe(false);
   });
 });

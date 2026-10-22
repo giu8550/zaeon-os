@@ -27,6 +27,8 @@ vi.mock("@/lib/canal/server", () => {
     sessaoUsuario: async () => state.user,
     exigirFlag: () => null,
     agentesDoCanal: async () => [{ agentKey: "aura", nome: "Aura", avatarUrl: null }, { agentKey: "medicina", nome: "Osler", avatarUrl: null }],
+    // #551: as pessoas da conversa (A = Giulia, B = Martinez)
+    pessoas: async (ids: string[]) => new Map(ids.filter((id) => id === A || id === B).map((id) => [id, { id, nome: id === A ? "Giulia" : "Martinez", avatar: null }])),
   };
 });
 vi.mock("@/lib/canal/realtime", async () => {
@@ -340,5 +342,36 @@ describe("POST /api/canal/[id]/mensagem · #551 despedidas olham quem está na c
     expect(sistema()).toEqual([["aura", "Aura saiu da conversa"]]);
     expect(state.disparos).toEqual([]);
     expect(j.agentesNoCanal).toEqual([]);
+  });
+});
+
+describe("POST /api/canal/[id]/mensagem · #551 falando com a outra pessoa, a agente fica quieta", () => {
+  beforeEach(() => {
+    state.criadas = []; state.disparos = []; state.publicados = []; state.atualizacoes = [];
+    // conversa da Giulia (A) com o Martinez (B); a Giulia estava falando com a Aura
+    state.canal = canal("turma"); state.user = user(A);
+    state.historico = [{ autorTipo: "humano", autorId: A }, { autorTipo: "agente", autorId: "aura" }];
+  });
+  it("'tchau martinez, até amanhã' → a Aura não responde e não sai", async () => {
+    const j = await (await POST(req("tchau martinez, até amanhã"), { params: { id: CANAL } })).json();
+    expect(state.disparos).toEqual([]);
+    expect(j.dispensadas).toBeUndefined();
+    expect(j.agentesNoCanal).toEqual(["aura"]);
+  });
+  it("'martinez, viu isso?' → a Aura fica quieta", async () => {
+    await POST(req("martinez, viu isso?"), { params: { id: CANAL } });
+    expect(state.disparos).toEqual([]);
+  });
+  it("falar SOBRE o Martinez ('o martinez disse que a prova é amanhã, é verdade?') → a Aura responde", async () => {
+    await POST(req("o martinez disse que a prova é amanhã, é verdade?"), { params: { id: CANAL } });
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["aura"]);
+  });
+  it("chamando a agente junto ('martinez, a @aura explica melhor') → a Aura responde", async () => {
+    await POST(req("martinez, a @aura explica melhor"), { params: { id: CANAL } });
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["aura"]);
+  });
+  it("sem citar ninguém, a Aura continua respondendo", async () => {
+    await POST(req("e a parte 2?"), { params: { id: CANAL } });
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["aura"]);
   });
 });

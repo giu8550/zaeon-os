@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { prisma, sessaoUsuario, exigirFlag, isObjectId, agentesDoCanal, pessoas } from "@/lib/canal/server";
-import { chamadasPeloNome } from "@/lib/canal/chamada";
+import { chamadasPeloNome, falaComPessoa } from "@/lib/canal/chamada";
 import { podeEscrever } from "@/lib/canal/gate";
 import { montarAliases, parseMentions } from "@/lib/canal/mention";
 import { resolverAlvos, estaForaDaConversa } from "@/lib/canal/alvo";
@@ -43,7 +43,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const agentes = await agentesDoCanal(u.id, canal.agentes);
   const mencoes = parseMentions(texto, montarAliases(agentes.map((a) => ({ agentKey: a.agentKey, nome: a.nome }))));
   // #466: sem @, o NOME usado pra chamar também chama ("sim continue aura…") — nunca o nome de uma pessoa da conversa
-  const chamadas = mencoes.length ? mencoes : chamadasPeloNome(texto, agentes, await nomesDasPessoas(canal));
+  const gente = await pessoasDaConversa(canal);
+  const chamadas = mencoes.length ? mencoes : chamadasPeloNome(texto, agentes, gente.map((p) => p.nome));
 
   // Quem responde: @menção manda; sem @, continua o último agente que falou no canal (ou a Aura,
   // no primeiro oi). Lê o histórico ANTES de gravar a mensagem atual. Ver lib/canal/alvo.ts.
@@ -52,7 +53,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     where: { canalId: canal.id }, orderBy: { createdAt: "desc" }, take: 100, select: { autorTipo: true, autorId: true, texto: true },
   });
   const historico = [...recentes].reverse();
-  const { alvos, implicito } = resolverAlvos({
+  const resolvido = resolverAlvos({
     mencoes: chamadas,
     historico,
     remetenteId: u.id,
@@ -60,13 +61,17 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     // conversa privada conta as duas pessoas → a IA não responde sozinha numa conversa de duas pessoas
     humanos: humanosNoCanal(canal),
   });
+  const humanos = humanosNoCanal(canal);
+  // #551: conversa com outras pessoas e a mensagem fala COM uma delas ("tchau martinez, até amanhã") → sem @ nem
+  // nome de agente, a agente da vez fica quieta (antes respondia o que era pra pessoa) e não é dispensada
+  const comPessoa = resolvido.implicito && humanos > 1 && falaComPessoa(texto, gente.filter((p) => p.id !== u.id).map((p) => p.nome));
+  const alvos = comPessoa ? [] : resolvido.alvos;
 
   // #438: a mensagem dispensa a agente da vez? (decide antes de gravar, pra barra já sair certa)
-  const humanos = humanosNoCanal(canal);
   // #443: só sai a agente PRA QUEM foi a despedida ("a zenita pode sair, aura continua comigo" → só a Zenita)
   // #551: entre TODAS da conversa ("vocês duas podem ir"); despedida de quem nem estava é ignorada
   const disponiveis = agentes.map((a) => a.agentKey);
-  const naConversa = [...new Set([...(canal.agentes ?? []), ...(implicito ? alvos : [])])]
+  const naConversa = comPessoa ? [] : [...new Set([...(canal.agentes ?? []), ...(resolvido.implicito ? alvos : [])])]
     .filter((k) => disponiveis.includes(k) && !estaForaDaConversa(historico, k));
   const { dispensadas, respondem, chamados } = saidasDaMensagem(texto, { alvos, naConversa, agentes, humanos });
   // #440: chamada com @ depois de ter saído → entra a linha "Zenita voltou para a conversa"
@@ -136,11 +141,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }, { status: 201 });
 }
 
-/** #466: os nomes das pessoas do canal (quem tem nome de agente não chama a agente). Falhou → nenhum. */
-async function nomesDasPessoas(canal: { ownerId: string; membros: string[]; dmCom?: string | null }): Promise<string[]> {
+/**
+ * #466: as pessoas do canal (quem tem nome de agente não chama a agente); #551: com o id, pra saber quando a
+ * mensagem fala com OUTRA pessoa. Falhou → nenhuma.
+ */
+async function pessoasDaConversa(canal: { ownerId: string; membros: string[]; dmCom?: string | null }): Promise<{ id: string; nome: string }[]> {
   try {
     const gente = await pessoas([canal.ownerId, ...(canal.membros ?? []), ...(canal.dmCom ? [canal.dmCom] : [])]);
-    return [...gente.values()].map((p) => p.nome).filter(Boolean);
+    return [...gente.entries()].map(([id, p]) => ({ id, nome: p.nome ?? "" })).filter((p) => p.nome);
   } catch {
     return [];
   }

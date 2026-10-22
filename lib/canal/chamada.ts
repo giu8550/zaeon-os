@@ -69,6 +69,31 @@ function palavras(texto: string): Tok[] {
   return out;
 }
 
+/** #551: palavras que, antes de um nome, fazem a frase falar COM a pessoa ("tchau martinez", "valeu ana"). */
+const SAUDACAO = new Set([
+  "oi", "ei", "ola", "opa", "ai", "tchau", "valeu", "vlw", "obrigado", "obrigada", "brigado", "brigada", "falou", "flw",
+  "beleza", "blz", "dia", "tarde", "noite", "parabens", "ate", "logo", "mais", "amanha",
+]);
+
+/**
+ * #551: a mensagem fala COM uma das outras pessoas da conversa? ("tchau martinez, até amanhã", "martinez, viu
+ * isso?", "valeu ana"). Aí, sem @ nem nome de agente, a agente fica quieta — antes ela respondia o que era pra
+ * pessoa. Falar SOBRE a pessoa ("o martinez disse que…, é verdade?") não conta: a pergunta pode ser pra agente.
+ */
+export function falaComPessoa(texto: string, outrasPessoas: readonly string[]): boolean {
+  const nomes = new Set(outrasPessoas.map((p) => semAcento(p).split(/\s+/)[0] ?? "").filter((n) => n.length >= 3));
+  if (!nomes.size) return false;
+  const toks = palavras(texto);
+  return toks.some((t, i) => {
+    if (!nomes.has(t.w)) return false;
+    const ant = toks[i - 1], prox = toks[i + 1];
+    return /^\s*[,!:]/.test(t.depois) ||                                     // "martinez, viu?"
+      (i === 0 && !prox) ||                                                   // "martinez"
+      (!prox && /,/.test(t.antes)) ||                                         // "viu isso, martinez"
+      (ant !== undefined && SAUDACAO.has(ant.w) && !/[.?]/.test(t.antes));    // "tchau martinez", "oi ana"
+  });
+}
+
 /**
  * As agentes chamadas pelo NOME nesta mensagem (sem @). `pessoas` = primeiros nomes das pessoas do canal (quem
  * tem o mesmo nome de uma agente não conta como chamar a agente). Mensagem com @ não passa por aqui (o @ manda).
