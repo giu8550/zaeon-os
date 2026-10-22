@@ -225,7 +225,7 @@ services:
     restart: unless-stopped
     deploy:
       resources:
-        limits: { memory: 1g }
+        limits: { memory: 384m }
 
   # Evolution API v1.x (sem Postgres; estado em volume). Instância ÚNICA da plataforma,
   # conectada 1× por QR pelo admin (número da Zaeon). Webhook da instância → agent-bridge.
@@ -340,7 +340,7 @@ services:
     restart: unless-stopped
     deploy:
       resources:
-        limits: { memory: 384m }
+        limits: { memory: 1g }   # acima do --maxmemory 768mb (senão o kernel mata o Redis antes do limite dele)
 
   # ── REALTIME do cyberespaço (Colyseus self-hosted): posição/presença + signaling da voz ──
   #    docs/REALTIME_COLYSEUS_VOZ.md. Só rede interna; o público entra pelo Caddy em wss://<domínio>/colyseus.
