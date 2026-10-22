@@ -69,8 +69,8 @@ const tomDoTraje = (nome: string) => { for (const [k, v] of Object.entries(TONS_
 async function vestidoDeTraje(gltf: GLTF, starTex: THREE.Texture, modelo: ModeloAstronauta) {
   await carregarAstronauta(ASTRONAUTAS[modelo].url);
   const av = criarAvatarLuz("#ffffff", starTex, true, gltf, { anime: true });
-  av.traje(true, { paleta: "branca", modelo });
-  const pecas = () => { const out: THREE.SkinnedMesh[] = []; av.group.traverse((o) => { const s = o as THREE.SkinnedMesh; if (s.isSkinnedMesh && tomDoTraje((s.material as THREE.Material).name ?? "") >= 0) out.push(s); }); return out; };
+  av.traje(true, { paleta: "branca", modelo, leve: true });   // (de longe: o traje LEVE)
+  const pecas = () => { const out: THREE.SkinnedMesh[] = []; av.group.traverse((o) => { const s = o as THREE.SkinnedMesh; if (s.isSkinnedMesh && (/^(traje|visera)$/.test((s.material as THREE.Material).name ?? "") || tomDoTraje((s.material as THREE.Material).name ?? "") >= 0)) out.push(s); }); return out; };
   for (let k = 0; k < 120 && !pecas().length; k++) await new Promise((r) => setTimeout(r, 16));
   if (!pecas().length) { av.dispose(); throw new Error(`o traje ${modelo} não chegou`); }
   return { av, pecas: pecas() };
@@ -200,9 +200,10 @@ async function assarTraje(av: ReturnType<typeof criarAvatarLuz>, pecas: THREE.Sk
     }
     const tom = new Float32Array(n), idx: number[] = [];
     for (const s of g.malhas) {
-      const t0 = tomDoTraje((s.material as THREE.Material).name ?? ""), ix = s.geometry.index;
+      // (o traje único: o tom é a ZONA de cada vértice — a viseira, 3; o modelo antigo: pelo nome do material)
+      const nome = (s.material as THREE.Material).name ?? "", z = s.geometry.attributes._zona, t0 = /visera/.test(nome) ? 3 : tomDoTraje(nome), ix = s.geometry.index;
       const ini = s.geometry.drawRange.start, fim = Math.min(ix ? ix.count : n, ini + s.geometry.drawRange.count);
-      for (let i = ini; i < fim; i++) { const v = ix ? ix.getX(i) : i; tom[v] = t0; idx.push(v); }
+      for (let i = ini; i < fim; i++) { const v = ix ? ix.getX(i) : i; tom[v] = z && t0 !== 3 ? z.getX(v) : t0; idx.push(v); }
     }
     out.setAttribute("aTom", new THREE.BufferAttribute(tom, 1));
     out.setAttribute("aVisor", new THREE.BufferAttribute(tom.map((x) => (x === 3 ? 1 : 0)), 1));
@@ -210,7 +211,7 @@ async function assarTraje(av: ReturnType<typeof criarAvatarLuz>, pecas: THREE.Sk
     out.setIndex(idx);
     return out;
   });
-  if (modelo === "f") { const mo = geoMochila(slotMochila); mo.setAttribute("aTom", new THREE.BufferAttribute(new Float32Array(mo.attributes.position!.count), 1)); partes.push(mo); }
+  if (!pecas.some((p) => p.geometry.attributes._zona) && modelo === "f") { const mo = geoMochila(slotMochila); mo.setAttribute("aTom", new THREE.BufferAttribute(new Float32Array(mo.attributes.position!.count), 1)); partes.push(mo); }
   const geo = juntar(partes) ?? partes[0]!;
   await ceder();
   const corpoG = partes[0]!, simples = corpoG.attributes.position!.count > 3000 ? simplificar(corpoG, 0.35) : null;

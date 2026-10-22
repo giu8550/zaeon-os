@@ -31,6 +31,7 @@ import { diaDe, fullNoDia, minutoDoDia } from "@/lib/cyber/frota/agenda";
 import { estadoDaIA, type EstadoIA } from "@/lib/cyber/frota/corpo";
 import { criarMotosEstacionadas, type MotoParada } from "./EstacionamentosEstudo";
 import { estiloDoId } from "@/lib/cyber/motos";
+import { rostoDe, type Rosto } from "@/lib/cyber/rosto";
 /** pinta a moto (do corpo reaproveitado) na cor da IA: a pintura clara e os frisos de luz */
 function pintarMoto(g: THREE.Object3D, hex: string) {
   const cor = new THREE.Color(hex), clara = cor.clone().lerp(new THREE.Color(0xffffff), 0.3);
@@ -48,6 +49,14 @@ import type { PedidoFrota, RespostaFrota } from "./frota.worker";
 import { desviar, empurrao, type P2 } from "@/lib/cyber/colisaoAtores";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
+/** o ROSTO de cada IA (lib/cyber/rosto) — ~1 em 4 vive de capacete (`null`) */
+const rostos = new Map<string, Rosto | null>();
+function rostoDaIA(id: string, feminino: boolean): Rosto | null {
+  let r = rostos.get(id);
+  if (r === undefined) { r = SEMPRE_DE_CAPACETE(id) ? null : rostoDe(id, feminino); rostos.set(id, r); }
+  return r;
+}
+const SEMPRE_DE_CAPACETE = (id: string) => { let h = 7; for (let i = 0; i < id.length; i++) h = (h * 33 + id.charCodeAt(i)) | 0; return (Math.abs(h) % 4) === 0; };
 /** a cor das PLACAS do traje de uma IA (a mesma do corpo completo: eles, a cor dela clareada; elas, a paleta feminina) */
 const corTraje = new Map<string, THREE.Color>();
 function corDoTraje(hex: string, genero: string): THREE.Color {
@@ -275,7 +284,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
           if (!k) break;
           const a = porId.get(id)!; k.id = id; k.av.recolorir(a.cor); crachar(k, a);
           // o TRAJE (out/2026, o dono: os homens com VARIAÇÕES do traje dele em outras cores; as mulheres com o traje feminino)
-          k.av.traje(true, { paleta: a.genero === "f" ? paletaFeminina(a.cor) : (a.cor as `#${string}`), modelo: a.genero === "f" ? "f" : "m" }); k.desvio = { x: 0, z: 0 }; k.motoK = 0;
+          k.av.traje(true, { paleta: a.genero === "f" ? paletaFeminina(a.cor) : (a.cor as `#${string}`), modelo: a.genero === "f" ? "f" : "m", leve: true }); k.desvio = { x: 0, z: 0 }; k.motoK = 0;
         }
       }
       // 1b) as SILHUETAS: todo mundo que aparece e NÃO tem corpo completo (quem se move é refeito a cada quadro)
@@ -347,6 +356,8 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
           else if (k.moto) k.moto.group.visible = false;
           k.av.group.position.set(x, y, z); k.av.olharPara(e.rumo);
         }
+        // o CAPACETE: sobe pra voar e pilotar; a pé, quem não é dos que vivem de capacete mostra o rosto
+        k.av.rostoTraje(e.pose === "moto" || e.pose === "mochila" ? null : rostoDaIA(k.id!, porId.get(k.id!)?.genero === "f"));
         k.av.group.visible = true;
         const vy = (y - k.yAnt) / Math.max(dt, 1e-3); k.yAnt = y;
         const deitado = e.pose === "deitado";

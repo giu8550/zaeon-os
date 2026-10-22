@@ -22,6 +22,7 @@ import { corDesenho, materialTinta, materialToon, materialToonSimples } from "./
 import { esconderOssosVazios, esferaRapida } from "./matrizes";
 import type { VRM } from "@pixiv/three-vrm";
 import { espelharNoVrm, medirRepouso, type EspelhoVrm, type Repouso } from "./AvatarVrm";
+import type { Rosto } from "@/lib/cyber/rosto";
 import { ASTRONAUTAS, carregarAstronauta, vestirAstronauta, type CorpoAstronautaHandle, type ModeloAstronauta, type Paleta } from "./CorpoAstronauta";
 import { criarAsas, type AsasHandle } from "./AsasAnjo";
 import { ASAS_INICIO, passoAsas, type ModoAsas } from "@/lib/cyber/asas";
@@ -150,7 +151,11 @@ export type AvatarLuzHandle = {
   /** o TRAJE: o CORPO DE ASTRONAUTA (components/cyber/CorpoAstronauta — um modelo riggado no Mixamo, que copia a pose
    *  do esqueleto do avatar); do corpo VRM só o rosto, atrás da viseira. As poses das armas de fogo ficam como foram
    *  gravadas. (Carrega na 1ª vez: até chegar, fica o corpo de sempre) */
-  traje(on: boolean, op?: { /** a cor da armadura (a do fundador é a preta) */ paleta?: Paleta; /** o modelo (sem ele: a feminina pra quem tem o jeito de corpo feminino, o masculino pros outros) */ modelo?: ModeloAstronauta }): void;
+  traje(on: boolean, op?: { /** a cor da armadura (a do fundador é a preta) */ paleta?: Paleta; /** o modelo (sem ele: a feminina pra quem tem o jeito de corpo feminino, o masculino pros outros) */ modelo?: ModeloAstronauta;
+    /** a versão LEVE do traje (os outros personagens — o meu é o detalhado) */ leve?: boolean;
+    /** SEM CAPACETE, com esse rosto de anime (`null` = de capacete; sem o campo, fica como está) */ rosto?: Rosto | null }): void;
+  /** tira/põe o capacete (o rosto de anime sem ele; `null` = de capacete) — barato, pode chamar todo quadro */
+  rostoTraje(r: Rosto | null): void;
   /** sai do clipe (com a mistura de volta) */
   soltarClipe(): void;
   /** um clipe de ação tocando agora? */
@@ -365,7 +370,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   let clipe: { a: THREE.AnimationAction; segurar: boolean } | null = null, wClipe = 0, pedidoClipe = 0;
   // o RIFLE (lib/cyber/rifle): o estado do quadro, a arma posta nas mãos e as ações dos andares com ela (baixadas na 1ª
   // vez que ela aparece; tocam sempre, em laço, com o peso que o quadro manda)
-  let vrmAtual: VRM | null = null, astroDoVrm = false, astro: CorpoAstronautaHandle | null = null, modeloTraje: ModeloAstronauta = "m", paletaTraje: Paleta = "branca", astroPedido = false, trajeOn = false, soldadoEscondido: THREE.Object3D[] | null = null, mochilaAntes = true, vivoAv = true;
+  let vrmAtual: VRM | null = null, astroDoVrm = false, astro: CorpoAstronautaHandle | null = null, modeloTraje: ModeloAstronauta = "m", trajeLeve = false, rostoAstro: Rosto | null = null, paletaTraje: Paleta = "branca", astroPedido = false, trajeOn = false, soldadoEscondido: THREE.Object3D[] | null = null, mochilaAntes = true, vivoAv = true;
   let semMochilaNunca = false;
   /** com o astronauta pronto: ele aparece, o corpo de antes some (do VRM, só o rosto — atrás da viseira) */
   const vestir = () => {
@@ -374,7 +379,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
     // a MOCHILA A JATO vai nas COSTAS do traje (segue o peito); se o modelo tem mochila própria, só os propulsores —
     // embaixo dela. Com as asas (o fundador), nada: as asas são o voo dele
     if (astro.costas && !asas && !semMochilaNunca) {
-      astro.costas.add(mochila); mochila.scale.setScalar(modeloTraje === "f" ? 0.78 : 1); mochila.position.set(0, -0.02, astro.temMochila ? -0.06 : 0.02); mochila.rotation.set(0, 0, 0); mochila.visible = true;
+      astro.costas.add(mochila); mochila.scale.setScalar(modeloTraje === "f" ? 0.94 : 1); mochila.position.set(0, -0.02, astro.temMochila ? -0.06 : 0.02); mochila.rotation.set(0, 0, 0); mochila.visible = true;
       for (const x of pecasCaixa) x.visible = !astro.temMochila;
     } else if (mochila.visible) { mochilaAntes = true; mochila.visible = false; }
     if (espelho) espelho.rosto(astro.ancoraRosto, ASTRONAUTAS[modeloTraje].olhos.escala);
@@ -382,14 +387,14 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   };  /** carrega e veste o modelo da vez (a feminina copia o VRM quando ele já chegou) */
   const pedirAstro = () => {
     if (astro || astroPedido || !modeloMx) return;
-    astroPedido = true; const qual = modeloTraje;
+    astroPedido = true; const qual = modeloTraje, leve = trajeLeve;
     void carregarAstronauta(ASTRONAUTAS[qual].url).then((g) => {
       astroPedido = false;
-      if (vivoAv && qual !== modeloTraje && trajeOn) { pedirAstro(); return; }   // (mudou de modelo enquanto carregava: pede o certo)
-      if (!vivoAv || !modeloMx || qual !== modeloTraje || astro) return;
+      if (vivoAv && (qual !== modeloTraje || leve !== trajeLeve) && trajeOn) { pedirAstro(); return; }   // (mudou de modelo enquanto carregava: pede o certo)
+      if (!vivoAv || !modeloMx || qual !== modeloTraje || leve !== trajeLeve || astro) return;
       const doVrm = qual === "f" && !!vrmAtual;
-      astro = vestirAstronauta(g, modeloMx, corpo, { rim: `#${luz.getHexString()}`, olhos: ASTRONAUTAS[qual].olhos, fonteVrm: doVrm ? vrmAtual! : undefined });
-      astroDoVrm = doVrm; astro.pintar(paletaTraje); astro.visivel(false); vestir();
+      astro = vestirAstronauta(g, modeloMx, corpo, { rim: `#${luz.getHexString()}`, olhos: ASTRONAUTAS[qual].olhos, fonteVrm: doVrm ? vrmAtual! : undefined, leve });
+      astroDoVrm = doVrm; astro.pintar(paletaTraje); astro.rosto(rostoAstro); astro.visivel(false); vestir();
     }).catch((e) => { astroPedido = false; console.warn("[avatar] o astronauta não carregou:", e); });
   };
   /** descarta o astronauta (pra vestir outro): o rosto continua no modo traje até o novo chegar */
@@ -1160,12 +1165,14 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       if (op?.paleta && op.paleta !== paletaTraje) { paletaTraje = op.paleta; astro?.pintar(paletaTraje); }
       if (!modeloMx) return;
       const quer: ModeloAstronauta = op?.modelo ?? (estiloCorpo === "feminina" ? "f" : "m");
-      if (on && trajeOn && quer !== modeloTraje) { largarAstro(); modeloTraje = quer; pedirAstro(); return; }   // (já vestido, trocou de modelo — o gênero: veste o outro)
+      if (op && "rosto" in op) { rostoAstro = op.rosto ?? null; astro?.rosto(rostoAstro); }
+      const leve = op?.leve ?? trajeLeve;
+      if (on && trajeOn && (quer !== modeloTraje || leve !== trajeLeve)) { largarAstro(); modeloTraje = quer; trajeLeve = leve; pedirAstro(); return; }   // (já vestido, trocou de modelo — o gênero: veste o outro)
       if (on === trajeOn) return;
       trajeOn = on;
       if (on) {
-        if (astro && quer !== modeloTraje) largarAstro();   // (trocou de modelo: veste o outro)
-        modeloTraje = quer;
+        if (astro && (quer !== modeloTraje || leve !== trajeLeve)) largarAstro();   // (trocou de modelo: veste o outro)
+        modeloTraje = quer; trajeLeve = leve;
         if (astro) vestir(); else pedirAstro();
       } else {
         if (astro?.cena.visible) { astro.visivel(false); mochila.visible = mochilaAntes && !asas; }
@@ -1186,6 +1193,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
         clipe = { a, segurar: !!op?.segurar };
       });
     },
+    rostoTraje(r) { rostoAstro = r; astro?.rosto(r); },
     soltarClipe() { pedidoClipe++; clipe = null; },
     noClipe: () => !!clipe,
     pontoDaMao(lado, out) {
