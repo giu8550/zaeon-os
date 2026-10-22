@@ -13,6 +13,9 @@ import { PLATAFORMAS, andarNaPlataforma, type IdPlataforma } from "../plataforma
 import { acasoDe, embaralhar } from "./aleatorio";
 import type { AmbienteEstudo } from "./agenda";
 import { lugaresDaCidadela } from "../cidadela";
+import { NOS } from "../buracos";
+/** o raio (m) em volta do ponto de CHEGADA de uma sala onde a frota não fica parada (quem chega aparece ali) */
+export const LIVRE_NA_CHEGADA = 7;
 
 /** `cabine` = a cadeira de uma CABINE DE ESTUDO da cidadela (lib/cyber/cidadela) */
 export type TipoSpot = "sofa" | "pufe" | "puff" | "trono" | "piso" | "pista" | "cabine";
@@ -46,6 +49,7 @@ function assentos(sala: NomeSala, amb: AmbienteEstudo): Spot[] {
 /** pontos no CHÃO de uma sala: grade, longe dos colisores, dos assentos, da pista/palco e do corredor da porta */
 function chaoDaSala(sala: NomeSala, amb: AmbienteEstudo): Spot[] {
   const s = CIDADE.salas[sala], cs = colisoresDaCidade(), ocupados = lugaresDoLounge().flatMap((l) => l.assentos), out: Spot[] = [];
+  const chegada = (NOS as Partial<Record<string, { chegada: { x: number; z: number } }>>)[sala]?.chegada;
   const pista = sala === "lounge" ? PISTA : null, passo = 2.6, R = s.r - 5;
   for (let lx = -R; lx <= R; lx += passo) for (let lz = -R; lz <= R; lz += passo) {
     if (Math.hypot(lx, lz) > R) continue;
@@ -54,6 +58,9 @@ function chaoDaSala(sala: NomeSala, amb: AmbienteEstudo): Spot[] {
     if (sala === "lounge" && (lz < -32 || (lx > 52 && lz > -28 && lz < -10))) continue;   // o palco, a torre e as caixas; a saída pro templo
     if (sala === "lounge" && lz > DECK.zFrente - 2.5 && noPatioOcupado(lx, lz)) continue;   // a rampa, a calçada central e os postes do pátio
     const w = mundo(daSala(s, lx, lz));
+    // (longe de onde as PESSOAS chegam pelo buraco negro: uma IA parada ali ficava dentro de quem acabava de chegar —
+    //  o dono via uma "skin amarela" por cima do traje dele)
+    if (chegada && Math.hypot(w.x - chegada.x, w.z - chegada.z) < LIVRE_NA_CHEGADA) continue;
     if (cs.some((c) => Math.hypot(w.x - c.x, w.z - c.z) < c.r + 1.1)) continue;
     if (ocupados.some((o) => Math.hypot(w.x - o.x, w.z - o.z) < 1.6)) continue;
     // de frente pro meio da sala (ou pro lado, um pouco variado)

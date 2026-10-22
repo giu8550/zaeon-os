@@ -7,7 +7,7 @@ import { estadoDaIA, MOV, OFFLINE, pontoDaGaragem, roteiroAndar, roteiroMoto, vi
 import { CONVERSA, divaga, episodiosDoDia, limparFala, normalizarFala, promptEpisodio, tomDaResposta, validarFalas } from "./conversas";
 import { gerarFalasSemRepetir, gerarResposta, type DepsTexto } from "./texto";
 import { CONFIG_PADRAO, aplicarMigracoes, novoLote, sanitizarConfig, totalDaFrota } from "./config";
-import { salaDoPonto, spotsDe } from "./lugares";
+import { LIVRE_NA_CHEGADA, salaDoPonto, spotsDe } from "./lugares";
 import { nivelDoPonto } from "../niveis";
 import { NOS } from "../buracos";
 import { alturaNoComplexo, naPiramide } from "../temploCosmico";
@@ -353,5 +353,14 @@ describe("SEM HORÁRIO: todo mundo passeando pela Zaeon e pelos lounges (o padr�
       }
     });
     expect(nosLounges).toBeGreaterThan(20);
+  });
+});
+
+describe("a frota não fica parada onde as pessoas chegam", () => {
+  it("nenhum lugar de chão das salas a menos de LIVRE_NA_CHEGADA da chegada (o dono via uma IA 'por cima' dele ao chegar)", () => {
+    for (const s of ["biblioteca", "jardim", "lounge"] as const) {
+      const ch = NOS[s].chegada;
+      for (const p of spotsDe(s).filter((x) => x.tipo === "piso")) expect(Math.hypot(p.x - ch.x, p.z - ch.z), `${s} ${p.id}`).toBeGreaterThanOrEqual(LIVRE_NA_CHEGADA);
+    }
   });
 });
