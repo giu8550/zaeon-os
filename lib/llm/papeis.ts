@@ -1,17 +1,17 @@
 /**
  * lib/llm/papeis.ts — os modelos da Contabo, cada um no papel que a CPU aguenta, com o Google cobrindo o resto.
  *
- *   gerarPapel("curto", req)  → tenta `zaeon-local-geral` (gpt-oss-20b) no gateway; falhou/timeout/vazio/ocupado →
+ *   gerarPapel("curto", req)  → tenta `zaeon-local-mini` (qwen3 4B instruct) no gateway; falhou/timeout/vazio/ocupado →
  *                               o MESMO pedido no Vertex (os modelos de `google`, em ordem). Quem chama não vê a troca.
  *
  * Papéis (números medidos no PR — docs/MODELOS_LOCAIS_PAPEIS.md):
  *   guarda → llama-guard3 8B : moderação da mensagem do aluno, DEPOIS do turno (auditoria, nunca bloqueia).
- *   curto  → gpt-oss-20b     : classificar/titular curto em segundo plano (gatekeeper do cérebro, juiz da árvore),
- *                              reasoning_effort "low" (~50–140 tokens pensando + o JSON: 17–23 s quente).
+ *   curto  → qwen3 4B instruct-2507 : classificar/titular curto em segundo plano (gatekeeper do cérebro, juiz da
+ *                              árvore). Quente 2,9–4,2 s (gatekeeper) e 12–17 s (juiz); frio ~27 s.
  *
- * Por que não o qwen3 4B (zaeon-local-mini): o `qwen3:4b` do Ollama é o build THINKING-2507 — pensa sempre,
- * ignora /no_think, think:false e reasoning_effort, e gastou 700 tokens (133–175 s) sem chegar ao JSON.
- * Se o dono puxar o `qwen3:4b-instruct-2507` na Contabo, LOCAL_CURTO_MODELO=zaeon-local-mini troca sem deploy.
+ * O `qwen3:4b` puro do Ollama é o build THINKING-2507 (pensa sempre, ignora /no_think/think:false, 700 tokens sem
+ * JSON): a Contabo aponta `qwen3-4b` pro `qwen3:4b-instruct-2507-q4_K_M` desde 2026-10-22. Reserva local:
+ * LOCAL_CURTO_MODELO=zaeon-local-geral (gpt-oss-20b, effort low, 17–23 s quente) troca sem deploy.
  *
  * Regras:
  *   - Só fire-and-forget. A CPU dá 6–9 tok/s e carregar modelo frio leva até ~100 s: nada aqui entra no
@@ -37,7 +37,7 @@ export type DefPapel = {
   envModelo?: string;
   /** Env que desliga o papel ("0"/"off"/"false"). */
   flag: string;
-  /** Teto da tentativa local. Folgado: ninguém espera nenhum deles (frio medido: guard 52 s, gpt-oss 112–120 s). */
+  /** Teto da tentativa local. Folgado: ninguém espera nenhum deles (frio medido: guard 52 s, qwen3 4B ~27 s, gpt-oss 112–120 s). */
   timeoutMs: number;
   /** Fallback Google, em ordem: o 1º que responder. */
   google: () => string[];
@@ -53,7 +53,8 @@ const LITE = () => process.env.GEMINI_MODEL_LITE || "gemini-3.5-flash-lite";
 export const PAPEIS: Record<Papel, DefPapel> = {
   guarda: { modeloLocal: "zaeon-local-guard", flag: "LOCAL_GUARDA", timeoutMs: 90_000, maxEmVoo: 2, google: () => [LITE(), GEMINI_MODEL_FLASH] },
   curto: {
-    modeloLocal: "zaeon-local-geral", envModelo: "LOCAL_CURTO_MODELO", flag: "LOCAL_CURTO", timeoutMs: 150_000, maxEmVoo: 1,
+    // reasoning_effort só pesa se LOCAL_CURTO_MODELO apontar pro gpt-oss; o instruct ignora.
+    modeloLocal: "zaeon-local-mini", envModelo: "LOCAL_CURTO_MODELO", flag: "LOCAL_CURTO", timeoutMs: 150_000, maxEmVoo: 1,
     google: () => [GEMINI_MODEL_FLASH], extra: { reasoning_effort: "low" },
   },
 };

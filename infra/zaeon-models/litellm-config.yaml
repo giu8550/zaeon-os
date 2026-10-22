@@ -31,7 +31,9 @@ model_list:
 
   - model_name: qwen3-4b                     # rápido/tiny: chat simples, classificação
     litellm_params:
-      model: ollama_chat/qwen3:4b
+      # INSTRUCT-2507, não o `qwen3:4b` (= thinking-2507: pensa sempre, ignora /no_think/think:false e
+      # gastou 700 tokens sem chegar ao JSON — medido 2026-10-21, docs/MODELOS_LOCAIS_PAPEIS.md).
+      model: ollama_chat/qwen3:4b-instruct-2507-q4_K_M
       api_base: http://ollama:11434
       num_thread: 8                          # ver nota THREADS no topo
 
