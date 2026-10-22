@@ -3,7 +3,11 @@
  *
  *   docker exec -w /app zaeon_web npx tsx scripts/ingerir-bases-area.ts --seco              # só conta (nada grava)
  *   docker exec -w /app zaeon_web npx tsx scripts/ingerir-bases-area.ts --fontes scielo,wiki,medicina,enem
- *   opções: --por-area 1500  --scielo-jsonl /tmp/scielo.jsonl (gerado por scripts/scielo-para-jsonl.py)  --linhas N (teto lido)
+ *   opções: --por-area 1500  --dir /tmp/bases (JSONL gerados por scripts/scielo-para-jsonl.py)  --linhas N (teto lido da SciELO)
+ *
+ * A API de linhas do HF (datasets-server) não serve a SciELO (parquet de 2,8 GB) e devolve 429 rápido nas outras, então
+ * os parquets viram JSONL antes (scielo.jsonl, medical_meadow_wikidoc_pt.jsonl, information-pt.jsonl com --cru) e o
+ * ENEM vem direto dos .jsonl do repositório.
  *
  * Grava pelo MESMO caminho dos PDFs (lib/rag/ingerir `ingerirTexto`): dedupe por hash, trechos, fila de vetores
  * (o worker rag-index gera os embeddings depois; até lá a busca por palavra já acha). Rodar de novo é seguro.
@@ -18,7 +22,7 @@ const SECO = args.includes("--seco");
 const FONTES = opt("--fontes", "scielo,wiki,medicina,enem").split(",");
 const POR_AREA = Number(opt("--por-area", "1500"));
 const LINHAS = Number(opt("--linhas", "1000000"));
-const DS = "https://datasets-server.huggingface.co";
+const DIR = opt("--dir", "/tmp/bases");
 const UA = { "User-Agent": "ZaeonBot/1.0 (https://zaeon.com.br; bases de estudo)" };
 
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -30,9 +34,10 @@ async function json(url: string, tentativas = 5): Promise<any> {
   }
   throw new Error(`falhou: ${url.slice(0, 120)}`);
 }
-async function linhas(dataset: string, config: string, offset: number, length = 100): Promise<any[]> {
-  const d = await json(`${DS}/rows?dataset=${encodeURIComponent(dataset)}&config=${encodeURIComponent(config)}&split=train&offset=${offset}&length=${length}`);
-  return (d.rows ?? []).map((r: any) => r.row);
+async function* jsonl(caminho: string): AsyncGenerator<any> {
+  const { createReadStream } = await import("node:fs");
+  const { createInterface } = await import("node:readline");
+  for await (const l of createInterface({ input: createReadStream(caminho, "utf8"), crlfDelay: Infinity })) if (l.trim()) yield JSON.parse(l);
 }
 
 async function main() {
@@ -53,17 +58,12 @@ async function main() {
   };
 
   if (FONTES.includes("scielo")) {
-    // A API de linhas do HF não serve este dataset (1 parquet de 2,8 GB, um bloco só). Ele é pré-extraído pra JSONL
-    // leve ({doc_id, year, titulo, resumo}) por scripts/scielo-para-jsonl.py e lido daqui (--scielo-jsonl).
-    const caminho = opt("--scielo-jsonl", "/tmp/scielo.jsonl");
-    const { createReadStream } = await import("node:fs");
-    const { createInterface } = await import("node:readline");
+    // {doc_id, year, titulo, resumo} — scripts/scielo-para-jsonl.py
     const porArea: Record<string, Array<{ pontos: number; titulo: string; resumo: string; id: string; ano: number }>> = {};
     let lidas = 0;
-    for await (const l of createInterface({ input: createReadStream(caminho, "utf8"), crlfDelay: Infinity })) {
-      if (!l.trim() || lidas >= LINHAS) continue;
+    for await (const row of jsonl(`${DIR}/scielo.jsonl`)) {
+      if (lidas >= LINHAS) break;
       lidas++;
-      const row = JSON.parse(l);
       if (String(row.resumo ?? "").length < 400) continue;
       const c = classificarArea(row.titulo, row.resumo);
       if (c) (porArea[c.slug] ??= []).push({ pontos: c.pontos, titulo: row.titulo, resumo: row.resumo, id: String(row.doc_id), ano: row.year });
@@ -94,11 +94,10 @@ async function main() {
   if (FONTES.includes("medicina")) {
     // "<s> [INST] <<SYS>>…<</SYS>> pergunta [/INST] resposta </s>" → lotes de 20 perguntas e respostas por documento
     const fontes = [
-      { ds: "rhaymison/medicine-medical_meadow_wikidoc_pt", areas: ["medicina", "enfermagem"] },
-      { ds: "rhaymison/medicine-information-pt", areas: ["farmacia", "medicina"] },
+      { ds: "rhaymison/medicine-medical_meadow_wikidoc_pt", arq: "medical_meadow_wikidoc_pt.jsonl", areas: ["medicina", "enfermagem"] },
+      { ds: "rhaymison/medicine-information-pt", arq: "information-pt.jsonl", areas: ["farmacia", "medicina"] },
     ];
     for (const f of fontes) {
-      const total = (await json(`${DS}/size?dataset=${f.ds}`)).size.dataset.num_rows as number;
       let lote: string[] = [];
       let n = 0;
       const fechar = async () => {
@@ -109,15 +108,13 @@ async function main() {
         }
         lote = [];
       };
-      for (let off = 0; off < total; off += 100) {
-        for (const row of await linhas(f.ds, "default", off)) {
-          const m = /\[\/SYS\]\]?|<<\/SYS>>/.exec(row.input ?? "");
-          const corpo = String(row.input ?? "").slice(m ? m.index + m[0].length : 0);
-          const [perg, resp] = corpo.split("[/INST]");
-          const P = perg?.replace(/<\/?s>|\[INST\]/g, "").trim(), R = resp?.replace(/<\/?s>/g, "").trim();
-          if (P && R) lote.push(`**Pergunta:** ${P}\n**Resposta:** ${R}`);
-          if (lote.length >= 20) await fechar();
-        }
+      for await (const row of jsonl(`${DIR}/${f.arq}`)) {
+        const m = /\[\/SYS\]\]?|<<\/SYS>>/.exec(row.input ?? "");
+        const corpo = String(row.input ?? "").slice(m ? m.index + m[0].length : 0);
+        const [perg, resp] = corpo.split("[/INST]");
+        const P = perg?.replace(/<\/?s>|\[INST\]/g, "").trim(), R = resp?.replace(/<\/?s>/g, "").trim();
+        if (P && R) lote.push(`**Pergunta:** ${P}\n**Resposta:** ${R}`);
+        if (lote.length >= 20) await fechar();
       }
       await fechar();
     }
@@ -125,11 +122,13 @@ async function main() {
 
   if (FONTES.includes("enem")) {
     for (const ano of ["2022", "2023", "2024"]) {
-      for (let off = 0; off < 200; off += 100) {
-        for (const q of await linhas("maritaca-ai/enem", ano, off)) {
-          const alts = Array.isArray(q.alternatives) ? q.alternatives.map((a: string, i: number) => `${"ABCDE"[i]}) ${a}`).join("\n") : "";
-          await gravar(AREA_GERAL, "enem", { chave: `enem-${ano}-${q.id}`, titulo: `ENEM ${ano} — ${q.id}`, texto: `${q.question}\n\n${alts}\n\nGabarito: ${q.label}\n\nFonte: maritaca-ai/enem (Hugging Face) — licença Apache-2.0.` });
-        }
+      const r = await fetch(`https://huggingface.co/datasets/maritaca-ai/enem/resolve/main/${ano}.jsonl`, { headers: UA });
+      if (!r.ok) throw new Error(`enem ${ano}: HTTP ${r.status}`);
+      for (const l of (await r.text()).split("\n")) {
+        if (!l.trim()) continue;
+        const q = JSON.parse(l);
+        const alts = Array.isArray(q.alternatives) ? q.alternatives.map((a: string, i: number) => `${"ABCDE"[i]}) ${a}`).join("\n") : "";
+        await gravar(AREA_GERAL, "enem", { chave: `enem-${ano}-${q.id}`, titulo: `ENEM ${ano} — ${q.id}`, texto: `${q.question}\n\n${alts}\n\nGabarito: ${q.label}\n\nFonte: maritaca-ai/enem (Hugging Face) — licença Apache-2.0.` });
       }
     }
   }

@@ -18,6 +18,11 @@ describe("bases por área", () => {
     expect(classificarArea("Qualidade de vida de pacientes em hemodiálise", "Estudo clínico com pacientes em tratamento dialítico no hospital universitário; diagnóstico e mortalidade.")?.slug).toBe("medicina");
     expect(classificarArea("Reflexões sobre a cidade", "Ensaio sobre urbanismo e cultura.")).toBeNull();
   });
+  it("termo com $ é palavra inteira; termos genéricos não puxam artigo de outra área", () => {
+    expect(classificarArea("O pós-estruturalismo e os estudos de gestão", "Estruturalismo, sujeito e emancipação na gestão.")).toBeNull();
+    expect(classificarArea("Aptidão física de escolares", "Educação física e atividade física em escolares; condicionamento físico.")).toBeNull();
+    expect(classificarArea("Análise estrutural de vigas de concreto armado", "Ensaio estrutural de vigas de concreto em edificações.")?.slug).toBe("eng-civil");
+  });
   it("tituloEResumo: 1ª linha é o título; o resumo começa no 'Resumo' quando ele vem cedo", () => {
     const r = tituloEResumo("Título do artigo\nAutores X e Y, Universidade Z\nRESUMO Objetivo: avaliar algo. Métodos: tal.\n\nIntrodução longa...", 60);
     expect(r.titulo).toBe("Título do artigo");
