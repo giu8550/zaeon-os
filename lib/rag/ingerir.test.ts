@@ -310,3 +310,26 @@ describe("ingerirPdf", () => {
     expect(r2.status).toBe("novo");
   });
 });
+
+describe.skipIf(!banco)("ingerirTexto — texto pelo mesmo caminho do PDF", () => {
+  it("vira documento com o título, trechos com a permissão da área, enfileira; 2ª vez = reaproveitado (+permissão)", async () => {
+    const { ingerirTexto } = await import("./ingerir");
+    const db = banco!.db;
+    const enfileirar = vi.fn(async (_id: string) => "fila" as const);
+    const e = {
+      titulo: "Fotossíntese (Wikipédia)", texto: "Primeiro parágrafo sobre luz.\n\nSegundo parágrafo sobre clorofila.", chave: "wiki-pt-Fotossíntese",
+      origem: "dataset" as const, criadoPor: "dataset:wikipedia", permissao: { turmaId: "area:biologia" },
+    };
+    const r = await ingerirTexto({ db, enfileirar }, e);
+    expect(r.status).toBe("novo");
+    expect(r.trechos).toBeGreaterThan(0);
+    expect(enfileirar).toHaveBeenCalledWith(r.documentoId);
+    const { documentos, trechos } = await estado(db);
+    expect(documentos[0]).toMatchObject({ titulo: "Fotossíntese (Wikipédia)", turma_ids: ["area:biologia"] });
+    expect(documentos[0].markdown).toContain("Segundo parágrafo sobre clorofila.");
+    expect(trechos.every((t) => t.turma_ids.includes("area:biologia"))).toBe(true);
+    const r2 = await ingerirTexto({ db, enfileirar }, { ...e, permissao: { turmaId: "area:geral" } });
+    expect(r2).toMatchObject({ status: "reaproveitado", documentoId: r.documentoId });
+    expect((await estado(db)).documentos[0].turma_ids.sort()).toEqual(["area:biologia", "area:geral"]);
+  });
+});

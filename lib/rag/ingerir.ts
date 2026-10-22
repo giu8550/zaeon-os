@@ -28,7 +28,7 @@ export type IngerirEntrada = {
   bytes: Uint8Array;
   nomeArquivo: string;
   titulo?: string;
-  origem: "admin" | "chat" | "gerado";
+  origem: "admin" | "chat" | "gerado" | "dataset";
   criadoPor: string;
   permissao: Permissao;
 };
@@ -171,4 +171,23 @@ async function ingerir(deps: IngerirDeps, e: IngerirEntrada): Promise<IngerirRes
     await marcarErro(db, doc.id, "indexacao_falhou");
     return { documentoId: doc.id, status: "erro", erro: "indexacao_falhou", trechos: 0, paginas };
   }
+}
+
+/**
+ * Texto (não PDF) → o MESMO caminho do `ingerirPdf`: dedupe pelo hash do texto, corte em trechos, fila de vetores.
+ * Usado pelas bases por área (scripts/ingerir-bases-area.ts: artigos da SciELO, verbetes da Wikipédia, Q&A médico).
+ * `chave` vira o nome do "arquivo" (ex.: "scielo-1234"); o título vira o heading do único bloco de página 1.
+ */
+export async function ingerirTexto(
+  deps: Omit<IngerirDeps, "extrair">,
+  e: Omit<IngerirEntrada, "bytes" | "nomeArquivo"> & { titulo: string; texto: string; chave: string },
+): Promise<IngerirResultado> {
+  const texto = String(e.texto ?? "").trim();
+  const paragrafos = texto.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  const blocks: Block[] = [{ type: "heading", level: 1, page: 1, text: e.titulo }, ...paragrafos.map((p) => ({ type: "paragraph" as const, page: 1, text: p }))];
+  const extrair = (async () => ({ blocks, markdown: `# ${e.titulo}\n\n${texto}` })) as unknown as IngerirDeps["extrair"];
+  return ingerirPdf({ ...deps, extrair }, {
+    bytes: new TextEncoder().encode(`${e.titulo}\n\n${texto}`), nomeArquivo: e.chave, titulo: e.titulo,
+    origem: e.origem, criadoPor: e.criadoPor, permissao: e.permissao,
+  });
 }
