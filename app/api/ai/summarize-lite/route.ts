@@ -1,12 +1,12 @@
 // Resumo LEVE (modo Vercel) — sem baixar o PDF. Resume do título + abstract + autores
-// que já estão nas sessões de pesquisa do usuário. Usa Gemini Flash (Vertex, via geminiText
-// → fatura no crédito GenAI). O resumo PROFUNDO (baixa o PDF inteiro) fica pro modo
+// que já estão nas sessões de pesquisa do usuário. Conteúdo 100% PÚBLICO (metadados do artigo) → vai pelo
+// POOL GRÁTIS (lib/llm/publico: AI Studio → Cerebras → reserva Google), Vertex direto se o pool cair. O resumo PROFUNDO (baixa o PDF inteiro) fica pro modo
 // container — ver lib/runtime/mode.
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
-import { geminiText } from "@/lib/ai/gemini-text";
+import { gerarTextoPublico } from "@/lib/llm/publico";
 import { cacheJson, hashKey } from "@/src/lib/cache";
 import { guard } from "@/src/lib/ratelimit";
 
@@ -70,7 +70,7 @@ export async function POST(req: Request) {
     try {
         // mesmo (título+abstract) → mesmo resumo, cacheado 7d (evita repagar e reduz 504).
         const text = await cacheJson(hashKey("sumlite", ctx), 60 * 60 * 24 * 7,
-            () => geminiText({ system: SYSTEM, prompt: ctx, temperature: 0.5 }));
+            async () => (await gerarTextoPublico({ system: SYSTEM, prompt: ctx, temperature: 0.5, surface: "pesquisa", phase: "resumo-artigo", userId: dbUser.id })).texto);
         return NextResponse.json({ text, mode: "lite", basis: abstract ? "abstract" : "title", context: ctx });
     } catch (e: any) {
         console.error("summarize-lite error:", e?.message);

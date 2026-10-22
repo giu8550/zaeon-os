@@ -63,7 +63,9 @@ describe("pool — constantes", () => {
     expect(ehModeloPool(undefined)).toBe(false);
   });
   it("grupos e tetos cobrem os 3 provedores ligados", () => {
-    expect(GRUPOS_POOL).toEqual(["zaeon-pool-lite", "zaeon-pool-cf", "zaeon-pool-groq"]);
+    expect(GRUPOS_POOL).toEqual(["zaeon-pool-lite", "zaeon-pool-cerebras", "zaeon-pool-cf", "zaeon-pool-groq"]);
+    expect(alvoDe("zaeon-pool-cerebras")).toBe("cerebras");
+    expect(alvoDe("cerebras/gpt-oss-120b", "cerebras")).toBe("cerebras");
     expect(TETOS_DIA.groq).toEqual({ unidade: "tokens/min", teto: 8_000, renova: "min" });
     expect(TETOS_DIA["gemini-free"].renova).toBe("dia");
   });
