@@ -123,7 +123,10 @@ async function papeis() {
   await (prisma as any).$disconnect?.();
 }
 
-if (args.includes("--medir")) await medir();
-if (args.includes("--papeis")) await papeis();
-if (!args.includes("--medir") && !args.includes("--papeis")) console.log("use --medir e/ou --papeis [--forcar-falha]");
-process.exit(0);
+// Sem top-level await: no container o tsx compila pra CommonJS.
+async function main() {
+  if (args.includes("--medir")) await medir();
+  if (args.includes("--papeis")) await papeis();
+  if (!args.includes("--medir") && !args.includes("--papeis")) console.log("use --medir e/ou --papeis [--forcar-falha]");
+}
+main().then(() => process.exit(0), (e) => { console.error(e); process.exit(1); });
