@@ -88,7 +88,7 @@ describe("o Templo Cósmico: o SALÃO central e a ponte pro lounge", () => {
 
   it("o CAMINHO DO MEIO: o CAMPUS DE TI (estações dos dois lados, o corredor livre) até a TORRE alta, e o ELEVADOR até o topo", () => {
     expect(CYBER.x).toBe(PIRAMIDE.x); expect(CHEGADA_SALAO.x).toBe(PIRAMIDE.x);   // a mesma linha de quem chega
-    expect(ESTACOES_TI.length).toBeGreaterThan(90);   // muitas estações de trabalho
+    expect(ESTACOES_TI.length).toBeGreaterThan(70);   // muitas estações de trabalho (as primeiras fileiras viraram os telões do mercado)
     expect(CYBER.h).toBeGreaterThanOrEqual(100); expect(SALAO.z - TORRE_TI.z).toBeGreaterThan(280);   // mais alta e mais longe
     const cs = colisoresDaCidade();
     // o corredor do meio, de trás da pirâmide até o anel do elevador: livre e no nível do salão

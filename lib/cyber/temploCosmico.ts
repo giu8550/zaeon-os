@@ -146,9 +146,30 @@ export function nivelNaTorre(q: P2, yRel: number): 0 | 1 | 2 | null {
  *  sala"): CABINES no molde das da cidadela (lib/cyber/ceu `CABINE`: o piso, a mesa, o monitor, a cadeira, os painéis de
  *  vidro), em fileiras dos dois lados do CORREDOR do meio (livre), viradas pra torre (o −z) — e, do lado de cada uma, o
  *  DIFUSOR que recebe os raios da tempestade de cima */
+/** os TELÕES DO MERCADO na ponte inicial do campus (out/2026, o dono: "o epicentro financeiro — telões em perspectiva de
+ *  cinema dos lados da ponte central; na ponte inicial, só observação: 2 na esquerda — um dashboard só pra Solana, outro
+ *  pras outras moedas — e um na direita com as métricas da blockchain, algo como Bloomberg"). Ficam no lugar das
+ *  primeiras fileiras de cabines, em pé sobre dois pilares, virados pro corredor e um pouco pra quem chega do salão.
+ *  `x`/`z` = o centro da base da tela; `l`/`a` = largura/altura; `rot` = pra onde a tela olha (ângulo no plano, a partir do
+ *  +x); `base` = a altura da borda de baixo acima do piso do salão */
+export type TelaoMercado = { id: "solana" | "moedas" | "blockchain"; x: number; z: number; l: number; a: number; rot: number; base: number };
+export const ZONA_TELOES = { z0: SALAO.z - SALAO.r - 4, z1: SALAO.z - SALAO.r - 80 } as const;
+export const TELOES_MERCADO: readonly TelaoMercado[] = (() => {
+  const olha = (lado: -1 | 1) => (lado < 0 ? 0 : Math.PI) - lado * 0.6;   // (pro corredor, girado ~35° pra quem vem do salão)
+  return [
+    // (a sala do lounge é ESPELHADA: o +x do layout fica à ESQUERDA de quem vem do salão)
+    { id: "solana", x: SALAO.x + 24, z: SALAO.z - SALAO.r - 22, l: 26, a: 14.6, rot: olha(1), base: 3.2 },
+    { id: "moedas", x: SALAO.x + 24, z: SALAO.z - SALAO.r - 58, l: 26, a: 14.6, rot: olha(1), base: 3.2 },
+    { id: "blockchain", x: SALAO.x - 23, z: SALAO.z - SALAO.r - 40, l: 34, a: 19, rot: olha(-1), base: 3.2 },
+  ];
+})();
+/** um ponto na tela (`u` -0,5..0,5 ao longo da largura) → layout */
+export const naTelaMercado = (t: TelaoMercado, u: number): P2 => ({ x: t.x - Math.sin(t.rot) * u * t.l, z: t.z + Math.cos(t.rot) * u * t.l });
+/** os dois PILARES de cada telão (a 1/3 de cada ponta) */
+export const pilaresDoTelao = (t: TelaoMercado): P2[] => [naTelaMercado(t, -0.3), naTelaMercado(t, 0.3)];
 export const ESTACOES_TI: readonly { x: number; z: number }[] = (() => {
   const out: { x: number; z: number }[] = [];
-  for (let z = SALAO.z - SALAO.r - 16; z >= CAMPUS.zFim + 20; z -= 9) for (const lado of [-1, 1]) for (const dx of [11, 18, 25]) out.push({ x: SALAO.x + lado * dx, z });
+  for (let z = ZONA_TELOES.z1 - 6; z >= CAMPUS.zFim + 20; z -= 9) for (const lado of [-1, 1]) for (const dx of [11, 18, 25]) out.push({ x: SALAO.x + lado * dx, z });
   return out;
 })();
 /** a cabine do campus (o mesmo molde da da cidadela; referencial dela: x ao longo da largura, z pra FRENTE — o monitor
@@ -196,7 +217,7 @@ export const CUBO_CYBER = { meia: NUCLEO_CYBER.r * Math.SQRT2 * 0.45, alt: NUCLE
 /** os RACKS de servidor nas laterais do campus (centro; a caixa tem 1,6 × 1,1 m, 4,2 de altura) */
 export const RACKS_TI: readonly P2[] = (() => {
   const out: P2[] = [], z0 = SALAO.z - SALAO.r + 1.5, z1 = TORRE_TI.z + TORRE_TI.baseR - 1.5;
-  for (let z = z0 - 14; z > z1 + 10; z -= 7) for (const s of [-1, 1]) out.push({ x: SALAO.x + s * (CAMPUS.meia - 2.4), z });
+  for (let z = z0 - 14; z > z1 + 10; z -= 7) if (z < ZONA_TELOES.z1 || z > ZONA_TELOES.z0) for (const s of [-1, 1]) out.push({ x: SALAO.x + s * (CAMPUS.meia - 2.4), z });   // (na zona dos telões, não)
   return out;
 })();
 /** as LUMINÁRIAS de pé e as PLANTAS dos lounges estudantis (a partir do centro, sem espelho; em todos os andares) */
@@ -399,6 +420,7 @@ export function colisoresDoComplexo(rLounge: number): { x: number; z: number; r:
     for (let a = 0; a < Math.PI * 2; a += 0.7 / rr) if (!abs.some((ab) => dentroDe(a, { ang: ab.ang, meia: ab.meia + 0.05 }))) out.push({ x: CASAIS.x + Math.cos(a) * rr, z: CASAIS.z + Math.sin(a) * rr, r: 0.45 });
     for (let a = 0; a <= Math.PI * 1.5 + 1e-6; a += 0.3) out.push({ x: CASAIS.x + Math.cos(a) * 3.2, z: CASAIS.z + Math.sin(a) * 3.2, r: 0.75 }); }
   for (const r of RACKS_TI) for (const dx of [-0.4, 0.4]) out.push({ x: r.x + dx, z: r.z, r: 0.62 });   // os RACKS do campus
+  for (const t of TELOES_MERCADO) for (const p of pilaresDoTelao(t)) out.push({ ...p, r: 1.1 });   // os pilares dos TELÕES do mercado
   for (const p of PLATS) if (ehEstudo(p)) {   // os LOUNGES ESTUDANTIS: as estantes (no térreo, fora das entradas), as luminárias e as plantas
     const abs = aberturasDe(p), R = p.r - ESTANTES_ESTUDO.dentro, n = Math.ceil((2 * Math.PI * R) / 0.9);
     for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2; if (abs.some((ab) => dentroDe(a, { ang: ab.ang, meia: ab.meia + 0.12 }))) continue; out.push({ x: p.x + Math.cos(a) * R, z: p.z + Math.sin(a) * R, r: 0.5 }); }
@@ -460,6 +482,11 @@ export function solidosDoComplexo(): { x: number; z: number; r: number; topo: nu
     ...ESTACOES_TI.map((e) => ({ ...daCabineTI(e, 0, 0.2), r: 1.7, topo: -SALAO.desce + 2.4, base: -SALAO.desce })),
     ...CABINES_TORRE.map((c) => ({ ...daCabineTI(c, 0, 0.2), r: 1.7, topo: c.y + 2.4, base: c.y })),
     ...RACKS_TI.map((r) => ({ x: r.x, z: r.z, r: 1.2, topo: -SALAO.desce + 2.6, base: -SALAO.desce })),
+    // os TELÕES do mercado: os pilares e a TELA (uma fileira de cilindros ao longo dela — quem voa não atravessa)
+    ...TELOES_MERCADO.flatMap((t) => [
+      ...pilaresDoTelao(t).map((p) => ({ ...p, r: 1.1, topo: -SALAO.desce + t.base, base: -SALAO.desce })),
+      ...Array.from({ length: Math.ceil(t.l / 2) + 1 }, (_, k) => ({ ...naTelaMercado(t, -0.5 + k / Math.ceil(t.l / 2)), r: 1.1, topo: -SALAO.desce + t.base + t.a, base: -SALAO.desce + t.base - 0.4 })),
+    ]),
     { x: RASTA.x, z: RASTA.z, r: ARVORE_RASTA.r, topo: ARVORE_RASTA.alt, base: 0 },
     { x: CYBER.x, z: CYBER.z, r: CUBO_CYBER.meia * 1.15, topo: CYBER.h + CUBO_CYBER.alt, base: CYBER.h },   // (o cubo, do tamanho do desenhado)
     // a PIRÂMIDE INVERTIDA flutuando (o dono: "não parece ter colisão"): a metade de cima, larga, e a ponta com o olho
