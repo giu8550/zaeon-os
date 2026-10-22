@@ -64,7 +64,7 @@ function Botao({ children, cor, onClick, titulo, desabilitado }: { children: Rea
   return <button type="button" title={titulo} disabled={desabilitado} onPointerDown={(e) => e.stopPropagation()} onClick={onClick} className="rounded-sm border px-2 py-1 font-mono text-[10.5px] tracking-wide transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40" style={{ borderColor: `${cor}88`, color: cor }}>{children}</button>;
 }
 
-export type AcoesModulo = { recompor?: () => void; recompondo?: boolean; reorganizar?: () => void; temFixos?: boolean; podeEditar: boolean; extra?: (id: string) => ReactNode };
+export type AcoesModulo = { avaliar?: () => void; avaliando?: boolean; recompor?: () => void; recompondo?: boolean; reorganizar?: () => void; temFixos?: boolean; podeEditar: boolean; extra?: (id: string) => ReactNode };
 
 /** o card de um módulo pelo id do layout */
 export function Modulo({ id, doc, acoes, onArrastar }: { id: string; doc: DocBlueprint; acoes: AcoesModulo; onArrastar?: (e: React.PointerEvent) => void }) {
@@ -78,6 +78,7 @@ export function Modulo({ id, doc, acoes, onArrastar }: { id: string; doc: DocBlu
         {abertosDaFase.length > 0 && <div className="mt-2 font-mono text-[10.5px]" style={{ color: COR.critico }}>● {abertosDaFase.length} crítico{abertosDaFase.length > 1 ? "s" : ""} travando a fase {doc.fase}</div>}
         {acoes.podeEditar && (
           <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {acoes.avaliar && <Botao cor={COR.avaliacao} titulo="A fase está toda provada: a Zaeon avalia pela rubrica" onClick={acoes.avaliar} desabilitado={acoes.avaliando}>{acoes.avaliando ? "▮ a Zaeon está avaliando…" : "✦ pedir avaliação da Zaeon"}</Botao>}
             {acoes.recompor && <Botao cor={COR.estudo} titulo="A Zaeon recompõe o blueprint agora (ela já faz isso sozinha a cada conversa)" onClick={acoes.recompor} desabilitado={acoes.recompondo}>{acoes.recompondo ? "▮ a Zaeon está recompondo…" : "⟳ Zaeon atualiza"}</Botao>}
             {acoes.reorganizar && acoes.temFixos && <Botao cor="#e8f6ff" titulo="Solta o que você arrastou e volta ao alinhamento simétrico" onClick={acoes.reorganizar}>⊞ reorganizar</Botao>}
           </div>

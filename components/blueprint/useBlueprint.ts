@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BlueprintView, ResumoBlueprint } from "@/lib/blueprint/server";
-import type { DocBlueprint } from "@/lib/blueprint/tipos";
+import type { Avaliacao, DocBlueprint } from "@/lib/blueprint/tipos";
 
 export type BlueprintCliente = Omit<BlueprintView, "updatedAt"> & { updatedAt: string };
 const RELER_MS = 20_000;
@@ -68,5 +68,19 @@ export function useBlueprint(inicialId?: string | null) {
     if (r?.blueprint && idAtual.current === a.id) setAtual(r.blueprint);
   }, [atual, recompondo]);
 
-  return { lista, atual, abrir, recarregar, fixar, reorganizar, recompor, recompondo, setAtual };
+  /** a PROVA de um crítico: o servidor confere; a última da fase dispara a avaliação da Zaeon. Devolve o motivo da recusa.
+   *  Sem crítico (null) = "pedir a avaliação de novo" (a anterior falhou) */
+  const enviarProva = useCallback(async (criticoId: string | null, url: string): Promise<{ ok: boolean; motivo?: string; avaliacao?: Avaliacao | null }> => {
+    const a = atual; if (!a) return { ok: false };
+    voo(a.id, 1);
+    const corpo = criticoId ? { criticoId, url } : { reavaliar: true };
+    const r = await json<{ ok: boolean; motivo?: string; blueprint: BlueprintCliente | null; avaliacao: Avaliacao | null }>(`/api/blueprint/${a.id}/prova`, { method: "POST", body: JSON.stringify(corpo) });
+    voo(a.id, -1);
+    if (!r) return { ok: false, motivo: "não deu pra enviar agora — tente de novo" };
+    if (r.blueprint && idAtual.current === a.id) setAtual(r.blueprint);
+    if (r.ok) void recarregar();
+    return { ok: r.ok, motivo: r.motivo, avaliacao: r.avaliacao };
+  }, [atual, recarregar]);
+
+  return { lista, atual, abrir, recarregar, fixar, reorganizar, recompor, recompondo, enviarProva, setAtual };
 }

@@ -11,10 +11,42 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { CATALOGO, FILTROS, MOEDA, NOME_TIPO, filtrarVitrine, precoTexto, vendido, type FiltroVitrine, type ItemVitrine } from "@/lib/estudos/vitrine";
 import { COR_RARIDADE, NOME_RARIDADE } from "@/lib/estudos/blueprint";
+import type { ItemEstudo } from "@/lib/estudos/itens";
 import { criarModelo } from "./modelos3d";
 import { plugar, desplugar, usePluginsChat } from "@/lib/plugins/chatPlugins";
 
 const hex = (c: string) => parseInt(c.slice(1), 16);
+
+/** os BLUEPRINTS da pessoa (lib/blueprint/itens) como itens raros — vêm de /api/estudos/itens (cardId "blueprint") */
+function SeusBlueprints() {
+  const [meus, setMeus] = useState<ItemEstudo[]>([]);
+  useEffect(() => {
+    let vivo = true;
+    fetch("/api/estudos/itens", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j: { itens?: ItemEstudo[] } | null) => {
+      if (vivo) setMeus((j?.itens ?? []).filter((i) => i.cardId === "blueprint"));
+    }).catch(() => null);
+    return () => { vivo = false; };
+  }, []);
+  if (!meus.length) return null;
+  return (
+    <div className="mt-5">
+      <div className="font-mono text-[10px] tracking-[0.3em] text-sky-300/80">SEUS BLUEPRINTS · ITENS RAROS</div>
+      <div className="mt-2 flex gap-3 overflow-x-auto pb-1">
+        {meus.map((it) => {
+          const cor = COR_RARIDADE[it.raridade];
+          return (
+            <div key={it.id} className="min-w-[220px] flex-none rounded-md border px-3 py-2" style={{ borderColor: cor, boxShadow: `0 0 18px ${cor}33`, background: "rgba(8,30,56,.8)" }}>
+              <div className="flex items-center justify-between font-mono text-[10px] tracking-[0.14em]" style={{ color: cor }}><span>{NOME_RARIDADE[it.raridade].toUpperCase()}</span><span>nível {it.nivel}</span></div>
+              <div className="mt-1 truncate font-mono text-[13px] font-semibold text-white">{it.titulo}</div>
+              <div className="mt-1 font-mono text-[10.5px] text-sky-200/70">{it.componentes} peças · {it.fontes} fontes{it.vendavel ? <span className="ml-1 text-emerald-300">· VENDÁVEL</span> : null}</div>
+              {it.proxima && <div className="mt-1 font-mono text-[10px] text-sky-200/50">faltam {it.proxima.faltam} pra {NOME_RARIDADE[it.proxima.raridade]}</div>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export default function VitrineEstudos() {
   const [filtro, setFiltro] = useState<FiltroVitrine>("todos"), [busca, setBusca] = useState(""), [aberto, setAberto] = useState<ItemVitrine | null>(null);
@@ -69,6 +101,8 @@ export default function VitrineEstudos() {
           <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1 font-mono text-[10.5px] text-amber-100/90">
             ◎ preços em {MOEDA.nome} — catálogo de exemplo; a moeda ainda não está no ar
           </div>
+
+          <SeusBlueprints />
 
           <div className="mt-5 flex flex-wrap items-center gap-2">
             {FILTROS.map((f) => (

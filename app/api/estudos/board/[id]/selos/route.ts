@@ -9,23 +9,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 import { NextResponse } from "next/server";
 import { podeEscrever } from "@/lib/cartolina/access";
-import { isSafePublicHttpUrl } from "@/lib/scholar/ssrf";
+import { vivo } from "@/lib/estudos/linkVivo";
 import { boardDoUsuario, patchBoardEstudos } from "@/lib/estudos/board-server";
 import { linksDoBlueprint, montarBlueprint } from "@/lib/estudos/blueprint";
 import { entrarNoBoard, falhaBoard } from "@/lib/estudos/rota";
-
-async function vivo(url: string): Promise<boolean> {
-  if (!isSafePublicHttpUrl(url)) return false;
-  for (const method of ["HEAD", "GET"] as const) {
-    try {
-      const r = await fetch(url, { method, redirect: "manual", signal: AbortSignal.timeout(6000), headers: { "User-Agent": "ZaeonLinkCheck/1.0", ...(method === "GET" ? { Range: "bytes=0-1023" } : {}) } });
-      if (r.status < 400) return true;
-      if (r.status === 401 || r.status === 403) return true;   // (existe, mas é PRIVADO — o repositório fechado conta)
-      if (method === "GET") return false;
-    } catch { if (method === "GET") return false; }
-  }
-  return false;
-}
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const a = await entrarNoBoard(req, "estudos-board-selos", "ai-heavy"); if ("response" in a) return a.response;
