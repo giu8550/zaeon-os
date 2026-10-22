@@ -6,6 +6,7 @@
  */
 import type { ReactNode } from "react";
 import { NOME_FASE, type Critico, type DocBlueprint, type Fase } from "@/lib/blueprint/tipos";
+import FiguraIso from "./FiguraIso";
 
 export const COR = {
   estudo: "#7fe0ff", passo: "#ffd36b", critico: "#ff4d5e", provado: "#7dffb0", figura: "#7fe0ff", repos: "#7fe0ff",
@@ -88,11 +89,8 @@ export function Modulo({ id, doc, acoes, onArrastar }: { id: string; doc: DocBlu
   if (id === "figura") {
     return (
       <CardPrancha cor={COR.figura} carimbo="FIGURA · F-01" direita={<span className="font-mono text-[9.5px] text-sky-200/60">o objeto é a explicação</span>} onArrastar={onArrastar}>
-        {acoes.extra?.("figura") ?? (
-          <ul className="space-y-1 font-mono text-[11.5px]">
-            {doc.pecas.map((p, i) => <li key={p.id} className="flex items-center gap-2"><span style={{ color: p.fase < doc.fase ? COR.provado : COR.estudo }}>C-{dois(i + 1)}</span><span>{p.nome}</span>{p.sub && <span className="text-sky-200/50">— {p.sub}</span>}</li>)}
-          </ul>
-        )}
+        <FiguraIso doc={doc} />
+        <p className="mt-1 font-mono text-[10px] text-sky-200/55">o caminho do tema, peça por peça — cada uma acende quando uma entrega a prova</p>
       </CardPrancha>
     );
   }
