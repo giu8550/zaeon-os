@@ -79,7 +79,7 @@ import { criarCarroHex, type CarroHandle } from "./CarroHex";
 import { definirNivel, NIVEIS_SEPARADOS, type IdNivel } from "@/lib/cyber/nivelAtivo";
 import { criarTravessia, type TravessiaHandle } from "./TravessiaBN";
 import { criarDetritos, type DetritosHandle } from "./DetritosBN";
-import { DETRITOS, empurraoDaBatida, lancarDetrito, naZona, passoDetrito, proximoLancamento, puxaoDaZona, vaiAcertar, type Detrito } from "@/lib/cyber/detritos";
+import { DETRITOS, baseDoTunel, empurraoDaBatida, naZona, novoAsteroide, passoAsteroide, puxaoDaZona, tamanhoDoCampo, vaiAcertar, type Asteroide } from "@/lib/cyber/detritos";
 import { FIO as FIO_COSMICO, comecarTragada, fiosCosmicos, naAtracao, raioDeAtracao, passoTragada, pertoDoBuraco, posDaTragada, progressoTragada, saidaDaSala, type Tragada } from "@/lib/cyber/fiosCosmicos";
 import { nivelDoPonto, proximoNivel } from "@/lib/cyber/niveis";
 import { CARROS_NA_ZAEON, LOTES_CARRO, pisoDaVaga, posseDosCarros, vagaDoLote, vagasDeCarro, type CarroDirigido, type CarroLargado, type PosseCarro, type VagaCarro } from "@/lib/cyber/carros";
@@ -2139,7 +2139,7 @@ export class CyberEngine {
   }
   private tmpBN = new THREE.Vector3(); private tmpEu = new THREE.Vector3();
   // ───────────── a APROXIMAÇÃO do buraco negro: os DETRITOS (lib/cyber/detritos) ─────────────
-  private aprox: { bn: THREE.Vector3; k: number; lista: Detrito[]; prox: number; id: number } | null = null;
+  private aprox: { bn: THREE.Vector3; k: number; lista: Asteroide[]; id: number } | null = null;
   private detritosVis: DetritosHandle | null = null; private wAprox = 0; private tremorBatida = -Infinity; private flashBatida: HTMLDivElement | null = null;
   /** a minha velocidade agora (mundo): a da moto, do carro ou da mochila */
   private minhaVel(): { x: number; y: number; z: number } {
@@ -2154,39 +2154,45 @@ export class CyberEngine {
     if (this.jet.noAr) { this.jetV = { x: this.jetV.x + d.x, z: this.jetV.z + d.z }; this.jet.vy += d.y; return; }
     this.empurrao = { x: this.empurrao.x + d.x * 0.3, z: this.empurrao.z + d.z * 0.3 };
   }
-  /** um quadro dentro da ZONA: o magnetismo puxa de leve, os detritos saem do buraco negro mirando em mim; acertou,
-   *  empurra pra trás, tira vida e a tela treme */
+  /** um quadro dentro da ZONA: o CAMPO DE ASTEROIDES vindo na sua direção (o que passa renasce lá na frente), o
+   *  magnetismo puxando de leve; acertou = empurrão, vida, tremor; raspou = o vush */
   private passoAproximacao(f: { bn: { x: number; y: number; z: number; r: number } }, k: number, dt: number) {
     const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, w = mundo(f.bn);
-    const a = (this.aprox ??= { bn: new THREE.Vector3(), k, lista: [], prox: 1.2, id: 0 });
+    const nova = !this.aprox, a = (this.aprox ??= { bn: new THREE.Vector3(), k, lista: [], id: 0 });
     a.bn.set(w.x, ilhaY + f.bn.y, w.z); a.k = k;
-    const eu = { x: this.eu.pos.x, y: this.eu.alt + 1, z: this.eu.pos.z }, vel = this.minhaVel(), bn = { x: a.bn.x, y: a.bn.y, z: a.bn.z };
+    const eu = { x: this.eu.pos.x, y: this.eu.alt + 1, z: this.eu.pos.z }, vel = this.minhaVel(), bn = { x: a.bn.x, y: a.bn.y, z: a.bn.z }, b = baseDoTunel(eu, bn);
     const pu = puxaoDaZona(eu, bn, k); this.empurrarVeiculo({ x: pu.x * dt, y: pu.y * dt, z: pu.z * dt });
-    a.prox -= dt;
-    if (a.prox <= 0) { a.prox = proximoLancamento(k, Math.random); if (a.lista.length < DETRITOS.max) a.lista.push(lancarDetrito(Math.random, a.id++, eu, vel, bn, k)); }
-    const perigo = new Set<number>();
+    // o campo: enche até o tamanho de agora (na entrada, espalhado pela profundidade toda; depois, nascendo lá no fundo)
+    const quer = tamanhoDoCampo(k, this.o.low);
+    while (a.lista.length < quer) a.lista.push(novoAsteroide(Math.random, a.id++, eu, vel, bn, k, nova ? DETRITOS.perto + 20 + Math.random() * (DETRITOS.fundo - 40) : DETRITOS.fundo * (0.85 + 0.15 * Math.random())));
+    const perigo = new Set<number>(); let raspou = false;
     a.lista = a.lista.filter((d) => {
-      const r = passoDetrito(d, dt, eu);
+      const r = passoAsteroide(d, dt, eu, b.f);
       if (r.acertou) { this.batidaDeDetrito(d, eu, bn); return false; }
-      if (!r.morreu && vaiAcertar(d, eu, vel)) perigo.add(d.id);
-      return !r.morreu;
+      if (r.raspou) raspou = true;
+      if (r.atras) return false;
+      if (vaiAcertar(d, eu, vel)) perigo.add(d.id);
+      return true;
     });
-    if (!this.detritosVis) { this.detritosVis = criarDetritos({ low: this.o.low, max: DETRITOS.max }); this.cena.scene.add(this.detritosVis.grupo); }
-    this.detritosVis.desenhar(a.lista, perigo, this.cam, performance.now() / 1000);
+    if (raspou && this.agora > this.raspaoAte) { this.raspaoAte = this.agora + 0.25; this.som.tocar("dash", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 0.7 }); this.tremorBatida = Math.max(this.tremorBatida, this.agora + 0.12); }
+    if (!this.detritosVis) { this.detritosVis = criarDetritos({ low: this.o.low, max: DETRITOS.n[1] }); this.cena.scene.add(this.detritosVis.grupo); }
+    const vAx = Math.max(20, -(vel.x * b.f.x + vel.y * b.f.y + vel.z * b.f.z) * -1 + 60 + 60 * k);
+    this.detritosVis.desenhar(a.lista, perigo, this.cam, performance.now() / 1000, eu, b.f, vAx, dt);
   }
-  private batidaDeDetrito(d: Detrito, eu: { x: number; y: number; z: number }, bn: { x: number; y: number; z: number }) {
+  private raspaoAte = -Infinity;
+  private batidaDeDetrito(d: Asteroide, eu: { x: number; y: number; z: number }, bn: { x: number; y: number; z: number }) {
     this.empurrarVeiculo(empurraoDaBatida(d, eu, bn));
     this.vida = Math.max(1, this.vida - DETRITOS.dano);   // (a batida machuca, não mata)
     this.tremorBatida = this.agora + 0.45;
     this.som.tocar("impacto-heroi", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 0.8 });
     this.som.tocar("estilhacos", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 0.45 });
-    if (!this.flashBatida) { const el = document.createElement("div"); el.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:24;opacity:0;transition:opacity .35s ease-out;background:radial-gradient(ellipse at 50% 50%, transparent 45%, rgba(255,40,60,.55) 100%);"; this.o.overlay.appendChild(el); this.flashBatida = el; }
+    if (!this.flashBatida) { const el = document.createElement("div"); el.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:24;opacity:0;background:radial-gradient(ellipse at 50% 50%, transparent 45%, rgba(255,40,60,.55) 100%);"; this.o.overlay.appendChild(el); this.flashBatida = el; }
     const fl = this.flashBatida; fl.style.transition = "none"; fl.style.opacity = "1"; requestAnimationFrame(() => { fl.style.transition = "opacity .45s ease-out"; fl.style.opacity = "0"; });
   }
   /** saiu da zona (ou chegou no ponto doce): os detritos somem */
   private fimDaAproximacao() {
     if (!this.aprox) return;
-    this.aprox = null; this.detritosVis?.desenhar([], new Set(), this.cam, 0);
+    this.aprox = null; this.detritosVis?.desenhar([], new Set(), this.cam, 0, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 }, 0, 0);
   }
   /** a CÂMERA da aproximação (o dono: "uma mudança de câmera que beneficie o 3D e permita identificar e desviar"): mais
    *  alta e mais atrás, olhando pro buraco negro — você no terço de baixo, os detritos vindo de frente com profundidade */
@@ -2197,8 +2203,10 @@ export class CyberEngine {
     const eu = { x: this.eu.pos.x, y: this.eu.alt + 1.2, z: this.eu.pos.z };
     let dx = a.bn.x - eu.x, dy = a.bn.y - eu.y, dz = a.bn.z - eu.z; const L = Math.hypot(dx, dy, dz) || 1; dx /= L; dy /= L; dz /= L;
     const h = Math.hypot(dx, dz) || 1, lx = -dz / h, lz = dx / h;
-    const pos = { x: eu.x - dx * 20 + lx * 3, y: eu.y - dy * 20 + 8.5, z: eu.z - dz * 20 + lz * 3 };
-    const olhar = { x: eu.x + dx * 40, y: eu.y + dy * 40 + 2, z: eu.z + dz * 40 };
+    // (a de PERSEGUIÇÃO dos jogos de nave: logo atrás e um pouco acima, olhando lá pra frente — a profundidade do campo)
+    void lx; void lz;
+    const pos = { x: eu.x - dx * 9.5, y: eu.y - dy * 9.5 + 3.4, z: eu.z - dz * 9.5 };
+    const olhar = { x: eu.x + dx * 60, y: eu.y + dy * 60 + 1, z: eu.z + dz * 60 };
     const k = this.wAprox * this.wAprox * (3 - 2 * this.wAprox);
     const mix = (p: { x: number; y: number; z: number }, q: { x: number; y: number; z: number }) => ({ x: p.x + (q.x - p.x) * k, y: p.y + (q.y - p.y) * k, z: p.z + (q.z - p.z) * k });
     return { ...c, pos: mix(c.pos, pos), olhar: mix(c.olhar, olhar) };
@@ -4295,7 +4303,7 @@ export class CyberEngine {
     const alvoVel = Math.max(this.moto !== null && !this.motoPousado ? sensacaoDeVelocidade(this.motoEst) : 0, aPe, naveTurbo);
     this.velTela += (alvoVel - this.velTela) * (1 - Math.exp(-dt * (alvoVel > this.velTela ? 3 : 1.8)));
     if (!this.fovBase) this.fovBase = this.cam.fov;
-    let fov = this.fovBase + 12 * Math.min(1.15, this.velTela) + 12 * this.wAprox;   // (na aproximação do buraco negro, a lente abre: ver os detritos chegando)
+    let fov = this.fovBase + 12 * Math.min(1.15, this.velTela) + 16 * this.wAprox;   // (na aproximação do buraco negro, a lente abre: ver o campo de asteroides chegando)
     if (this.wMira > 0.001) fov += (RIFLE.fovMira - fov) * this.wMira;   // (mirando: o zoom)
     if (Math.abs(fov - this.cam.fov) > 0.02) { this.cam.fov = fov; this.cam.updateProjectionMatrix(); }
     // tremor: no boost, mais acima da barreira do som e um SOCO na hora em que ela quebra
