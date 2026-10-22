@@ -18,14 +18,20 @@ const PRAZO_HTTP_MS = 30_000;
 
 export type EmbedRag = (textos: string[], tipo: "documento" | "pergunta") => Promise<number[][]>;
 
-export const embedVertex: EmbedRag = async (textos, tipo) => {
+export const embedVertex: EmbedRag = (textos, tipo) =>
+  embedGemini(textos, { dim: RAG_EMBED_DIM, taskType: tipo === "pergunta" ? "RETRIEVAL_QUERY" : "RETRIEVAL_DOCUMENT" });
+
+/**
+ * gemini-embedding-001 no Vertex com a dimensão pedida. Também serve a memória L3 (1536, sem task_type:
+ * o mesmo vetor serve pra gravar e pra buscar). Lotes de LOTE_EMBED; erro HTTP/timeout lança.
+ */
+export async function embedGemini(textos: string[], o: { dim: number; taskType?: "RETRIEVAL_QUERY" | "RETRIEVAL_DOCUMENT" }): Promise<number[][]> {
   if (textos.length === 0) return [];
   const { project, client_email, private_key } = vertexCredentials();
   const loc = geminiTextLocation();
   const token = await vertexAccessToken(client_email, private_key);
   if (!token) throw new Error("embed_sem_token");
   const url = `https://${vertexHost(loc)}/v1/projects/${project}/locations/${loc}/publishers/google/models/${RAG_EMBED_MODEL}:predict`;
-  const task_type = tipo === "pergunta" ? "RETRIEVAL_QUERY" : "RETRIEVAL_DOCUMENT";
 
   const out: number[][] = [];
   for (let i = 0; i < textos.length; i += LOTE_EMBED) {
@@ -35,8 +41,8 @@ export const embedVertex: EmbedRag = async (textos, tipo) => {
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       // autoTruncate: uma tabela inteira (que o corte não parte) pode passar do limite de entrada — Vertex trunca em vez de falhar.
       body: JSON.stringify({
-        instances: lote.map((content) => ({ content, task_type })),
-        parameters: { outputDimensionality: RAG_EMBED_DIM, autoTruncate: true },
+        instances: lote.map((content) => (o.taskType ? { content, task_type: o.taskType } : { content })),
+        parameters: { outputDimensionality: o.dim, autoTruncate: true },
       }),
       // Sem prazo, um Vertex pendurado travaria o worker; abort vira erro lançado e a fila repete.
       signal: AbortSignal.timeout(PRAZO_HTTP_MS),
@@ -51,4 +57,4 @@ export const embedVertex: EmbedRag = async (textos, tipo) => {
     out.push(...(vetores as number[][]));
   }
   return out;
-};
+}

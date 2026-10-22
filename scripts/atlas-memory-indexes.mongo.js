@@ -42,17 +42,26 @@ if (!names.includes(COLLECTION)) {
 // Índices já presentes (evita erro de duplicado em re-runs).
 const existing = new Set(col.getSearchIndexes().map((ix) => ix.name));
 
-// ── Índice vetorial (ANN sobre embedding, cosine, filtro por userId) ──
+// ── Índice vetorial (ANN sobre embedding, cosine) ──
+// TODO campo que o `baseFilter` de memory.ts põe no `filter` do $vectorSearch tem que estar aqui como "filter":
+// campo fora do índice = erro "needs to be indexed as filter" (wingLabel) ou 0 resultados (invalidatedAt) — e o
+// recall engole o erro. Até 2026-10-21 só havia userId: o wakeUp de todo turno voltava vazio.
+const VECTOR_DEF = {
+  fields: [
+    { type: "vector", path: "embedding", numDimensions: EMBED_DIM, similarity: "cosine" },
+    { type: "filter", path: "userId" },
+    { type: "filter", path: "invalidatedAt" },
+    { type: "filter", path: "wingKind" },
+    { type: "filter", path: "wingLabel" },
+    { type: "filter", path: "room" },
+  ],
+};
 if (existing.has(VECTOR_INDEX)) {
-  print(`✓ ${VECTOR_INDEX} já existe — pulando`);
+  col.updateSearchIndex(VECTOR_INDEX, VECTOR_DEF); // reaplica a definição (não gasta vaga nova de índice)
+  print(`~ ${VECTOR_INDEX} atualizado (filtros: userId, invalidatedAt, wingKind, wingLabel, room)`);
 } else {
-  col.createSearchIndex(VECTOR_INDEX, "vectorSearch", {
-    fields: [
-      { type: "vector", path: "embedding", numDimensions: EMBED_DIM, similarity: "cosine" },
-      { type: "filter", path: "userId" },
-    ],
-  });
-  print(`+ criado ${VECTOR_INDEX} (vectorSearch, ${EMBED_DIM}d cosine, filter userId)`);
+  col.createSearchIndex(VECTOR_INDEX, "vectorSearch", VECTOR_DEF);
+  print(`+ criado ${VECTOR_INDEX} (vectorSearch, ${EMBED_DIM}d cosine, filtros do baseFilter)`);
 }
 
 // ── Índice de texto (ramo $search / $rankFusion do recall híbrido) ──

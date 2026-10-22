@@ -32,6 +32,11 @@ export async function register() {
       const { iniciarWorkerRagOpcional } = await import("./instrumentation-node");
       await iniciarWorkerRagOpcional();
     }
+    // Memória L3 dos agentes (MEMORY_L3=1 + DATABASE_URL); sem a env, os consumidores caem no nullMemory.
+    if (process.env.MEMORY_L3 === "1") {
+      const { ligarMemoriaOpcional } = await import("./instrumentation-node");
+      await ligarMemoriaOpcional();
+    }
     if (process.env.SCHOLAR_WORKER === "1") {
       const { iniciarWorkers } = await import("./instrumentation-node");
       await iniciarWorkers();

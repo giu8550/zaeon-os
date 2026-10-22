@@ -27,21 +27,23 @@ import {
 } from "@/lib/agent/memory";
 import type { StructuredAnswer } from "@/lib/agent/contracts";
 
-let configured: MemoryAPI | null = null;
+// No globalThis, não numa variável do módulo: o boot (instrumentation.ts) e as rotas do Next podem carregar
+// CÓPIAS diferentes deste módulo no mesmo processo — a configuração feita no boot tem que valer em todas.
+const g = globalThis as unknown as { __zaeonMemoriaL3?: MemoryAPI | null };
 
-/** Liga o L3 (dono, no boot). Idempotente-ish: a última configuração vence. */
+/** Liga o L3 (no boot — lib/agent/memory-boot.ts, MEMORY_L3=1). A última configuração vence. */
 export function configureMemory(deps: MemoryDeps): void {
-  try { configured = createMongoMemory(deps); } catch { configured = null; }
+  try { g.__zaeonMemoriaL3 = createMongoMemory(deps); } catch { g.__zaeonMemoriaL3 = null; }
 }
 
 /** Só p/ testes: injeta uma MemoryAPI direta (ou null p/ resetar). */
-export function __setMemoryForTest(api: MemoryAPI | null): void { configured = api; }
+export function __setMemoryForTest(api: MemoryAPI | null): void { g.__zaeonMemoriaL3 = api; }
 
 /** true se o L3 está realmente ligado (senão os consumidores degradam). */
-export function isMemoryConfigured(): boolean { return configured !== null; }
+export function isMemoryConfigured(): boolean { return g.__zaeonMemoriaL3 != null; }
 
 /** A memória ativa — configurada ou nullMemory (nunca lança, nunca é null). */
-export function getMemory(): MemoryAPI { return configured ?? nullMemory; }
+export function getMemory(): MemoryAPI { return g.__zaeonMemoriaL3 ?? nullMemory; }
 
 // ───────────────────────────── derivação L1 → drawers (verbatim) ─────────────────────────────
 export type TurnMemoryInput = {
