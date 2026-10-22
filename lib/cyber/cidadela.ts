@@ -7,7 +7,8 @@
  * Tudo determinístico; local da ilha → mundo pelo `mundo` do ceu.
  */
 import { CABINE, CIDADE, alturaNaCidade, cabinesDaCidadela, colisoresDaCidade, daCabine, mundo, naIlhaPrincipal, type CabineEstudo } from "./ceu";
-import { SUPERTREES } from "./terra";
+import { ESTACAO, MEIO_TELOES, MIRANTES_ESTACAO, SUPERTREES, noMirante } from "./terra";
+import { acasoDe } from "./frota/aleatorio";
 import type { Spot } from "./frota/lugares";
 
 type P2 = { x: number; z: number };
@@ -53,4 +54,32 @@ export function rodasDeEstudo(): RodaDeEstudo[] {
 /** todos os lugares de estudo da cidadela (os assentos das cabines + os das rodas) */
 export function lugaresDaCidadela(): Spot[] {
   return [...cabinesDaCidadela().map(assentoDaCabine), ...rodasDeEstudo().flatMap((r) => r.lugares)];
+}
+
+let novatosCache: Spot[] | null = null;
+/** os lugares dos NOVATOS (level 1 — out/2026, o dono: "fica somente na Zaeon, pesquisando e estudando ao redor das
+ *  supertrees e dos painéis"): RODAS de 2 a 5 (cada uma, um grupo — no chão com o tablet ou de pé conversando) em volta
+ *  das supertrees (mais longe que as rodas da hierarquia) e na plateia dos telões dos mirantes */
+export function lugaresDosNovatos(): Spot[] {
+  if (novatosCache) return novatosCache;
+  const cs = colisoresDaCidade(), ocupados = rodasDeEstudo().flatMap((r) => r.lugares), out: Spot[] = [], centros: P2[] = [];
+  const livre = (l: P2) => { const w = mundo(l); return naIlhaPrincipal(w) && alturaNaCidade(w) === 0 && Math.hypot(l.x, l.z) <= CIDADE.andavelR - 2 && cs.every((c) => Math.hypot(w.x - c.x, w.z - c.z) > c.r + 0.9) && ocupados.every((o) => Math.hypot(w.x - o.x, w.z - o.z) > 2.2); };
+  const rodas = (id: string, n: number, ponto: (r: () => number) => P2, olhar?: P2) => {
+    const r = acasoDe("novatos", id);
+    for (let t = 0, feitas = 0; t < n * 16 && feitas < n; t++) {
+      const c = ponto(r); if (centros.some((o) => Math.hypot(o.x - c.x, o.z - c.z) < 3.6)) continue;
+      const k = 2 + Math.floor(r() * 4), raio = 0.75 + 0.22 * k, giro = r() * Math.PI * 2, senta = r() < 0.6;
+      const qs = Array.from({ length: k }, (_, j) => { const a = giro + (j / k) * Math.PI * 2; return { x: c.x + Math.cos(a) * raio, z: c.z + Math.sin(a) * raio }; });
+      if (!livre(c) || !qs.every(livre)) continue;
+      centros.push(c); feitas++;
+      qs.forEach((q, j) => { const w = mundo(q), alvo = olhar && j % 3 === 0 ? olhar : c;
+        out.push({ id: `novatos-${id}-${feitas}-${j}`, ambiente: "zaeon", tipo: senta ? "piso" : "pe", x: w.x, z: w.z, y: CIDADE.pisoY, rumo: Math.atan2(alvo.x - q.x, alvo.z - q.z), zaeon: true }); });
+    }
+  };
+  SUPERTREES.forEach((t, k) => rodas(`arvore-${k}`, 6, (r) => { const a = r() * Math.PI * 2, d = 9 + r() * 7; return { x: t.x + Math.cos(a) * d, z: t.z + Math.sin(a) * d }; }, t));
+  for (const m of MIRANTES_ESTACAO) for (const dv of [-MEIO_TELOES, MEIO_TELOES]) {
+    const tel = noMirante(m, ESTACAO.u, ESTACAO.v + dv);
+    rodas(`telao-${m.id}-${dv}`, 8, (r) => noMirante(m, ESTACAO.u + 12 + r() * 18, ESTACAO.v + dv + (r() - 0.5) * 24), tel);
+  }
+  return (novatosCache = out);
 }

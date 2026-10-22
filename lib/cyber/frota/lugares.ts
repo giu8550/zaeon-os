@@ -12,13 +12,15 @@ import { lugaresDoLounge } from "../descanso";
 import { PLATAFORMAS, andarNaPlataforma, type IdPlataforma } from "../plataformas";
 import { acasoDe, embaralhar } from "./aleatorio";
 import type { AmbienteEstudo } from "./agenda";
-import { lugaresDaCidadela } from "../cidadela";
+import { lugaresDaCidadela, lugaresDosNovatos } from "../cidadela";
 import { NOS } from "../buracos";
+import { noDiscoDoLounge, spotsDoTemplo, type LugarNoTemplo } from "./templo";
 /** o raio (m) em volta do ponto de CHEGADA de uma sala onde a frota não fica parada (quem chega aparece ali) */
 export const LIVRE_NA_CHEGADA = 7;
 
-/** `cabine` = a cadeira de uma CABINE DE ESTUDO da cidadela (lib/cyber/cidadela) */
-export type TipoSpot = "sofa" | "pufe" | "puff" | "trono" | "piso" | "pista" | "cabine";
+/** `cabine` = a cadeira de uma CABINE DE ESTUDO (a cidadela, o campus e a torre do Templo); `pe` = de pé, numa roda de
+ *  conversa */
+export type TipoSpot = "sofa" | "pufe" | "puff" | "trono" | "piso" | "pista" | "cabine" | "pe";
 export type Spot = {
   id: string; ambiente: AmbienteEstudo | "pista"; tipo: TipoSpot;
   x: number; z: number; y: number; rumo: number;
@@ -26,6 +28,8 @@ export type Spot = {
   zaeon: boolean;
   /** sofá: o outro assento (deitar exige o sofá todo) e a pose deitada */
   par?: string; deita?: { x: number; z: number; rumo: number };
+  /** no TEMPLO CÓSMICO: a sala, o andar e o ponto no layout (lib/cyber/frota/templo — o caminho a pé até lá) */
+  templo?: LugarNoTemplo;
 };
 
 /** a altura (mundo) do piso num ponto de uma sala — o lounge tem o pátio e o DECK da festa */
@@ -111,8 +115,9 @@ export function spotsDe(amb: AmbienteEstudo | "pista"): Spot[] {
   let s = cache.get(amb);
   if (s) return s;
   if (amb === "pista") s = pista();
-  else if (amb === "cidadela") s = lugaresDaCidadela();   // (cada membro da hierarquia tem o SEU — lib/cyber/frota/hierarquia)
-  else if (amb === "lounge") s = [...assentos("lounge", "lounge"), ...chaoDaSala("lounge", "lounge").slice(0, 220)];   // os sofás primeiro; lotou, o chão perto deles (o pátio também) — quantos, o plano limita (painel admin `loungeChao`, padrão 60)
+  else if (amb === "cidadela") s = lugaresDaCidadela();
+  else if (amb === "zaeon") s = lugaresDosNovatos();   // (as rodas dos NOVATOS: as supertrees e os telões)   // (cada membro da hierarquia tem o SEU — lib/cyber/frota/hierarquia)
+  else if (amb === "lounge") s = [...[...assentos("lounge", "lounge"), ...chaoDaSala("lounge", "lounge").slice(0, 220)].map((x) => ({ ...x, templo: noDiscoDoLounge(x) })), ...spotsDoTemplo()];   // (+ as salas do Templo Cósmico — lib/cyber/frota/templo)   // os sofás primeiro; lotou, o chão perto deles (o pátio também) — quantos, o plano limita (painel admin `loungeChao`, padrão 60)
   else if (SALAS[amb]) s = [...assentos(SALAS[amb]!, amb), ...chaoDaSala(SALAS[amb]!, amb)];
   else s = chaoDaPlataforma(amb as IdPlataforma);
   cache.set(amb, s); return s;

@@ -135,7 +135,7 @@ export default function FrotaModule({ glassPanel }: { glassPanel?: string }) {
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm">Quantidade <input type="number" min={1} max={LIMITES.loteMax} value={qtd} onChange={(e) => setQtd(Math.max(1, Math.min(LIMITES.loteMax, Number(e.target.value) || 1)))} className="ml-2 w-28 rounded-xl border border-slate-300 bg-transparent px-3 py-2 dark:border-white/15" /></label>
           <button onClick={() => setCfg(novoLote(cfg, qtd, Math.floor(Math.random() * 2 ** 30) + 1))} disabled={totalDaFrota(cfg) + qtd > LIMITES.totalMax} className="flex min-h-[40px] items-center gap-2 rounded-full border border-cyan-400/50 px-4 text-sm font-bold text-cyan-300 disabled:opacity-40"><Plus className="h-4 w-4" />Criar {qtd} agentes</button>
-          <span className="text-xs text-slate-500 dark:text-white/45">Nomes de gente de verdade · 60% mulheres / 40% homens · 70% em cloak · grupos de {cfg.frota.tamanhoGrupo}. Máx. {LIMITES.totalMax} na frota.</span>
+          <span className="text-xs text-slate-500 dark:text-white/45">Nomes de gente de verdade · 60% mulheres / 40% homens · 70% em cloak · grupos de 2 a 5. Máx. {LIMITES.totalMax} na frota.</span>
         </div>
         <ul className="mt-4 space-y-2">
           {cfg.frota.lotes.map((l, i) => (

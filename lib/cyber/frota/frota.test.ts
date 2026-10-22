@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { hierarquiaDaCidadela } from "./hierarquia";
+import { credenciaisDaFrota, ehNovato, hierarquiaDaCidadela } from "./hierarquia";
+import { areaDe } from "./areas";
+import type { BlocoPlano as BlocoP } from "./plano";
 import { FROTA_PADRAO, gerarFrota, amigosDe } from "./frota";
 import { FLAGS_PADRAO, REGRAS, agendaBase, diaDe, fullNoDia, minutoDoDia, type Bloco } from "./agenda";
 import { planejarDia } from "./plano";
@@ -19,13 +21,16 @@ const frota = gerarFrota(), DIA = 20734, plano = planejarDia(frota, DIA, FLAGS_H
 const dur = (b: Bloco) => b.fim - b.ini;
 
 describe("a frota (700 IAs)", () => {
-  it("700, nomes de gente de verdade sem repetir, 60% mulheres, 70% em cloak, grupos de 4", () => {
+  it("700, nomes de gente de verdade sem repetir, 60% mulheres, 70% em cloak, grupos de 2 a 5 (poucos sozinhos)", () => {
     expect(frota).toHaveLength(700);
     expect(new Set(frota.map((a) => a.nome)).size).toBe(700);
     expect(new Set(frota.map((a) => a.id)).size).toBe(700);
     expect(frota.filter((a) => a.genero === "f")).toHaveLength(420);
     expect(frota.filter((a) => a.cloak)).toHaveLength(490);
-    for (const a of frota) { expect(a.nome).toMatch(/^[\p{L}]+( [\p{L}]+){1,2}$/u); expect(amigosDe(frota, a)).toHaveLength(3); const p = a.nome.split(" "); expect(new Set(p).size).toBe(p.length); }
+    for (const a of frota) { expect(a.nome).toMatch(/^[\p{L}]+( [\p{L}]+){1,2}$/u); expect(amigosDe(frota, a).length).toBeLessThanOrEqual(4); const p = a.nome.split(" "); expect(new Set(p).size).toBe(p.length); }
+    const sozinhos = frota.filter((a) => amigosDe(frota, a).length === 0).length;
+    expect(sozinhos / frota.length).toBeLessThan(0.06);
+    for (const t of [2, 3, 4, 5]) expect(new Set(frota.filter((a) => amigosDe(frota, a).length === t - 1).map((a) => a.grupo)).size).toBeGreaterThan(10);
     expect(gerarFrota()).toEqual(frota);   // determinística
   });
   it("criar em massa acrescenta um lote sem mudar quem já existia", () => {
@@ -138,6 +143,7 @@ describe("os lugares (ninguém senta no colo de ninguém)", () => {
 
 describe("o corpo no instante", () => {
   const est = (id: string, m: number) => { const p = plano.agentes.get(id)!; return estadoDaIA(id, p.blocos, m, FLAGS_HORARIO, true); };
+  const p0 = (id: string) => plano.agentes.get(id)!;
   it("de madrugada ninguém; à tarde a maioria; posições sempre finitas; estudando = tablet na mão e sentado", () => {
     let on = 0, tablet = 0;
     for (const a of frota) {
@@ -145,8 +151,8 @@ describe("o corpo no instante", () => {
       const e = est(a.id, 15 * 60 + 17);
       if (!e.visivel) continue; on++;
       expect(Number.isFinite(e.x + e.y + e.z + e.rumo)).toBe(true);
-      const naCabine = e.ambiente === "cidadela" && e.pose === "sentado";   // (na cabine da cidadela: o monitor, sem tablet)
-      if (!naCabine && e.atividade?.startsWith("estudo") && ["sentado", "relaxa", "chao", "deitado"].includes(e.pose) && e.sentar > 0.99) { expect(e.tablet).toBeGreaterThan(0.99); tablet++; }
+      const naCabine = p0(a.id).blocos[e.bloco]?.spot?.tipo === "cabine";   // (numa cabine — a cidadela, o campus, a torre: o monitor, sem tablet)
+      if (!naCabine && e.atividade?.startsWith("estudo") && ["sentado", "relaxa", "chao", "deitado"].includes(e.pose) && e.sentar > 0.99) { expect(e.tablet).toBeGreaterThan(0); if (e.tablet > 0.99) tablet++; }   // (logo que senta, o tablet ainda está aparecendo)
     }
     expect(on).toBeGreaterThan(450); expect(tablet).toBeGreaterThan(150);
   });
@@ -325,17 +331,38 @@ describe("o FLUXO entre os níveis: da cidadela pros lounges pelos buracos negro
 
 describe("SEM HORÁRIO: todo mundo passeando pela Zaeon e pelos lounges (o padrão — out/2026)", () => {
   const planoP = planejarDia(frota, DIA, FLAGS_PADRAO);
-  it("o dia inteiro, sem folga: a maior parte PASSEANDO, e metade dos passeios nos lounges", () => {
-    let total = 0, andando = 0, online = 0;
-    for (const { blocos } of planoP.agentes.values()) {
+  it("o dia inteiro, sem folga: o GRUPO junto; os novatos (level 1) só na Zaeon e sem moto; os outros, a maior parte nas salas do Templo", () => {
+    const cred = credenciaisDaFrota(frota);
+    let online = 0, veterano = 0, noTemplo = 0;
+    for (const { agente, blocos } of planoP.agentes.values()) {
       if (blocos.length) online++;
-      for (const b of blocos) { total += b.fim - b.ini; if (b.atividade === "andar") andando += b.fim - b.ini; }
+      if (hierarquiaDaCidadela(frota).has(agente.id)) continue;   // (a cidadela tem a agenda dela)
+      for (const b of blocos) {
+        if (ehNovato(cred.get(agente.id))) { expect(b.atividade, agente.id).not.toBe("moto"); expect(b.ambiente === undefined || b.ambiente === "zaeon", `${agente.id} ${b.ambiente}`).toBe(true); if (b.atividade === "andar") expect(b.zona).toBe("zaeon"); continue; }
+        veterano += b.fim - b.ini; if (b.ambiente === "lounge" || b.zona === "templo") noTemplo += b.fim - b.ini;
+      }
     }
     expect(online / planoP.agentes.size).toBeGreaterThan(0.95);
-    expect(andando / total).toBeGreaterThan(0.5);
+    expect(noTemplo / veterano).toBeGreaterThan(0.6);
+    // o grupo junto: os amigos têm os mesmos blocos (com até 2 min de atraso)
+    const porGrupo = new Map<number, BlocoP[][]>();
+    for (const { agente, blocos } of planoP.agentes.values()) if (!hierarquiaDaCidadela(frota).has(agente.id)) (porGrupo.get(agente.grupo) ?? porGrupo.set(agente.grupo, []).get(agente.grupo)!).push(blocos);
+    for (const gs of porGrupo.values()) for (const bs of gs.slice(1)) { const n = Math.min(bs.length, gs[0]!.length) - 2; expect(Math.abs(bs.length - gs[0]!.length)).toBeLessThanOrEqual(1); bs.slice(0, Math.max(0, n)).forEach((b, k) => { expect(b.atividade).toBe(gs[0]![k]!.atividade); expect(Math.abs(b.ini - gs[0]![k]!.ini)).toBeLessThanOrEqual(2); }); }
     // de madrugada também tem gente
     let madrugada = 0; for (const { agente, blocos } of planoP.agentes.values()) if (estadoDaIA(agente.id, blocos, 3 * 60, FLAGS_PADRAO, false, false).visivel) madrugada++;
     expect(madrugada).toBeGreaterThan(planoP.agentes.size * 0.3);
+  });
+  it("a qualquer hora (com o teto de 500): ao menos 300 no Templo, a Zaeon entre 50 e 130, alguém de moto no trânsito", () => {
+    const f5 = gerarFrota({ lotes: [{ ...FROTA_PADRAO.lotes[0]!, total: 500 }], tamanhoGrupo: 4 }), p5 = planejarDia(f5, DIA, FLAGS_PADRAO);
+    for (const min of [200, 640, 1100]) {
+      let templo = 0, zaeon = 0, ceu = 0;
+      for (const [id, { blocos }] of p5.agentes) {
+        const e = estadoDaIA(id, blocos, min, FLAGS_PADRAO, true, false); if (!e.visivel) continue;
+        const a = areaDe(e, e.pose === "moto" || e.pose === "mochila");
+        if (a === "lounge") templo++; else if (a === "zaeon") zaeon++; else if (a === "ceu") ceu++;
+      }
+      expect(templo, `${min}`).toBeGreaterThanOrEqual(300); expect(zaeon, `${min}`).toBeGreaterThanOrEqual(50); expect(zaeon, `${min}`).toBeLessThanOrEqual(130);
+    }
   });
   it("o passeio nos LOUNGES: só por piso (salão, pontes, escadas, campus, lounges), sem atravessar a pirâmide, e a pé contínuo", () => {
     const L = CIDADE.salas.lounge, loc = (p: { x: number; z: number }) => naSala(L, p.x - CIDADE.centro.x, p.z - CIDADE.centro.z);

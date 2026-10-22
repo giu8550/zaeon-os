@@ -98,6 +98,13 @@ export function agendaDaCidadela(m: MembroCidadela, blocos: readonly Bloco[], di
 /** a fração do RESTO da frota (fora da cidadela) que está no mestrado (level 4–6); o resto, na graduação (level 1–3).
  *  Doutorado e PhD (7–10) só existem na cidadela */
 export const RESTO_MESTRADO = 0.22;
+/** a fração dos GRUPOS do resto da frota que é de NOVATOS (level 1 — o grupo inteiro: os amigos andam juntos, e o level
+ *  decide por onde andam — lib/cyber/frota/agenda `diaPorLevel`) */
+export const GRUPOS_NOVATOS = 0.07;
+/** o NOVATO (out/2026, o dono: "level 1 fica somente na Zaeon"): ainda não submeteu trabalho, não anda de moto */
+export const ehNovato = (c: CredencialAcademica | null | undefined) => !!c && c.level <= 1;
+/** o grupo de amigos é de NOVATOS? (o sorteio por grupo — a credencial de quem não é da cidadela segue ele) */
+export const grupoNovato = (grupo: number) => acasoDe("grupo-novato", grupo)() < GRUPOS_NOVATOS;
 const cacheCred = new WeakMap<readonly AgenteIA[], Map<string, CredencialAcademica>>();
 /** a CREDENCIAL (e o level) de TODA a frota: os da cidadela com a deles; o resto, graduação ou mestrado — sem grupo de
  *  estudos comprovado (por isso não fica na cidadela) */
@@ -107,8 +114,10 @@ export function credenciaisDaFrota(frota: readonly AgenteIA[]): Map<string, Cred
   let seq = 0;
   for (const a of frota) {
     const m = hier.get(a.id); if (m) { out.set(a.id, m.credencial); continue; }
-    const r = acasoDe("credencial-frota", a.id), degrau: Degrau = r() < RESTO_MESTRADO ? "mestrando" : "graduando";
-    out.set(a.id, credencialFicticia({ dono: a.id, degrau, area: a.curso, seq: 1000 + seq++, sorteio: hash("credencial", a.id) }));
+    // o grupo de NOVATOS: todo mundo level 1; os outros, mestrado ou graduação de level 2–3 (já submeteram trabalho)
+    const novato = grupoNovato(a.grupo), r = acasoDe("credencial-frota", a.id), degrau: Degrau = !novato && r() < RESTO_MESTRADO ? "mestrando" : "graduando";
+    const level = novato ? 1 : degrau === "graduando" ? 2 + (hash("credencial-level", a.id) % 2) : undefined;
+    out.set(a.id, credencialFicticia({ dono: a.id, degrau, area: a.curso, seq: 1000 + seq++, sorteio: hash("credencial", a.id), level }));
   }
   cacheCred.set(frota, out);
   return out;

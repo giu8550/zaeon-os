@@ -11,7 +11,7 @@ import { AMBIENTES_ESTUDO, AREAS_PADRAO, agendaDoGrupo, type AreasFrota, type Bl
 import type { AgenteIA } from "./frota";
 import { spotsDe, type Spot } from "./lugares";
 import { VAGAS_POR_ESTACIONAMENTO, temVaga, vagaEstudo, type VagaEstudo } from "../estacionamentosEstudo";
-import { agendaDaCidadela, hierarquiaDaCidadela } from "./hierarquia";
+import { agendaDaCidadela, grupoNovato, hierarquiaDaCidadela } from "./hierarquia";
 
 export type BlocoPlano = Bloco & { spot?: Spot; deitado?: boolean; /** a VAGA no estacionamento do lugar (chegou de moto e a moto fica lá) — lib/cyber/estacionamentosEstudo */ vaga?: VagaEstudo };
 export type PlanoDia = { dia: number; agentes: Map<string, { agente: AgenteIA; blocos: BlocoPlano[] }> };
@@ -23,7 +23,8 @@ export function planejarDia(frota: readonly AgenteIA[], dia: number, flags: Flag
   const agentes: PlanoDia["agentes"] = new Map(), grupos = new Map<number, AgenteIA[]>(), hier = hierarquiaDaCidadela(frota);
   for (const a of frota) (grupos.get(a.grupo) ?? grupos.set(a.grupo, []).get(a.grupo)!).push(a);
   for (const membros of grupos.values()) {
-    const ag = agendaDoGrupo(membros, dia, flags, full, ar);
+    // (o grupo de NOVATOS — todo mundo level 1 — fica só na Zaeon: lib/cyber/frota/agenda `diaPorLevel`)
+    const ag = agendaDoGrupo(membros, dia, flags, full, ar, grupoNovato(membros[0]!.grupo));
     // (quem tem credencial na CIDADELA: a agenda dela — o lugar fixo, e só 30%/70% com rotina fora)
     for (const a of membros) { const m = hier.get(a.id), bl = ag.get(a.id) ?? []; agentes.set(a.id, { agente: a, blocos: (m ? agendaDaCidadela(m, bl, dia) : bl).map((b) => ({ ...b })) }); }
   }
@@ -38,7 +39,7 @@ export function planejarDia(frota: readonly AgenteIA[], dia: number, flags: Flag
   /** até quando cada spot está ocupado (a fila anda em ordem de início: livre = acabou antes de começar) */
   const ocupadoAte = new Map<string, number>();
   // o lounge: os assentos + no máximo `loungeChao` lugares no chão (o painel admin); as vagas: no máximo `vagas` por lugar
-  let nChao = 0; const loungeLimitado = spotsDe("lounge").filter((s) => s.tipo !== "piso" || nChao++ < ar.loungeChao);
+  let nChao = 0; const loungeLimitado = spotsDe("lounge").filter((s) => s.tipo !== "piso" || !s.id.startsWith("lounge-piso") || nChao++ < ar.loungeChao);   // (o limite é do chão do PÁTIO; as rodas das salas do Templo valem todas)
   const nVagas = Math.max(0, Math.min(VAGAS_POR_ESTACIONAMENTO, Math.floor(ar.vagas)));
   const livre = (s: Spot, ini: number) => (ocupadoAte.get(s.id) ?? -1) <= ini;
   /** onde cada agente está sentado agora (pra os amigos sentarem perto) */
@@ -55,7 +56,7 @@ export function planejarDia(frota: readonly AgenteIA[], dia: number, flags: Flag
     let escolhido: Spot | null = null;
     if (ancora) {
       let md = 7;
-      for (const s of todos) { const d = Math.hypot(s.x - ancora.x, s.z - ancora.z); if (d < md && livre(s, b.ini)) { md = d; escolhido = s; } }
+      for (const s of todos) { const d = Math.hypot(s.x - ancora.x, s.z - ancora.z); if (d < md && Math.abs(s.y - ancora.y) < 2 && livre(s, b.ini)) { md = d; escolhido = s; } }   // (no MESMO andar: a torre e os lounges estudantis têm pisos uns sobre os outros)
     }
     if (!escolhido) for (let k = 0; k < todos.length; k++) { const s = todos[(giro + k) % todos.length]!; if (livre(s, b.ini)) { escolhido = s; break; } }
     if (!escolhido && b.atividade !== "festa") {   // lotou: vai estudar noutro ambiente de estudo (o primeiro com lugar)
