@@ -33,7 +33,12 @@ describe("mensagensLocais — ordem pro cache de prefixo do Ollama", () => {
     const m = mensagensLocais({ ...base, systemContext: "Você é o Osler.", base: "[Base] trecho p.2", history: [{ role: "user", text: "oi" }, { role: "model", text: "olá" }] });
     expect(m[0]).toEqual({ role: "system", content: `${PERSONA_LOCAL}\n\nVocê é o Osler.` });
     expect(m.slice(1, 3)).toEqual([{ role: "user", content: "oi" }, { role: "assistant", content: "olá" }]);
-    expect(m[3]).toEqual({ role: "user", content: "[Base] trecho p.2\n\nPergunta: o que é mitose?" });
+    expect(m[3].content).toBe("Trechos da base da turma (use-os e cite o documento e a página entre colchetes):\n[Base] trecho p.2\n\nPergunta: o que é mitose?");
+  });
+  it("sem base: a pergunta vai pura e nenhuma instrução de citar base (o modelo inventava página)", () => {
+    const m = mensagensLocais(base);
+    expect(m.at(-1)).toEqual({ role: "user", content: "o que é mitose?" });
+    expect(m[0].content).not.toMatch(/base da turma/i);
   });
   it("histórico curto (8 últimas) e mensagens cortadas", () => {
     const history = Array.from({ length: 20 }, (_, i) => ({ role: i % 2 ? "model" : "user", text: "x".repeat(5000) }));
