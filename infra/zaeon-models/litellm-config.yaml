@@ -13,44 +13,19 @@
 
 model_list:
   # ── LLMs (Ollama) ──────────────────────────────────────────────────────────
-  - model_name: gpt-oss-20b                 # workhorse: geral + raciocínio + código leve
+  - model_name: lfm2-8b                      # LFM2-8B-A1B (Liquid AI): o modelo LOCAL de texto desde 2026-10-22
     litellm_params:
-      model: ollama_chat/gpt-oss:20b
+      # MoE com ~1,5B ativos: ~3× o Qwen3 30B na CPU (medido 22/10, mapa mental de uma conversa em JSON:
+      # lê 74 tok/s, escreve 15 tok/s, ~32 s; Qwen 30B 31/5–8 tok/s, ~69 s; Granite-4-H-Tiny 53/11 e quebrou o formato).
+      # Faz o papel "curto" (gatekeeper/juiz) e os artefatos em segundo plano. Saíram: gpt-oss-20b, qwen3 4B/30B, llama-guard.
+      model: ollama_chat/hf.co/LiquidAI/LFM2-8B-A1B-GGUF:Q4_K_M
       api_base: http://ollama:11434
       num_thread: 8                          # ver nota THREADS no topo
-      # SEM keep_alive próprio (sai com o OLLAMA_KEEP_ALIVE=30m, como os outros): desde #496/#497 o
-      # gpt-oss não tem papel em prod, e preso 24h ele ocupava 1 dos 3 slots (OLLAMA_MAX_LOADED_MODELS)
-      # e expulsava os que trabalham — guard (todo turno do chat), mini (gatekeeper/juiz) e coder (Octa) —,
-      # que voltavam frios e caíam pro Google. Se ele ganhar papel no caminho de alguém esperando, rever.
+      num_ctx: 8192                          # um valor só (mudar recarrega o modelo); cabe a conversa inteira de um artefato
 
   - model_name: qwen3-coder                 # especialista de CÓDIGO (Octa / complexo)
     litellm_params:
       model: ollama_chat/qwen3-coder:30b
-      api_base: http://ollama:11434
-      num_thread: 8                          # ver nota THREADS no topo
-
-  - model_name: qwen3-4b                     # rápido/tiny: chat simples, classificação
-    litellm_params:
-      # INSTRUCT-2507, não o `qwen3:4b` (= thinking-2507: pensa sempre, ignora /no_think/think:false e
-      # gastou 700 tokens sem chegar ao JSON — medido 2026-10-21, docs/MODELOS_LOCAIS_PAPEIS.md).
-      model: ollama_chat/qwen3:4b-instruct-2507-q4_K_M
-      api_base: http://ollama:11434
-      num_thread: 8                          # ver nota THREADS no topo
-
-  - model_name: qwen3-30b                    # MoE 30B com 3B ativos: papel "curto" (gatekeeper/juiz) desde 2026-10-22
-    litellm_params:
-      # Mesma velocidade do 4B na CPU (o gargalo é ler o prompt, ~20–26 tok/s) e bem mais qualidade —
-      # medido 2026-10-22: gatekeeper 2,4 s, juiz 14,9 s, resumo 7,4 tok/s (4B: 2,7 / 17,5 / 5,3).
-      model: ollama_chat/qwen3:30b-a3b-instruct-2507-q4_K_M
-      api_base: http://ollama:11434
-      num_thread: 8                          # ver nota THREADS no topo
-      # Contexto 16k (o Ollama abre com 4096 e CORTA o resto): é o modelo do chat local (lib/agent/turnoLocal).
-      # Um valor só pra todo uso dele — mudar num_ctx entre pedidos recarrega o modelo. KV de 16k ≈ +1,5 GB.
-      num_ctx: 16384
-
-  - model_name: llama-guard                  # moderação/segurança
-    litellm_params:
-      model: ollama_chat/llama-guard3:8b
       api_base: http://ollama:11434
       num_thread: 8                          # ver nota THREADS no topo
 

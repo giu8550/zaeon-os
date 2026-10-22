@@ -177,7 +177,7 @@ export async function runChatTurn(
         prompt, answer, wing: mentor?.wing,
       });
     }
-    // Moderação: DESLIGADA no chat (decisão do dono, 2026-10-22). lib/llm/guarda continua pronto, sem chamador.
+    // Moderação: fora do chat (decisão do dono, 2026-10-22); o llama-guard saiu da Contabo.
     // Uso do agente (card founder): +1 em (mentor|aura, userId). Fire-and-forget; nunca derruba o turno.
     if (userId) {
       void Promise.all([import("@/lib/canal/usage"), import("@/src/lib/prisma")])

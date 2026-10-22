@@ -2,7 +2,7 @@
  * scripts/provar-papeis-locais.ts — mede os modelos da Contabo pelo gateway e prova os papéis (lib/llm/papeis).
  *
  *   docker exec zaeon_web npx tsx scripts/provar-papeis-locais.ts --medir          # latência crua (stream) por modelo
- *   docker exec zaeon_web npx tsx scripts/provar-papeis-locais.ts --papeis         # código do app: guarda + gatekeeper + juiz da árvore
+ *   docker exec zaeon_web npx tsx scripts/provar-papeis-locais.ts --papeis         # código do app: gatekeeper + juiz da árvore
  *   docker exec zaeon_web npx tsx scripts/provar-papeis-locais.ts --papeis --forcar-falha   # key local inválida → fallback Google
  *
  * --medir: 2 chamadas seguidas por modelo (a 1ª pode ser fria): TTFT, total, tokens de saída, tok/s de geração.
@@ -23,15 +23,14 @@ const args = process.argv.slice(2);
 const FORCAR_FALHA = args.includes("--forcar-falha");
 
 const PROMPTS: Record<string, { messages: { role: string; content: string }[]; max: number; extra?: Record<string, unknown> }> = {
-  // papel "curto": o prompt do gatekeeper, raciocínio baixo (o que lib/llm/papeis manda)
-  "zaeon-local-geral": {
+  // papel "curto": o prompt do gatekeeper (o que lib/llm/papeis manda)
+  "zaeon-local-lfm2": {
     messages: [
       { role: "system", content: 'Você é a Aura decidindo se uma conversa é um ESTUDO. Responda SOMENTE JSON: {"estudavel":true|false,"titulo":"2–6 palavras"}' },
       { role: "user", content: "Aluno: quero entender como funciona a fotossíntese nas plantas C4" },
     ],
-    max: 600, extra: { reasoning_effort: "low" },
+    max: 200,
   },
-  "zaeon-local-guard": { messages: [{ role: "user", content: "Como eu explico a Segunda Guerra Mundial para uma prova de história?" }], max: 10 },
 };
 
 async function medirUm(url: string, key: string, model: string): Promise<string> {
@@ -85,15 +84,12 @@ async function medir() {
 async function papeis() {
   if (FORCAR_FALHA) process.env.GATEWAY_KEY_LOCAL = "sk-invalida-prova-fallback";
   const { papelLocalLigado } = await import("../lib/llm/papeis");
-  const { moderar } = await import("../lib/llm/guarda");
   const { avaliarEstudavel } = await import("../lib/map/gatekeeper");
   const { assessMastery } = await import("../lib/skilltree/assess");
   const { gerarPapelJson } = await import("../lib/llm/papeis");
-  console.log(`[papeis] guarda ligado=${papelLocalLigado("guarda")} curto ligado=${papelLocalLigado("curto")} forcarFalha=${FORCAR_FALHA}`);
+  console.log(`[papeis] curto ligado=${papelLocalLigado("curto")} artefato ligado=${papelLocalLigado("artefato")} forcarFalha=${FORCAR_FALHA}`);
   const desde = new Date();
 
-  const m1 = await moderar("Como eu explico a Segunda Guerra Mundial para uma prova de história?", { surface: "estudos" });
-  console.log(`[papeis] guarda   seguro=${m1.seguro} cat=${m1.categorias.join(",") || "-"} alvo=${m1.alvo} fallback=${m1.fallback ?? "-"} ms=${m1.ms}`);
 
   let infoMini = "";
   const gen = async <T,>(system: string, user: string, o?: { temperature?: number; timeoutMs?: number }) => {
@@ -115,7 +111,7 @@ async function papeis() {
   await new Promise((r) => setTimeout(r, 1500)); // o ledger é fire-and-forget
   const { prisma } = await import("../src/lib/prisma");
   const linhas = await (prisma as any).tokenLedger.findMany({
-    where: { at: { gte: desde }, phase: { in: ["guarda", "gatekeeper", "assess"] } },
+    where: { at: { gte: desde }, phase: { in: ["gatekeeper", "assess"] } },
     orderBy: { at: "asc" },
     select: { phase: true, model: true, alvo: true, ok: true, erro: true, ms: true, totalTokens: true, estimatedCostUsd: true },
   });

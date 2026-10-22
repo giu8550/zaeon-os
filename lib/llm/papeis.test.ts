@@ -18,14 +18,14 @@ function deps(over: Partial<Deps> = {}): Deps & { linhas: any[]; vertexModelos: 
 }
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
-beforeEach(() => { _emVoo.guarda = 0; _emVoo.curto = 0; vi.spyOn(console, "warn").mockImplementation(() => {}); });
+beforeEach(() => { _emVoo.curto = 0; _emVoo.artefato = 0; vi.spyOn(console, "warn").mockImplementation(() => {}); });
 
 describe("papelLocalLigado — flag por papel", () => {
   it("ligado por default com gateway + key; '0'/'off' desliga só aquele papel", () => {
     expect(papelLocalLigado("curto", ENV)).toBe(true);
     expect(papelLocalLigado("curto", { ...ENV, LOCAL_CURTO: "0" })).toBe(false);
-    expect(papelLocalLigado("guarda", { ...ENV, LOCAL_CURTO: "0" })).toBe(true);
-    expect(papelLocalLigado("guarda", { ...ENV, LOCAL_GUARDA: "off" })).toBe(false);
+    expect(papelLocalLigado("artefato", { ...ENV, LOCAL_CURTO: "0" })).toBe(true);
+    expect(papelLocalLigado("artefato", { ...ENV, LOCAL_ARTEFATO: "off" })).toBe(false);
   });
   it("sem GATEWAY_URL ou sem key que enxergue zaeon-local-* → desligado (a key do agente não serve)", () => {
     expect(papelLocalLigado("curto", { GATEWAY_KEY_LOCAL: "k" })).toBe(false);
@@ -36,7 +36,7 @@ describe("papelLocalLigado — flag por papel", () => {
 });
 
 describe("gerarPapel — escolha do modelo local", () => {
-  it("curto → zaeon-local-qwen30 (qwen3 30B-A3B instruct) no gateway, key local; ledger alvo contabo", async () => {
+  it("curto → zaeon-local-lfm2 (LFM2-8B-A1B) no gateway, key local; ledger alvo contabo", async () => {
     const f = vi.fn(async () => okLocal('{"estudavel":true}'));
     const d = deps({ fetchImpl: f as any });
     const r = await gerarPapel("curto", { system: "s", user: "pergunta", json: true, ctx }, d);
@@ -45,18 +45,18 @@ describe("gerarPapel — escolha do modelo local", () => {
     expect(url).toBe("http://litellm:4000/v1/chat/completions");
     expect(init.headers.Authorization).toBe("Bearer sk-local");
     const body = JSON.parse(init.body);
-    expect(body.model).toBe("zaeon-local-qwen30"); expect(body.reasoning_effort).toBe("low");
+    expect(body.model).toBe("zaeon-local-lfm2"); expect(body.reasoning_effort).toBeUndefined();
     expect(body.messages.at(-1).content).toBe("pergunta");
     expect(d.vertexModelos).toEqual([]);
     await tick();
     expect(d.linhas).toHaveLength(1); expect(d.linhas[0]).toMatchObject({ alvo: "contabo", ok: true, phase: "curto" });
   });
-  it("guarda → zaeon-local-guard, sem system local (o template do llama-guard já sabe a tarefa)", async () => {
-    const f = vi.fn(async () => okLocal("safe"));
-    const r = await gerarPapel("guarda", { user: "oi", systemGoogle: "classifique", ctx }, deps({ fetchImpl: f as any }));
+  it("systemGoogle: o local vai sem system (só o user); o Google recebe o system", async () => {
+    const f = vi.fn(async () => okLocal("ok"));
+    const r = await gerarPapel("curto", { user: "oi", systemGoogle: "classifique", ctx }, deps({ fetchImpl: f as any }));
     const body = JSON.parse((f.mock.calls[0] as any)[1].body);
-    expect(body.model).toBe("zaeon-local-guard"); expect(body.messages).toEqual([{ role: "user", content: "oi" }]);
-    expect(r.texto).toBe("safe");
+    expect(body.messages).toEqual([{ role: "user", content: "oi" }]);
+    expect(r.texto).toBe("ok");
   });
   it("tira o <think> que o Qwen3 às vezes devolve no conteúdo", async () => {
     expect(limparPensamento("<think>hmm\nok</think>\n{\"a\":1}")).toBe('{"a":1}');
@@ -113,21 +113,36 @@ describe("gerarPapel — fallback Google", () => {
     await gerarPapel("curto", { user: "u", ctx }, deps({ fetchImpl: f as any }));
     expect(_emVoo.curto).toBe(0);
   });
-  it("systemGoogle só entra no fallback; 1º modelo Google falhou → tenta o próximo", async () => {
+  it("systemGoogle só entra no fallback (o local vai só com o user)", async () => {
     const f = vi.fn(async () => resposta(500, { error: { message: "x" } }));
     const vistos: any[] = [];
     const d = deps({
       fetchImpl: f as any,
-      vertex: async (req, modelo) => { vistos.push([modelo, req.system]); if (vistos.length === 1) throw Object.assign(new Error("404 model not found"), { status: 404 }); return { texto: "safe", usage: { promptTokens: 1, completionTokens: 1, cachedTokens: 0, totalTokens: 2, reportado: true }, modelo }; },
+      vertex: async (req, modelo) => { vistos.push([modelo, req.system]); return { texto: "safe", usage: { promptTokens: 1, completionTokens: 1, cachedTokens: 0, totalTokens: 2, reportado: true }, modelo }; },
     });
-    const r = await gerarPapel("guarda", { user: "oi", systemGoogle: "SYS", ctx }, d);
+    const r = await gerarPapel("curto", { user: "oi", systemGoogle: "SYS", ctx }, d);
     expect(r.texto).toBe("safe");
-    expect(vistos).toEqual(PAPEIS.guarda.google().map((m) => [m, "SYS"]));
+    expect(vistos).toEqual([[PAPEIS.curto.google()[0], "SYS"]]);
     expect(JSON.parse((f.mock.calls[0] as any)[1].body).messages[0].role).toBe("user");
   });
   it("Contabo E Google fora → erro sobe pra quem chamou (eles são best-effort e engolem)", async () => {
     const f = vi.fn(async () => resposta(500, { error: { message: "x" } }));
     const d = deps({ fetchImpl: f as any, vertex: async () => { throw new Error("vertex 503"); } });
     await expect(gerarPapel("curto", { user: "u", ctx }, d)).rejects.toThrow(/vertex 503/);
+  });
+});
+
+describe("papel artefato (Studio em segundo plano)", () => {
+  it("vai pro zaeon-local-lfm2 com 5 min de teto; LOCAL_ARTEFATO=0 manda direto pro Google", async () => {
+    _emVoo.artefato = 0;
+    expect(PAPEIS.artefato.modeloLocal).toBe("zaeon-local-lfm2");
+    expect(PAPEIS.artefato.timeoutMs).toBe(300_000);
+    const f = vi.fn(async () => okLocal('{"items":[]}'));
+    const r = await gerarPapel("artefato", { user: "u", json: true, ctx }, deps({ fetchImpl: f as any }));
+    expect(JSON.parse((f.mock.calls[0] as any)[1].body).model).toBe("zaeon-local-lfm2");
+    expect(r.alvo).toBe("contabo");
+    const g = vi.fn();
+    const r2 = await gerarPapel("artefato", { user: "u", ctx }, deps({ fetchImpl: g as any, env: { ...ENV, LOCAL_ARTEFATO: "0" } }));
+    expect(g).not.toHaveBeenCalled(); expect(r2.fallback).toBe("desligado");
   });
 });

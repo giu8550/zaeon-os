@@ -1,34 +1,32 @@
 /**
- * lib/llm/papeis.ts — os modelos da Contabo, cada um no papel que a CPU aguenta, com o Google cobrindo o resto.
+ * lib/llm/papeis.ts — o modelo LOCAL da Contabo (CPU, sem GPU) nos papéis em que ninguém espera, com o Google
+ * cobrindo o resto.
  *
- *   gerarPapel("curto", req)  → tenta `zaeon-local-qwen30` (qwen3 30B-A3B instruct) no gateway; falhou/timeout/vazio/ocupado →
+ *   gerarPapel("curto", req)  → tenta `zaeon-local-lfm2` (LFM2-8B-A1B) no gateway; falhou/timeout/vazio/ocupado →
  *                               o MESMO pedido no Vertex (os modelos de `google`, em ordem). Quem chama não vê a troca.
  *
- * Papéis (números medidos no PR — docs/MODELOS_LOCAIS_PAPEIS.md):
- *   guarda → llama-guard3 8B : moderação da mensagem do aluno, DEPOIS do turno (auditoria, nunca bloqueia).
- *   curto  → qwen3 30B-A3B instruct-2507 : classificar/titular curto em segundo plano (gatekeeper do cérebro, juiz da
- *                              árvore). MoE com 3B ativos: mesma velocidade do 4B na CPU e bem mais qualidade —
- *                              medido 2026-10-22: gatekeeper 2,4 s, juiz 14,9 s (4B: 2,7 / 17,5). 4B segue de reserva:
- *                              LOCAL_CURTO_MODELO=zaeon-local-mini.
+ * Papéis (medidos — docs/MODELOS_LOCAIS_PAPEIS.md):
+ *   curto    → gatekeeper do cérebro (estudável + título) e juiz da árvore. LFM2: 4–10 s. Julga pior que um modelo
+ *              grande (chamou uma pergunta de 5 palavras de domínio total) — os filtros de antes da chamada seguram:
+ *              o gatekeeper só pergunta na zona cinzenta e o juiz só avalia tentativas de ≥ 6 palavras.
+ *   artefato → o aparato pesado em segundo plano (comando /artefato da conversa). LFM2: mapa mental ~32 s.
  *
- * O `qwen3:4b` puro do Ollama é o build THINKING-2507 (pensa sempre, ignora /no_think/think:false, 700 tokens sem
- * JSON): a Contabo aponta `qwen3-4b` pro `qwen3:4b-instruct-2507-q4_K_M` desde 2026-10-22. Reserva local:
- * LOCAL_CURTO_MODELO=zaeon-local-geral (gpt-oss-20b, effort low, 17–23 s quente) troca sem deploy.
+ * Desde 2026-10-22 o LFM2-8B-A1B (MoE, ~1,5B ativos) é o ÚNICO modelo local de texto: ~3× o Qwen3 30B na CPU
+ * (lê 74 tok/s, escreve 15). Saíram da Contabo: qwen3 4B/30B, gpt-oss-20b e o llama-guard (moderação fora do chat).
  *
  * Regras:
- *   - Só fire-and-forget. A CPU dá 6–9 tok/s e carregar modelo frio leva até ~100 s: nada aqui entra no
- *     caminho de uma resposta em streaming.
- *   - Flag por papel, LIGADA por default quando há gateway: LOCAL_GUARDA / LOCAL_CURTO = "0" desliga
- *     (vai direto no Google) — basta mudar o .env e recriar o web, sem build.
- *   - Teto de chamadas em voo POR PROCESSO (o Ollama da Contabo roda NUM_PARALLEL=1 e um request abortado
- *     continua lá dentro): passou do teto, o pedido vai direto pro Google em vez de enfileirar na CPU.
+ *   - Só fire-and-forget: nada aqui entra no caminho de uma resposta em streaming.
+ *   - Flag por papel, LIGADA por default quando há gateway: LOCAL_CURTO / LOCAL_ARTEFATO = "0" desliga
+ *     (vai direto no Google) — basta mudar o .env e recriar o web, sem build. *_MODELO troca o grupo.
+ *   - Teto de chamadas em voo POR PROCESSO (o Ollama roda NUM_PARALLEL=1 e um request abortado continua lá
+ *     dentro): passou do teto, o pedido vai direto pro Google em vez de enfileirar na CPU.
  *   - O ledger grava as duas tentativas (alvo "contabo" na que foi pra lá, "vertex" no fallback).
  */
 import { gerar, type Deps, type GerarReq, type GerarRes } from "@/lib/llm/envelope";
 import { GEMINI_MODEL_FLASH } from "@/lib/ai/model";
 import { gatewayLigado } from "@/lib/llm/usage";
 
-export type Papel = "guarda" | "curto";
+export type Papel = "curto" | "artefato";
 
 type Env = Record<string, string | undefined>;
 
@@ -49,15 +47,17 @@ export type DefPapel = {
   extra?: Record<string, unknown>;
 };
 
-/** flash-lite do Vertex (global) — o mesmo da reserva do pool. Override: GEMINI_MODEL_LITE. */
-const LITE = () => process.env.GEMINI_MODEL_LITE || "gemini-3.5-flash-lite";
 
 export const PAPEIS: Record<Papel, DefPapel> = {
-  guarda: { modeloLocal: "zaeon-local-guard", flag: "LOCAL_GUARDA", timeoutMs: 90_000, maxEmVoo: 2, google: () => [LITE(), GEMINI_MODEL_FLASH] },
   curto: {
-    // reasoning_effort só pesa se LOCAL_CURTO_MODELO apontar pro gpt-oss; o instruct ignora.
-    modeloLocal: "zaeon-local-qwen30", envModelo: "LOCAL_CURTO_MODELO", flag: "LOCAL_CURTO", timeoutMs: 150_000, maxEmVoo: 1,
-    google: () => [GEMINI_MODEL_FLASH], extra: { reasoning_effort: "low" },
+    modeloLocal: "zaeon-local-lfm2", envModelo: "LOCAL_CURTO_MODELO", flag: "LOCAL_CURTO", timeoutMs: 120_000, maxEmVoo: 1,
+    google: () => [GEMINI_MODEL_FLASH],
+  },
+  // ARTEFATOS da conversa em segundo plano (comando /artefato): o LFM2 escreve enquanto o Google conversa com o
+  // aluno. Mapa mental ~30 s, diagrama ~1,5–3 min na CPU; falhou/vazio/ocupado → o Google faz.
+  artefato: {
+    modeloLocal: "zaeon-local-lfm2", envModelo: "LOCAL_ARTEFATO_MODELO", flag: "LOCAL_ARTEFATO", timeoutMs: 300_000, maxEmVoo: 1,
+    google: () => [GEMINI_MODEL_FLASH],
   },
 };
 
@@ -84,7 +84,7 @@ export function limparPensamento(texto: string): string {
   return t.replace(/<think>[\s\S]*$/i, "").trim();
 }
 
-const emVoo: Record<Papel, number> = { guarda: 0, curto: 0 };
+const emVoo: Record<Papel, number> = { curto: 0, artefato: 0 };
 /** Só pra teste. */
 export const _emVoo = emVoo;
 
@@ -99,7 +99,7 @@ export type ReqPapel = Omit<GerarReq, "model" | "rota" | "extra" | "chaveGateway
   timeoutMs?: number;
   /** Valida a resposta local além de "não vazia" (ex.: JSON parseável). false = cai pro Google. */
   aceita?: (texto: string) => boolean;
-  /** System SÓ do fallback Google (modelo local que já sabe a tarefa, como o llama-guard). Vence `system`. */
+  /** System SÓ do fallback Google (quando o modelo local já sabe a tarefa sem ele). Vence `system`. */
   systemGoogle?: string;
 };
 

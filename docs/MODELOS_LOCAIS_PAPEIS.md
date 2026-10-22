@@ -3,10 +3,30 @@
 Os modelos da Contabo (CPU, sem GPU) fazem o trabalho em que **ninguém espera a resposta**. A resposta
 que o aluno vê em streaming continua no Google (Vertex global + gemini-3.5-flash).
 
+**Desde 2026-10-22 o único modelo local de texto é o LFM2-8B-A1B** (Liquid AI, MoE ~1,5B ativos, 5 GB). O dono
+testou o Qwen3 30B no chat e achou lento e pesado; o LFM2 é ~3× mais rápido na CPU. Saíram da Contabo: qwen3 4B
+(thinking e instruct), qwen3 30B, gpt-oss-20b, llama-guard (a moderação saiu do chat no #535). Ficam: LFM2, qwen3-coder
+(Octa) e o TEI (embedding + rerank do RAG).
+
 | papel | modelo local (gateway) | onde roda | fallback Google | flag (`0` desliga) |
 |---|---|---|---|---|
-| `guarda` | `zaeon-local-guard` (llama-guard3 8B) | `runChatTurn` → `lib/llm/guarda.auditarEntrada`, **depois** do turno (auditoria; nunca bloqueia) | 3.5-flash-lite → flash (mesma taxonomia S1–S14) | `LOCAL_GUARDA` |
-| `curto` | `zaeon-local-qwen30` (qwen3 **30B-A3B** instruct-2507, desde 2026-10-22) — `LOCAL_CURTO_MODELO=zaeon-local-mini` volta pro 4B | gatekeeper do cérebro (`lib/map/gatekeeper`, zona cinzenta: estudável + título) e juiz da árvore (`lib/skilltree/assess`) — os dois fire-and-forget | `GEMINI_MODEL` (flash), o que eles já usavam | `LOCAL_CURTO` |
+| `curto` | `zaeon-local-lfm2` | gatekeeper do cérebro (zona cinzenta) e juiz da árvore (tentativas ≥ 6 palavras) — fire-and-forget | `GEMINI_MODEL` (flash) | `LOCAL_CURTO` (`LOCAL_CURTO_MODELO` troca o grupo) |
+| `artefato` | `zaeon-local-lfm2` | artefatos da conversa em segundo plano (comando `/`) | flash | `LOCAL_ARTEFATO` (`LOCAL_ARTEFATO_MODELO`) |
+
+**Comparativo 2026-10-22** (mapa mental em JSON a partir de uma conversa de ~400 tokens, `num_thread 8`, sem cache):
+
+| modelo | lê | escreve | mapa pronto | JSON |
+|---|---|---|---|---|
+| **LFM2-8B-A1B** | 74 tok/s | 15 tok/s | ~32 s (+24 s de carga, 1×) | válido, fiel |
+| Granite-4.0-H-Tiny | 53 tok/s | 11 tok/s | ~42 s | válido, mas `"título"` com acento (fora do formato) |
+| Qwen3 30B-A3B | 31 tok/s | 5–8 tok/s | ~69 s (+122 s de carga) | válido |
+
+LFM2 nos prompts do papel curto (pela VPS): 4–10 s; acerta explicação certa (0,95) e erro conceitual (0,3), mas deu
+domínio total a uma pergunta curta e chamou "horário da biblioteca" de estudo — os filtros antes da chamada (zona
+cinzenta do gatekeeper, ≥ 6 palavras no juiz) seguram esses casos. Laya (decisão, ModernBERT) testado e descartado:
+intenção 7/8 em português, mas 0,8–7,6 s na nossa CPU e o juiz não distingue sem ajuste fino.
+
+## Histórico (antes do LFM2)
 
 ## Medido pelo gateway da VPS (2026-10-21, de dentro do `zaeon_web`)
 
