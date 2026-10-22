@@ -65,3 +65,14 @@ export function inicios(duracoes: number[]): { tempos: number[]; total: number }
   for (const d of duracoes) { tempos.push(Math.round(t * 1000) / 1000); t += Math.max(0, d); }
   return { tempos, total: Math.round(t * 1000) / 1000 };
 }
+
+/** onde o vídeo está no tempo `t` (s): a frase (global), o slide, o alvo aceso, os tópicos já revelados e onde cada
+ *  slide começa (pra "anterior/próximo") — o player inteiro é sincronizado por aqui */
+export function posicaoNoVideo(r: Roteiro, tempos: readonly number[], t: number): { frase: number; slide: number; alvo: string; legenda: string; revelados: Set<string>; inicioSlide: number[] } {
+  const fs = frasesEmOrdem(r);
+  let i = 0; for (let k = 0; k < tempos.length && k < fs.length; k++) if (tempos[k]! <= t + 1e-6) i = k;
+  const atual = fs[i] ?? fs[0]!;
+  const revelados = new Set(fs.filter((f, k) => f.slide === atual.slide && k <= i).map((f) => f.alvo));
+  const inicioSlide = r.slides.map((_, si) => tempos[fs.findIndex((f) => f.slide === si)] ?? 0);
+  return { frase: i, slide: atual.slide, alvo: atual.alvo, legenda: atual.legenda, revelados, inicioSlide };
+}

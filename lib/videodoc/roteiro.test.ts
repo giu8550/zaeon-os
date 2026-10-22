@@ -45,3 +45,16 @@ describe("gerarVideoDoc", () => {
     expect(await gerarVideoDoc("a".repeat(24), { titulo: "Z", texto: "t", meta }, x.d)).toBe("done");
   });
 });
+
+describe("posicaoNoVideo — o player sincroniza por aqui", () => {
+  it("slide, frase, alvo aceso e tópicos revelados conforme o tempo", async () => {
+    const { posicaoNoVideo } = await import("./roteiro");
+    const r = lerRoteiro(roteiroBruto)!, tempos = [0, 1, 2, 3, 4, 5];
+    expect(posicaoNoVideo(r, tempos, 0.5)).toMatchObject({ frase: 0, slide: 0, alvo: "t2", legenda: "1" });
+    const p = posicaoNoVideo(r, tempos, 1.2);
+    expect(p).toMatchObject({ frase: 1, slide: 0, alvo: "titulo" }); expect([...p.revelados].sort()).toEqual(["t2", "titulo"]);
+    expect(posicaoNoVideo(r, tempos, 2.1)).toMatchObject({ slide: 1, frase: 2 });
+    expect(posicaoNoVideo(r, tempos, 99).slide).toBe(2);
+    expect(p.inicioSlide).toEqual([0, 2, 4]);
+  });
+});

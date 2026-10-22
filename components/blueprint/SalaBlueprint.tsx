@@ -12,6 +12,9 @@ import { useState } from "react";
 import { NOME_FASE } from "@/lib/blueprint/tipos";
 import { precisaAvaliar } from "@/lib/blueprint/fases";
 import { useBlueprint } from "./useBlueprint";
+import dynamic from "next/dynamic";
+
+const PlayerVideoDoc = dynamic(() => import("@/components/videodoc/PlayerVideoDoc"), { ssr: false });
 
 const AZUL = "#0b2c4d";
 
@@ -54,7 +57,7 @@ function ProvaForm({ criticoId, tipo, enviar }: { criticoId: string; tipo: strin
 export default function SalaBlueprint({ inicialId }: { inicialId?: string | null }) {
   const B = useBlueprint(inicialId);
   const { lista, atual } = B;
-  const [aviso, setAviso] = useState<string | null>(null), [avaliando, setAvaliando] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null), [avaliando, setAvaliando] = useState(false), [videoAberto, setVideoAberto] = useState<string | null>(null);
   const enviar = async (criticoId: string | null, url: string) => {
     const r = await B.enviarProva(criticoId, url);
     if (r.avaliacao) {
@@ -82,10 +85,13 @@ export default function SalaBlueprint({ inicialId }: { inicialId?: string | null
       <div className="relative min-h-0 flex-1">
         {atual ? (
           <PranchaBlueprint id={atual.id} doc={atual.doc} onFixar={B.fixar}
-            acoes={{ podeEditar: podeEscrever(atual.papel), avaliando,
+            acoes={{ podeEditar: podeEscrever(atual.papel), avaliando, abrirVideo: setVideoAberto,
               avaliar: podeEscrever(atual.papel) && precisaAvaliar(atual.doc) ? () => { setAvaliando(true); void enviar(null, "").finally(() => setAvaliando(false)); } : undefined, recompor: atual.papel === "dono" ? B.recompor : undefined, recompondo: B.recompondo, reorganizar: B.reorganizar, temFixos: Object.keys(atual.doc.fixos).length > 0,
               extra: podeEscrever(atual.papel) ? (id) => { const c = id.startsWith("critico:") ? atual.doc.criticos.find((k) => `critico:${k.id}` === id) : undefined; return c ? <ProvaForm criticoId={c.id} tipo={c.tipoProva} enviar={enviar} /> : undefined; } : undefined }}
-            sobre={aviso ? <div className="absolute left-1/2 top-3 z-[95] -translate-x-1/2 rounded border px-3 py-1.5 font-mono text-[11.5px] text-sky-50" style={{ background: "rgba(5,22,42,.92)", borderColor: COR.avaliacao }}>{aviso}</div> : undefined} />
+            sobre={<>
+              {aviso && <div className="absolute left-1/2 top-3 z-[95] -translate-x-1/2 rounded border px-3 py-1.5 font-mono text-[11.5px] text-sky-50" style={{ background: "rgba(5,22,42,.92)", borderColor: COR.avaliacao }}>{aviso}</div>}
+              {videoAberto && <PlayerVideoDoc videoId={videoAberto} onFechar={() => setVideoAberto(null)} />}
+            </>} />
         ) : lista && !lista.length ? (
           <div className="flex h-full items-center justify-center p-8">
             <div className="max-w-md text-center font-mono text-[12.5px] leading-relaxed text-sky-100/75">

@@ -125,7 +125,7 @@ export function mesclarComposicao(doc: DocBlueprint, plano: PlanoComposto, agora
   if (!proximo.produto) delete proximo.produto;
   if (!proximo.demo) delete proximo.demo;
   // os fixos de módulos que sumiram caem (os ids dos módulos são os do layout: "passo:<id>", "critico:<id>", "nota:<id>"…)
-  const vivos = new Set([...proximo.passos.map((p) => `passo:${p.id}`), ...proximo.criticos.map((c) => `critico:${c.id}`), ...proximo.notas.map((n) => `nota:${n.id}`)]);
-  proximo.fixos = Object.fromEntries(Object.entries(doc.fixos).filter(([k]) => !/^(passo|critico|nota):/.test(k) || vivos.has(k)));
+  const vivos = new Set([...proximo.passos.map((p) => `passo:${p.id}`), ...proximo.criticos.map((c) => `critico:${c.id}`), ...proximo.notas.map((n) => `nota:${n.id}`), ...proximo.documentos.map((d) => `video:${d.id}`)]);
+  proximo.fixos = Object.fromEntries(Object.entries(doc.fixos).filter(([k]) => !/^(passo|critico|nota|video):/.test(k) || vivos.has(k)));
   return proximo;
 }

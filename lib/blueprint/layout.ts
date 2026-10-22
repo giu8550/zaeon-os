@@ -16,7 +16,7 @@ export const LARG = { centro: 440, lado: 330, critico: 300 } as const;
 const VAO_LADO = 200, GAP = 34, GAP_CENTRO = 40;
 
 /** os módulos que aparecem na prancha, na ordem (a demo aparece sempre — travada até existir) */
-export function modulosDo(doc: DocBlueprint): { id: IdModulo; lado: Lado }[] {
+export function modulosDo(doc: DocBlueprint, o: { videos?: boolean } = {}): { id: IdModulo; lado: Lado }[] {
   const abertos = doc.criticos.filter((c) => c.status === "aberto" && c.fase === doc.fase);
   const centro: IdModulo[] = [
     ...(doc.pecas.length ? ["figura"] : []), "estudo",
@@ -24,6 +24,8 @@ export function modulosDo(doc: DocBlueprint): { id: IdModulo; lado: Lado }[] {
     ...abertos.map((c) => `critico:${c.id}`),
   ];
   const dir: IdModulo[] = [
+    // os VÍDEOS dos documentos-base (lib/videodoc) logo no topo da prática: a Zaeon holograma explicando cada um
+    ...(o.videos === false ? [] : doc.documentos.filter((d) => d.base || d.videoId).map((d) => `video:${d.id}`)),
     ...(doc.repos.length ? ["repos"] : []), ...(doc.participantes.length ? ["conversas"] : []), "demo",
     ...(doc.produto ? ["produto"] : []), ...(doc.proximos.length ? ["proximos"] : []),
     ...doc.notas.map((n) => `nota:${n.id}`),
@@ -35,8 +37,8 @@ export function modulosDo(doc: DocBlueprint): { id: IdModulo; lado: Lado }[] {
   ];
 }
 
-export function layoutBlueprint(doc: DocBlueprint, alturaDe: (id: IdModulo) => number): { caixas: Caixa[]; fios: Fio[] } {
-  const mods = modulosDo(doc), caixas: Caixa[] = [];
+export function layoutBlueprint(doc: DocBlueprint, alturaDe: (id: IdModulo) => number, o: { videos?: boolean } = {}): { caixas: Caixa[]; fios: Fio[] } {
+  const mods = modulosDo(doc, o), caixas: Caixa[] = [];
   const h = (id: IdModulo) => Math.max(40, alturaDe(id) || 0);
   // ── o eixo central ──
   let y = 0;

@@ -58,3 +58,14 @@ describe("layoutBlueprint — simetria, nunca caos", () => {
     expect(ids).not.toContain("critico:r1"); expect(ids).toContain("avaliacao");
   });
 });
+
+describe("cards de vídeo", () => {
+  it("documento-base (ou com vídeo) vira card de vídeo no topo da prática; desligado, some", () => {
+    const d = cheio({ documentos: [{ id: "da", titulo: "Zether", tipo: "artigo", base: true }, { id: "db", titulo: "x", tipo: "artigo", base: false }] });
+    const dir = modulosDo(d).filter((m) => m.lado === "dir").map((m) => m.id);
+    expect(dir[0]).toBe("video:da"); expect(dir).not.toContain("video:db");
+    expect(modulosDo(d, { videos: false }).some((m) => m.id.startsWith("video:"))).toBe(false);
+    const { caixas } = layoutBlueprint(d, alt);
+    for (let i = 0; i < caixas.length; i++) for (let j = i + 1; j < caixas.length; j++) expect(sobrepoe(caixas[i]!, caixas[j]!)).toBe(false);
+  });
+});

@@ -11,6 +11,9 @@
 import type { StructuredAnswer } from "@/lib/agent/contracts";
 import { MAX_BASE, MAX_DOCUMENTOS, sanitizarDocumento, type Documento } from "@/lib/blueprint/tipos";
 
+/** a UI dos vídeos (valor de BUILD): os cards de vídeo na prancha e o player */
+export const videoDocUiOn = (): boolean => process.env.NEXT_PUBLIC_VIDEO_DOC === "1";
+
 const RE_DOI = /(?:doi\.org\/|^doi:)(10\.\d{4,9}\/[^\s?#]+)/i;
 
 /** a chave do documento: doi:… | url:… | base:… | trabalho:… */
