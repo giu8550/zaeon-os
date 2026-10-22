@@ -63,3 +63,14 @@ describe("a loja", () => {
     expect(await gravarDoc(c.id, "x".repeat(24), (d) => d, db)).toEqual({ ok: false, motivo: "not_found" });
   });
 });
+
+describe("duplicatas que escaparam da corrida", () => {
+  beforeEach(() => { process.env.BLUEPRINT_PRATICO = "1"; });
+  it("o turno seguinte deixa só o mais antigo", async () => {
+    const { db, linhas } = bancoFalso(); const onde = { ownerId: base.userId, surface: "blueprint", scopeId: base.scopeId, titulo: "X", cards: docVazio("X", 0) as never };
+    await db.cartolina.create({ data: onde }); await db.cartolina.create({ data: onde });
+    expect(linhas).toHaveLength(2); const primeiro = linhas[0]!.id;
+    await blueprintDoTurno({ ...base, sinal: { estudavel: true, tituloSugerido: "X" }, db, gen: gen() });
+    expect(linhas.map((l) => l.id)).toEqual([primeiro]);
+  });
+});

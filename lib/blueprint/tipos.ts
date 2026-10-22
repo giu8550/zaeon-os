@@ -57,7 +57,8 @@ export type DocBlueprint = {
   compostoEm: number; turnos: number;
 };
 
-export const MAX_PASSOS = 10, MAX_PECAS = 7, MAX_CRITICOS = 12, MAX_REPOS = 6, MAX_PROXIMOS = 6, MAX_NOTAS = 30;
+/** MAX_CRITICOS = os ABERTOS (até 3 por fase); os PROVADOS nunca são cortados por eles (entrega real não some) */
+export const MAX_PASSOS = 10, MAX_PECAS = 7, MAX_CRITICOS = 12, MAX_PROVADOS = 60, MAX_ABERTOS_POR_FASE = 3, MAX_REPOS = 6, MAX_PROXIMOS = 6, MAX_NOTAS = 30;
 const MAX_TITULO = 200, MAX_CORPO = 1200, MAX_FONTES = 6, MAX_PARTICIPANTES = 8, MAX_AVALIACOES = 12, MAX_FIXOS = 80;
 const ID_RE = /^[\w:.-]{1,64}$/;
 
@@ -148,7 +149,8 @@ export function sanitizarDoc(raw: unknown): DocBlueprint | null {
   const passos = unicos(arr(o.passos).map(sanitizarPasso).filter((p): p is Passo => !!p)).slice(0, MAX_PASSOS);
   const idsPasso = new Set(passos.map((p) => p.id));
   const ligacoes = arr(o.ligacoes).filter((l): l is [string, string] => Array.isArray(l) && l.length === 2 && idsPeca.has(l[0]) && idsPeca.has(l[1]) && l[0] !== l[1]).map((l) => [l[0], l[1]] as [string, string]).slice(0, 20);
-  const criticos = unicos(arr(o.criticos).map(sanitizarCritico).filter((c): c is Critico => !!c)).slice(0, MAX_CRITICOS)
+  const todos = unicos(arr(o.criticos).map(sanitizarCritico).filter((c): c is Critico => !!c));
+  const criticos = [...todos.filter((c) => c.status === "provado").slice(0, MAX_PROVADOS), ...todos.filter((c) => c.status === "aberto").slice(0, MAX_CRITICOS)]
     .map((c) => ({ ...c, pecaId: c.pecaId && idsPeca.has(c.pecaId) ? c.pecaId : undefined, passoId: c.passoId && idsPasso.has(c.passoId) ? c.passoId : undefined }))
     .map((c) => { if (!c.pecaId) delete c.pecaId; if (!c.passoId) delete c.passoId; return c; });
   const fixos: DocBlueprint["fixos"] = {};

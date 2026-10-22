@@ -18,12 +18,15 @@ const OID = /^[a-f0-9]{24}$/i;
 
 type Linha = { id: string; ownerId: string; surface: string; scopeId: string | null; titulo: string; cards: unknown; rev: number; createdAt: Date; updatedAt: Date };
 type Onde = { id?: string; ownerId?: string; surface?: string; scopeId?: string };
+type Ordem = { createdAt?: "asc" | "desc"; updatedAt?: "asc" | "desc"; id?: "asc" | "desc" };
+/** o mais ANTIGO primeiro, com o id desempatando o mesmo milissegundo (todo mundo concorda sobre quem vence) */
+const MAIS_ANTIGO: Ordem[] = [{ createdAt: "asc" }, { id: "asc" }];
 /** o pedaço do Prisma que a loja usa (injetável nos testes) */
 export type BlueprintDb = {
   cartolina: {
-    findFirst(a: { where: Onde; orderBy?: { createdAt?: "asc" | "desc"; updatedAt?: "asc" | "desc" } }): Promise<Linha | null>;
+    findFirst(a: { where: Onde; orderBy?: Ordem | Ordem[] }): Promise<Linha | null>;
     findUnique(a: { where: { id: string } }): Promise<Linha | null>;
-    findMany(a: { where: Onde; orderBy?: { updatedAt?: "asc" | "desc"; createdAt?: "asc" | "desc" }; take?: number }): Promise<Linha[]>;
+    findMany(a: { where: Onde; orderBy?: Ordem | Ordem[]; take?: number }): Promise<Linha[]>;
     create(a: { data: { ownerId: string; surface: string; scopeId: string; titulo: string; cards: never } }): Promise<Linha>;
     updateMany(a: { where: { id: string; rev: number }; data: { cards: never; titulo: string; rev: number } }): Promise<{ count: number }>;
     deleteMany(a: { where: { id: string } }): Promise<{ count: number }>;
@@ -76,16 +79,24 @@ export async function gravarDoc(id: string, userId: string, mudar: (d: DocBluepr
   return { ok: false, motivo: "conflict" };
 }
 
-/** o blueprint da conversa — cria na 1ª vez. Dois turnos ao mesmo tempo: o mais ANTIGO vence e o outro se apaga */
+/** o blueprint da conversa — cria na 1ª vez. Dois turnos ao mesmo tempo: o mais ANTIGO vence e o outro se apaga (e o
+ *  que escapar de uma corrida apertada é limpo no turno seguinte por `limparDuplicatas`) */
 export async function garantirBlueprint(userId: string, scopeId: string, titulo: string, db?: BlueprintDb): Promise<string> {
   const d = db ?? (await prismaDb());
   const onde = { ownerId: userId, surface: SURFACE_BLUEPRINT, scopeId };
-  const ja = await d.cartolina.findFirst({ where: onde, orderBy: { createdAt: "asc" } });
+  const ja = await d.cartolina.findFirst({ where: onde, orderBy: MAIS_ANTIGO });
   if (ja) return ja.id;
   const novo = await d.cartolina.create({ data: { ...onde, titulo: titulo.slice(0, 200) || "Estudo", cards: docVazio(titulo, Date.now()) as never } });
-  const primeiro = await d.cartolina.findFirst({ where: onde, orderBy: { createdAt: "asc" } });
+  const primeiro = await d.cartolina.findFirst({ where: onde, orderBy: MAIS_ANTIGO });
   if (primeiro && primeiro.id !== novo.id) { await d.cartolina.deleteMany({ where: { id: novo.id } }); return primeiro.id; }
   return novo.id;
+}
+
+/** duplicatas da mesma conversa (corrida rara na criação): fica o mais antigo, os outros saem. Devolve o que ficou */
+export async function limparDuplicatas(userId: string, scopeId: string, db: BlueprintDb): Promise<Linha | null> {
+  const todas = await db.cartolina.findMany({ where: { ownerId: userId, surface: SURFACE_BLUEPRINT, scopeId }, orderBy: MAIS_ANTIGO, take: 10 });
+  for (const extra of todas.slice(1)) await db.cartolina.deleteMany({ where: { id: extra.id } });
+  return todas[0] ?? null;
 }
 
 export type GenJson = <T>(system: string, user: string) => Promise<T>;
@@ -110,7 +121,7 @@ export async function blueprintDoTurno(i: EntradaTurno): Promise<"off" | "nao-es
   const { userId, scopeId } = i, agora = i.agora ?? Date.now();
   try {
     const db = i.db ?? (await prismaDb());
-    let linha = await db.cartolina.findFirst({ where: { ownerId: userId, surface: SURFACE_BLUEPRINT, scopeId }, orderBy: { createdAt: "asc" } });
+    let linha = await limparDuplicatas(userId, scopeId, db);
     if (!linha) {
       const conv = i.sinal?.estudavel ? null : await db.conversation.findFirst({ where: { userId, surface: SURFACE_CONVERSA, scopeId }, select: { estudavel: true } });
       if (!i.sinal?.estudavel && !conv?.estudavel) return "nao-estudo";

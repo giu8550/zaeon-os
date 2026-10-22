@@ -54,3 +54,16 @@ describe("promptComposicao", () => {
     expect(p).not.toContain("a".repeat(601));
   });
 });
+
+describe("o teto de críticos nunca come entrega provada", () => {
+  it("12 provados de fases passadas + plano novo: a fase atual ainda ganha críticos e nenhum provado some", () => {
+    const provados = Array.from({ length: 12 }, (_, i): Critico => ({ ...provado, id: `v${i}`, fase: i < 6 ? 1 : 2 }));
+    const r = mesclarComposicao(doc({ fase: 3, criticos: provados }), plano({ criticos: [{ id: "n1", fase: 3, titulo: "no ar", prova: "url", tipoProva: "demo" }] }), 1);
+    expect(r.criticos.filter((c) => c.status === "provado")).toHaveLength(12);
+    expect(r.criticos.find((c) => c.id === "n1")).toBeTruthy();
+  });
+  it("no máximo 3 abertos por fase vindos do plano", () => {
+    const p = lerPlano({ titulo: "X", criticos: Array.from({ length: 6 }, (_, i) => ({ id: `c${i}`, fase: 2, titulo: "t", prova: "p", tipoProva: "link" })) })!;
+    expect(p.criticos).toHaveLength(3);
+  });
+});
