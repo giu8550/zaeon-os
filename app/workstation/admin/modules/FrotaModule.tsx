@@ -30,6 +30,7 @@ const CHAVES: { k: keyof FlagsFrota; nome: string; desc: string }[] = [
   { k: "cloak", nome: "Modo cloak", desc: "70% conversam só com \"...\" nos balões (o teor fica oculto)." },
   { k: "mochila", nome: "Mochila a jato", desc: "Ir de um lugar pro outro voando dentro da Zaeon." },
   { k: "responderUsuarios", nome: "Responder usuários", desc: "As sem cloak respondem seco e cortam se insistirem." },
+  { k: "semHorario", nome: "Sem horário (passeio)", desc: "Todo mundo online 24 h, passeando pela Zaeon e pelos lounges (sem a agenda das 9h, sem folga)." },
 ];
 const ATIVIDADE: Record<string, string> = { "estudo-plataforma": "📖 estudando", "estudo-lounge": "🎧 estudando no lounge", moto: "🏍️ de moto", andar: "🚶 andando", festa: "🪩 na festa" };
 const POR_PAGINA = 40;
