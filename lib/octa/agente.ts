@@ -140,6 +140,7 @@ function gravarDesign(w: Workspace, e: EstiloDesign): void {
 /** O que cada falha da publicação vira pro modelo: instrução curta, sem nenhum detalhe do GitHub. */
 const INSTRUCAO_PUBLICAR: Record<ErroPublicar, string> = {
   github_reconectar: "O GitHub do aluno não está conectado (ou a conexão venceu): peça ao aluno para conectar o GitHub e tente de novo.",
+  github_sem_permissao: "O app Zaeon Code instalado no GitHub do aluno não tem permissão para criar repositórios/ligar o Pages: peça ao aluno para aceitar as permissões novas em github.com/settings/installations (Zaeon Code) e tente de novo.",
   aviso_publico_pendente: "Peça ao aluno para aceitar o aviso de repositório público (o código e a página ficarão públicos no GitHub dele).",
   limite_publicacoes: "O aluno chegou ao limite de publicações de hoje; avise que dá pra publicar de novo amanhã.",
   limite_repos: "O aluno chegou ao limite de repositórios novos de hoje; avise que dá pra criar amanhã.",
