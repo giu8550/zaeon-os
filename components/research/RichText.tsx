@@ -1,7 +1,11 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import ChatMarkdown from "@/components/study/ChatMarkdown";
+import { temMatematica } from "@/lib/chat/matematica";
 
 // Render leve de markdown — **negrito**, *itálico* e quebras de linha. Sem biblioteca.
+// Texto com fórmula ($…$, $$…$$, \(…\), \[…\]) ou ```grafico vai pro ChatMarkdown (KaTeX, o mesmo do chat da
+// Aura — PR #405): o chat de PDF e os resumos da Sala de Pesquisa mostravam o LaTeX cru.
 // `reveal` (opt-in): revela o texto AOS POUCOS, como se a IA estivesse gerando — dá fluidez.
 //   Regra do app: toda saída de IA usa reveal (ver docs/RESEARCH_ROOM_RULES.md §8).
 export default function RichText({
@@ -14,6 +18,16 @@ export default function RichText({
   reveal?: boolean;
 }) {
   const { display, revealing } = useReveal(text || "", !!reveal);
+  // Decide pelo texto INTEIRO (não pelo pedaço revelado), pra não trocar de render no meio da revelação.
+  // O ChatMarkdown é seguro em streaming: $$ ainda sem fecho fica como texto até fechar.
+  if (temMatematica(text || "")) {
+    return (
+      <div className={className}>
+        <ChatMarkdown text={display} />
+        {revealing && <span className="animate-pulse opacity-60 ml-px">▍</span>}
+      </div>
+    );
+  }
   const lines = display.split("\n");
   return (
     <span className={className}>
