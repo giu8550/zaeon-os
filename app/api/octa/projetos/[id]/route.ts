@@ -1,12 +1,15 @@
 /**
  * GET/PATCH/DELETE /api/octa/projetos/[id] — um projeto do aluno logado.
  * PATCH aceita arquivos (≤200 / 1,5 MB, como /api/octa/agente), designId, permissao e avisoPublicoAceito.
+ * designId (string) tem que existir no índice da biblioteca DESIGN.md; o servidor grava o DESIGN.md do estilo
+ * (mesmo formato/marcador do octa_design_escolher) nos arquivos do projeto — o cliente nunca manda esse texto.
  * Projeto de outro dono = 404 (igual a inexistente). O dono vem da sessão, nunca do corpo.
  */
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
 import { prisma } from "@/src/lib/prisma";
+import { carregarIndice, designMdComMarcador } from "@/lib/octa/design/indice";
 import {
   lerProjeto, salvarArquivos, atualizarProjeto, apagarProjeto, lerArquivos,
   PERMISSOES, type Arquivos, type PatchProjeto, type PermissaoOcta, type ProjetosDb,
@@ -45,7 +48,9 @@ export async function PATCH(req: Request, { params }: Ctx) {
     patch.permissao = body.permissao as PermissaoOcta;
   }
   if (body.designId !== undefined) {
-    if (body.designId !== null && typeof body.designId !== "string") return NextResponse.json({ error: "designId inválido" }, { status: 400 });
+    if (body.designId !== null && (typeof body.designId !== "string" || !carregarIndice().some((e) => e.id === body.designId))) {
+      return NextResponse.json({ error: "designId inválido" }, { status: 400 });
+    }
     patch.designId = body.designId;
   }
   if (body.avisoPublicoAceito !== undefined) {
@@ -60,7 +65,9 @@ export async function PATCH(req: Request, { params }: Ctx) {
     arquivos = lidos;
   }
 
-  if (!(await lerProjeto(db, userId, params.id))) return naoEncontrado();
+  const atual = await lerProjeto(db, userId, params.id);
+  if (!atual) return naoEncontrado();
+  if (typeof patch.designId === "string") arquivos = { ...(arquivos ?? atual.arquivos ?? {}), "DESIGN.md": designMdComMarcador(patch.designId) };
   if (arquivos) await salvarArquivos(db, userId, params.id, arquivos);
   const projeto = await atualizarProjeto(db, userId, params.id, patch);
   return projeto ? NextResponse.json({ projeto }) : naoEncontrado();

@@ -9,6 +9,7 @@ vi.mock("@/src/lib/prisma", () => ({
 
 import { GET, POST } from "./route";
 import { GET as GET1, PATCH, DELETE } from "./[id]/route";
+import { lerDesignMd, MARCADOR_ESTILO } from "@/lib/octa/design/indice";
 
 const ID = "0123456789abcdef01234567";
 const ctx = { params: { id: ID } };
@@ -58,7 +59,7 @@ describe("/api/octa/projetos", () => {
     expect(m.update).not.toHaveBeenCalled();
     m.update.mockImplementation(async ({ data }: any) => ({ ...meu, ...data }));
     for (const permissao of ["auto", "antes_de_publicar", "antes_de_escrever"]) {
-      expect((await PATCH(patch({ permissao, designId: "d1" }), ctx)).status).toBe(200);
+      expect((await PATCH(patch({ permissao, designId: "notion" }), ctx)).status).toBe(200);
     }
   });
 
@@ -75,5 +76,34 @@ describe("/api/octa/projetos", () => {
     const r = await PATCH(patch({ arquivos: { "index.html": "<h1>oi</h1>" } }), ctx);
     expect(r.status).toBe(200);
     expect(m.update.mock.calls[0][0].data).toEqual({ arquivos: { "index.html": "<h1>oi</h1>" } });
+  });
+
+  it("PATCH com designId do índice grava DESIGN.md (marcador + markdown do estilo) junto, no servidor", async () => {
+    m.findFirst.mockResolvedValue({ ...meu, arquivos: { "index.html": "<h1>oi</h1>" } });
+    m.update.mockImplementation(async ({ data }: any) => ({ ...meu, ...data }));
+    const r = await PATCH(patch({ designId: "notion" }), ctx);
+    expect(r.status).toBe(200);
+    const datas = m.update.mock.calls.map((c: any) => c[0].data);
+    const comArquivos = datas.find((d: any) => d.arquivos);
+    expect(comArquivos.arquivos["index.html"]).toBe("<h1>oi</h1>");
+    expect(comArquivos.arquivos["DESIGN.md"]).toBe(`${MARCADOR_ESTILO("notion")}\n${lerDesignMd("notion")}`);
+    expect(datas.some((d: any) => d.designId === "notion")).toBe(true);
+  });
+
+  it("PATCH com designId fora do índice (ou com ../) → 400 e nada é gravado", async () => {
+    m.findFirst.mockResolvedValue(meu);
+    for (const designId of ["nao-existe", "../../package.json"]) {
+      expect((await PATCH(patch({ designId }), ctx)).status).toBe(400);
+    }
+    expect(m.update).not.toHaveBeenCalled();
+  });
+
+  it("PATCH com arquivos E designId: o DESIGN.md do estilo vence o que veio no corpo", async () => {
+    m.findFirst.mockResolvedValue(meu);
+    m.update.mockImplementation(async ({ data }: any) => ({ ...meu, ...data }));
+    await PATCH(patch({ arquivos: { "index.html": "a", "DESIGN.md": "falso" }, designId: "notion" }), ctx);
+    const ultimo = m.update.mock.calls.map((c: any) => c[0].data).filter((d: any) => d.arquivos).pop();
+    expect(ultimo.arquivos["DESIGN.md"].startsWith(MARCADOR_ESTILO("notion"))).toBe(true);
+    expect(ultimo.arquivos["index.html"]).toBe("a");
   });
 });

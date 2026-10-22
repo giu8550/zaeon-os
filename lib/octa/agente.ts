@@ -21,7 +21,7 @@ import { detectShit, PERGUNTAS_ANTES_DE_AGIR, type ShitFlag } from "@/lib/octa/s
 import { REGRA_DADOS_NAO_COMANDOS } from "@/lib/octa/untrusted";
 import { custoDoRun, type Trace } from "@/lib/octa/trace";
 import { gerarPeca, verificarDeterminismo } from "@/lib/octa/genart";
-import { carregarIndice, candidatosPorDescricao, lerDesignMd, type EstiloDesign } from "@/lib/octa/design/indice";
+import { carregarIndice, candidatosPorDescricao, designMdComMarcador, type EstiloDesign } from "@/lib/octa/design/indice";
 import { extrairTokens } from "@/lib/octa/design/tokens";
 import { renderPagina, mencionaMarca, ErroMarca } from "@/lib/octa/secoes/render";
 import { validarSecoes, TIPOS_SECAO } from "@/lib/octa/secoes/tipos";
@@ -116,8 +116,7 @@ export const FERRAMENTAS: ToolDef[] = [
 FERRAMENTAS.forEach(registerTool);
 
 // ───────────────────────────── ferramentas do fluxo landing ─────────────────────────────
-/** 1ª linha do DESIGN.md gravado pelo Octa: diz às tools seguintes (e ao turno retomado) qual estilo vale. */
-export const MARCADOR_ESTILO = (id: string) => `<!-- zaeon-estilo: ${id} -->`;
+export { MARCADOR_ESTILO } from "@/lib/octa/design/indice";
 const RE_MARCADOR = /^<!-- zaeon-estilo: ([^\s]+) -->\r?\n?/;
 
 /** O DESIGN.md do workspace: o estilo de origem (se veio da biblioteca) e o markdown sem o marcador. */
@@ -130,7 +129,7 @@ function designDoWorkspace(w: Workspace): { estilo?: EstiloDesign; md: string } 
 }
 
 function gravarDesign(w: Workspace, e: EstiloDesign): void {
-  w["DESIGN.md"] = `${MARCADOR_ESTILO(e.id)}\n${lerDesignMd(e.id)}`;
+  w["DESIGN.md"] = designMdComMarcador(e.id);
 }
 
 /** O que cada falha da publicação vira pro modelo: instrução curta, sem nenhum detalhe do GitHub. */

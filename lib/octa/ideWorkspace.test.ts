@@ -86,3 +86,46 @@ describe("octa · #421 · revisão: arte recriada com o mesmo nome abre como ima
     expect(esquecerVerCodigo(pref, [])).toBe(pref);
   });
 });
+
+describe("octa · projeto do servidor na IDE (Tarefa 7)", () => {
+  it("estadoDoProjeto abre o index.html (ou o 1º arquivo) e esconde nada", async () => {
+    const { estadoDoProjeto } = await import("./ideWorkspace");
+    expect(estadoDoProjeto({ "styles.css": "a", "index.html": "b" })).toEqual({ arquivos: { "styles.css": "a", "index.html": "b" }, abertos: ["index.html"], ativo: "index.html" });
+    expect(estadoDoProjeto({ "b.css": "", "a.md": "" })).toMatchObject({ abertos: ["a.md"], ativo: "a.md" });
+    expect(estadoDoProjeto({})).toEqual({ arquivos: {}, abertos: [], ativo: null });
+  });
+
+  it("estadoDoProjeto mantém as abas que ainda existem quando o servidor devolve os arquivos novos", async () => {
+    const { estadoDoProjeto } = await import("./ideWorkspace");
+    const antes = { arquivos: {}, abertos: ["styles.css", "velho.js"], ativo: "velho.js" };
+    expect(estadoDoProjeto({ "index.html": "", "styles.css": "" }, antes)).toEqual({ arquivos: { "index.html": "", "styles.css": "" }, abertos: ["styles.css"], ativo: "styles.css" });
+  });
+
+  it("montarPrevia põe o styles.css (e outros .css locais) inline e não deixa </style> fechar cedo", async () => {
+    const { montarPrevia } = await import("./ideWorkspace");
+    const html = montarPrevia({
+      "index.html": '<html><head><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="./css/extra.css"><link rel="stylesheet" href="https://fonts.googleapis.com/x"></head><body>oi</body></html>',
+      "styles.css": "body{color:red}</style><script>alert(1)</script>",
+      "css/extra.css": "p{margin:0}",
+    })!;
+    expect(html).toContain("<style>body{color:red}<\\/style><script>alert(1)<\\/script></style>");
+    expect(html).toContain("<style>p{margin:0}</style>");
+    expect(html).toContain('href="https://fonts.googleapis.com/x"'); // externo fica
+    expect(html).not.toContain('href="styles.css"');
+  });
+
+  it("montarPrevia sem index.html → null", async () => {
+    const { montarPrevia } = await import("./ideWorkspace");
+    expect(montarPrevia({ "styles.css": "" })).toBeNull();
+  });
+});
+
+describe("octa · estilo em uso", () => {
+  it("lê o id do marcador do DESIGN.md (o mesmo que a tool e a galeria gravam)", async () => {
+    const { estiloDoDesignMd } = await import("./ideWorkspace");
+    const { MARCADOR_ESTILO } = await import("./design/indice");
+    expect(estiloDoDesignMd({ "DESIGN.md": `${MARCADOR_ESTILO("notion")}\n# x` })).toBe("notion");
+    expect(estiloDoDesignMd({ "DESIGN.md": "# feito à mão" })).toBeNull();
+    expect(estiloDoDesignMd({})).toBeNull();
+  });
+});

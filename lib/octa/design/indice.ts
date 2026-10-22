@@ -3,6 +3,7 @@
  *
  *   carregarIndice()              lê vendor/design-md/indice.json (gerado por scripts/sync-design-md.mjs)
  *   lerDesignMd(id)               markdown bruto de um estilo do índice
+ *   designMdComMarcador(id)       o DESIGN.md do projeto (marcador zaeon-estilo + markdown)
  *   candidatosPorDescricao(...)   ranking puro por clima + nome, para o agente escolher o estilo
  *   extrairClima / marcaDaPasta   usados pelo script de sync ao montar o índice
  *
@@ -37,6 +38,14 @@ export function carregarIndice(): EstiloDesign[] {
 export function lerDesignMd(id: string): string {
   if (!carregarIndice().some((e) => e.id === id)) throw new Error(`estilo de design desconhecido: ${id}`);
   return readFileSync(join(DIR(), id, "DESIGN.md"), "utf8");
+}
+
+/** 1ª linha do DESIGN.md gravado pelo Octa: diz às tools seguintes (e ao turno retomado) qual estilo vale. */
+export const MARCADOR_ESTILO = (id: string) => `<!-- zaeon-estilo: ${id} -->`;
+
+/** O DESIGN.md que o projeto recebe ao escolher um estilo (tool octa_design_escolher ou a galeria da IDE). */
+export function designMdComMarcador(id: string): string {
+  return `${MARCADOR_ESTILO(id)}\n${lerDesignMd(id)}`;
 }
 
 /** `linear.app` → "Linear", `bmw-m` → "Bmw M", `x.ai` → "X". */
