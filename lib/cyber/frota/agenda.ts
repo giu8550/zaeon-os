@@ -27,6 +27,10 @@ export type Bloco = {
   turma?: string;
   /** do DIA DE PASSEIO (`semHorario`): metade dos passeios é nos LOUNGES (lib/cyber/frota/corpo `roteiroAndar`) */
   passeio?: boolean;
+  /** (o passeio a pé) ONDE: na Zaeon (os telões e a capela — o dos novatos) ou nas salas do Templo Cósmico */
+  zona?: "zaeon" | "templo";
+  /** (moto) o TRÂNSITO: sai do Templo pelo buraco negro, cruza a Zaeon voando e entra noutro (lib/cyber/frota/corpo) */
+  transito?: boolean;
 };
 /** os ambientes de estudo (as universidades flutuantes e as salas de convivência da Zaeon). A ORDEM importa: quem acha
  *  o seu lotado vai pro primeiro com lugar (lib/cyber/frota/plano) — as universidades vêm antes */
@@ -38,7 +42,7 @@ export const PESO_AMBIENTE: Readonly<Record<(typeof AMBIENTES_ESTUDO)[number], n
 /** um ambiente de estudo que existe no mapa (as universidades só com UNIVERSIDADES_NO_MAPA) */
 export const ambienteNoMapa = (a: string) => a === "biblioteca" || a === "jardim" || plataformaAtiva(a as IdPlataforma);
 /** `cidadela` = o lugar FIXO de quem tem credencial na hierarquia da cidadela (lib/cyber/frota/hierarquia) */
-export type AmbienteEstudo = (typeof AMBIENTES_ESTUDO)[number] | "lounge" | "cidadela";
+export type AmbienteEstudo = (typeof AMBIENTES_ESTUDO)[number] | "lounge" | "cidadela" | "zaeon";
 
 /** as chaves que o painel CEO liga e desliga */
 export type FlagsFrota = {
@@ -108,7 +112,7 @@ function atividadeDoIntervalo(r: Acaso, a: AgenteIA, flags: FlagsFrota, ar: Area
  *  sem folga e sem hora de começar (todo mundo online o tempo todo) */
 export function agendaBase(a: AgenteIA, dia: number, flags: FlagsFrota, preferido: AmbienteEstudo | null, full = false, ar: AreasFrota = AREAS_PADRAO): Bloco[] {
   if (!flags.ativa) return [];
-  if (flags.semHorario && flags.andar) return diaDePasseio(a, dia, flags, preferido, ar);
+  if (flags.semHorario && flags.andar) return diaPorLevel([a], dia, flags, false, ar).get(a.id) ?? [];
   const r = acasoDe("agenda", a.id, dia);
   if (r() < REGRAS.folga && !full) return [];   // folga
   const hum = a.ritmo.humor;
@@ -137,34 +141,59 @@ export function agendaBase(a: AgenteIA, dia: number, flags: FlagsFrota, preferid
   return out.filter((b) => b.fim > b.ini && b.ini < 24 * 60).map((b) => ({ ...b, fim: Math.min(b.fim, 24 * 60 - 1) }));
 }
 
-/** o DIA DE PASSEIO (out/2026, o dono: "desligue as flags temporais e deixe todos os NPCs passeando pela Zaeon e pelos
- *  lounges"): sem hora de começar nem de acabar, sem folga — da meia-noite à meia-noite, blocos de 30–60 min: a maior
- *  parte PASSEANDO a pé (a turma junto — na Zaeon ou nos lounges do Templo Cósmico: lib/cyber/frota/corpo
- *  `roteiroAndar`), às vezes SENTADO lendo nos lounges, e um pouco estudando nas salas da Zaeon */
-export const DIA_DE_PASSEIO = { bloco: [30, 60] as const, andar: 0.65, lounge: 0.22 } as const;
-function diaDePasseio(a: AgenteIA, dia: number, flags: FlagsFrota, preferido: AmbienteEstudo | null, ar: AreasFrota): Bloco[] {
-  const r = acasoDe("passeio", a.id, dia), out: Bloco[] = [];
-  for (let t = entre(r, 0, 12), guarda = 0; t < 24 * 60 - 1 && guarda++ < 100;) {
-    const dur = Math.round(entre(r, DIA_DE_PASSEIO.bloco[0], DIA_DE_PASSEIO.bloco[1])), x = r();
-    if (x < DIA_DE_PASSEIO.andar) out.push({ ini: t, fim: t + dur, atividade: "andar", turma: `${a.grupo}|${dia}`, passeio: true });
-    else if (x < DIA_DE_PASSEIO.andar + DIA_DE_PASSEIO.lounge && flags.estudoLounge) out.push({ ini: t, fim: t + dur, atividade: "estudo-lounge", ambiente: "lounge" });
-    else { const l = lugarDeEstudo(r, flags, preferido, ar); out.push(l ? { ini: t, fim: t + dur, atividade: l.atividade, ambiente: l.ambiente } : { ini: t, fim: t + dur, atividade: "andar", turma: `${a.grupo}|${dia}`, passeio: true }); }
+/** o DIA POR LEVEL (out/2026, o dono: "vamos ordenar os comportamentos por níveis") — sem hora de começar nem de acabar
+ *  (o `semHorario`), da meia-noite à meia-noite, e o GRUPO faz tudo JUNTO (a mesma agenda pra todos, cada um com um
+ *  atraso de 0–2 min — quem é de um grupo de 3 aparece com os outros 2):
+ *  - NOVATOS (level 1 — não submeteram trabalho, não andam de moto): SÓ na Zaeon. Estudam nas rodas em volta das
+ *    supertrees e dos telões (`zaeon`), passeiam pelos telões e às vezes passam pela capela pra falar com a Zaeon e vão
+ *    embora (o passeio a pé `zona: "zaeon"`); e de vez em quando saem (offline — o ritmo de 50 a 100 na Zaeon);
+ *  - os OUTROS (level 2+): a maior parte nas salas do Templo Cósmico (os lounges — `estudo-lounge`, em todas as salas),
+ *    trocando de sala a pé, às vezes andando por lá, e o TRÂNSITO de moto (sai pelo buraco negro, cruza a Zaeon voando e
+ *    entra noutro — não para); um pouco nas salas antigas da Zaeon */
+export const DIA_POR_LEVEL = {
+  novato: { bloco: [16, 36] as const, estudo: 0.5, andar: 0.34 },
+  veterano: { bloco: [12, 34] as const, templo: 0.74, andar: 0.06, transito: 0.16, transitoMin: [5, 9] as const },
+} as const;
+export function diaPorLevel(membros: readonly AgenteIA[], dia: number, flags: FlagsFrota, novato: boolean, ar: AreasFrota): Map<string, Bloco[]> {
+  const g = membros[0]!, r = acasoDe("dia-por-level", g.grupo, g.id, dia), blocos: Bloco[] = [], turma = `${g.grupo}|${dia}`;
+  const N = DIA_POR_LEVEL.novato, V = DIA_POR_LEVEL.veterano;
+  for (let t = entre(r, 0, 12), guarda = 0; t < 24 * 60 - 1 && guarda++ < 200;) {
+    const x = r();
+    if (novato) {
+      const dur = Math.round(entre(r, N.bloco[0], N.bloco[1]));
+      if (x < N.estudo) blocos.push({ ini: t, fim: t + dur, atividade: "estudo-plataforma", ambiente: "zaeon" });
+      else if (x < N.estudo + N.andar && flags.andar) blocos.push({ ini: t, fim: t + dur, atividade: "andar", turma, passeio: true, zona: "zaeon" });
+      // (o resto: foi embora por um tempo — volta depois)
+      t += dur; continue;
+    }
+    if (x < V.transito && flags.moto) { const dur = Math.round(entre(r, V.transitoMin[0], V.transitoMin[1])); blocos.push({ ini: t, fim: t + dur, atividade: "moto", transito: true }); t += dur; continue; }
+    const dur = Math.round(entre(r, V.bloco[0], V.bloco[1]));
+    if (x < V.transito + V.andar && flags.andar) blocos.push({ ini: t, fim: t + dur, atividade: "andar", turma, passeio: true, zona: "templo" });
+    else if (x < V.transito + V.andar + V.templo && flags.estudoLounge) blocos.push({ ini: t, fim: t + dur, atividade: "estudo-lounge", ambiente: "lounge" });
+    else { const l = lugarDeEstudo(r, flags, null, ar); blocos.push(l ? { ini: t, fim: t + dur, atividade: l.atividade, ambiente: l.ambiente } : { ini: t, fim: t + dur, atividade: "estudo-lounge", ambiente: "lounge" }); }
     t += dur;
   }
-  return out.map((b) => ({ ...b, fim: Math.min(b.fim, 24 * 60 - 1) })).filter((b) => b.fim > b.ini);
+  const out = new Map<string, Bloco[]>();
+  for (const a of membros) {
+    const atraso = a === g ? 0 : Math.floor(acasoDe("atraso", a.id, dia)() * 3);   // (chegam juntos — com um respiro)
+    out.set(a.id, blocos.map((b, k) => ({ ...b, ini: k === 0 ? b.ini : b.ini + atraso, fim: Math.min(24 * 60 - 1, b.fim + (k === blocos.length - 1 ? 0 : atraso)) })).filter((b) => b.fim > b.ini));
+  }
+  return out;
 }
 
 /** a agenda do GRUPO no dia: as de cada um + o lugar de estudo preferido do grupo + a FESTA (todos juntos, à noite) +
  *  as CORRIDAS (intervalos de moto que se cruzam viram corrida juntos, na janela em comum) */
-export function agendaDoGrupo(membros: readonly AgenteIA[], dia: number, flags: FlagsFrota, full = false, ar: AreasFrota = AREAS_PADRAO): Map<string, Bloco[]> {
-  const out = new Map<string, Bloco[]>();
+export function agendaDoGrupo(membros: readonly AgenteIA[], dia: number, flags: FlagsFrota, full = false, ar: AreasFrota = AREAS_PADRAO, novato = false): Map<string, Bloco[]> {
+  let out = new Map<string, Bloco[]>();
   if (!membros.length) return out;
   const g = membros[0]!.grupo, rg = acasoDe("grupo", g, dia);
   const preferido = algumPeso(ar) ? ponderado(rg, ar.pesos) : null;
-  for (const a of membros) out.set(a.id, agendaBase(a, dia, flags, preferido, full, ar));
+  // (o dia por LEVEL: o grupo inteiro junto — `diaPorLevel`)
+  if (flags.ativa && flags.semHorario && flags.andar) out = diaPorLevel(membros, dia, flags, novato, ar);
+  else for (const a of membros) out.set(a.id, agendaBase(a, dia, flags, preferido, full, ar));
   // CORRIDAS: cada intervalo de moto que cruza o de um amigo vira um evento (o maior trecho em comum)
   if (flags.corridas && flags.moto) {
-    const motos = membros.flatMap((a) => (out.get(a.id) ?? []).filter((b) => b.atividade === "moto").map((b) => ({ a, b })));
+    const motos = membros.flatMap((a) => (out.get(a.id) ?? []).filter((b) => b.atividade === "moto" && !b.transito).map((b) => ({ a, b })));   // (o trânsito não vira corrida)
     for (let i = 0; i < motos.length; i++) {
       const x = motos[i]!; if (x.b.evento) continue;
       const juntos = motos.filter((y) => y.a.id !== x.a.id && !y.b.evento && Math.min(x.b.fim, y.b.fim) - Math.max(x.b.ini, y.b.ini) >= REGRAS.corridaMin);
@@ -178,10 +207,10 @@ export function agendaDoGrupo(membros: readonly AgenteIA[], dia: number, flags: 
     }
   }
   // FESTA: o grupo vai junto (quem gosta) — começa entre 19h e 21h, depois do dia de todo mundo
-  if (flags.festa && rg() < REGRAS.festaChance) {
+  if (flags.festa && !novato && rg() < REGRAS.festaChance) {   // (novato não vai: a festa é no lounge)
     const fimDoDia = full ? 0 : Math.max(...membros.map((a) => (out.get(a.id) ?? []).at(-1)?.fim ?? 0));   // (full: o dia não acaba — a festa abre espaço)
     const ini = Math.max(fimDoDia + 15, Math.round(entre(rg, REGRAS.festaIni[0], REGRAS.festaIni[1]))), dur = inteiro(rg, REGRAS.festaDur[0], REGRAS.festaDur[1]);
-    const vao = membros.filter((a) => (out.get(a.id) ?? []).length && a.ritmo.festa > 0.25);
+    const vao = membros.filter((a) => (out.get(a.id) ?? []).length && (flags.semHorario || a.ritmo.festa > 0.25));   // (no dia por level o grupo faz tudo junto: vão todos)
     if (vao.length >= 2 && ini + dur < 24 * 60) for (const a of vao) {
       const fim = ini + dur, ag = out.get(a.id)!;
       // abre o espaço da festa na agenda (no modo full ela está cheia): corta o que cruza [ini, fim] — o resto continua

@@ -36,9 +36,10 @@ import { acasoDe, entre, inteiro, embaralhar, type Acaso } from "./aleatorio";
 import type { FlagsFrota } from "./agenda";
 import type { BlocoPlano } from "./plano";
 import { spotsDe, type Spot } from "./lugares";
+import { BOCA_NO_TEMPLO, CHEGADA_NO_TEMPLO, caminhoNoTemplo as caminhoPeloTemplo, doLayoutT, pousoNoSalao, type LugarNoTemplo, type SalaTemplo, type TrechoTemplo } from "./templo";
 import type { VagaEstudo } from "../estacionamentosEstudo";
 
-type P3 = { x: number; y: number; z: number };
+type P3 = { x: number; y: number; z: number; /** é um lugar do TEMPLO CÓSMICO (o caminho a pé até ele — lib/cyber/frota/templo) */ templo?: LugarNoTemplo };
 export type PoseIA = "andando" | "parado" | "mochila" | "moto" | "sentado" | "deitado" | "relaxa" | "chao" | "danca";
 export type EstadoIA = {
   visivel: boolean; x: number; y: number; z: number; rumo: number; zaeon: boolean;
@@ -117,7 +118,7 @@ function movimentoCache(agente: string, blocos: readonly BlocoPlano[], i: number
  *  CORTADO pro tempo do bloco (`movimento`), então bate exatamente com onde ela está */
 function fimDoBloco(agente: string, blocos: readonly BlocoPlano[], i: number, flags: FlagsFrota): Ponto {
   const b = blocos[i]!;
-  if (b.spot) { const p = b.deitado && b.spot.deita ? b.spot.deita : b.spot; return { id: b.spot.id, x: p.x, y: b.spot.y, z: p.z, estudo: true }; }
+  if (b.spot) { const p = b.deitado && b.spot.deita ? b.spot.deita : b.spot; return { id: b.spot.id, x: p.x, y: b.spot.y, z: p.z, estudo: true, ...(b.spot.templo ? { templo: b.spot.templo } : {}) }; }
   if (b.atividade !== "moto" && b.atividade !== "andar") return NA_CHEGADA;
   return movimentoCache(agente, blocos, i, flags, false).fim;
 }
@@ -196,7 +197,8 @@ export function roteiroAndar(b: BlocoPlano, a: string, iBloco: number): Ponto[] 
   return lembrar(`andar|${a}|${iBloco}|${b.ini}`, () => {
     const turma = b.turma ?? a, rt = acasoDe("interesse", turma, Math.floor(b.ini / 40));   // (a turma, nesse pedaço do dia)
     // metade dos passeios é nos LOUNGES (o Templo Cósmico — chega-se pelo buraco negro: `travessia`)
-    if (NIVEIS_SEPARADOS && b.passeio && rt() < 0.5) return roteiroNoTemplo(turma, a, iBloco, b.ini, rt);
+    // (os NOVATOS — `zona: "zaeon"` — nunca; o passeio do Templo — `zona: "templo"` — sempre)
+    if (NIVEIS_SEPARADOS && b.passeio && b.zona !== "zaeon" && (b.zona === "templo" || rt() < 0.5)) return roteiroNoTemplo(turma, a, iBloco, b.ini, rt);
     const m = MIRANTES_ESTACAO[Math.floor(rt() * MIRANTES_ESTACAO.length)]!.id, tel = (n: string) => INTERESSES.find((q) => q.id === `telao-${n}-${m}`)!, salao = INTERESSES.at(-1)!;
     const seq = rt() < 0.4 ? [salao, tel("problemas"), tel("solucoes")] : rt() < 0.6 ? [tel("problemas"), tel("solucoes"), salao] : [tel("problemas"), tel("solucoes")];
     const ra = acasoDe("lugar-interesse", a, iBloco);
@@ -208,7 +210,9 @@ export function roteiroAndar(b: BlocoPlano, a: string, iBloco: number): Ponto[] 
         const ang = ra() * Math.PI * 2, d = entre(ra, 2, 5 + t * 0.5); l = { x: enc.x + Math.cos(ang) * d, z: enc.z + Math.sin(ang) * d }; w = mundo(l);
         if (livre(w)) break;
       }
-      return { id: `${q.id}#${k}`, x: w.x, y: PISO, z: w.z, estudo: false, olha: Math.atan2(q.alvo.x - l.x, q.alvo.z - l.z), fica: entre(rt, 180, 480) };
+      // (na CAPELA, o novato só passa pra pegar uma informação com a Zaeon e vai embora)
+      const fica = q.id === "salao" && b.zona === "zaeon" ? entre(rt, 50, 110) : entre(rt, 180, 480);
+      return { id: `${q.id}#${k}`, x: w.x, y: PISO, z: w.z, estudo: false, olha: Math.atan2(q.alvo.x - l.x, q.alvo.z - l.z), fica };
     });
   });
 }
@@ -242,6 +246,8 @@ const LUGARES_TEMPLO: readonly LugarTemplo[] = (() => {
     { id: "rasta", caminho: [...doEstudo("estudoR"), rasta.a, rasta.b], lugar: noAnel(RASTA, 22, 52, ang(RASTA, rasta.b) - 0.5, ang(RASTA, rasta.b) + 0.5), alvo: RASTA },
   ];
 })();
+/** a sala (lib/cyber/frota/templo) de cada lugar do passeio */
+const SALA_DO_LUGAR: Record<string, SalaTemplo> = { salao: "salao", campus: "campus", estudoL: "estudoL", estudoR: "estudoR", lounge: "lounge", rasta: "rasta" };
 /** o caminho a pé de um lugar do Templo a outro: volta pelo caminho do de saída até o hub e vai pelo do destino */
 function caminhoNoTemplo(de: LugarTemplo, ponto: { x: number; z: number }, para: LugarTemplo, chegada: { x: number; z: number }): P3[] {
   return [ponto, ...[...de.caminho].reverse(), HUB_TEMPLO, ...para.caminho, chegada].map(doLayout);
@@ -255,7 +261,7 @@ function roteiroNoTemplo(turma: string, a: string, iBloco: number, ini: number, 
     const enc = l.lugar(rt(), rt()), d = entre(ra, 1.5, 4), g = ra() * Math.PI * 2, q = { x: enc.x + Math.cos(g) * d, z: enc.z + Math.sin(g) * d };
     // (o canto de cada um tem que ser PISO do Templo: senão fica no ponto de encontro)
     const ok = alturaNoComplexo(q) !== null || Math.hypot(q.x, q.z) < 66 ? q : enc, w = doLayout(ok);
-    out.push({ id: `templo-${l.id}#${k}`, ...w, estudo: false, olha: rumoNaSala(CIDADE.salas.lounge, Math.atan2(l.alvo.x - ok.x, l.alvo.z - ok.z)), fica: entre(rt, 150, 360), ...(ant ? { via: caminhoNoTemplo(ant.l, ant.q, l, ok) } : {}) });
+    out.push({ id: `templo-${l.id}#${k}`, ...w, templo: { sala: SALA_DO_LUGAR[l.id] ?? "salao", yRel: w.y - PISO - ALTURA_LOUNGE, andar: 0, q: ok }, estudo: false, olha: rumoNaSala(CIDADE.salas.lounge, Math.atan2(l.alvo.x - ok.x, l.alvo.z - ok.z)), fica: entre(rt, 150, 360), ...(ant ? { via: caminhoNoTemplo(ant.l, ant.q, l, ok) } : {}) });
     ant = { l, q: ok };
   });
   void turma; void ini;
@@ -295,6 +301,31 @@ function deMoto(de: P3, para: P3): Viagem {
     const k = s3((t - sobe - voo) / desce); return { x: para.x, y: cruz + (para.y - cruz) * k, z: para.z, rumo, modo: "moto" };
   } };
 }
+/** a pé por uma polilinha (com a altura de cada vértice) */
+function pelaVia(via: readonly P3[]): Viagem {
+  const acum = [0]; for (let k = 1; k < via.length; k++) acum.push(acum[k - 1]! + Math.hypot(via[k]!.x - via[k - 1]!.x, via[k]!.z - via[k - 1]!.z));
+  const L = acum.at(-1)!, dur = Math.max(0.5, L / MOV.pe);
+  return { modo: "pe", dur, em: (u) => {
+    const s = L * Math.max(0, Math.min(1, u)); let k = 1; while (k < via.length - 1 && acum[k]! < s) k++;
+    const a0 = via[k - 1]!, a1 = via[k]!, seg = Math.max(1e-6, acum[k]! - acum[k - 1]!), f = Math.max(0, Math.min(1, (s - acum[k - 1]!) / seg));
+    return { x: a0.x + (a1.x - a0.x) * f, y: a0.y + (a1.y - a0.y) * f, z: a0.z + (a1.z - a0.z) * f, rumo: Math.atan2(a1.x - a0.x, a1.z - a0.z), modo: "pe" };
+  } };
+}
+/** o caminho no TEMPLO (lib/cyber/frota/templo): a pé pelos trechos, de mochila nos saltos (a torre, a escadaria) */
+function aPeNoTemplo(trechos: readonly TrechoTemplo[]): Viagem {
+  const vs = trechos.map((t) => (t.salto ? deMochila(t.pts[0]!, t.pts.at(-1)!) : pelaVia(t.pts)));
+  return vs.length ? vs.reduce(emSeguida) : { modo: "pe", dur: 0, em: () => ({ x: 0, y: 0, z: 0, rumo: 0, modo: "pe" }) };
+}
+/** (cacheado: o caminho de um lugar a outro não muda — e é pedido a cada quadro pra quem está andando à vista) */
+const memoCaminho = new Map<string, Viagem>();
+function caminhoEntre(de: LugarNoTemplo, para: LugarNoTemplo): Viagem {
+  const k = `${de.sala}|${de.andar}|${de.q.x.toFixed(2)},${de.q.z.toFixed(2)}>${para.sala}|${para.andar}|${para.q.x.toFixed(2)},${para.q.z.toFixed(2)}`;
+  let v = memoCaminho.get(k);
+  if (!v) { v = aPeNoTemplo(caminhoPeloTemplo({ q: de.q, no: de }, { q: para.q, no: para })); memoCaminho.set(k, v); if (memoCaminho.size > 6000) memoCaminho.delete(memoCaminho.keys().next().value!); }
+  return v;
+}
+/** um lugar do Templo no mundo (com o lugar junto) */
+const noTemplo = (l: LugarNoTemplo): P3 => ({ ...doLayoutT(l.q, l.yRel), templo: l });
 /** dois trechos seguidos (o modo de cada ponto vem no `em`) */
 function emSeguida(a: Viagem, b: Viagem): Viagem {
   const dur = a.dur + b.dur;
@@ -319,18 +350,61 @@ function emergindo(de: P3, para: P3 & { rumo?: number }, nivel: IdNivel): Viagem
     return { ...p, rumo, modo: "mochila", oculto: nivelDoPonto(p, p.y) !== nivel }; } };   // (o buraco negro de saída fica fora do nível: só aparece ao entrar nele)
 }
 const noMundo = (l: { x: number; y: number; z: number }): P3 => ({ ...mundo(l), y: PISO + l.y });
+/** SAINDO do buraco negro DE MOTO (o trânsito): o mesmo arco do `emergindo`, mais rápido, montado */
+function emergindoDeMoto(de: P3, para: P3, nivel: IdNivel): Viagem {
+  const d = dist3(de, para), dur = Math.max(2.5, d / MOV.moto), rumo = Math.atan2(para.x - de.x, para.z - de.z);
+  return { modo: "moto", dur, em: (u) => { const k = s3(u), p = { x: de.x + (para.x - de.x) * k, y: de.y + (para.y - de.y) * u + Math.sin(Math.PI * u) * 8, z: de.z + (para.z - de.z) * k };
+    return { ...p, rumo, modo: "moto", oculto: nivelDoPonto(p, p.y) !== nivel }; } };
+}
+/** a moto PARADA num ponto `dur` s (a IA montando — a moto se materializa — ou descendo) */
+const motoParada = (p: P3, dur: number): Viagem => ({ modo: "moto", dur, em: () => ({ ...p, rumo: 0, modo: "moto" }) });
+/** o TRÂNSITO DE MOTO (out/2026, o dono: "os de level 2 pra cima passeiam entre o lounge cósmico e a cidadela, não
+ *  param muito, só passam de moto voando pra outros buracos negros"): de onde está, A PÉ até a boca de saída do
+ *  Templo (no salão), MONTA e entra no buraco negro; SAI do portal da cidadela de moto, cruza a Zaeon VOANDO por cima
+ *  da capela e mergulha no fio de uma sala (quase sempre a do Templo de novo); sai do buraco negro de lá e POUSA */
+const SALAS_DO_TRANSITO: readonly (readonly [NomeSala, number])[] = [["lounge", 0.75], ["biblioteca", 0.1], ["jardim", 0.1], ["garagem", 0.05]];
+export function transitoDeMoto(de: P3, agente: string, i: number): { v: Viagem; fim: Ponto } {
+  const r = acasoDe("transito", agente, i), pernas: Viagem[] = [];
+  const nd = NIVEIS_SEPARADOS ? nivelDe(de) : "zaeon";
+  if (ehSalaNivel(nd)) {   // 1) sai da sala: a pé até a boca (no Templo, pelas pontes), monta e some no túnel
+    const boca = noMundo(saidaDaSala(nd).boca);
+    pernas.push(nd === "lounge" && de.templo ? emSeguida(caminhoEntre(de.templo, BOCA_NO_TEMPLO), deMochila(noTemplo(BOCA_NO_TEMPLO), boca)) : deMochila(de, boca), motoParada(boca, 1.2), noTunel(boca));
+    // 2) sai do portal da cidadela, já de moto, e sobe por cima da capela
+    const portal = { ...mundo(CIDADE.portalTunel), y: PISO + 9 };
+    const sobre = { x: CIDADE.centro.x + (r() - 0.5) * 90, y: PISO + 26 + r() * 14, z: CIDADE.centro.z + (r() - 0.5) * 90 };
+    pernas.push(emergindoDeMoto(portal, sobre, "zaeon"));
+    de = sobre;
+  } else pernas.push(deMoto(de, { x: de.x, y: Math.max(de.y, PISO) + 24, z: de.z }));   // (na Zaeon: monta e sobe)
+  // 3) o fio de uma sala: voa até a boca dele (no hub) e mergulha
+  let x = r() * SALAS_DO_TRANSITO.reduce((a, [, p]) => a + p, 0), destino: NomeSala = "lounge";
+  for (const [s, p] of SALAS_DO_TRANSITO) if ((x -= p) < 0) { destino = s; break; }
+  const fio = fiosCosmicos().find((f) => f.sala === destino)!, boca = noMundo(fio.boca), aqui = pernas.length ? de : de;
+  const d = dist3(aqui, boca), rumo = Math.atan2(boca.x - aqui.x, boca.z - aqui.z);
+  pernas.push({ modo: "moto", dur: Math.max(1, d / MOV.moto), em: (u) => ({ x: aqui.x + (boca.x - aqui.x) * u, y: aqui.y + (boca.y - aqui.y) * s3(u), z: aqui.z + (boca.z - aqui.z) * u, rumo, modo: "moto" }) }, noTunel(boca));
+  // 4) sai do buraco negro da sala de moto e POUSA (no Templo, num canto do salão; nas outras, perto da chegada)
+  const bn = noMundo(saidaDaSala(destino).bn);
+  let pouso: P3;
+  if (destino === "lounge") pouso = noTemplo(pousoNoSalao(r));
+  else { const ch = NOS[destino].chegada, a = r() * Math.PI * 2; pouso = { x: ch.x + Math.cos(a) * (LIVRE_DO_POUSO + r() * 6), y: NOS[destino].y, z: ch.z + Math.sin(a) * (LIVRE_DO_POUSO + r() * 6) }; }
+  pernas.push(emergindoDeMoto(bn, pouso, destino), motoParada(pouso, 1.5));
+  return { v: pernas.reduce(emSeguida), fim: { id: `pouso-${destino}`, ...pouso, estudo: false } };
+}
+/** quão longe da chegada (m) quem vem de moto pousa nas salas antigas */
+const LIVRE_DO_POUSO = 9;
 /** a viagem entre NÍVEIS diferentes (pelo menos um deles é uma sala): pelo hub, pelos buracos negros */
 function travessia(de: P3, nDe: IdNivel, para: P3, nPara: IdNivel, flags: FlagsFrota, chave: string, preciso: boolean): Viagem {
   const pernas: Viagem[] = []; let aqui = de;
   if (ehSalaNivel(nDe)) {   // sai da sala: a boca de saída (no salão, no Templo) → o túnel → o portal da cidadela
     const boca = noMundo(saidaDaSala(nDe).boca), portal = { ...mundo(CIDADE.portalTunel), y: PISO + 9 }, ch = NOS.zaeon.chegada;
-    pernas.push(deMochila(aqui, boca), noTunel(boca), emergindo(portal, { x: ch.x, y: PISO, z: ch.z, rumo: ch.rumo }, "zaeon"));
+    // (no Templo, A PÉ até a boca — pelas pontes e pelo caracol; nas outras salas, de mochila)
+    pernas.push(nDe === "lounge" && de.templo ? emSeguida(caminhoEntre(de.templo, BOCA_NO_TEMPLO), deMochila(noTemplo(BOCA_NO_TEMPLO), boca)) : deMochila(aqui, boca), noTunel(boca), emergindo(portal, { x: ch.x, y: PISO, z: ch.z, rumo: ch.rumo }, "zaeon"));
     aqui = { x: ch.x, y: PISO, z: ch.z };
   }
   if (ehSalaNivel(nPara)) {   // entra na sala: a boca do fio dela no hub → o túnel → sai do buraco negro dela → a chegada
     const fio = fiosCosmicos().find((f) => f.sala === nPara)!, boca = noMundo(fio.boca), bn = noMundo(saidaDaSala(nPara).bn), ch = NOS[nPara].chegada;
     const chegada = { x: ch.x, y: NOS[nPara].y, z: ch.z };
-    pernas.push(viagem(aqui, boca, flags, `${chave}|boca`, preciso), noTunel(boca), emergindo(bn, { ...chegada, rumo: ch.rumo }, nPara), deMochila(chegada, para));
+    // (chegando no Templo, a pé da chegada até o lugar)
+    pernas.push(viagem(aqui, boca, flags, `${chave}|boca`, preciso), noTunel(boca), emergindo(bn, { ...chegada, rumo: ch.rumo }, nPara), nPara === "lounge" && para.templo ? caminhoEntre(CHEGADA_NO_TEMPLO, para.templo) : deMochila(chegada, para));
   } else pernas.push(viagem(aqui, para, flags, `${chave}|hub`, preciso));
   return pernas.reduce(emSeguida);
 }
@@ -339,6 +413,8 @@ function travessia(de: P3, nDe: IdNivel, para: P3, nPara: IdNivel, flags: FlagsF
 export function viagem(de: P3, para: P3, flags: FlagsFrota, chave: string, preciso = true): Viagem {
   // (por enquanto só o LOUNGE — o Templo Cósmico — vai pelos buracos negros; as outras salas seguem pelo ar)
   if (NIVEIS_SEPARADOS) { const nd = nivelDe(de), np = nivelDe(para); if (nd !== np && (nd === "lounge" || np === "lounge")) return travessia(de, nd, para, np, flags, chave, preciso); }
+  // dentro do TEMPLO: a pé (as pontes, o caracol), nunca o arco de mochila atravessando as lajes
+  if (de.templo && para.templo) return caminhoEntre(de.templo, para.templo);
   const dist = Math.hypot(para.x - de.x, para.z - de.z), dentroDe = naZaeon(de), dentroPara = naZaeon(para), dentro = dentroDe && dentroPara;
   if (dist < 0.5 && Math.abs(para.y - de.y) < 0.5) return { modo: "pe", dur: 0, em: () => ({ ...para, rumo: 0 }) };
   if (dentro && flags.mochila) return deMochila(de, para);
@@ -400,11 +476,13 @@ export function estadoDaIA(agente: string, blocos: readonly BlocoPlano[], min: n
   };
   // ESTUDO e FESTA: viaja, senta (ou dança) e fica
   if (b.spot) {
-    const s: Spot = b.spot, alvo = b.deitado && s.deita ? s.deita : s, destino = { x: alvo.x, y: s.y, z: alvo.z };
+    const s: Spot = b.spot, alvo = b.deitado && s.deita ? s.deita : s, destino: P3 = { x: alvo.x, y: s.y, z: alvo.z, ...(s.templo ? { templo: s.templo } : {}) };
     const v = comViagem(destino, 0); if (v.estado) return v.estado;
     const kf = t - v.fim, fimSentar = durBloco - kf;   // (levanta no fim, junto com a próxima viagem)
     const sentar = Math.min(s3(kf / MOV.senta), s3(fimSentar / MOV.senta));
     if (b.atividade === "festa") return { ...base, x: s.x, y: s.y, z: s.z, rumo: s.rumo, zaeon: s.zaeon, pose: "danca", vagaMoto: vAqui };
+    // (numa roda DE PÉ — `pe`: conversando, sem sentar e sem o tablet)
+    if (s.tipo === "pe") return { ...base, vagaMoto: vAqui, x: s.x, y: s.y, z: s.z, rumo: s.rumo, zaeon: s.zaeon, pose: "parado" };
     const pose: PoseIA = b.deitado ? "deitado" : s.tipo === "pufe" ? "relaxa" : s.tipo === "piso" ? "chao" : "sentado";
     // (na CABINE da cidadela: na cadeira, de frente pro monitor — sem o tablet)
     return { ...base, vagaMoto: vAqui, x: alvo.x, y: s.y, z: alvo.z, rumo: alvo.rumo, zaeon: s.zaeon, pose, sentar, tablet: s.tipo === "cabine" ? 0 : s3((kf - MOV.senta) / MOV.tabletIn) * s3(fimSentar / MOV.tabletIn), assentoY: s.tipo === "sofa" ? 0.78 : s.tipo === "pufe" ? 0.74 : s.tipo === "puff" ? 0.7 : s.tipo === "trono" ? 0.76 : s.tipo === "cabine" ? 0.56 : 0 };
@@ -420,7 +498,7 @@ export function estadoDaIA(agente: string, blocos: readonly BlocoPlano[], min: n
       if (k < c.dur) { const sAt = (k / MOV.corridaVolta) * 2 * Math.PI * 330 * c.ritmo, p = noCircuito(b.evento!, sAt); return { ...base, x: p.x + Math.cos(p.rumo) * c.faixa, y: p.y, z: p.z - Math.sin(p.rumo) * c.faixa, rumo: p.rumo, zaeon: true, pose: "moto", moto: { vel: MOV.moto * c.ritmo, curva: 0.3 } }; }
       k -= c.dur;
     }
-    if (!mv.trechos.length) { const f = mv.fim; return b.atividade === "moto" ? { ...base, x: f.x, y: f.y, z: f.z, rumo: 0, zaeon: naZaeon(f), pose: "moto", moto: { vel: 0, curva: 0 } } : { ...base, x: f.x, y: f.y, z: f.z, rumo: 0, zaeon: true, pose: "parado" }; }
+    if (!mv.trechos.length) { const f = mv.fim; return b.atividade === "moto" && !b.transito ? { ...base, x: f.x, y: f.y, z: f.z, rumo: 0, zaeon: naZaeon(f), pose: "moto", moto: { vel: 0, curva: 0 } } : { ...base, x: f.x, y: f.y, z: f.z, rumo: 0, zaeon: true, pose: "parado" }; }
     const r = percorrer(mv.trechos, k, mv.disponivel);
     if (r.em === "parada") return { ...base, x: r.q.x, y: r.q.y, z: r.q.z, rumo: r.q.rumo, zaeon: naZaeon(r.q), pose: "parado" };   // (moto: de pé ao lado de onde pousou)
     const e = estadoDe(r.p, r.p.modo ?? r.v.modo);
@@ -437,6 +515,10 @@ const poseDoModo = (m: ModoViagem): PoseIA => (m === "moto" ? "moto" : m === "mo
 type Movimento = { ida: Viagem; idaDur: number; corrida: { dur: number; ritmo: number; faixa: number } | null; trechos: Trecho[]; disponivel: number; fim: Ponto };
 function movimento(agente: string, blocos: readonly BlocoPlano[], i: number, flags: FlagsFrota, preciso: boolean): Movimento {
   const b = blocos[i]!, durBloco = (b.fim - b.ini) * 60, ant = antDoBloco(agente, blocos, i, flags);
+  if (b.atividade === "moto" && b.transito) {   // o TRÂNSITO: a viagem inteira (sem roteiro de passeio); depois, de pé onde pousou
+    const t = transitoDeMoto(ant, agente, i), idaDur = Math.min(t.v.dur, durBloco * 0.92);
+    return { ida: t.v, idaDur, corrida: null, trechos: [], disponivel: durBloco - idaDur, fim: t.fim };
+  }
   if (b.atividade === "moto") {
     const rot = roteiroMoto(b, agente, i);
     if (b.evento?.startsWith("corrida")) {

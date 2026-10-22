@@ -24,7 +24,7 @@ export type RitmoIA = {
 };
 export type AgenteIA = {
   id: string; nome: string; genero: Genero; curso: string; cor: string;
-  /** o grupo de amigos (4 por grupo) — conversa só com eles */
+  /** o grupo de amigos (de 2 a 5 — `TAMANHOS_GRUPO`; poucos sozinhos) — conversa só com eles e faz as coisas junto */
   grupo: number;
   /** conversa em MODO CLOAK (o balão só mostra "...") */
   cloak: boolean;
@@ -41,9 +41,21 @@ export const CURSOS = [
 ] as const;
 const CORES = ["#ff6ad5", "#45d6ff", "#ffc46b", "#9affd0", "#a98bff", "#5aff8a", "#ff9a3c", "#3c8bff", "#f2ff5a", "#ff3c9e", "#5afff2", "#c46bff", "#ffd1a3", "#7dd3ff", "#b6ff3c", "#ff7a7a"] as const;
 
+/** o TAMANHO dos grupos de amigos (out/2026, o dono: "os grupos variam de 2 a 5, poucos estão sozinhos") e o peso de
+ *  cada tamanho no sorteio — em pessoas, ~3% sozinhas */
+export const TAMANHOS_GRUPO: readonly (readonly [number, number])[] = [[1, 0.1], [2, 0.26], [3, 0.27], [4, 0.22], [5, 0.15]];
+/** os tamanhos dos grupos de um lote de `n` (o último aparado pra fechar a conta) */
+export function tamanhosDosGrupos(r: Acaso, n: number): number[] {
+  const out: number[] = [], soma = TAMANHOS_GRUPO.reduce((a, [, p]) => a + p, 0);
+  for (let feito = 0; feito < n;) {
+    let x = r() * soma, t = 2; for (const [k, p] of TAMANHOS_GRUPO) { if ((x -= p) < 0) { t = k; break; } }
+    t = Math.min(t, n - feito); out.push(t); feito += t;
+  }
+  return out;
+}
 /** um LOTE de agentes criado de uma vez (a criação em massa do painel CEO acrescenta lotes — os já existentes não mudam) */
 export type LoteFrota = { semente: number; total: number; fracaoMulheres: number; fracaoCloak: number };
-/** a FROTA: os lotes + o tamanho dos grupos de amigos */
+/** a FROTA: os lotes (+ `tamanhoGrupo`, de antes dos grupos de 2 a 5 — não é mais usado) */
 export type ConfigFrota = { lotes: LoteFrota[]; tamanhoGrupo: number };
 export const LOTE_INICIAL: LoteFrota = { semente: 2026, total: 700, fracaoMulheres: 0.6, fracaoCloak: 0.7 };   // (com o teto de 500, o sanitizar apara em 500)
 export const FROTA_PADRAO: ConfigFrota = { lotes: [LOTE_INICIAL], tamanhoGrupo: 4 };
@@ -64,22 +76,23 @@ export function gerarFrota(c: ConfigFrota = FROTA_PADRAO): AgenteIA[] {
   const out: AgenteIA[] = [], usados = new Set<string>();
   let grupo0 = 0;
   for (const l of c.lotes) {
-    const lote = gerarLote(l, c.tamanhoGrupo, grupo0, usados);
+    const lote = gerarLote(l, grupo0, usados);
     out.push(...lote); grupo0 = lote.length ? Math.max(...lote.map((a) => a.grupo)) + 1 : grupo0;
   }
   return out;
 }
-/** um LOTE: `total` agentes (60% mulheres), grupos de 4, 70% em cloak — o mesmo pra mesma semente */
-function gerarLote(c: LoteFrota, tamanhoGrupo: number, grupo0: number, usados: Set<string>): AgenteIA[] {
+/** um LOTE: `total` agentes (60% mulheres), grupos de 2 a 5, 70% em cloak — o mesmo pra mesma semente */
+function gerarLote(c: LoteFrota, grupo0: number, usados: Set<string>): AgenteIA[] {
   const r = acasoDe("frota", c.semente), n = Math.max(0, Math.floor(c.total));
   // gênero e cloak por COTA exata (60/40, 70/30) e depois embaralhados — não é sorteio solto
   const nF = Math.round(n * c.fracaoMulheres), generos = embaralhar(r, Array.from({ length: n }, (_, i): Genero => (i < nF ? "f" : "m")));
   const nC = Math.round(n * c.fracaoCloak), cloaks = embaralhar(r, Array.from({ length: n }, (_, i) => i < nC));
+  const grupoDe: number[] = []; tamanhosDosGrupos(acasoDe("grupos", c.semente), n).forEach((t, g) => { for (let k = 0; k < t; k++) grupoDe.push(grupo0 + g); });
   return generos.map((genero, i) => {
     const ri = acasoDe("agente", c.semente, i);
     return {
       id: `ia-${c.semente}-${i}`, nome: nomeNovo(ri, genero, usados), genero, curso: escolher(ri, CURSOS), cor: escolher(ri, CORES),
-      grupo: grupo0 + Math.floor(i / Math.max(2, tamanhoGrupo)), cloak: cloaks[i]!,
+      grupo: grupoDe[i]!, cloak: cloaks[i]!,
       ritmo: {
         foco: genero === "f" ? entre(ri, 0.55, 1) : entre(ri, 0.35, 0.85),
         chegada: Math.floor(entre(ri, 0, 80)), humor: entre(ri, 0.15, 0.6), moto: entre(ri, 0.2, 1), festa: entre(ri, 0, 1),

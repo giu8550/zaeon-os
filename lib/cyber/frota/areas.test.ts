@@ -50,7 +50,7 @@ describe("modo admin: as áreas do mapa", () => {
     const p0 = planejarDia(frota, DIA, FLAGS_HORARIO, false, { ...AREAS_PADRAO, vagas: 0 });
     expect([...p0.agentes.values()].some(({ blocos }) => blocos.some((b) => b.vaga))).toBe(false);
     const p5 = planejarDia(frota, DIA, FLAGS_HORARIO, false, { ...AREAS_PADRAO, loungeChao: 5 });
-    const chao = new Set<string>(); for (const { blocos } of p5.agentes.values()) for (const b of blocos) if (b.ambiente === "lounge" && b.spot?.tipo === "piso") chao.add(b.spot.id);
+    const chao = new Set<string>(); for (const { blocos } of p5.agentes.values()) for (const b of blocos) if (b.ambiente === "lounge" && b.spot?.id.startsWith("lounge-piso")) chao.add(b.spot.id);   // (o chão do PÁTIO — as rodas do Templo não contam)
     expect(chao.size).toBeLessThanOrEqual(5);
   });
 });
