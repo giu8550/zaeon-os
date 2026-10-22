@@ -74,9 +74,9 @@ export function hierarquiaDaCidadela(frota: readonly AgenteIA[]): Map<string, Me
 }
 
 /** a fração dos blocos de estudo de quem tem rotina que acontece no lugar dela na cidadela (o resto: noutra área) */
-export const ESTUDO_NA_CIDADELA = 0.75;
+export const ESTUDO_NA_CIDADELA = 0.9;
 /** a chance de um intervalo de moto (que não seja corrida) virar passeio a pé pelo pátio/centro da cidadela */
-export const PASSEIO_NA_CIDADELA = 0.4;
+export const PASSEIO_NA_CIDADELA = 0.15;
 
 /** a agenda do dia de um membro da cidadela, a partir da agenda normal dele: quem só fica logado no laboratório vira UM
  *  bloco de estudo no lugar dele do começo ao fim do dia online (sem festa, sem corrida, sem passeio); quem tem rotina
@@ -91,6 +91,8 @@ export function agendaDaCidadela(m: MembroCidadela, blocos: readonly Bloco[], di
   return blocos.map((b) => {
     if (b.atividade === "estudo-plataforma" || b.atividade === "estudo-lounge") return r() < ESTUDO_NA_CIDADELA ? { ini: b.ini, fim: b.fim, atividade: "estudo-plataforma", ambiente: "cidadela" } : { ...b };
     if (b.atividade === "moto" && !b.evento && r() < PASSEIO_NA_CIDADELA) return { ini: b.ini, fim: b.fim, atividade: "andar", turma: `${m.agente.grupo}|${dia}` };
+    // (out/2026, o dono: "na cidadela, menos ociosos e mais estudando": no dia por level, o passeio a pé vira estudo)
+    if (b.atividade === "andar" && b.passeio) return { ini: b.ini, fim: b.fim, atividade: "estudo-plataforma", ambiente: "cidadela" };
     return { ...b };
   });
 }

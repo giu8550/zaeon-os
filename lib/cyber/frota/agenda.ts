@@ -151,8 +151,9 @@ export function agendaBase(a: AgenteIA, dia: number, flags: FlagsFrota, preferid
  *    trocando de sala a pé, às vezes andando por lá, e o TRÂNSITO de moto (sai pelo buraco negro, cruza a Zaeon voando e
  *    entra noutro — não para); um pouco nas salas antigas da Zaeon */
 export const DIA_POR_LEVEL = {
-  novato: { bloco: [16, 36] as const, estudo: 0.5, andar: 0.34 },
-  veterano: { bloco: [12, 34] as const, templo: 0.74, andar: 0.06, transito: 0.16, transitoMin: [5, 9] as const },
+  // (out/2026, o dono: "ao menos 80% da frota estudando constantemente, tem muitos personagens ociosos")
+  novato: { bloco: [20, 40] as const, estudo: 0.86, andar: 0.08 },
+  veterano: { bloco: [16, 38] as const, templo: 0.86, andar: 0.02, transito: 0.1, transitoMin: [5, 9] as const },
 } as const;
 export function diaPorLevel(membros: readonly AgenteIA[], dia: number, flags: FlagsFrota, novato: boolean, ar: AreasFrota): Map<string, Bloco[]> {
   const g = membros[0]!, r = acasoDe("dia-por-level", g.grupo, g.id, dia), blocos: Bloco[] = [], turma = `${g.grupo}|${dia}`;
