@@ -298,8 +298,9 @@ export type OpcoesOcta = {
   retomar?: { msgs: MsgModelo[]; aprovado: boolean };
   /** Só no fluxo landing: quem publica de fato (lib/octa/publicar, fechado pela rota). */
   octaPublicar?: PublicarOcta;
-  /** Chamado a cada passo (modelo pensando, tool chamada/resultado, arquivo gravado/apagado, aprovação pedida). */
-  onEvento?: (e: EventoOcta) => Promise<void>;
+  /** Chamado a cada passo (modelo pensando, tool chamada/resultado, arquivo gravado/apagado, aprovação pedida).
+   *  `ws` = o workspace vivo AGORA (só leitura, pra quem grava no meio do turno; nunca entra no evento). */
+  onEvento?: (e: EventoOcta, ws: Workspace) => Promise<void>;
 };
 
 export const MAX_PASSOS = 8;
@@ -382,7 +383,7 @@ export async function rodarAgenteOcta(t: TurnoOcta, chamar: ChamarModelo, opts: 
   if (opts.retomar) s.state.sinaisInjecao = msgs.filter((m) => m.role === "tool" && RE_SINAL_INJECAO.test(m.content)).length;
   s.tracer.registrar("prompt", { pedido: t.pedido, modo: t.modo, liberados: t.liberados, fluxo: t.fluxo, retomado: !!opts.retomar });
 
-  const emitir = async (tipo: TipoEventoOcta, dados: Record<string, unknown>) => { if (opts.onEvento) await opts.onEvento({ tipo, dados }); };
+  const emitir = async (tipo: TipoEventoOcta, dados: Record<string, unknown>) => { if (opts.onEvento) await opts.onEvento({ tipo, dados }, vivo); };
   let pendente: PendenteOcta | undefined;
   const responder = (c: ChamadaTool, content: string) => msgs.push({ role: "tool", tool_call_id: c.id, content });
 

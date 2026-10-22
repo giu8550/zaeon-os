@@ -245,6 +245,14 @@ export async function processarTurno(deps: DepsTurno, turnoId: string): Promise<
     }
   };
 
+  /** Grava no projeto o que o turno tem AGORA (a prévia da IDE relê daqui). Cercado pelo runId; DESIGN.md do projeto fica. */
+  const salvarIntermediario = async (ws: Workspace) => {
+    await aindaMinha();
+    const atual = await lerProjeto(db, t.userId, t.projetoId);
+    const designs = Object.fromEntries(Object.entries(atual?.arquivos ?? {}).filter(([k]) => ehDesign(k)));
+    await salvarArquivos(db, t.userId, t.projetoId, { ...designs, ...ws });
+  };
+
   try {
     const anteriores = t.estado?.msgs ? [] : await historico(db, t);
     const chamar = await deps.chamador({ userId: t.userId, turnoId: t.id });
@@ -254,7 +262,11 @@ export async function processarTurno(deps: DepsTurno, turnoId: string): Promise<
       {
         sessionId: `octa-turno-${t.id}`, userId: t.userId, permissao: projeto.permissao, octaPublicar,
         retomar: t.estado?.msgs ? { msgs: t.estado.msgs, aprovado: t.estado.aprovado === true } : undefined,
-        onEvento: (e) => emitir(e.tipo, e.dados),
+        onEvento: async (e, ws) => {
+          // grava ANTES de anunciar: quem relê o projeto ao ver o evento já encontra o arquivo
+          if (e.tipo === "arquivo") await salvarIntermediario(ws);
+          await emitir(e.tipo, e.dados);
+        },
       },
     );
     const arquivos: Arquivos = { ...base, ...r.edicoes };

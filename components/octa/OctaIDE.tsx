@@ -248,8 +248,36 @@ export default function OctaIDE() {
     if (opts.abrirPrevia) setVista((v) => (v === "estilos" ? v : "previa"));
   }, []);
 
+  // ───────────── arquivos ao vivo: cada arquivo que o servidor grava no turno redesenha a prévia ─────────────
+  const timerAoVivo = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ultimoArquivoVisto = useRef(0);
+  const trocouPraPrevia = useRef<string | null>(null);
+  const relerAoVivo = useCallback(async (id: string) => {
+    const r = await fetch(`/api/octa/projetos/${id}`).catch(() => null);
+    if (!r?.ok || projetoRef.current?.id !== id || sujo.current) return; // edição do aluno em andamento não é atropelada
+    const j = await r.json().catch(() => null);
+    if (!j?.projeto || projetoRef.current?.id !== id || sujo.current) return;
+    // só os arquivos: a foto do "desfazer" (antesDoTurno) fica intacta e nada vai de volta pro servidor
+    setIde((prev) => estadoDoProjeto(j.projeto.arquivos ?? {}, prev ?? undefined));
+  }, []);
+  useEffect(() => {
+    const p = projetoRef.current;
+    if (!turno || !p) { ultimoArquivoVisto.current = 0; return; }
+    const novos = turno.eventos.filter((e) => e.tipo === "arquivo" && e.seq > ultimoArquivoVisto.current);
+    if (!novos.length) return;
+    ultimoArquivoVisto.current = novos[novos.length - 1].seq;
+    if (trocouPraPrevia.current !== turno.turnoId && novos.some((e) => /\.(html|css)$/i.test(String(e.dados.path)))) {
+      trocouPraPrevia.current = turno.turnoId; // uma vez por turno: depois disso o aluno manda
+      setVista((v) => (v === "codigo" ? "previa" : v));
+    }
+    if (timerAoVivo.current) clearTimeout(timerAoVivo.current);
+    timerAoVivo.current = setTimeout(() => { timerAoVivo.current = null; void relerAoVivo(p.id); }, 400);
+  }, [turno, relerAoVivo]);
+  useEffect(() => () => { if (timerAoVivo.current) clearTimeout(timerAoVivo.current); }, []);
+
   const sairDoAtual = async () => {
     limpar();
+    if (timerAoVivo.current) { clearTimeout(timerAoVivo.current); timerAoVivo.current = null; }
     antesDoTurno.current = null; // a foto é deste projeto: não pode virar o "desfazer" de outro
     await salvarAgora();
     setPub({ fase: "ocioso" });
@@ -416,6 +444,7 @@ export default function OctaIDE() {
   // ───────────── turnos (modo projeto) ─────────────
   function aoPararTurno(t: EstadoTurno) {
     const p = projetoRef.current;
+    if (timerAoVivo.current) { clearTimeout(timerAoVivo.current); timerAoVivo.current = null; } // o recarregamento final cobre
     if (!p) return;
     if (t.status === "aguardando_aprovacao") { void recarregarProjeto(p.id); return; } // o que já gravou fica salvo
     const gravados = [...new Set(t.eventos.filter((e) => e.tipo === "arquivo" && e.dados.acao !== "apagado").map((e) => String(e.dados.path)))];

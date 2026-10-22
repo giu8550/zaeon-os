@@ -205,6 +205,33 @@ describe("OctaIDE · modo projeto", () => {
     expect(patchesComB).toHaveLength(0);
   });
 
+  it("evento arquivo: relê o projeto (debounce) e a prévia mostra o HTML novo, sem esperar o fim do turno", async () => {
+    let lido = 0;
+    let status = "rodando";
+    extra = (u, i) => {
+      if (u === `/api/octa/projetos/${ID}` && (i?.method ?? "GET") === "GET") {
+        lido++;
+        return json({ projeto: { ...projeto, arquivos: { "index.html": lido > 1 ? "<h1>ao vivo</h1>" : "<h1>oi</h1>" } } });
+      }
+      if (u.startsWith("/api/octa/turnos/t1/eventos")) {
+        return json({ status, eventos: [{ seq: 1, tipo: "arquivo", dados: { path: "index.html", acao: "gravado" } }], pendente: null, resposta: null });
+      }
+      return undefined;
+    };
+    render(<OctaIDE />);
+    await screen.findByText("Confeitaria da Ana");
+    const caixa = screen.getByPlaceholderText(/Peça ao Octa/);
+    fireEvent.change(caixa, { target: { value: "muda" } });
+    fireEvent.keyDown(caixa, { key: "Enter" });
+    // o turno segue "rodando": a prévia já tem o HTML novo
+    await waitFor(() => {
+      const iframe = document.querySelector("iframe");
+      expect(iframe?.getAttribute("srcdoc") ?? "").toContain("ao vivo");
+    }, { timeout: 4000 });
+    expect(chamadas((u, i) => u === `/api/octa/projetos/${ID}` && (i?.method ?? "GET") === "GET").length).toBeGreaterThanOrEqual(2);
+    status = "pronto";
+  });
+
   it("no MESMO projeto, desfazer volta os arquivos de antes do turno (PATCH no próprio projeto)", async () => {
     eventos = [
       { seq: 1, tipo: "tool", dados: { tool: "octa_escrever", path: "index.html" } },
