@@ -57,13 +57,7 @@ teste instala o App na conta pessoal dele (All repositories ou só os criados).
 - [ ] **Republicar** (pedir uma mudança): o **mesmo repositório** ganha commit novo (conferir no histórico), mesma URL.
 - [ ] Se o GitHub exigiu o App instalado na conta (item 1), anotar aqui.
 - [ ] **Varredura do token** (sem nunca imprimir o valor). Dentro do container, decifrar e comparar por hash:
-  ```bash
-  docker exec -i zaeon_web node -e '
-    const {PrismaClient}=require("@prisma/client");
-    // decifra com lib/projects/crypto (rodar via tsx/script do repo) e imprime só sha256 e contagens
-  '
-  ```
-  Receita: um script no container que lê `User.githubUserToken` do usuário de teste, decifra, calcula `sha256` e
+  Receita: um script temporário (fora do repo, apagado depois) no container que lê `User.githubUserToken` do usuário de teste, decifra, calcula `sha256` e
   procura o token (bytes) em cada fonte, imprimindo apenas `fonte: N ocorrências`. Fontes, todas com zero:
   - [ ] `docker logs zaeon_web` e `docker logs zaeon_worker` (se existir worker separado);
   - [ ] coleção `TokenLedger`;
