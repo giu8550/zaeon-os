@@ -1,13 +1,15 @@
 /**
  * lib/llm/papeis.ts — os modelos da Contabo, cada um no papel que a CPU aguenta, com o Google cobrindo o resto.
  *
- *   gerarPapel("curto", req)  → tenta `zaeon-local-mini` (qwen3 4B instruct) no gateway; falhou/timeout/vazio/ocupado →
+ *   gerarPapel("curto", req)  → tenta `zaeon-local-qwen30` (qwen3 30B-A3B instruct) no gateway; falhou/timeout/vazio/ocupado →
  *                               o MESMO pedido no Vertex (os modelos de `google`, em ordem). Quem chama não vê a troca.
  *
  * Papéis (números medidos no PR — docs/MODELOS_LOCAIS_PAPEIS.md):
  *   guarda → llama-guard3 8B : moderação da mensagem do aluno, DEPOIS do turno (auditoria, nunca bloqueia).
- *   curto  → qwen3 4B instruct-2507 : classificar/titular curto em segundo plano (gatekeeper do cérebro, juiz da
- *                              árvore). Quente 2,9–4,2 s (gatekeeper) e 12–17 s (juiz); frio ~27 s.
+ *   curto  → qwen3 30B-A3B instruct-2507 : classificar/titular curto em segundo plano (gatekeeper do cérebro, juiz da
+ *                              árvore). MoE com 3B ativos: mesma velocidade do 4B na CPU e bem mais qualidade —
+ *                              medido 2026-10-22: gatekeeper 2,4 s, juiz 14,9 s (4B: 2,7 / 17,5). 4B segue de reserva:
+ *                              LOCAL_CURTO_MODELO=zaeon-local-mini.
  *
  * O `qwen3:4b` puro do Ollama é o build THINKING-2507 (pensa sempre, ignora /no_think/think:false, 700 tokens sem
  * JSON): a Contabo aponta `qwen3-4b` pro `qwen3:4b-instruct-2507-q4_K_M` desde 2026-10-22. Reserva local:
@@ -54,7 +56,7 @@ export const PAPEIS: Record<Papel, DefPapel> = {
   guarda: { modeloLocal: "zaeon-local-guard", flag: "LOCAL_GUARDA", timeoutMs: 90_000, maxEmVoo: 2, google: () => [LITE(), GEMINI_MODEL_FLASH] },
   curto: {
     // reasoning_effort só pesa se LOCAL_CURTO_MODELO apontar pro gpt-oss; o instruct ignora.
-    modeloLocal: "zaeon-local-mini", envModelo: "LOCAL_CURTO_MODELO", flag: "LOCAL_CURTO", timeoutMs: 150_000, maxEmVoo: 1,
+    modeloLocal: "zaeon-local-qwen30", envModelo: "LOCAL_CURTO_MODELO", flag: "LOCAL_CURTO", timeoutMs: 150_000, maxEmVoo: 1,
     google: () => [GEMINI_MODEL_FLASH], extra: { reasoning_effort: "low" },
   },
 };

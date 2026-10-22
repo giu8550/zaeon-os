@@ -6,7 +6,7 @@ que o aluno vê em streaming continua no Google (Vertex global + gemini-3.5-flas
 | papel | modelo local (gateway) | onde roda | fallback Google | flag (`0` desliga) |
 |---|---|---|---|---|
 | `guarda` | `zaeon-local-guard` (llama-guard3 8B) | `runChatTurn` → `lib/llm/guarda.auditarEntrada`, **depois** do turno (auditoria; nunca bloqueia) | 3.5-flash-lite → flash (mesma taxonomia S1–S14) | `LOCAL_GUARDA` |
-| `curto` | `zaeon-local-mini` (qwen3 4B **instruct-2507**) — `LOCAL_CURTO_MODELO=zaeon-local-geral` volta pro gpt-oss | gatekeeper do cérebro (`lib/map/gatekeeper`, zona cinzenta: estudável + título) e juiz da árvore (`lib/skilltree/assess`) — os dois fire-and-forget | `GEMINI_MODEL` (flash), o que eles já usavam | `LOCAL_CURTO` |
+| `curto` | `zaeon-local-qwen30` (qwen3 **30B-A3B** instruct-2507, desde 2026-10-22) — `LOCAL_CURTO_MODELO=zaeon-local-mini` volta pro 4B | gatekeeper do cérebro (`lib/map/gatekeeper`, zona cinzenta: estudável + título) e juiz da árvore (`lib/skilltree/assess`) — os dois fire-and-forget | `GEMINI_MODEL` (flash), o que eles já usavam | `LOCAL_CURTO` |
 
 ## Medido pelo gateway da VPS (2026-10-21, de dentro do `zaeon_web`)
 
@@ -18,6 +18,7 @@ que o aluno vê em streaming continua no Google (Vertex global + gemini-3.5-flas
 | gpt-oss-20b, texto livre (200 tok) | TTFT 112 s, 142 s | TTFT 0,9 s, 36 s | 5,2–5,7 tok/s |
 | **qwen3:4b-instruct-2507** (2026-10-22), gatekeeper JSON | 27,3 s | **2,9 s** (pelo app: 4,2 s) | JSON certo, 0 raciocínio |
 | **qwen3:4b-instruct-2507**, juiz JSON | 17,1 s | **12,5–17 s** | score 0,9–1 |
+| **qwen3:30b-a3b-instruct-2507** (2026-10-22), gatekeeper / juiz / resumo | load ~19 GB | **2,4 s / 14,9 s / 7,4 tok/s** | JSON certo; português melhor que o 4B |
 | qwen3:4b (thinking-2507) | TTFT 25 s | 10,6 s p/ 60 tok, **só pensamento** | 700 tok sem JSON em 133–175 s com think:false / reasoning_effort none / nada |
 
 **qwen3 4B:** o `qwen3:4b` do Ollama é o build thinking-2507 (contexto 262k), que pensa sempre. Desde 2026-10-22 a
@@ -25,7 +26,10 @@ Contabo tem o `qwen3:4b-instruct-2507-q4_K_M` e o `qwen3-4b` do litellm-config a
 antigo em `/opt/zaeon-models/litellm-config.yaml.bak-20261022-pre-instruct`). O `.env` da VPS tem
 `LOCAL_CURTO_MODELO=zaeon-local-mini` desde então (redundante depois deste PR; backup `.env.bak-20261022-pre-local-curto`).
 
-**Memória da Contabo:** Ollama com `mem_limit 42g`, `MAX_LOADED_MODELS=3`, `KEEP_ALIVE=30m` (o 24h do gpt-oss saiu
+**Memória da Contabo (2026-10-22):** Ollama 56 GB, 4 modelos, `KEEP_ALIVE=6h` (era 42 GB / 3 / 30 min — a moderação
+quase sempre pegava o modelo frio). Gargalo real na CPU é LER o prompt (~20–26 tok/s), não gerar.
+
+**Memória da Contabo (antes):** Ollama com `mem_limit 42g`, `MAX_LOADED_MODELS=3`, `KEEP_ALIVE=30m` (o 24h do gpt-oss saiu
 no #498). coder do Octa (18 GB) + gpt-oss (13 GB) + guard (5,6 GB) cabem juntos nos 3 slots; o qwen3:4b fora do
 uso libera o slot. Ocioso > 30 min = frio. Por isso os tetos (guard 90 s, curto 150 s) e `maxEmVoo` 2/1.
 
