@@ -381,6 +381,8 @@ describe("SEM HORÁRIO: todo mundo passeando pela Zaeon e pelos lounges (o padr�
       expect(estudando / vis, `${min}`).toBeGreaterThanOrEqual(0.8);
       expect(salao, `${min}`).toBeLessThanOrEqual(30);
     }
+    // (as motos trocando de sala: um voo de ~1 min — procura no dia inteiro, de 10 em 10 min)
+    for (let min = 0; min < 24 * 60 && !motoNoTemplo; min += 10) for (const [id, { blocos }] of p5.agentes) { const e = estadoDaIA(id, blocos, min, FLAGS_PADRAO, true, false); if (e.visivel && e.pose === "moto" && e.atividade === "estudo-lounge") motoNoTemplo++; }
     expect(motoNoTemplo).toBeGreaterThan(0);
   });
   it("o passeio nos LOUNGES: só por piso (salão, pontes, escadas, campus, lounges), sem atravessar a pirâmide, e a pé contínuo", () => {

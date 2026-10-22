@@ -7,6 +7,7 @@
  * Referencial da SALA do lounge, y = 0 no pátio (vai dentro do grupo do Templo Cósmico).
  */
 import * as THREE from "three";
+import { criarTeloesMercado } from "./TeloesMercado";
 import { RACKS_TI, ALTO_TI, PIRAMIDE_INV, CABINES_TORRE, CABINE_TI, CAMPUS, CYBER, DIFUSOR_TI, ESTACOES_TI, NUCLEO_CYBER, PILARES_ALTO, POCOS_TC, PONTES, SALAO, TEMPESTADE_TI, TORRE_TI, capsulaEm, difusorDe, portaDoPoco } from "@/lib/cyber/temploCosmico";
 
 export type MeioHandle = { group: THREE.Group; alvos: THREE.Object3D[]; /** os RAIOS que caíram desde a última leitura (onde, no MUNDO) — o engine toca o trovão */ raios(): { x: number; y: number; z: number }[]; /** a cápsula em que eu estou (a vista de DENTRO: sem o teto, o vidro quase sumido), ou null */ capsulaDentro(id: string | null): void; /** os ESTILHAÇOS girando em volta do cubo agora (MUNDO: centro e raio) — o engine empurra quem encosta */ estilhacos(): { x: number; y: number; z: number; r: number }[]; atualizar(dt: number, t: number): void; dispose(): void };
@@ -89,6 +90,9 @@ export function criarMeio(o: { low: boolean }): MeioHandle {
     const pl = malha(new THREE.PlaneGeometry(CAMPUS.meia * 2 - 1, L), grade); pl.rotation.x = -Math.PI / 2; pl.position.set(campus.a.x, y0 + 0.03, zc);
     const linha = malha(new THREE.PlaneGeometry(0.35, L), corSala(aditivo(VERMELHO, 0.55))); linha.rotation.x = -Math.PI / 2; linha.position.set(campus.a.x, y0 + 0.04, zc);
   }
+  // ── os TELÕES DO MERCADO na ponte inicial (components/cyber/TeloesMercado): a moldura acompanha a cor da sala ──
+  const teloes = criarTeloesMercado({ low: o.low }); group.add(teloes.group); alvos.push(...teloes.alvos);
+  anim.push((dt, t) => teloes.atualizar(dt, t, fluxo.uCor.value));
   // ── as ESTAÇÕES DE TRABALHO: as CABINES no molde das da cidadela (components/cyber/CabinesEstudo), nas cores da sala —
   //    o vidro escuro, os frisos vermelhos acesos, o monitor com o código rolando e o losango vermelho em cima ──
   const N = ESTACOES_TI.length, C = CABINE_TI;
@@ -355,6 +359,6 @@ export function criarMeio(o: { low: boolean }): MeioHandle {
       return out;
     },
     atualizar(dt, t) { for (const f of anim) f(dt, t); },
-    dispose() { group.removeFromParent(); for (const g of geos) g.dispose(); for (const m of mats) m.dispose(); },
+    dispose() { teloes.dispose(); group.removeFromParent(); for (const g of geos) g.dispose(); for (const m of mats) m.dispose(); },
   };
 }
