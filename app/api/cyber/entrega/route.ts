@@ -2,7 +2,8 @@
  * POST /api/cyber/entrega { tipo: "pesquisa" | "livro", id, salaId? } — a ENTREGA no RELICÁRIO DO SABER
  * (lib/cyber/relicario). O item é DA PESSOA (IDOR → 404):
  *  - "pesquisa" (ResearchWork — artigos/TCCs inclusos): completa e totalmente estruturada em ABNT (lib/cyber/entregaAbnt);
- *  - "livro" (o estudo do board, `boardId:cardId`, de um board em que ela tem papel): VENDÁVEL no blueprint.
+ *  - "livro" (o estudo do board, `boardId:cardId`, de um board em que ela tem papel): VENDÁVEL no blueprint; ou o
+ *    BLUEPRINT PRÁTICO dela (`cartolinaId:blueprint` — lib/blueprint/itens: vendável com a fase 2 aprovada).
  * Aceita → grava em User.cyberPerfil `entregaAceitaEm`/`entregaItem` (preservando as outras chaves). Com `salaId` (a sala
  * do cyberespaço, de que ela é membro) a cena vai pra todo mundo (EV_RELICARIO — o item voando e a Zaeon lendo).
  * Responde o veredito, o que falta e o evento. (Compatível: `{ workId }` = uma pesquisa.)
@@ -20,6 +21,8 @@ import { avaliarEntrega } from "@/lib/cyber/entregaAbnt";
 import { avaliarEstudo, idDeEncaixeValido, type EventoRelicario, type TipoEncaixe } from "@/lib/cyber/relicario";
 import { SURFACE_ESTUDOS, lerCards } from "@/lib/estudos/board";
 import { itensDosBoards } from "@/lib/estudos/itens";
+import { CARD_BLUEPRINT, itemDoBlueprint } from "@/lib/blueprint/itens";
+import { SURFACE_BLUEPRINT, docVazio, sanitizarDoc } from "@/lib/blueprint/tipos";
 
 export async function POST(req: Request) {
   const rl = await guard(req, "lounge3d-acesso"); if (!rl.ok) return rl.response;
@@ -37,9 +40,16 @@ export async function POST(req: Request) {
     titulo = (w.title ?? "").replace(/\.(pdf|docx)$/i, "").trim() || "Pesquisa sem título"; aceito = a.aceito; faltando = a.faltando; paginas = a.paginas;
   } else {
     const [boardId, cardId] = id.split(":") as [string, string];
-    const membro = await prisma.cartolinaMembro.findFirst({ where: { cartolinaId: boardId, userId: me.id }, select: { id: true } });
-    const b = await prisma.cartolina.findFirst({ where: { id: boardId, surface: SURFACE_ESTUDOS, ...(membro ? {} : { ownerId: me.id }) }, select: { id: true, cards: true } });
-    const it = b ? itensDosBoards([{ id: b.id, cards: lerCards(b.cards) }]).find((x) => x.cardId === cardId) : undefined;
+    let it: ReturnType<typeof itensDosBoards>[number] | undefined;
+    if (cardId === CARD_BLUEPRINT) {
+      // um BLUEPRINT PRÁTICO (lib/blueprint): só o do próprio dono
+      const b = await prisma.cartolina.findFirst({ where: { id: boardId, surface: SURFACE_BLUEPRINT, ownerId: me.id }, select: { id: true, titulo: true, cards: true } });
+      it = b ? itemDoBlueprint(b.id, sanitizarDoc(b.cards) ?? docVazio(b.titulo, 0)) : undefined;
+    } else {
+      const membro = await prisma.cartolinaMembro.findFirst({ where: { cartolinaId: boardId, userId: me.id }, select: { id: true } });
+      const b = await prisma.cartolina.findFirst({ where: { id: boardId, surface: SURFACE_ESTUDOS, ...(membro ? {} : { ownerId: me.id }) }, select: { id: true, cards: true } });
+      it = b ? itensDosBoards([{ id: b.id, cards: lerCards(b.cards) }]).find((x) => x.cardId === cardId) : undefined;
+    }
     if (!it) return NextResponse.json({ error: "Not found" }, { status: 404 });
     const a = avaliarEstudo(it);
     titulo = it.titulo; aceito = a.aceito; faltando = a.faltando;
