@@ -293,4 +293,18 @@ describe("octa · agente (fluxo landing)", () => {
     const r2 = await rodarAgenteOcta(t, roteiro([{ content: "apaguei" }]), { sessionId: "g4", permissao: "auto", retomar: { msgs: r.msgs, aprovado: true } });
     expect(r2.apagados).toEqual(["index.html"]);
   });
+
+  it("onEvento: pensando/tool/resultado/arquivo em ordem, sem conteúdo de arquivo lido", async () => {
+    const eventos: any[] = [];
+    const m = roteiro([
+      { content: null, tool_calls: [call("1", "octa_ler", { path: "src/soma.ts" })] },
+      { content: null, tool_calls: [call("2", "octa_escrever", { path: "src/soma.ts", conteudo: "export const soma = (a, b) => a + b;" })] },
+      { content: "feito" },
+    ]);
+    await rodarAgenteOcta(base(), m, { sessionId: "ev1", onEvento: async (e) => { eventos.push(e); } });
+    expect(eventos.map((e) => e.tipo)).toEqual(["pensando", "tool", "resultado", "pensando", "tool", "resultado", "arquivo", "pensando"]);
+    expect(eventos[2]).toEqual({ tipo: "resultado", dados: { tool: "octa_ler", ok: true } });
+    expect(eventos[6]).toEqual({ tipo: "arquivo", dados: { path: "src/soma.ts", acao: "gravado" } });
+    expect(JSON.stringify(eventos)).not.toContain("a - b");
+  });
 });

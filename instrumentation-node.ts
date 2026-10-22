@@ -33,6 +33,14 @@ export async function iniciarWorkerRagOpcional() {
   } catch (e) { console.warn("[rag-worker] não iniciado:", (e as Error)?.message); }
 }
 
+/** Worker dos turnos do Octa (lib/queue/octa): OCTA_WORKER=1 + OCTA_QUEUE=1 + REDIS_URL. Nunca lança. */
+export async function iniciarWorkerOctaOpcional() {
+  try {
+    const { iniciarWorkerOcta } = await import("@/lib/queue/octa");
+    if (!(await iniciarWorkerOcta())) console.warn("[octa-worker] OCTA_WORKER=1 mas fila desligada (OCTA_QUEUE=1 + REDIS_URL) — não iniciado.");
+  } catch (e) { console.warn("[octa-worker] não iniciado:", (e as Error)?.message); }
+}
+
 /** Memória L3 (MEMORY_L3=1): gavetas verbatim no Atlas. Nunca lança — sem ela o chat segue sem memória. */
 export async function ligarMemoriaOpcional() {
   try {

@@ -11,6 +11,8 @@
  * a tool nunca vê token nem email). Sem o fluxo, essas tools nem são oferecidas e chamá-las é negado.
  * Permissão do projeto (`opts.permissao`, lib/octa/permissao): a tool que precisa do aluno PARA o laço e volta como
  * `pendente`; `opts.retomar` continua de `msgs` com a decisão dele.
+ * Eventos ao vivo (`opts.onEvento`, lib/queue/octa): nome da tool, caminho, ok/código e o resumo JÁ REDIGIDO de tool
+ * que escreve — nunca conteúdo de arquivo lido nem mensagem crua de erro.
  */
 import { registerTool, getTool, err, type ToolDef, type ToolContext } from "@/lib/agent/runtime";
 import { novaSessao, runOctaTool } from "@/lib/octa/runner";
@@ -291,6 +293,10 @@ export type ResultadoOcta = {
   msgs: MsgModelo[];
 };
 
+/** Um passo do laço, pra tela acompanhar ao vivo. `fim`/`erro` são do job (lib/queue/octa), não do laço. */
+export type TipoEventoOcta = "pensando" | "tool" | "arquivo" | "resultado" | "aprovacao" | "fim" | "erro";
+export type EventoOcta = { tipo: TipoEventoOcta; dados: Record<string, unknown> };
+
 export type OpcoesOcta = {
   sessionId: string;
   userId?: string;
@@ -300,6 +306,8 @@ export type OpcoesOcta = {
   retomar?: { msgs: MsgModelo[]; aprovado: boolean };
   /** Só no fluxo landing: quem publica de fato (lib/octa/publicar, fechado pela rota). */
   octaPublicar?: PublicarOcta;
+  /** Chamado a cada passo (modelo pensando, tool chamada/resultado, arquivo gravado/apagado, aprovação pedida). */
+  onEvento?: (e: EventoOcta) => Promise<void>;
 };
 
 export const MAX_PASSOS = 8;
@@ -342,6 +350,13 @@ function comAlvos(nome: string, args: unknown, w: Workspace): unknown {
 
 const RE_SINAL_INJECAO = /alerta="possível prompt-injection/;
 
+/** Caminho que a tool diz tocar (só pro evento; o guard já validou o de verdade). */
+const caminhoDoEvento = (alvo: unknown): { path?: string } => {
+  const p = alvo && typeof alvo === "object" ? (alvo as Record<string, unknown>).path : undefined;
+  const n = typeof p === "string" ? normalizePath(p) : null;
+  return n ? { path: n } : {};
+};
+
 export async function rodarAgenteOcta(t: TurnoOcta, chamar: ChamarModelo, opts: OpcoesOcta): Promise<ResultadoOcta> {
   const landing = t.fluxo === "landing";
   const maxPassos = t.maxPassos ?? (landing ? MAX_PASSOS_LANDING : MAX_PASSOS);
@@ -364,6 +379,7 @@ export async function rodarAgenteOcta(t: TurnoOcta, chamar: ChamarModelo, opts: 
   if (opts.retomar) s.state.sinaisInjecao = msgs.filter((m) => m.role === "tool" && RE_SINAL_INJECAO.test(m.content)).length;
   s.tracer.registrar("prompt", { pedido: t.pedido, modo: t.modo, liberados: t.liberados, fluxo: t.fluxo, retomado: !!opts.retomar });
 
+  const emitir = async (tipo: TipoEventoOcta, dados: Record<string, unknown>) => { if (opts.onEvento) await opts.onEvento({ tipo, dados }); };
   let pendente: PendenteOcta | undefined;
   const responder = (c: ChamadaTool, content: string) => msgs.push({ role: "tool", tool_call_id: c.id, content });
 
@@ -375,6 +391,7 @@ export async function rodarAgenteOcta(t: TurnoOcta, chamar: ChamarModelo, opts: 
     if (!landing && NOMES_LANDING.has(nome)) {
       negados.push({ tool: nome, motivo: "tool_fora_do_fluxo" });
       responder(c, `NEGADO (tool_fora_do_fluxo): ${nome} não está disponível neste turno.`);
+      await emitir("resultado", { tool: nome, ok: false, codigo: "tool_fora_do_fluxo" });
       return true;
     }
     const alvo = comAlvos(nome, args, vivo);
@@ -385,15 +402,27 @@ export async function rodarAgenteOcta(t: TurnoOcta, chamar: ChamarModelo, opts: 
       if (pede && octaPermit(def, alvo, s.ctx, task, s.state).gate !== "DENY") {
         pendente = { tool: nome, args, toolCallId: c.id };
         s.tracer.registrar("guard", { tool: nome, gate: "REQUIRE_APPROVAL", reason: "permissao_do_projeto", detail: permissao });
+        await emitir("aprovacao", { tool: nome, ...caminhoDoEvento(alvo) });
         return false;
       }
     }
     aprovadaAgora = aprovada;
+    await emitir("tool", { tool: nome, ...caminhoDoEvento(alvo) });
+    const escreve = !!def && def.risk !== "read";
+    const antesDaTool: Workspace = escreve ? { ...vivo } : vivo;
+    let res: Awaited<ReturnType<typeof runOctaTool>>;
     try {
-      const res = await runOctaTool(nome, alvo, s);
+      res = await runOctaTool(nome, alvo, s);
       if (!res.ok) negados.push({ tool: nome, motivo: res.code ?? res.error ?? "negado" });
       responder(c, res.paraModelo);
     } finally { aprovadaAgora = false; }
+    // resumo só de tool que escreve (a de leitura traria conteúdo de arquivo); falha = só o código fixo
+    const resumo = escreve ? String(res.findings?.[0]?.claim ?? "").slice(0, 300) : "";
+    await emitir("resultado", res.ok ? { tool: nome, ok: true, ...(resumo ? { resumo } : {}) } : { tool: nome, ok: false, codigo: res.code ?? "negado" });
+    if (escreve) {
+      for (const [p, conteudo] of Object.entries(vivo)) if (antesDaTool[p] !== conteudo) await emitir("arquivo", { path: p, acao: "gravado" });
+      for (const p of Object.keys(antesDaTool)) if (!(p in vivo)) await emitir("arquivo", { path: p, acao: "apagado" });
+    }
     return true;
   };
 
@@ -415,12 +444,14 @@ export async function rodarAgenteOcta(t: TurnoOcta, chamar: ChamarModelo, opts: 
       else {
         negados.push({ tool: primeira.function.name, motivo: "recusado_pelo_aluno" });
         responder(primeira, `NEGADO (recusado_pelo_aluno): o aluno recusou ${primeira.function.name}. Não tente de novo neste turno; pergunte o que ele prefere.`);
+        await emitir("resultado", { tool: primeira.function.name, ok: false, codigo: "recusado_pelo_aluno" });
       }
       for (const c of resto) if (!(await processar(c))) break;
     }
   }
   if (!pendente) {
     for (; passos < maxPassos; passos++) {
+      await emitir("pensando", { passo: passos + 1 });
       const r = await chamar(msgs);
       s.tracer.registrar("modelo", { texto: (r.content ?? "").slice(0, 2000), tools: r.tool_calls?.map((c) => c.function.name) },
         r.usage ? { tokens: { entrada: r.usage.prompt_tokens, saida: r.usage.completion_tokens } } : {});

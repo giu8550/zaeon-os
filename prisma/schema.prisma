@@ -1483,3 +1483,34 @@ model OctaPublicacao {
   @@index([userId, em])
   @@map("octa_publicacoes")
 }
+
+// Um turno do agente Octa no fluxo landing, rodando em job (lib/queue/octa). O estado para retomar depois de uma
+// aprovação (msgs + a tool pendente) mora SÓ aqui — o cliente manda só { aprovado }.
+model OctaTurno {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String
+  email     String   // do dono (sessão) — o job precisa pra achar o GitHub do aluno; nunca vai pro cliente
+  projetoId String
+  pedido    String
+  status    String   // rodando | aguardando_aprovacao | pronto | erro
+  estado    Json?    // { msgs } para retomar; na retomada ganha { aprovado }
+  pendente  Json?    // { tool, args, toolCallId }
+  resposta  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([projetoId, status])
+  @@index([userId])
+  @@map("octa_turnos")
+}
+
+// Eventos ao vivo de um turno (o cliente lê com ?depois=<seq>). `dados` nunca leva token nem erro cru.
+model OctaEvento {
+  id      String   @id @default(auto()) @map("_id") @db.ObjectId
+  turnoId String
+  seq     Int
+  tipo    String   // pensando | tool | arquivo | resultado | aprovacao | fim | erro
+  dados   Json
+  em      DateTime @default(now())
+  @@index([turnoId, seq])
+  @@map("octa_eventos")
+}
