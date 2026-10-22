@@ -110,6 +110,22 @@ describe("publicarProjeto", () => {
     expect(pubs).toEqual([{ userId: "u1", projetoId: ID, ok: true, repoNovo: true, em: AGORA }]);
   });
 
+  it("projeto React: tipo_nao_publicavel antes de qualquer chamada ao GitHub (nem o octokit é pedido)", async () => {
+    for (const arquivos of [
+      { "index.html": "<div id=root></div>", "src/App.jsx": "export default () => null" }, // misto: index.html + App.jsx
+      { "index.html": "", "package.json": JSON.stringify({ dependencies: { react: "^18.3.1" } }), "src/main.jsx": "" },
+    ]) {
+      const { db, pubs } = dbFalso({ arquivos });
+      const { octokit, chamadas } = octoFalso();
+      const octokitDoAluno = vi.fn(async () => octokit);
+      const r = await publicarProjeto({ db, octokitDoAluno, agora: () => AGORA }, P);
+      expect(r).toEqual({ ok: false, erro: "tipo_nao_publicavel" });
+      expect(octokitDoAluno).not.toHaveBeenCalled();
+      expect(chamadas).toHaveLength(0);
+      expect(pubs).toHaveLength(0); // não conta no limite do dia
+    }
+  });
+
   it("mensagem do commit pode vir do aluno", async () => {
     const { db } = dbFalso();
     const { octokit, chamadas } = octoFalso();

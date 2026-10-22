@@ -3,9 +3,17 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, fireEvent, cleanup, waitFor, within } from "@testing-library/react";
 
-vi.mock("next/dynamic", () => ({ default: () => (p: { value?: string }) => <textarea aria-label="editor" readOnly value={p.value ?? ""} /> }));
+// saída do runner e erros do app React que cada teste injeta
+const sim = vi.hoisted(() => ({ output: [] as { type: string; text: string; ts: number }[], errosReact: [] as string[] }));
+vi.mock("next/dynamic", async () => {
+  const React = await import("react");
+  return { default: () => (p: { value?: string; onErros?: (e: string[]) => void }) => {
+    React.useEffect(() => { p.onErros?.(sim.errosReact); }, [p.onErros]);
+    return <textarea aria-label="editor" readOnly value={p.value ?? ""} />;
+  } };
+});
 vi.mock("@/app/agentic-modules/codelab/useCodeRunner", () => ({
-  useCodeRunner: () => ({ run: vi.fn(), output: [], isRunning: false, isPyodideReady: true, clearOutput: vi.fn(), iframeRef: { current: null } }),
+  useCodeRunner: () => ({ run: vi.fn(), output: sim.output, isRunning: false, isPyodideReady: true, clearOutput: vi.fn(), iframeRef: { current: null } }),
 }));
 
 import OctaIDE, { AVISO_PUBLICO } from "./OctaIDE";
@@ -39,7 +47,7 @@ beforeEach(() => {
   });
   vi.stubGlobal("fetch", fetchMock);
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { sim.output = []; sim.errosReact = []; cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("OctaIDE · modo projeto", () => {
   it("abre o projeto do servidor e mostra a conta GitHub conectada", async () => {
@@ -138,6 +146,33 @@ describe("OctaIDE · modo projeto", () => {
     expect(alerta.textContent).toMatch(/troque|edite/i);
   });
 
+  it("projeto React: a Prévia usa o Sandpack (sem srcdoc) e diz que roda no navegador; o estático segue igual", async () => {
+    projeto.arquivos = { "index.html": '<div id="root"></div>', "src/App.jsx": "export default () => <h1>oi</h1>" };
+    render(<OctaIDE />);
+    await screen.findByText("Confeitaria da Ana");
+    fireEvent.click(screen.getByRole("tab", { name: /Prévia/ }));
+    expect(await screen.findByText("a prévia React roda no seu navegador")).toBeTruthy();
+    expect(document.querySelector("iframe[srcdoc]")).toBeNull();
+    cleanup();
+
+    projeto.arquivos = { "index.html": "<h1>oi</h1>" };
+    render(<OctaIDE />);
+    await screen.findByText("Confeitaria da Ana");
+    fireEvent.click(screen.getByRole("tab", { name: /Prévia/ }));
+    await waitFor(() => expect(document.querySelector("iframe[srcdoc]")).toBeTruthy());
+    expect(screen.queryByText("a prévia React roda no seu navegador")).toBeNull();
+  });
+
+  it("Publicar projeto React: avisa que chega na próxima fase e não chama o servidor", async () => {
+    projeto.avisoPublicoAceito = true;
+    projeto.arquivos = { "index.html": "", "package.json": JSON.stringify({ dependencies: { react: "^18.3.1" } }), "src/main.jsx": "" };
+    render(<OctaIDE />);
+    await screen.findByText("ana-dev");
+    fireEvent.click(screen.getByRole("button", { name: /Publicar/ }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Publicação de apps React chega na próxima fase");
+    expect(chamadas((u) => u.endsWith("/publicar"))).toHaveLength(0);
+  });
+
   it("trocar a permissão grava no projeto (PATCH permissao)", async () => {
     render(<OctaIDE />);
     await screen.findByText("Confeitaria da Ana");
@@ -205,6 +240,91 @@ describe("OctaIDE · modo projeto", () => {
     expect(patchesComB).toHaveLength(0);
   });
 
+  it("evento arquivo: relê o projeto (debounce) e a prévia mostra o HTML novo, sem esperar o fim do turno", async () => {
+    let lido = 0;
+    let status = "rodando";
+    extra = (u, i) => {
+      if (u === `/api/octa/projetos/${ID}` && (i?.method ?? "GET") === "GET") {
+        lido++;
+        return json({ projeto: { ...projeto, arquivos: { "index.html": lido > 1 ? "<h1>ao vivo</h1>" : "<h1>oi</h1>" } } });
+      }
+      if (u.startsWith("/api/octa/turnos/t1/eventos")) {
+        return json({ status, eventos: [{ seq: 1, tipo: "arquivo", dados: { path: "index.html", acao: "gravado" } }], pendente: null, resposta: null });
+      }
+      return undefined;
+    };
+    render(<OctaIDE />);
+    await screen.findByText("Confeitaria da Ana");
+    const caixa = screen.getByPlaceholderText(/Peça ao Octa/);
+    fireEvent.change(caixa, { target: { value: "muda" } });
+    fireEvent.keyDown(caixa, { key: "Enter" });
+    // o turno segue "rodando": a prévia já tem o HTML novo
+    await waitFor(() => {
+      const iframe = document.querySelector("iframe");
+      expect(iframe?.getAttribute("srcdoc") ?? "").toContain("ao vivo");
+    }, { timeout: 4000 });
+    expect(chamadas((u, i) => u === `/api/octa/projetos/${ID}` && (i?.method ?? "GET") === "GET").length).toBeGreaterThanOrEqual(2);
+    status = "pronto";
+  });
+
+  it("desfazer depois de uma releitura ao vivo aplicada volta pro estado de ANTES do turno (não o intermediário)", async () => {
+    let poll = 0;
+    let projetoNoServidor: Record<string, string> = { "index.html": "<h1>oi</h1>" };
+    extra = (u, i) => {
+      if (u === `/api/octa/projetos/${ID}` && (i?.method ?? "GET") === "GET") return json({ projeto: { ...projeto, arquivos: projetoNoServidor } });
+      if (u.startsWith("/api/octa/turnos/t1/eventos")) {
+        poll++;
+        const arq = { seq: 1, tipo: "arquivo", dados: { path: "index.html", acao: "gravado" } };
+        if (poll === 1) { projetoNoServidor = { "index.html": "<h1>intermediario</h1>" }; return json({ status: "rodando", eventos: [arq], pendente: null, resposta: null }); }
+        if (poll < 4) return json({ status: "rodando", eventos: [], pendente: null, resposta: null });
+        projetoNoServidor = { "index.html": "<h1>final</h1>" };
+        return json({ status: "pronto", eventos: [{ seq: 2, tipo: "fim", dados: {} }], pendente: null, resposta: "ok" });
+      }
+      return undefined;
+    };
+    render(<OctaIDE />);
+    await screen.findByText("Confeitaria da Ana");
+    const caixa = screen.getByPlaceholderText(/Peça ao Octa/);
+    fireEvent.change(caixa, { target: { value: "muda" } });
+    fireEvent.keyDown(caixa, { key: "Enter" });
+    await waitFor(() => expect(document.querySelector("iframe")?.getAttribute("srcdoc") ?? "").toContain("intermediario"), { timeout: 4000 });
+    fireEvent.click(await screen.findByRole("button", { name: /desfazer/ }, { timeout: 6000 }));
+    await waitFor(() => expect(chamadas((u, i) => i?.method === "PATCH" && String(i.body).includes("arquivos"))).toHaveLength(1), { timeout: 3000 });
+    const [, init] = chamadas((u, i) => i?.method === "PATCH" && String(i.body).includes("arquivos"))[0];
+    expect(JSON.parse(String(init!.body))).toEqual({ arquivos: { "index.html": "<h1>oi</h1>" } });
+  }, 15000);
+
+  it("releitura ao vivo que só resolve depois do fim do turno não sobrescreve o estado final", async () => {
+    let soltar: ((r: Response) => void) | null = null;
+    let lidos = 0;
+    let poll = 0;
+    extra = (u, i) => {
+      if (u === `/api/octa/projetos/${ID}` && (i?.method ?? "GET") === "GET") {
+        lidos++;
+        if (lidos === 2) return new Promise<Response>((res) => { soltar = res; }) as any; // a releitura ao vivo fica em voo
+        return json({ projeto: { ...projeto, arquivos: { "index.html": lidos > 2 ? "<h1>final</h1>" : "<h1>oi</h1>" } } });
+      }
+      if (u.startsWith("/api/octa/turnos/t1/eventos")) {
+        poll++;
+        if (poll === 1) return json({ status: "rodando", eventos: [{ seq: 1, tipo: "arquivo", dados: { path: "index.html", acao: "gravado" } }], pendente: null, resposta: null });
+        if (poll < 3) return json({ status: "rodando", eventos: [], pendente: null, resposta: null });
+        return json({ status: "pronto", eventos: [{ seq: 2, tipo: "fim", dados: {} }], pendente: null, resposta: "ok" });
+      }
+      return undefined;
+    };
+    render(<OctaIDE />);
+    await screen.findByText("Confeitaria da Ana");
+    const caixa = screen.getByPlaceholderText(/Peça ao Octa/);
+    fireEvent.change(caixa, { target: { value: "muda" } });
+    fireEvent.keyDown(caixa, { key: "Enter" });
+    await waitFor(() => expect(soltar).not.toBeNull(), { timeout: 4000 });
+    await waitFor(() => expect(document.querySelector("iframe")?.getAttribute("srcdoc") ?? "").toContain("final"), { timeout: 6000 });
+    soltar!(json({ projeto: { ...projeto, arquivos: { "index.html": "<h1>velho-em-voo</h1>" } } }));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(document.querySelector("iframe")?.getAttribute("srcdoc") ?? "").toContain("final");
+    expect(document.querySelector("iframe")?.getAttribute("srcdoc") ?? "").not.toContain("velho-em-voo");
+  }, 15000);
+
   it("no MESMO projeto, desfazer volta os arquivos de antes do turno (PATCH no próprio projeto)", async () => {
     eventos = [
       { seq: 1, tipo: "tool", dados: { tool: "octa_escrever", path: "index.html" } },
@@ -228,5 +348,56 @@ describe("OctaIDE · modo projeto", () => {
     await waitFor(() => expect(chamadas((u, i) => u === `/api/octa/projetos/${ID}` && i?.method === "PATCH" && String(i.body).includes("arquivos"))).toHaveLength(1), { timeout: 3000 });
     const [, init] = chamadas((u, i) => i?.method === "PATCH" && String(i.body).includes("arquivos"))[0];
     expect(JSON.parse(String(init!.body))).toEqual({ arquivos: { "index.html": "<h1>oi</h1>" } });
+  });
+});
+
+describe("OctaIDE · Corrigir com o Octa", () => {
+  const abrirComPy = async () => {
+    projeto.arquivos = { "main.py": "print(x)" };
+    render(<OctaIDE />);
+    await screen.findByText("Confeitaria da Ana");
+    await screen.findAllByText("main.py"); // já aberto como ativo
+  };
+
+  it("sem erro o botão não aparece", async () => {
+    sim.output = [{ type: "stdout", text: "ola", ts: 1 }];
+    await abrirComPy();
+    expect(screen.queryByRole("button", { name: /Corrigir com o Octa/ })).toBeNull();
+  });
+
+  it("erro do Python: o clique manda o pedido montado em POST /api/octa/turnos", async () => {
+    sim.output = [{ type: "stderr", text: "NameError: name 'x' is not defined", ts: 1 }];
+    await abrirComPy();
+    fireEvent.click(await screen.findByRole("button", { name: /Corrigir com o Octa/ }));
+    await waitFor(() => expect(chamadas((u, i) => u === "/api/octa/turnos" && i?.method === "POST")).toHaveLength(1));
+    const corpo = JSON.parse(String(chamadas((u, i) => u === "/api/octa/turnos" && i?.method === "POST")[0][1]!.body));
+    expect(corpo.projetoId).toBe(ID);
+    expect(corpo.pedido).toContain("Rodei o código Python (main.py) e deu este erro");
+    expect(corpo.pedido).toContain("NameError: name 'x' is not defined");
+  });
+
+  it("erros do app React: botão na barra de erros, e o clique manda o pedido", async () => {
+    sim.errosReact = ["Erro de compilação: Unexpected token (src/App.jsx:3)"];
+    projeto.arquivos = { "index.html": '<div id="root"></div>', "src/App.jsx": "export default () => <h1>oi</h1>" };
+    render(<OctaIDE />);
+    await screen.findByText("Confeitaria da Ana");
+    fireEvent.click(screen.getByRole("tab", { name: /Prévia/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Corrigir com o Octa/ }));
+    await waitFor(() => expect(chamadas((u, i) => u === "/api/octa/turnos" && i?.method === "POST")).toHaveLength(1));
+    const corpo = JSON.parse(String(chamadas((u, i) => u === "/api/octa/turnos" && i?.method === "POST")[0][1]!.body));
+    expect(corpo.pedido).toContain("o app React");
+    expect(corpo.pedido).toContain("Unexpected token (src/App.jsx:3)");
+  });
+
+  it("clicar em Corrigir não apaga o rascunho digitado na caixa", async () => {
+    sim.output = [{ type: "stderr", text: "NameError: x", ts: 1 }];
+    await abrirComPy();
+    const caixa = screen.getByPlaceholderText(/Peça ao Octa/) as HTMLTextAreaElement;
+    fireEvent.change(caixa, { target: { value: "depois quero um botão azul" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Corrigir com o Octa/ }));
+    await waitFor(() => expect(chamadas((u, i) => u === "/api/octa/turnos" && i?.method === "POST")).toHaveLength(1));
+    const corpo = JSON.parse(String(chamadas((u, i) => u === "/api/octa/turnos" && i?.method === "POST")[0][1]!.body));
+    expect(corpo.pedido).toContain("NameError: x");
+    expect(caixa.value).toBe("depois quero um botão azul");
   });
 });

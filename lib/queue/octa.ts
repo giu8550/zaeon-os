@@ -8,7 +8,9 @@
  * Regras:
  * - Todo turno daqui é `fluxo: "landing"`, `modo: "change"`, `liberados: ["**"]` (o projeto é inteiro do aluno) e
  *   a `permissao` vem do PROJETO (OctaProjeto.permissao), nunca do pedido.
- * - O estado para retomar (msgs + a tool pendente) mora SÓ no OctaTurno. Aprovar = o cliente manda `{ aprovado }`;
+ * - O estado para retomar (msgs + a tool pendente) mora SÓ no OctaTurno, e SEM imagem: a captura de tela que o modelo
+ *   viu vira a nota neutra CAPTURA_OMITIDA (a mensagem inteira) antes de gravar (semImagens). O evento `captura` leva só a miniatura (≤ 60 KB).
+ * - Aprovar = o cliente manda `{ aprovado }`;
  *   só um turno `aguardando_aprovacao` aceita (troca atômica de status → aprovar 2× dá `nao_aguardando`).
  * - Eventos (OctaEvento, seq crescente por turno) nunca levam segredo: vêm do onEvento do laço (nome de tool,
  *   caminho, código, resumo já redigido) ou são códigos fixos daqui. Mensagem crua de erro (gateway, octokit) não entra.
@@ -18,8 +20,8 @@
  *   por esse runId; job repetido/stalled não roda de novo (e o worker usa maxStalledCount: 0 — stalled = falha → reaper).
  *   `@@unique([turnoId, seq])` impede dois eventos com o mesmo seq; colisão = essa execução para.
  */
-import { randomUUID } from "node:crypto";
-import { rodarAgenteOcta, ferramentasGateway, type ChamarModelo, type MsgModelo, type PendenteOcta, type TipoEventoOcta, type Workspace } from "@/lib/octa/agente";
+import { createHash, randomUUID } from "node:crypto";
+import { rodarAgenteOcta, ferramentasGateway, semImagens, type CapturarOcta, type ChamarModelo, type MsgModelo, type PendenteOcta, type TipoEventoOcta, type Workspace } from "@/lib/octa/agente";
 import { lerProjeto, salvarArquivos, type Arquivos, type ProjetosDb } from "@/lib/octa/projetos";
 import { publicarProjeto, type ResultadoPublicar } from "@/lib/octa/publicar";
 
@@ -73,6 +75,8 @@ export type DepsTurno = {
   agora?: () => Date;
   /** null = inline; ausente = BullMQ se OCTA_QUEUE=1 + REDIS_URL, senão inline. */
   fila?: FilaTurno | null;
+  /** Captura de tela pro octa_ver_pagina (ausente = lib/octa/captura real). */
+  capturar?: CapturarOcta;
 };
 
 export type CodigoErroOcta = "projeto_inexistente" | "turno_ativo" | "turno_inexistente" | "nao_aguardando";
@@ -245,6 +249,24 @@ export async function processarTurno(deps: DepsTurno, turnoId: string): Promise<
     }
   };
 
+  /** Grava no projeto o que o turno tem AGORA (a prévia da IDE relê daqui). Cercado pelo runId; DESIGN.md do projeto fica.
+   *  Best-effort: o salvamento final continua valendo, então falha de banco aqui não derruba o turno (só perder a posse). */
+  const designsBase = Object.fromEntries(Object.entries(base).filter(([k]) => ehDesign(k)));
+  let ultimoSalvo = "";
+  const assinatura = (ws: Workspace) => createHash("sha1").update(JSON.stringify(Object.entries(ws).sort(([x], [y]) => (x < y ? -1 : 1)))).digest("hex");
+  const salvarIntermediario = async (ws: Workspace) => {
+    const ass = assinatura(ws);
+    if (ass === ultimoSalvo) return; // N arquivos de uma tool só custam uma gravação
+    try {
+      await aindaMinha();
+      await salvarArquivos(db, t.userId, t.projetoId, { ...designsBase, ...ws });
+      ultimoSalvo = ass;
+    } catch (e) {
+      if (e instanceof TurnoInterrompido) throw e;
+      console.warn("[octa-turno] gravação intermediária falhou", { turnoId: t.id, codigo: (e as any)?.code }); // sem a mensagem
+    }
+  };
+
   try {
     const anteriores = t.estado?.msgs ? [] : await historico(db, t);
     const chamar = await deps.chamador({ userId: t.userId, turnoId: t.id });
@@ -252,9 +274,13 @@ export async function processarTurno(deps: DepsTurno, turnoId: string): Promise<
       { historico: anteriores, pedido: t.pedido, workspace: base, modo: "change", liberados: ["**"], fluxo: "landing" },
       chamar,
       {
-        sessionId: `octa-turno-${t.id}`, userId: t.userId, permissao: projeto.permissao, octaPublicar,
+        sessionId: `octa-turno-${t.id}`, userId: t.userId, permissao: projeto.permissao, octaPublicar, capturar: deps.capturar,
         retomar: t.estado?.msgs ? { msgs: t.estado.msgs, aprovado: t.estado.aprovado === true } : undefined,
-        onEvento: (e) => emitir(e.tipo, e.dados),
+        onEvento: async (e, ws) => {
+          // grava ANTES de anunciar: quem relê o projeto ao ver o evento já encontra o arquivo
+          if (e.tipo === "arquivo") await salvarIntermediario(ws);
+          await emitir(e.tipo, e.dados);
+        },
       },
     );
     const arquivos: Arquivos = { ...base, ...r.edicoes };
@@ -265,7 +291,7 @@ export async function processarTurno(deps: DepsTurno, turnoId: string): Promise<
     if (r.pendente) {
       const ok = await db.octaTurno.updateMany({
         where: { id: t.id, status: "rodando", runId },
-        data: { status: "aguardando_aprovacao", runId: null, estado: { msgs: r.msgs }, pendente: r.pendente, resposta: r.resposta },
+        data: { status: "aguardando_aprovacao", runId: null, estado: { msgs: semImagens(r.msgs) }, pendente: r.pendente, resposta: r.resposta },
       });
       if (!ok.count) throw new TurnoInterrompido();
       return; // o evento "aprovacao" já saiu do laço

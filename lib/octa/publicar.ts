@@ -14,6 +14,8 @@
  *   Vale pro botão Publicar da IDE e pra tool octa_publicar.
  *   Devolve `marca_no_conteudo` + só a palavra; nada do conteúdo.
  * - Repo do Octa apagado pelo aluno (GET 404): o destino é limpo e o caminho é o de repo novo (conta no limite).
+ * - Publicar continua só ESTÁTICO: projeto React (tipoProjeto === "react") devolve `tipo_nao_publicavel` antes de
+ *   qualquer chamada ao GitHub (nem o octokit é pedido) e não conta no limite do dia.
  * - Limites por aluno por dia (LIMITES); publicação que falha não conta.
  * - O token do aluno só existe dentro do octokit que `octokitDoAluno` devolve. Nada daqui o lê;
  *   erro do GitHub vira um código fixo e o log leva só o status HTTP — a mensagem/objeto do erro
@@ -23,6 +25,7 @@ import { lerProjeto, contarPublicacoesHoje, gravarDestinoPublicado, registrarPub
 import { createRepo, commitChanges, habilitarPages, readRepoTree, repoExiste } from "@/lib/projects/github-service";
 import { estiloDoProjeto, palavrasDaMarca } from "./design/indice";
 import { marcaNoFonte } from "./secoes/render";
+import { tipoProjeto } from "./tipoProjeto";
 
 type AnyOctokit = any;
 
@@ -33,7 +36,7 @@ const MAX_TENTATIVAS_NOME = 20; // slug, slug-2 … slug-20
 
 export type ErroPublicar =
   | "github_reconectar" | "limite_publicacoes" | "limite_repos" | "aviso_publico_pendente" | "falha_github"
-  | "projeto_inexistente" | "sem_arquivos_publicaveis" | "marca_no_conteudo";
+  | "projeto_inexistente" | "sem_arquivos_publicaveis" | "marca_no_conteudo" | "tipo_nao_publicavel";
 
 export type ResultadoPublicar =
   | { ok: true; repoUrl: string; pagesUrl: string; status: "publicando" | "no_ar"; ignorados: string[] }
@@ -101,6 +104,8 @@ export async function publicarProjeto(
 
   const projeto = await lerProjeto(db, p.userId, p.projetoId);
   if (!projeto) return { ok: false, erro: "projeto_inexistente" };
+  // app React não vira GitHub Pages nesta fase (precisaria de build): pára aqui, antes de tocar no GitHub
+  if (tipoProjeto(projeto.arquivos) === "react") return { ok: false, erro: "tipo_nao_publicavel" };
   if (!projeto.avisoPublicoAceito) return { ok: false, erro: "aviso_publico_pendente" };
 
   const files: { path: string; content: string }[] = [];

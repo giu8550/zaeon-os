@@ -5,7 +5,7 @@
  * (erros do turno, da publicação, pedido de aprovação) moram aqui também.
  */
 
-export type TipoEvento = "pensando" | "tool" | "arquivo" | "resultado" | "aprovacao" | "fim" | "erro";
+export type TipoEvento = "pensando" | "tool" | "arquivo" | "resultado" | "captura" | "aprovacao" | "fim" | "erro";
 export type EventoTurno = { seq: number; tipo: TipoEvento; dados: Record<string, unknown> };
 export type ArquivoPasso = { path: string; acao: "gravado" | "apagado" };
 
@@ -14,6 +14,8 @@ export type Passo =
   | {
     tipo: "tool"; chave: string; tool: string; rotulo: string; path?: string;
     estado: "rodando" | "aguardando" | "ok" | "falhou"; resumo?: string; motivo?: string; arquivos: ArquivoPasso[];
+    /** Captura que o agente olhou (base64 de JPEG já validado por miniaturaSegura) e a tela dela. */
+    miniatura?: string; tela?: string;
   }
   | { tipo: "erro"; chave: string; texto: string };
 
@@ -29,6 +31,7 @@ const ROTULOS: Record<string, string> = {
   octa_arte: "Gerando a arte",
   octa_apagar: "Apagando",
   octa_publicar: "Publicando no GitHub",
+  octa_ver_pagina: "Olhando a página",
 };
 export const rotuloDaTool = (tool: string) => ROTULOS[tool] ?? tool;
 
@@ -42,7 +45,21 @@ const MOTIVOS: Record<string, string> = {
   PATH_NOT_ALLOWED: "caminho inválido",
   MUTATION_WITHOUT_PATH: "escrita sem arquivo",
   not_found: "não encontrado",
+  limite_capturas: "limite de capturas do turno",
+  sem_index: "ainda não há index.html",
+  chromium_ausente: "captura indisponível no servidor",
+  tempo_esgotado: "a captura demorou demais",
+  falha_render: "a captura falhou",
+  projeto_grande: "projeto grande demais pra capturar",
+  fila_cheia: "servidor de capturas ocupado",
 };
+
+/** Miniatura do evento `captura` (vem do servidor, mas a tela não confia): só base64 de JPEG ("/9j/") até 60 KB. */
+export const MINIATURA_MAX_BYTES = 60 * 1024;
+export function miniaturaSegura(v: unknown): string | undefined {
+  if (typeof v !== "string" || !v.startsWith("/9j/") || !/^[A-Za-z0-9+/]+={0,2}$/.test(v)) return undefined;
+  return Math.floor((v.length * 3) / 4) <= MINIATURA_MAX_BYTES ? v : undefined;
+}
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
 
@@ -87,6 +104,10 @@ export function passosDoTurno(eventos: readonly EventoTurno[], terminado: boolea
       const acao = e.dados.acao === "apagado" ? "apagado" : "gravado";
       const p = ultimaTool();
       if (p) p.arquivos.push({ path, acao });
+    } else if (e.tipo === "captura") {
+      const p = ultimaTool(tool || undefined);
+      const miniatura = miniaturaSegura(e.dados.miniatura);
+      if (p && miniatura) { p.miniatura = miniatura; const tela = str(e.dados.tela); if (tela) p.tela = tela; }
     } else if (e.tipo === "erro") {
       passos.push({ tipo: "erro", chave: `e${e.seq}`, texto: textoErroTurno(str(e.dados.codigo) ?? "") });
     }
@@ -124,6 +145,7 @@ const ERROS_PUBLICAR: Record<string, string> = {
   falha_github: "O GitHub não respondeu agora. Tente de novo em alguns minutos.",
   projeto_inexistente: "Este projeto não existe mais no servidor.",
   sem_arquivos_publicaveis: "Ainda não há página para publicar: peça ao Octa para montar a landing (index.html).",
+  tipo_nao_publicavel: "Publicação de apps React chega na próxima fase",
 };
 export const textoErroPublicar = (codigo: string, palavra?: string) => {
   if (codigo === "marca_no_conteudo") {

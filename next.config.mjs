@@ -74,8 +74,11 @@ const nextConfig = {
     },
 
     // 3. Resolução de conflitos de Build (Canvas/PDF)
-    webpack: (config) => {
+    webpack: (config, { isServer }) => {
         config.resolve.alias.canvas = false;
+        // Nodebox (Sustainable Use License, proíbe uso comercial) fora do bundle do navegador: o Sandpack só o
+        // carrega no template vite-react/node, que a prévia do Octa nunca usa (ruling P3: só o template `react`).
+        if (!isServer) config.resolve.alias['@codesandbox/nodebox'] = false;
         config.resolve.fallback = {
             ...config.resolve.fallback,
             fs: false,

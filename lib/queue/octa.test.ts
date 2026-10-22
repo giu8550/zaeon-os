@@ -329,6 +329,92 @@ describe("lib/queue/octa · turno em job", () => {
     expect(turno(id)!.status).toBe("rodando"); // fica pro reaper
   });
 
+  it("arquivos ao vivo: cada escrita do turno grava no projeto na hora (3 escritas → 3 gravações + a final)", async () => {
+    modelo = roteiro([
+      { content: null, tool_calls: [call("1", "octa_escrever", { path: "a.html", conteudo: "<p>a</p>" })] },
+      { content: null, tool_calls: [call("2", "octa_escrever", { path: "b.html", conteudo: "<p>b</p>" })] },
+      { content: null, tool_calls: [call("3", "octa_escrever", { path: "c.css", conteudo: "p{}" })] },
+      { content: "feito" },
+    ]);
+    const id = await novoTurno();
+    const original = db.octaProjeto.update;
+    const vistos: string[][] = [];
+    const update = vi.spyOn(db.octaProjeto, "update").mockImplementation(async (a: any) => { vistos.push(Object.keys(a.data.arquivos ?? {})); return original.call(db.octaProjeto, a); });
+    await processarTurno(deps, id);
+    expect(update).toHaveBeenCalledTimes(4);
+    expect(vistos[0]).toEqual(expect.arrayContaining(["index.html", "a.html"]));
+    expect(vistos[0]).not.toContain("b.html"); // a 1ª gravação já existia antes das outras
+    expect(vistos[2]).toEqual(expect.arrayContaining(["a.html", "b.html", "c.css"]));
+    // o evento não carrega conteúdo de arquivo
+    for (const e of eventos(id).filter((x) => x.tipo === "arquivo")) expect(Object.keys(e.dados).sort()).toEqual(["acao", "path"]);
+  });
+
+  it("turno cortado no meio: o que já foi gravado fica no projeto; perdeu o runId → não grava mais", async () => {
+    const id = await novoTurno();
+    modelo = roteiro([
+      { content: null, tool_calls: [call("1", "octa_escrever", { path: "a.html", conteudo: "<p>a</p>" })] },
+      { content: null, tool_calls: [call("2", "octa_escrever", { path: "b.html", conteudo: "<p>b</p>" })] },
+      { content: "fim" },
+    ]);
+    const original = db.octaEvento.create;
+    db.octaEvento.create = async (a: any) => {
+      const r = await original(a);
+      // depois do 1º arquivo anunciado, outra execução reivindica o turno
+      if (a.data.tipo === "arquivo" && a.data.dados.path === "a.html") turno(id)!.runId = "roubado";
+      return r;
+    };
+    await processarTurno(deps, id);
+    const arquivos = db.octaProjeto.rows[0].arquivos;
+    expect(arquivos["a.html"]).toBe("<p>a</p>");
+    expect(arquivos["b.html"]).toBeUndefined();
+  });
+
+  it("execução que já perdeu o runId antes do 1º arquivo não grava nada no projeto", async () => {
+    const id = await novoTurno();
+    modelo = roteiro([
+      { content: null, tool_calls: [call("1", "octa_escrever", { path: "a.html", conteudo: "<p>a</p>" })] },
+      { content: "fim" },
+    ]);
+    const original = db.octaEvento.create;
+    db.octaEvento.create = async (a: any) => {
+      const r = await original(a);
+      if (a.data.tipo === "resultado") turno(id)!.runId = "roubado";
+      return r;
+    };
+    const update = vi.spyOn(db.octaProjeto, "update");
+    await processarTurno(deps, id);
+    expect(update).not.toHaveBeenCalled();
+    expect(db.octaProjeto.rows[0].arquivos["a.html"]).toBeUndefined();
+  });
+
+  it("uma tool que muda vários arquivos custa UMA gravação intermediária (mais a final)", async () => {
+    modelo = roteiro([
+      { content: null, tool_calls: [call("1", "octa_pagina_montar", { secoes: PAGINA, titulo: "Bolos da Ana" })] },
+      { content: "ok" },
+    ]);
+    const id = await novoTurno();
+    const update = vi.spyOn(db.octaProjeto, "update");
+    await processarTurno(deps, id);
+    expect(eventos(id).filter((e) => e.tipo === "arquivo").length).toBeGreaterThanOrEqual(2);
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+
+  it("gravação intermediária que falha (Mongo) não derruba o turno e a final grava", async () => {
+    modelo = roteiro([
+      { content: null, tool_calls: [call("1", "octa_escrever", { path: "a.html", conteudo: "<p>a</p>" })] },
+      { content: "ok" },
+    ]);
+    const id = await novoTurno();
+    const original = db.octaProjeto.update;
+    let n = 0;
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(db.octaProjeto, "update").mockImplementation(async (a: any) => { if (n++ === 0) throw Object.assign(new Error("mongo caiu SEGREDO"), { code: "X1" }); return original.call(db.octaProjeto, a); });
+    await processarTurno(deps, id);
+    expect(turno(id)!.status).toBe("pronto");
+    expect(db.octaProjeto.rows[0].arquivos["a.html"]).toBe("<p>a</p>");
+    expect(JSON.stringify((console.warn as any).mock.calls)).not.toContain("SEGREDO");
+  });
+
   it("execução que perde o turno no meio (outra reivindicou) para de gravar eventos e não publica", async () => {
     const id = await novoTurno("publica");
     modelo = roteiro([
@@ -373,5 +459,33 @@ describe("lib/queue/octa · turno em job", () => {
     expect(turno(id)).toMatchObject({ status: "rodando", runId: null });
     expect(await reapTurnosPresos(db as unknown as TurnosDb, agora)).toBe(0);
     expect(turno(id)!.status).toBe("rodando");
+  });
+  it("captura no turno: o modelo recebe a imagem, mas o estado.msgs gravado e os eventos não guardam base64", async () => {
+    db.octaProjeto.rows[0].permissao = "antes_de_publicar";
+    const JPEG = "/9j/" + "QUJD".repeat(2000);
+    const MINI = "/9j/" + "WFla".repeat(100);
+    const capturar = vi.fn(async () => ({ ok: true as const, jpegBase64: JPEG, largura: 1280, altura: 800, miniaturaBase64: MINI }));
+    const vistos: any[][] = [];
+    const passos: RespostaModelo[] = [
+      { content: null, tool_calls: [call("v1", "octa_ver_pagina", {})] },
+      { content: null, tool_calls: [call("p1", "octa_publicar", {})] },
+    ];
+    let i = 0;
+    modelo = async (msgs) => { vistos.push(structuredClone(msgs)); return passos[Math.min(i++, passos.length - 1)]; };
+    const id = await novoTurno("olha e publica");
+    await processarTurno({ ...deps, capturar }, id);
+
+    expect(capturar).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(vistos[1])).toContain(`data:image/jpeg;base64,${JPEG}`);
+    expect(turno(id)!.status).toBe("aguardando_aprovacao");
+    const gravado = JSON.stringify(turno(id)!.estado);
+    expect(gravado).not.toContain("/9j/");
+    expect(gravado).not.toContain("base64");
+    expect(gravado).toContain("(captura de tela vista antes; imagem não guardada)");
+    expect(gravado).not.toContain("Avalie o layout");
+    const evs = eventos(id);
+    const cap = evs.find((e) => e.tipo === "captura")!;
+    expect(cap.dados).toMatchObject({ tool: "octa_ver_pagina", tela: "desktop", miniatura: MINI });
+    expect(JSON.stringify(evs)).not.toContain(JPEG);
   });
 });

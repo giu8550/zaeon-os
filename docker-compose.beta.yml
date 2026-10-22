@@ -98,6 +98,9 @@ services:
       pdf-loader: { condition: service_started }
     expose: ["3000"]            # público é só o Caddy
     volumes: ["studio_data:/app/.studio"]   # artefatos do Studio (podcast/imagem) — persistem entre deploys
+    # init (tini) como PID 1: recolhe processos órfãos — a captura do Octa (lib/octa/captura.ts) roda Chromium
+    # aqui, e o `node server.js` como PID 1 nunca colhe filhos que sobram quando o navegador é morto.
+    init: true
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
@@ -107,7 +110,7 @@ services:
       start_period: 60s
     deploy:
       resources:
-        limits: { memory: 3g }   # era 1536m; o web roda os workers (chat/scholar/cérebro) desde o #526 — a VPS tem 23 GB e usava 3
+        limits: { memory: 3g }   # era 1536m; o web roda os workers (chat/scholar/cérebro) desde o #526 e o Chromium headless sob demanda (captura do Octa) — a VPS tem 23 GB e usava 3
 
   # ── SearXNG: busca web self-hosted (metabuscador, sem key, sem custo por query) ──
   # Rede interna (expose, sem porta pública). Config em ./searxng/settings.yml (JSON habilitado).
@@ -152,10 +155,12 @@ services:
       LEITOR_PROXY_URL: ${LEITOR_PROXY_URL:-}   # Fatia 7: chores leem a web SÓ por aqui
     depends_on:
       redis: { condition: service_started }
+    # mesma imagem do web: turno do Octa na fila também pode capturar (Chromium) → init colhe órfãos
+    init: true
     restart: unless-stopped
     deploy:
       resources:
-        limits: { memory: 1024m }
+        limits: { memory: 1536m }   # turno do Octa na fila também captura (Chromium)
 
   # ── Voz neural (Kokoro, CPU-only). Gated por perfil (admin → aba "Voz"). ──
   voice-engine:

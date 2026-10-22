@@ -28,11 +28,19 @@ import {
 import { textoErroPublicar, type EventoTurno } from "@/lib/octa/passos";
 import type { PermissaoOcta } from "@/lib/octa/projetos";
 import PreviaSvg from "./PreviaSvg";
+import CorrigirComOcta from "./CorrigirComOcta";
 import GaleriaDesign from "./GaleriaDesign";
 import { PassosTurno, CartaoAprovacao } from "./PassosTurno";
 import { useTurnoOcta, type EstadoTurno, type StatusTurno } from "./useTurnoOcta";
+import { tipoProjeto } from "@/lib/octa/tipoProjeto";
 
 const Monaco = dynamic(() => import("@monaco-editor/react").then((m) => m.default), {
+  ssr: false,
+  loading: () => <div className="grid place-items-center h-full text-[12px] text-[#7f848e]"><Loader2 className="w-4 h-4 animate-spin" /></div>,
+});
+
+// app React: o Sandpack só existe no navegador (iframe do bundler hospedado), nunca no servidor
+const PreviaReact = dynamic(() => import("./PreviaReact"), {
   ssr: false,
   loading: () => <div className="grid place-items-center h-full text-[12px] text-[#7f848e]"><Loader2 className="w-4 h-4 animate-spin" /></div>,
 });
@@ -171,6 +179,7 @@ export default function OctaIDE() {
   const [saidaAberta, setSaidaAberta] = useState(false);
   // #421: por arquivo .svg, mostrar o código em vez da imagem? (padrão: imagem)
   const [verCodigo, setVerCodigo] = useState<Record<string, boolean>>({});
+  const [errosReact, setErrosReact] = useState<string[]>([]); // compilação + console.error do app React (Sandpack)
   const { run, output, isRunning, isPyodideReady, clearOutput, iframeRef } = useCodeRunner();
   const fimChat = useRef<HTMLDivElement>(null);
   const abortar = useRef<AbortController | null>(null);
@@ -248,8 +257,40 @@ export default function OctaIDE() {
     if (opts.abrirPrevia) setVista((v) => (v === "estilos" ? v : "previa"));
   }, []);
 
+  // ───────────── arquivos ao vivo: cada arquivo que o servidor grava no turno redesenha a prévia ─────────────
+  const timerAoVivo = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ultimoArquivoVisto = useRef(0);
+  const trocouPraPrevia = useRef<string | null>(null);
+  const geracaoAoVivo = useRef(0); // sobe quando o turno acaba ou o projeto sai: leitura em voo vira lixo
+  const relerAoVivo = useCallback(async (id: string) => {
+    const g = geracaoAoVivo.current;
+    const vale = () => g === geracaoAoVivo.current && projetoRef.current?.id === id && !sujo.current; // edição do aluno em andamento não é atropelada
+    const r = await fetch(`/api/octa/projetos/${id}`).catch(() => null);
+    if (!r?.ok || !vale()) return;
+    const j = await r.json().catch(() => null);
+    if (!j?.projeto || !vale()) return;
+    // só os arquivos: a foto do "desfazer" (antesDoTurno) fica intacta e nada vai de volta pro servidor
+    setIde((prev) => estadoDoProjeto(j.projeto.arquivos ?? {}, prev ?? undefined));
+  }, []);
+  useEffect(() => {
+    const p = projetoRef.current;
+    if (!turno || !p) { ultimoArquivoVisto.current = 0; return; }
+    const novos = turno.eventos.filter((e) => e.tipo === "arquivo" && e.seq > ultimoArquivoVisto.current);
+    if (!novos.length) return;
+    ultimoArquivoVisto.current = novos[novos.length - 1].seq;
+    if (trocouPraPrevia.current !== turno.turnoId && novos.some((e) => /\.(html|css)$/i.test(String(e.dados.path)))) {
+      trocouPraPrevia.current = turno.turnoId; // uma vez por turno: depois disso o aluno manda
+      setVista((v) => (v === "codigo" ? "previa" : v));
+    }
+    if (timerAoVivo.current) clearTimeout(timerAoVivo.current);
+    timerAoVivo.current = setTimeout(() => { timerAoVivo.current = null; void relerAoVivo(p.id); }, 400);
+  }, [turno, relerAoVivo]);
+  useEffect(() => () => { if (timerAoVivo.current) clearTimeout(timerAoVivo.current); }, []);
+
   const sairDoAtual = async () => {
     limpar();
+    geracaoAoVivo.current++;
+    if (timerAoVivo.current) { clearTimeout(timerAoVivo.current); timerAoVivo.current = null; }
     antesDoTurno.current = null; // a foto é deste projeto: não pode virar o "desfazer" de outro
     await salvarAgora();
     setPub({ fase: "ocioso" });
@@ -389,6 +430,8 @@ export default function OctaIDE() {
   const publicar = async () => {
     const p = projetoRef.current;
     if (!p || turnoVivo || pub.fase === "publicando") return;
+    // app React não publica nesta fase: avisa sem pedir GitHub nem o aviso público (o servidor barra de novo)
+    if (ideRef.current && tipoProjeto(ideRef.current.arquivos) === "react") { setPub({ fase: "erro", erro: "tipo_nao_publicavel" }); return; }
     if (gh && !gh.conectado) { setPub({ fase: "erro", erro: "github_reconectar" }); return; }
     await salvarAgora();
     if (!p.avisoPublicoAceito) { setPub({ fase: "aviso" }); return; }
@@ -416,6 +459,8 @@ export default function OctaIDE() {
   // ───────────── turnos (modo projeto) ─────────────
   function aoPararTurno(t: EstadoTurno) {
     const p = projetoRef.current;
+    geracaoAoVivo.current++;
+    if (timerAoVivo.current) { clearTimeout(timerAoVivo.current); timerAoVivo.current = null; } // o recarregamento final cobre
     if (!p) return;
     if (t.status === "aguardando_aprovacao") { void recarregarProjeto(p.id); return; } // o que já gravou fica salvo
     const gravados = [...new Set(t.eventos.filter((e) => e.tipo === "arquivo" && e.dados.acao !== "apagado").map((e) => String(e.dados.path)))];
@@ -443,7 +488,8 @@ export default function OctaIDE() {
     const pedido = texto.trim();
     const p = projetoRef.current;
     if (!pedido || !p || turno || enviando) return;
-    setInput(""); setAvisoAgente(null); setEnviando(true);
+    if (pedido === input.trim()) setInput(""); // texto de fora (Corrigir com o Octa) não apaga o rascunho do aluno
+    setAvisoAgente(null); setEnviando(true);
     try {
       await salvarAgora();
       const foto = ideRef.current;
@@ -468,7 +514,10 @@ export default function OctaIDE() {
   const ativo = ide?.ativo ?? null;
   const lang = ativo ? linguagem(ativo) : null;
   const estiloAtual = ide ? estiloDoDesignMd(ide.arquivos) ?? projeto?.designId ?? null : null;
-  const previaHtml = useMemo(() => (vista === "previa" && ide ? montarPrevia(ide.arquivos) : null), [vista, ide]);
+  const tipo = useMemo(() => tipoProjeto(ide?.arquivos), [ide?.arquivos]);
+  const previaHtml = useMemo(() => (vista === "previa" && ide && tipo !== "react" ? montarPrevia(ide.arquivos) : null), [vista, ide, tipo]);
+  // fora da prévia React os erros dela não valem mais (voltam quando o Sandpack monta de novo)
+  useEffect(() => { if (vista !== "previa" || tipo !== "react") setErrosReact([]); }, [vista, tipo]);
 
   const novoArquivo = () => {
     const p = caminhoValido(window.prompt("Nome do arquivo (ex.: src/app.ts)") ?? "");
@@ -683,6 +732,23 @@ export default function OctaIDE() {
                     if (typeof md === "string") setIde((e) => (e ? { ...e, arquivos: { ...e.arquivos, "DESIGN.md": md } } : e)); // o servidor já gravou
                   }} />
               </div>
+            ) : vista === "previa" && tipo === "react" ? (
+              <div className="flex-1 min-h-0 flex flex-col">
+                <div className="h-8 shrink-0 flex items-center gap-2 px-3 text-[11.5px]" style={{ background: Z.painel, borderBottom: `1px solid ${Z.borda}`, color: Z.apagado }}>
+                  <Eye className="w-3.5 h-3.5" /> Prévia do app <span style={{ color: Z.fraco }}>React</span>
+                  <span className="ml-auto">a prévia React roda no seu navegador</span>
+                </div>
+                <div className="flex-1 min-h-0">
+                  <PreviaReact key={projeto?.id ?? "rascunho"} arquivos={ide.arquivos} onErros={setErrosReact} />
+                </div>
+                {errosReact.length > 0 && (
+                  <div role="status" aria-label="Erros do app" className="shrink-0 max-h-28 overflow-y-auto px-3 py-1.5 font-mono text-[11.5px] leading-relaxed"
+                    style={{ background: Z.painel, borderTop: `1px solid ${Z.borda}`, color: Z.erro }}>
+                    {errosReact.map((e, i) => <div key={i} className="truncate" title={e}>{e}</div>)}
+                    {projeto && <div className="mt-1"><CorrigirComOcta origem="react" saida={errosReact.join("\n")} desabilitado={travado || enviando} onCorrigir={(p) => void enviarTurno(p)} /></div>}
+                  </div>
+                )}
+              </div>
             ) : vista === "previa" ? (
               <div className="flex-1 min-h-0 flex flex-col">
                 <div className="h-8 shrink-0 flex items-center gap-2 px-3 text-[11.5px]" style={{ background: Z.painel, borderBottom: `1px solid ${Z.borda}`, color: Z.apagado }}>
@@ -758,6 +824,7 @@ export default function OctaIDE() {
                       <div key={i} style={{ color: o.type === "stderr" ? Z.erro : o.type === "info" ? Z.apagado : Z.texto }} className="whitespace-pre-wrap">{o.text}</div>
                     ))}
                     {!output.length && <div style={{ color: Z.apagado }}>Clique em Rodar pra executar o arquivo aberto.</div>}
+                    {projeto && <div className="mt-1"><CorrigirComOcta origem={ativo?.endsWith(".py") ? "python" : "pagina"} arquivo={ativo ?? undefined} saida={output.filter((o: RunOutput) => o.type === "stderr").map((o: RunOutput) => o.text).join("\n")} desabilitado={travado || enviando} onCorrigir={(p) => void enviarTurno(p)} /></div>}
                   </div>
                 </div>
               </>
