@@ -1429,15 +1429,14 @@ export class CyberEngine {
    *  quem ainda não escolheu veste a astronauta se tem corpo feminino, o astronauta se não, na cor dela. A do fundador:
    *  a preta */
   private vestirTraje(a: Ator) {
-    // quem tem CORPO PRÓPRIO de jogador (feito no VRoid, estilo anime — a Giulia) fica com ele: o traje cobria a skin
-    // quem tem CORPO PRÓPRIO feito no VRoid (estilo anime — o fundador e a Giulia) fica com ELE: a armadura de astronauta
-    // ia por cima da skin (out/2026, o dono: "meu personagem ainda veste a armadura por cima da atual, e não vejo a skin
-    // da Giulia"). A armadura é o corpo de quem NÃO tem um próprio
-    if (corpoProprio(this.pessoaDe(a.id), location.search)) { a.av.traje(false); return; }
+    // quem tem CORPO PRÓPRIO de jogador feito no VRoid (estilo anime — a Giulia) fica com a SKIN: a armadura cobria ela.
+    // O FUNDADOR veste a armadura PRETA por cima do corpo dele (out/2026, o dono: "volta a armadura preta só pra mim")
+    const proprio = corpoProprio(this.pessoaDe(a.id), location.search);
+    if (proprio && proprio.corpo !== CORPO_DO_FUNDADOR) { a.av.traje(false); return; }
     const ps = this.personagemDe(a.id);
-    // (o FUNDADOR: o próprio avatar sabe pelo `eu` que o servidor mandou — a lista de pessoas da sala às vezes ainda não
-    //  tem a gente, e o traje piscava na cor de jogador: o amarelo perto da Zaeon)
-    const fund = a === this.eu ? !!this.o.eu.fundador || this.ehFundador(a.id) : this.ehFundador(a.id);
+    // (o FUNDADOR: pelo corpo dele ou pelo `eu` que o servidor mandou — a lista de pessoas da sala às vezes ainda não
+    //  tem a gente, e o traje pintava na cor de jogador: o amarelo)
+    const fund = !!proprio || (a === this.eu ? !!this.o.eu.fundador || this.ehFundador(a.id) : this.ehFundador(a.id));
     a.av.traje(true, { paleta: fund ? "preta" : ps ? paletaDoPersonagem(ps) : this.paletaDe(a), modelo: ps?.genero });
   }
   /** a cor da armadura de astronauta de alguém: a cor do jogador (a do fundador é a preta) */
