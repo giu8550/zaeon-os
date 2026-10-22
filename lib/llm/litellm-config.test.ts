@@ -27,6 +27,7 @@ const ENV_KEY_DO_PROVEDOR: Record<string, string> = {
   "gemini/": "GEMINI_FREE_API_KEY",
   "cloudflare/": "CLOUDFLARE_API_KEY",
   "groq/": "GROQ_API_KEY",
+  "cerebras/": "CEREBRAS_API_KEY",
   "openai/glm": "ZHIPU_API_KEY",
 };
 
@@ -42,8 +43,8 @@ describe("infra/litellm.config.yaml — pool grátis", () => {
     }
   });
 
-  it("os 3 grupos do pool existem (GLM comentado = fora)", () => {
-    expect(pool.map((d) => d.nome).sort()).toEqual(["zaeon-pool-cf", "zaeon-pool-groq", "zaeon-pool-lite"]);
+  it("os 4 grupos do pool existem (GLM comentado = fora)", () => {
+    expect(pool.map((d) => d.nome).sort()).toEqual(["zaeon-pool-cerebras", "zaeon-pool-cf", "zaeon-pool-groq", "zaeon-pool-lite"]);
   });
 
   it("nenhum vertex_ai/ dentro de grupo zaeon-pool-* (pool nunca é crédito do negócio)", () => {
@@ -79,15 +80,16 @@ describe("infra/litellm.config.yaml — pool grátis", () => {
   });
 
   it("cada deployment do pool tem model_info.id = alvo (header x-litellm-model-id)", () => {
-    const esperado: Record<string, string> = { "zaeon-pool-lite": "gemini-free", "zaeon-pool-cf": "cloudflare", "zaeon-pool-groq": "groq" };
+    const esperado: Record<string, string> = { "zaeon-pool-lite": "gemini-free", "zaeon-pool-cerebras": "cerebras", "zaeon-pool-cf": "cloudflare", "zaeon-pool-groq": "groq" };
     for (const d of pool) expect(d.linhas.join("\n"), d.nome).toMatch(new RegExp(`model_info:\\s*\\{\\s*id:\\s*${esperado[d.nome]}\\s*\\}`));
   });
 
-  it("fallback do pool = só a reserva Google; nunca zaeon-flash/zaeon-pro (o orçamento do chat)", () => {
+  it("fallback do pool = Cerebras grátis e depois a reserva Google (Groq fora, decisão do dono); nunca zaeon-flash/zaeon-pro", () => {
     const linha = ativas.find((l) => /^\s*fallbacks:/.test(l));
     expect(linha).toBeTruthy();
     expect(linha).not.toMatch(/zaeon-flash|zaeon-pro/);
-    expect(linha).toMatch(/"zaeon-pool-lite":\s*\["zaeon-reserva-google"\]/);
+    expect(linha).toMatch(/"zaeon-pool-lite":\s*\["zaeon-pool-cerebras",\s*"zaeon-reserva-google"\]/);
+    expect(linha).not.toMatch(/zaeon-pool-groq|zaeon-pool-cf/);
   });
 
   it("reserva Google = Vertex flash-lite (o mais barato), com alvo vertex pro ledger contar o custo", () => {
