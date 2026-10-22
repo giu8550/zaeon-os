@@ -32,6 +32,11 @@ export async function register() {
       const { iniciarWorkerRagOpcional } = await import("./instrumentation-node");
       await iniciarWorkerRagOpcional();
     }
+    // Worker dos turnos do Octa (fluxo landing): OCTA_WORKER=1 + OCTA_QUEUE=1 + REDIS_URL; sem as envs, roda inline no web.
+    if (process.env.OCTA_WORKER === "1") {
+      const { iniciarWorkerOctaOpcional } = await import("./instrumentation-node");
+      await iniciarWorkerOctaOpcional();
+    }
     // Memória L3 dos agentes (MEMORY_L3=1 + DATABASE_URL); sem a env, os consumidores caem no nullMemory.
     if (process.env.MEMORY_L3 === "1") {
       const { ligarMemoriaOpcional } = await import("./instrumentation-node");

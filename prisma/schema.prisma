@@ -1451,3 +1451,67 @@ model OctaEvalRun {
   @@index([agente, em])
   @@map("octa_eval_runs")
 }
+
+// Projeto do Octa no servidor (landing → GitHub Pages): arquivos do site estático, design escolhido,
+// permissão do agente e o repositório que o Octa criou na conta do aluno (um projeto ↔ um repositório).
+model OctaProjeto {
+  id                  String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId              String
+  nome                String
+  slug                String
+  arquivos            Json
+  designId            String?
+  permissao           String   @default("auto") // auto | antes_de_publicar | antes_de_escrever
+  avisoPublicoAceito  Boolean  @default(false)
+  repoFullName        String?
+  repoCriadoPeloOcta  Boolean  @default(false)
+  pagesUrl            String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  @@index([userId])
+  @@map("octa_projetos")
+}
+
+// Uma tentativa de publicação — só as ok:true contam nos limites diários (10 publicações / 3 repositórios novos).
+model OctaPublicacao {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String
+  projetoId String
+  ok        Boolean
+  repoNovo  Boolean
+  em        DateTime @default(now())
+  @@index([userId, em])
+  @@map("octa_publicacoes")
+}
+
+// Um turno do agente Octa no fluxo landing, rodando em job (lib/queue/octa). O estado para retomar depois de uma
+// aprovação (msgs + a tool pendente) mora SÓ aqui — o cliente manda só { aprovado }.
+model OctaTurno {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String
+  email     String   // do dono (sessão) — o job precisa pra achar o GitHub do aluno; nunca vai pro cliente
+  projetoId String
+  pedido    String
+  status    String   // rodando | aguardando_aprovacao | pronto | erro
+  runId     String?  // a execução que reivindicou o turno (processarTurno); null = livre pra ser reivindicado
+  estado    Json?    // { msgs } para retomar; na retomada ganha { aprovado }
+  pendente  Json?    // { tool, args, toolCallId }
+  resposta  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([projetoId, status])
+  @@index([userId])
+  @@map("octa_turnos")
+}
+
+// Eventos ao vivo de um turno (o cliente lê com ?depois=<seq>). `dados` nunca leva token nem erro cru.
+model OctaEvento {
+  id      String   @id @default(auto()) @map("_id") @db.ObjectId
+  turnoId String
+  seq     Int
+  tipo    String   // pensando | tool | arquivo | resultado | aprovacao | fim | erro
+  dados   Json
+  em      DateTime @default(now())
+  @@unique([turnoId, seq])
+  @@map("octa_eventos")
+}

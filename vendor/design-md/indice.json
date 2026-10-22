@@ -1,0 +1,2428 @@
+[
+  {
+    "id": "1win",
+    "nome": "1win",
+    "marca": "1win",
+    "resumo": "An analysis of 1win's design language — a near-black crypto casino and sportsbook built on Inter at heavy weights, where a vivid green action color and an electric blue secondary carry every CTA across dense, full-bleed game-tile rails, pro",
+    "clima": [
+      "escuro"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#141415",
+        "superficie": "#2e3035",
+        "texto": "#f0f2f5",
+        "textoSuave": "#9aa1b1",
+        "primaria": "#00b24b",
+        "acento": "#00b24b",
+        "borda": "#2d2f33"
+      },
+      "fontes": {
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "12px",
+      "escuro": true
+    }
+  },
+  {
+    "id": "airbnb",
+    "nome": "Airbnb",
+    "marca": "Airbnb",
+    "resumo": "A warm, generous consumer marketplace anchored on a clean white canvas and Airbnb Rausch (#ff385c), the single brand voltage that carries every primary CTA, search-button orb, and rating dot. Type runs Airbnb Cereal VF at modest weights — d",
+    "clima": [
+      "claro",
+      "corporativo"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#ffffff",
+        "texto": "#222222",
+        "textoSuave": "#3f3f3f",
+        "primaria": "#ff385c",
+        "acento": "#e00b41",
+        "borda": "#dddddd"
+      },
+      "fontes": {
+        "titulo": "\"Roboto\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "14px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "airtable",
+    "nome": "Airtable",
+    "marca": "Airtable",
+    "resumo": "A sober, editorial workflow-software interface anchored on white canvas and dark-ink type, where brand voltage comes from full-bleed signature cards in coral, dark green, peach, and dark navy that punctuate long-scroll explainer pages. Prim",
+    "clima": [
+      "claro",
+      "ousado",
+      "corporativo"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f8fafc",
+        "texto": "#181d26",
+        "textoSuave": "#333840",
+        "primaria": "#181d26",
+        "acento": "#1b61c9",
+        "borda": "#dddddd"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "10px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "aljazeera",
+    "nome": "Al Jazeera",
+    "marca": "Al Jazeera",
+    "aliases": [
+      "Aljazeera"
+    ],
+    "resumo": "An analysis of Al Jazeera's design language — a hard-news editorial system built on flat white paper and dense Roboto headline stacks, signed by one saturated orange used as logo block and section-eyebrow bar, punctuated by a live-red that ",
+    "clima": [
+      "claro",
+      "corporativo"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f6f7f9",
+        "texto": "#000000",
+        "textoSuave": "#595959",
+        "primaria": "#fa9000",
+        "acento": "#fa9000",
+        "borda": "#d8d8d8"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Roboto\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "10px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "apple",
+    "nome": "Apple",
+    "marca": "Apple",
+    "resumo": "A photography-first interface that turns marketing into a museum gallery. Edge-to-edge product tiles alternate light and dark canvases, framed by SF Pro Display headlines with negative letter-spacing and a single Action Blue (#0066cc) inter",
+    "clima": [
+      "claro"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f6f7f9",
+        "texto": "#1d1d1f",
+        "textoSuave": "#1d1d1f",
+        "primaria": "#0066cc",
+        "acento": "#0066cc",
+        "borda": "#e0e0e0"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "11px",
+      "espaco": "17px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "binance",
+    "nome": "Binance",
+    "marca": "Binance",
+    "resumo": "A confident financial-platform interface anchored on a deep near-black canvas, where Binance's iconic yellow (#FCD535) carries every primary CTA, brand accent, and value-claim moment. Type runs Binance's custom BinanceNova / BinancePlex sta",
+    "clima": [
+      "claro",
+      "corporativo",
+      "tecnico"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f6f7f9",
+        "texto": "#181a20",
+        "textoSuave": "#eaecef",
+        "primaria": "#fcd535",
+        "acento": "#f0b90b",
+        "borda": "#e5e7eb"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "6px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "bmw",
+    "nome": "BMW",
+    "marca": "BMW",
+    "resumo": "BMW's corporate site — distinct from BMW M's motorsport-bombastic variant, this is a measured and settled corporate-automotive interface. On a light (cream-tinted white) canvas, BMW corporate blue (#1c69d4) carries every primary CTA; dark n",
+    "clima": [
+      "claro",
+      "corporativo",
+      "tecnico"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#fafafa",
+        "texto": "#262626",
+        "textoSuave": "#3c3c3c",
+        "primaria": "#1c69d4",
+        "acento": "#0653b6",
+        "borda": "#e6e6e6"
+      },
+      "fontes": {
+        "titulo": "\"Roboto\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "bmw-m",
+    "nome": "BMW M",
+    "marca": "BMW",
+    "resumo": "A motorsport-engineering interface anchored on a near-black canvas with white BMW Type Next Latin display headlines in confident UPPERCASE. The brand carries no decorative voltage — its energy comes from full-bleed automotive photography (c",
+    "clima": [
+      "escuro",
+      "tecnico",
+      "corporativo",
+      "minimalista"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#000000",
+        "superficie": "#1a1a1a",
+        "texto": "#ffffff",
+        "textoSuave": "#bbbbbb",
+        "primaria": "#ffffff",
+        "acento": "#ffffff",
+        "borda": "#3c3c3c"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "6px",
+      "espaco": "16px",
+      "escuro": true
+    }
+  },
+  {
+    "id": "bugatti",
+    "nome": "Bugatti",
+    "marca": "Bugatti",
+    "resumo": "An austere luxury-automotive interface that uses near-pure black canvas, white uppercase letterspaced display, and full-bleed automotive photography as the only voltage. The system runs three custom Bugatti typefaces — Bugatti Display, Buga",
+    "clima": [
+      "escuro",
+      "tecnico",
+      "luxuoso",
+      "minimalista"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#000000",
+        "superficie": "#141414",
+        "texto": "#ffffff",
+        "textoSuave": "#cccccc",
+        "primaria": "#ffffff",
+        "acento": "#c3d9f3",
+        "borda": "#262626"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": true
+    }
+  },
+  {
+    "id": "cal",
+    "nome": "Cal",
+    "marca": "Cal",
+    "resumo": "A clean, calendar-software-first interface anchored on white canvas with black primary CTAs and custom Cal Sans display typography. The system reads as friendly modern SaaS — generous whitespace, soft-rounded cards (~12px), product UI fragm",
+    "clima": [
+      "claro",
+      "tecnico",
+      "corporativo",
+      "divertido"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f5f5f5",
+        "texto": "#111111",
+        "textoSuave": "#374151",
+        "primaria": "#111111",
+        "acento": "#242424",
+        "borda": "#e5e7eb"
+      },
+      "fontes": {
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "claude",
+    "nome": "Claude",
+    "marca": "Claude",
+    "resumo": "A warm-canvas editorial interface for Anthropic's Claude product. The system anchors on a tinted cream canvas with serif display headlines, warm coral CTAs, and dark navy product surfaces (code editor mockups, model showcase cards). Brand v",
+    "clima": [
+      "claro",
+      "tecnico",
+      "corporativo",
+      "minimalista"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#faf9f5",
+        "superficie": "#efe9de",
+        "texto": "#141413",
+        "textoSuave": "#3d3d3a",
+        "primaria": "#cc785c",
+        "acento": "#a9583e",
+        "borda": "#e6dfd8"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "clay",
+    "nome": "Clay",
+    "marca": "Clay",
+    "resumo": "A vibrant claymation-meets-data interface for Clay.com (GTM data-orchestration platform). Anchors on white canvas with dark-navy primary CTAs, custom rounded display type, and saturated single-color feature cards — hot pink, deep teal, lave",
+    "clima": [
+      "claro",
+      "divertido"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#fffaf0",
+        "superficie": "#f5f0e0",
+        "texto": "#0a0a0a",
+        "textoSuave": "#3a3a3a",
+        "primaria": "#0a0a0a",
+        "acento": "#1f1f1f",
+        "borda": "#e5e5e5"
+      },
+      "fontes": {
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "12px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "clickhouse",
+    "nome": "ClickHouse",
+    "marca": "ClickHouse",
+    "resumo": "A high-performance database interface anchored on near-pure black canvas with electric yellow as the brand voltage. White typography in confident sans, yellow CTAs, and yellow-text stat numbers carry the brand voice across every page. Code ",
+    "clima": [
+      "escuro",
+      "tecnico",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#0a0a0a",
+        "superficie": "#1a1a1a",
+        "texto": "#ffffff",
+        "textoSuave": "#cccccc",
+        "primaria": "#faff69",
+        "acento": "#3b82f6",
+        "borda": "#2a2a2a"
+      },
+      "fontes": {
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": true
+    }
+  },
+  {
+    "id": "cohere",
+    "nome": "Cohere",
+    "marca": "Cohere",
+    "resumo": "Cohere's 2026 web system is a controlled enterprise AI interface built from stark white editorial space, deep green-black product bands, soft mineral surfaces, rounded media cards, and a distinctive type split between monospaced-feeling dis",
+    "clima": [
+      "claro",
+      "corporativo",
+      "tecnico",
+      "minimalista"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f6f7f9",
+        "texto": "#212121",
+        "textoSuave": "#93939f",
+        "primaria": "#17171c",
+        "acento": "#17171c",
+        "borda": "#d9d9dd"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "16px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "coinbase",
+    "nome": "Coinbase",
+    "marca": "Coinbase",
+    "resumo": "An institutional-grade crypto exchange whose marketing surfaces read like a quietly-confident financial-services brand. The base canvas is pure white; Coinbase Blue (`#0052ff`) is the single brand voltage, used scarcely on primary CTAs, sig",
+    "clima": [
+      "claro",
+      "corporativo",
+      "tecnico"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#ffffff",
+        "texto": "#0a0b0d",
+        "textoSuave": "#5b616e",
+        "primaria": "#0052ff",
+        "acento": "#f4b000",
+        "borda": "#dee1e6"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "12px",
+      "espaco": "20px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "composio",
+    "nome": "Composio",
+    "marca": "Composio",
+    "resumo": "A developer-tools brand for AI-agent tool integration whose marketing surfaces lean into a dark, technical aesthetic with a single deep-electric-blue voltage (`#0007cd`). The page floor is near-black (`#0f0f0f`); cards float above on subtle",
+    "clima": [
+      "escuro",
+      "tecnico"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#0f0f0f",
+        "superficie": "#181818",
+        "texto": "#ffffff",
+        "textoSuave": "#a8a8a8",
+        "primaria": "#0007cd",
+        "acento": "#0005a3",
+        "borda": "#222222"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "20px",
+      "escuro": true
+    }
+  },
+  {
+    "id": "cursor",
+    "nome": "Cursor",
+    "marca": "Cursor",
+    "resumo": "An AI-first code editor whose marketing site reads like a quietly-confident developer-tools brand with a warm-cream editorial canvas (`#f7f7f4`) instead of the typical dark IDE atmosphere. Near-black warm ink (`#26251e`) carries body and di",
+    "clima": [
+      "claro",
+      "tecnico",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#f7f7f4",
+        "superficie": "#ffffff",
+        "texto": "#26251e",
+        "textoSuave": "#5a5852",
+        "primaria": "#f54e00",
+        "acento": "#d04200",
+        "borda": "#e6e5e0"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "20px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "dell-1996",
+    "nome": "Dell 1996",
+    "marca": "Dell",
+    "resumo": "An inspired interpretation of Dell.com's 1996 design language — a catalog-era enterprise web design built around a literal black page frame, vivid flat color-block \"ribbon cards\" tinted in sage, salmon, periwinkle, sky, peach and lime, chun",
+    "clima": [
+      "claro",
+      "ousado",
+      "corporativo"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#ffffff",
+        "texto": "#000000",
+        "textoSuave": "#6b7280",
+        "primaria": "#e91d2a",
+        "acento": "#0000ee",
+        "borda": "#e5e7eb"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Times New Roman\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "dji",
+    "nome": "DJI",
+    "marca": "DJI",
+    "resumo": "An analysis of DJI's design language — a product-photography showroom for drones and cameras, where full-bleed studio renders sit in square, gutter-separated tiles on a white canvas, every action is a rounded pill in a single engineering bl",
+    "clima": [
+      "claro",
+      "tecnico"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f6f7f9",
+        "texto": "#111827",
+        "textoSuave": "#6b7280",
+        "primaria": "#2563eb",
+        "acento": "#7c3aed",
+        "borda": "#e5e7eb"
+      },
+      "fontes": {
+        "titulo": "\"Open Sans\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Open Sans\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "elevenlabs",
+    "nome": "ElevenLabs",
+    "marca": "ElevenLabs",
+    "resumo": "A voice-AI brand whose marketing surfaces read like a quietly editorial print magazine. The base canvas is off-white (`#f5f5f5`) holding warm near-black ink (`#292524`); the brand voltage is photographic, not chromatic — soft pastel atmosph",
+    "clima": [
+      "claro",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#f5f5f5",
+        "superficie": "#ffffff",
+        "texto": "#0c0a09",
+        "textoSuave": "#4e4e4e",
+        "primaria": "#292524",
+        "acento": "#0c0a09",
+        "borda": "#e7e5e4"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "20px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "expo",
+    "nome": "Expo",
+    "marca": "Expo",
+    "resumo": "A React Native developer-platform whose marketing site reads like a quietly-confident infrastructure brand. The base canvas is pure white with a soft sky-blue gradient atmospheric wash behind the hero; near-black ink (`#171717`) carries bod",
+    "clima": [
+      "claro",
+      "tecnico",
+      "minimalista"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#ffffff",
+        "texto": "#171717",
+        "textoSuave": "#60646c",
+        "primaria": "#000000",
+        "acento": "#1a1a1a",
+        "borda": "#f0f0f3"
+      },
+      "fontes": {
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "20px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "ferrari",
+    "nome": "Ferrari",
+    "marca": "Ferrari",
+    "resumo": "A luxury-automotive brand whose marketing surfaces read as cinematic editorial. The base canvas is **near-black** (`#181818`) holding pure white display type; white-canvas bands appear only inside specific editorial contexts (preowned listi",
+    "clima": [
+      "escuro",
+      "luxuoso",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#181818",
+        "superficie": "#303030",
+        "texto": "#ffffff",
+        "textoSuave": "#969696",
+        "primaria": "#da291c",
+        "acento": "#f6e500",
+        "borda": "#303030"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "6px",
+      "espaco": "32px",
+      "escuro": true
+    }
+  },
+  {
+    "id": "figma",
+    "nome": "Figma",
+    "marca": "Figma",
+    "resumo": "A confident black-and-white editorial frame interrupted by oversized, hand-cut pastel color blocks. The marketing canvas is rigorously monochrome — figmaSans variable type, pure white surfaces, pure black ink, pill-shaped CTAs — while each ",
+    "clima": [
+      "claro",
+      "corporativo",
+      "tecnico",
+      "divertido"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f7f7f5",
+        "texto": "#000000",
+        "textoSuave": "#6b7280",
+        "primaria": "#000000",
+        "acento": "#000000",
+        "borda": "#e6e6e6"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "framer",
+    "nome": "Framer",
+    "marca": "Framer",
+    "resumo": "A confident dark-canvas builder marketing site that treats the page like a working artboard — pure black surfaces, white display type set in GT Walsheim Medium with aggressive negative tracking, and a single confident blue (#0099ff) reserve",
+    "clima": [
+      "escuro",
+      "divertido"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#090909",
+        "superficie": "#141414",
+        "texto": "#ffffff",
+        "textoSuave": "#999999",
+        "primaria": "#ffffff",
+        "acento": "#0099ff",
+        "borda": "#262626"
+      },
+      "fontes": {
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "10px",
+      "espaco": "15px",
+      "escuro": true
+    }
+  },
+  {
+    "id": "hashicorp",
+    "nome": "HashiCorp",
+    "marca": "HashiCorp",
+    "resumo": "An enterprise-infrastructure marketing canvas built around a near-black ground (#000000) and a system of per-product accent colors — Terraform purple, Vault yellow, Consul pink, Waypoint cyan, Vagrant blue — that act as identity tokens rath",
+    "clima": [
+      "escuro",
+      "tecnico",
+      "corporativo"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#000000",
+        "superficie": "#15181e",
+        "texto": "#ffffff",
+        "textoSuave": "#b2b6bd",
+        "primaria": "#000000",
+        "acento": "#2b89ff",
+        "borda": "#3b3d45"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": true
+    }
+  },
+  {
+    "id": "hp",
+    "nome": "HP",
+    "marca": "HP",
+    "resumo": "An inspired interpretation of HP's design language — a white-paper enterprise-consumer system anchored by HP Electric Blue (`#024ad8`) as the lone signal CTA, near-black ink (`#1a1a1a`) for headlines, geometric Forma-DJR sans throughout, an",
+    "clima": [
+      "claro",
+      "ousado",
+      "corporativo"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f6f7f9",
+        "texto": "#1a1a1a",
+        "textoSuave": "#292929",
+        "primaria": "#024ad8",
+        "acento": "#024ad8",
+        "borda": "#e8e8e8"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "4px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "ibm",
+    "nome": "IBM",
+    "marca": "IBM",
+    "resumo": "An enterprise-marketing canvas faithful to Carbon Design System: white surfaces, charcoal type, IBM Blue (#0f62fe) as the single confident accent, and a deliberately flat-square aesthetic where corners stay at 0–4px. Type runs IBM Plex Sans",
+    "clima": [
+      "claro",
+      "corporativo",
+      "ousado",
+      "tecnico"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f4f4f4",
+        "texto": "#161616",
+        "textoSuave": "#525252",
+        "primaria": "#0f62fe",
+        "acento": "#0f62fe",
+        "borda": "#e0e0e0"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "6px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "intercom",
+    "nome": "Intercom",
+    "marca": "Intercom",
+    "resumo": "An editorial customer-service marketing canvas built around a soft cream-white ground, charcoal type set in Saans (Intercom's proprietary geometric sans), and a single confident Fin Orange (#ff5600) reserved for the Fin AI brand. Cards live",
+    "clima": [
+      "claro",
+      "tecnico",
+      "minimalista"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#f5f1ec",
+        "superficie": "#ffffff",
+        "texto": "#111111",
+        "textoSuave": "#626260",
+        "primaria": "#111111",
+        "acento": "#111111",
+        "borda": "#d3cec6"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "jobright",
+    "nome": "Jobright",
+    "marca": "Jobright",
+    "resumo": "An analysis of Jobright's design language — an AI job-hunting platform built on an energetic spring-mint green against black and white, with pale-mint section bands carrying the page rhythm. Bold condensed Titillium Web display headings pai",
+    "clima": [
+      "claro",
+      "divertido",
+      "ousado",
+      "corporativo"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f2f4f5",
+        "texto": "#000000",
+        "textoSuave": "#86909c",
+        "primaria": "#00f0a0",
+        "acento": "#00f0a0",
+        "borda": "#e5e7eb"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "16px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "kraken",
+    "nome": "Kraken",
+    "marca": "Kraken",
+    "resumo": "Kraken's website is a clean, trustworthy crypto exchange that uses purple as its commanding brand color. The design operates on white backgrounds with Kraken Purple (`",
+    "clima": [
+      "escuro"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#7132f5",
+        "superficie": "#ffffff",
+        "texto": "#7132f5",
+        "textoSuave": "#a1a1aa",
+        "primaria": "#7132f5",
+        "acento": "#7132f5",
+        "borda": "#dedee5"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": true
+    }
+  },
+  {
+    "id": "lamborghini",
+    "nome": "Lamborghini",
+    "marca": "Lamborghini",
+    "resumo": "Lamborghini's website is a cathedral of darkness — a digital stage where jet-black surfaces stretch infinitely and every element emerges from the void like a machine under a spotlight. The page is almost entirely black. Not dark gray, not n",
+    "clima": [
+      "escuro",
+      "ousado",
+      "minimalista",
+      "tecnico"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#000000",
+        "superficie": "#000000",
+        "texto": "#ffffff",
+        "textoSuave": "#a1a1aa",
+        "primaria": "#ffc000",
+        "acento": "#ffc000",
+        "borda": "#ffc000"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "0px",
+      "espaco": "16px",
+      "escuro": true
+    }
+  },
+  {
+    "id": "linear.app",
+    "nome": "Linear",
+    "marca": "Linear",
+    "resumo": "A near-black product-focused marketing canvas built around #010102 (the deepest dark surface of any tool in this collection), light gray text (#f7f8f8), and the signature Linear lavender-blue (#5e6ad2) used as the single chromatic accent. T",
+    "clima": [
+      "escuro",
+      "tecnico"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#010102",
+        "superficie": "#0f1011",
+        "texto": "#f7f8f8",
+        "textoSuave": "#d0d6e0",
+        "primaria": "#5e6ad2",
+        "acento": "#5e6ad2",
+        "borda": "#23252a"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": true
+    }
+  },
+  {
+    "id": "lovable",
+    "nome": "Lovable",
+    "marca": "Lovable",
+    "resumo": "Lovable's website radiates warmth through restraint. The entire page sits on a creamy, parchment-toned background (`",
+    "clima": [
+      "claro",
+      "ousado",
+      "minimalista",
+      "tecnico"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#f7f4ed",
+        "superficie": "#f7f4ed",
+        "texto": "#1c1c1c",
+        "textoSuave": "#6b7280",
+        "primaria": "#3b82f6",
+        "acento": "#3b82f6",
+        "borda": "#1c1c1c"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "mastercard",
+    "nome": "Mastercard",
+    "marca": "Mastercard",
+    "resumo": "Mastercard's experience reads like a warm, editorial magazine built from soft stone and signal orange. The canvas is a muted putty-cream (`",
+    "clima": [
+      "claro",
+      "ousado",
+      "corporativo"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#f3f0ee",
+        "superficie": "#f3f0ee",
+        "texto": "#141413",
+        "textoSuave": "#6b7280",
+        "primaria": "#eb001b",
+        "acento": "#eb001b",
+        "borda": "#141413"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "mercury",
+    "nome": "Mercury",
+    "marca": "Mercury",
+    "resumo": "An analysis of Mercury's design language — a fintech system that moves between a deep ink-violet night world on the homepage and a pale, near-white light world on its product and pricing pages, held together by one confident indigo action p",
+    "clima": [
+      "claro",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#fbfcfd",
+        "superficie": "#ffffff",
+        "texto": "#28253b",
+        "textoSuave": "#70707d",
+        "primaria": "#5266eb",
+        "acento": "#5266eb",
+        "borda": "#e5e7eb"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "12px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "meta",
+    "nome": "Meta",
+    "marca": "Meta",
+    "resumo": "Meta's design system spans hardware commerce (Quest VR, Ray-Ban Meta AI glasses) and brand surfaces with a confident product-merchandising voice. The system pairs a stark white canvas with full-bleed photographic product cards, a confident ",
+    "clima": [
+      "claro",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f1f4f7",
+        "texto": "#1c1e21",
+        "textoSuave": "#4b4c4f",
+        "primaria": "#0064e0",
+        "acento": "#0457cb",
+        "borda": "#ced0d4"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "6px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "minimax",
+    "nome": "MiniMax",
+    "marca": "MiniMax",
+    "resumo": "MiniMax presents itself as a premium AI infrastructure brand through a striking duality — bold black-pill CTAs and stark white canvas for marketing, paired with vibrant gradient product cards (orange-red, magenta-pink, purple, blue) that tu",
+    "clima": [
+      "claro",
+      "ousado",
+      "tecnico",
+      "divertido"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f2f3f5",
+        "texto": "#0a0a0a",
+        "textoSuave": "#a8aab2",
+        "primaria": "#0a0a0a",
+        "acento": "#0a0a0a",
+        "borda": "#e5e7eb"
+      },
+      "fontes": {
+        "titulo": "\"DM Sans\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"DM Sans\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "mintlify",
+    "nome": "Mintlify",
+    "marca": "Mintlify",
+    "resumo": "Mintlify presents documentation infrastructure with a dual-mode aesthetic — atmospheric sky-gradient marketing heroes (cloud illustration backdrops, soft cream-to-blue washes) paired with dense developer-grade documentation surfaces. The sy",
+    "clima": [
+      "claro",
+      "tecnico",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#fafafa",
+        "texto": "#0a0a0a",
+        "textoSuave": "#a8a8aa",
+        "primaria": "#0a0a0a",
+        "acento": "#0a0a0a",
+        "borda": "#e5e5e5"
+      },
+      "fontes": {
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "miro",
+    "nome": "Miro",
+    "marca": "Miro",
+    "resumo": "Miro presents itself as the AI-powered visual workspace through a confident, almost playful brand voice — anchored by its signature canary yellow ({colors.brand-yellow}) wordmark over white canvas, broken open by colorful pastel feature tin",
+    "clima": [
+      "claro",
+      "ousado",
+      "divertido",
+      "corporativo"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#fafbfc",
+        "texto": "#1c1c1e",
+        "textoSuave": "#a5a8b5",
+        "primaria": "#1c1c1e",
+        "acento": "#1c1c1e",
+        "borda": "#e0e2e8"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "mistral.ai",
+    "nome": "Mistral",
+    "marca": "Mistral",
+    "resumo": "Mistral AI brands itself with a singular signature — atmospheric sunset gradients (mustard, orange, deep red) layered over photography of mountains, plus a horizontal \"sunset stripe\" bar that closes every page. The system pairs warm cream-y",
+    "clima": [
+      "claro",
+      "tecnico",
+      "ousado",
+      "luxuoso"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#fafafa",
+        "texto": "#1f1f1f",
+        "textoSuave": "#a8a8a8",
+        "primaria": "#fa520f",
+        "acento": "#fa520f",
+        "borda": "#e5e5e5"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "mongodb",
+    "nome": "MongoDB",
+    "marca": "MongoDB",
+    "resumo": "MongoDB carries a strong dual-mode visual identity — dark deep-teal hero bands with bright MongoDB green ({colors.brand-green}) CTAs paired with stark white documentation surfaces. The signature green pill button is unmistakable across prod",
+    "clima": [
+      "claro",
+      "tecnico",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f4f7f6",
+        "texto": "#001e2b",
+        "textoSuave": "#a8b3bc",
+        "primaria": "#00ed64",
+        "acento": "#3d4f9f",
+        "borda": "#e1e5e8"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "mydealz",
+    "nome": "Mydealz",
+    "marca": "Mydealz",
+    "resumo": "An analysis of mydealz's design language — a high-density German deals-community system built on a confident brand green, where a stacked white-card feed carries thousands of deals and every card wears the signature hot/cold temperature con",
+    "clima": [
+      "claro",
+      "luxuoso",
+      "ousado",
+      "tecnico"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#f3f5f7",
+        "superficie": "#ffffff",
+        "texto": "#000000",
+        "textoSuave": "#6b6d70",
+        "primaria": "#30a83c",
+        "acento": "#30a83c",
+        "borda": "#dfe1e4"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "nerdwallet",
+    "nome": "NerdWallet",
+    "marca": "NerdWallet",
+    "resumo": "An analysis of NerdWallet's design language — a personal-finance comparison platform built almost entirely from one deep green and a ladder of mints beneath it. Editorial pages open on a green gradient band, then drop to near-white where de",
+    "clima": [
+      "claro",
+      "corporativo",
+      "divertido",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f7f7f7",
+        "texto": "#000000",
+        "textoSuave": "#3d4045",
+        "primaria": "#008254",
+        "acento": "#005fb9",
+        "borda": "#ebebec"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "6px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "nike",
+    "nome": "Nike",
+    "marca": "Nike",
+    "resumo": "|",
+    "clima": [
+      "claro"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f6f7f9",
+        "texto": "#111111",
+        "textoSuave": "#707072",
+        "primaria": "#111111",
+        "acento": "#ed1aa0",
+        "borda": "#cacacb"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "24px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "nintendo-2001",
+    "nome": "Nintendo 2001",
+    "marca": "Nintendo",
+    "resumo": "An analysis of Nintendo.com's 2001 design language — a brushed-periwinkle \"console chrome\" interface where every panel is a beveled metal plate, navigation glows amber over a halftone-dotted carbon bar, and bold outlined display type sits o",
+    "clima": [
+      "claro",
+      "ousado",
+      "tecnico",
+      "corporativo"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f6f7f9",
+        "texto": "#111827",
+        "textoSuave": "#6b7280",
+        "primaria": "#2563eb",
+        "acento": "#7c3aed",
+        "borda": "#e5e7eb"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Arial\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "6px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "notion",
+    "nome": "Notion",
+    "marca": "Notion",
+    "resumo": "Notion presents itself as the all-in-one workspace through a confident, illustration-rich brand voice — anchored by a deep navy hero band ({colors.brand-navy}) decorated with brand-colored sticky-note dots and mesh wire illustrations, a sig",
+    "clima": [
+      "claro",
+      "ousado",
+      "corporativo"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#fafaf9",
+        "texto": "#1a1a1a",
+        "textoSuave": "#bbb8b1",
+        "primaria": "#5645d4",
+        "acento": "#3a2a99",
+        "borda": "#e5e3df"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "nvidia",
+    "nome": "Nvidia",
+    "marca": "Nvidia",
+    "resumo": "|",
+    "clima": [
+      "claro",
+      "tecnico",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f7f7f7",
+        "texto": "#000000",
+        "textoSuave": "#1a1a1a",
+        "primaria": "#76b900",
+        "acento": "#952fc6",
+        "borda": "#cccccc"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "2px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "ollama",
+    "nome": "Ollama",
+    "marca": "Ollama",
+    "resumo": "|",
+    "clima": [
+      "claro",
+      "tecnico"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#ffffff",
+        "texto": "#000000",
+        "textoSuave": "#737373",
+        "primaria": "#000000",
+        "acento": "#000000",
+        "borda": "#e5e5e5"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "opencode.ai",
+    "nome": "OpenCode",
+    "marca": "OpenCode",
+    "resumo": "|",
+    "clima": [
+      "claro",
+      "corporativo",
+      "tecnico",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#fdfcfc",
+        "superficie": "#f1eeee",
+        "texto": "#201d1d",
+        "textoSuave": "#424245",
+        "primaria": "#201d1d",
+        "acento": "#007aff",
+        "borda": "#646262"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "4px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "oracle",
+    "nome": "Oracle",
+    "marca": "Oracle",
+    "resumo": "An analysis of Oracle's design language — an enterprise system built on a warm neutral ladder rather than a colour palette. Six numbered greys carry almost every surface, a single dark charcoal carries every action, and the famous red is he",
+    "clima": [
+      "claro",
+      "corporativo"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#fbf9f8",
+        "texto": "#161513",
+        "textoSuave": "#6b7280",
+        "primaria": "#312d2a",
+        "acento": "#006b8f",
+        "borda": "#e4e1dd"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "oura",
+    "nome": "Oura",
+    "marca": "Oura",
+    "resumo": "An analysis of Oura's design language — a warm-paper wellness system that pairs a high-contrast Editorial serif with a quiet grotesque sans, wraps every surface in a cream-and-earth palette drawn from mustard, clay and olive, and drives con",
+    "clima": [
+      "claro"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#f7f1e8",
+        "superficie": "#ffffff",
+        "texto": "#1c1b1a",
+        "textoSuave": "#a8a5a0",
+        "primaria": "#2a72de",
+        "acento": "#2a72de",
+        "borda": "#e1dcd3"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "12px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "pinterest",
+    "nome": "Pinterest",
+    "marca": "Pinterest",
+    "resumo": "|",
+    "clima": [
+      "claro",
+      "divertido",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f6f6f3",
+        "texto": "#000000",
+        "textoSuave": "#33332e",
+        "primaria": "#e60023",
+        "acento": "#7e238b",
+        "borda": "#dadad3"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "16px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "playstation",
+    "nome": "PlayStation",
+    "marca": "PlayStation",
+    "resumo": "|",
+    "clima": [
+      "claro",
+      "ousado",
+      "luxuoso"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f5f7fa",
+        "texto": "#000000",
+        "textoSuave": "#cccccc",
+        "primaria": "#0070d1",
+        "acento": "#004d8d",
+        "borda": "#e5e7eb"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "posthog",
+    "nome": "PostHog",
+    "marca": "PostHog",
+    "resumo": "|",
+    "clima": [
+      "claro",
+      "tecnico",
+      "divertido",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#eeefe9",
+        "superficie": "#ffffff",
+        "texto": "#23251d",
+        "textoSuave": "#4d4f46",
+        "primaria": "#f7a501",
+        "acento": "#2c84e0",
+        "borda": "#bfc1b7"
+      },
+      "fontes": {
+        "titulo": "\"IBM Plex Sans\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"IBM Plex Sans\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "6px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "raycast",
+    "nome": "Raycast",
+    "marca": "Raycast",
+    "resumo": "|",
+    "clima": [
+      "escuro",
+      "tecnico"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#07080a",
+        "superficie": "#121212",
+        "texto": "#f4f4f6",
+        "textoSuave": "#cdcdcd",
+        "primaria": "#ffffff",
+        "acento": "#57c1ff",
+        "borda": "#242728"
+      },
+      "fontes": {
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "12px",
+      "escuro": true
+    }
+  },
+  {
+    "id": "renault",
+    "nome": "Renault",
+    "marca": "Renault",
+    "resumo": "|",
+    "clima": [
+      "claro"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#ffffff",
+        "texto": "#000000",
+        "textoSuave": "#222222",
+        "primaria": "#ffed00",
+        "acento": "#0000ee",
+        "borda": "#f2f2f2"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "4px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "replicate",
+    "nome": "Replicate",
+    "marca": "Replicate",
+    "resumo": "|",
+    "clima": [
+      "claro",
+      "tecnico",
+      "corporativo"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#f9f7f3",
+        "superficie": "#ffffff",
+        "texto": "#202020",
+        "textoSuave": "#3a3a3a",
+        "primaria": "#ea2804",
+        "acento": "#ea2804",
+        "borda": "#202020"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "10px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "resend",
+    "nome": "Resend",
+    "marca": "Resend",
+    "resumo": "|",
+    "clima": [
+      "escuro",
+      "tecnico"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#000000",
+        "superficie": "#0a0a0c",
+        "texto": "#fcfdff",
+        "textoSuave": "#a1a4a5",
+        "primaria": "#fcfdff",
+        "acento": "#3b9eff",
+        "borda": "#27272a"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "12px",
+      "escuro": true
+    }
+  },
+  {
+    "id": "revolut",
+    "nome": "Revolut",
+    "marca": "Revolut",
+    "resumo": "|",
+    "clima": [
+      "claro",
+      "luxuoso",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#ffffff",
+        "texto": "#191c1f",
+        "textoSuave": "#1f2226",
+        "primaria": "#494fdf",
+        "acento": "#e61e49",
+        "borda": "#191c1f"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "12px",
+      "espaco": "14px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "runwayml",
+    "nome": "Runway",
+    "marca": "Runway",
+    "aliases": [
+      "RunwayML"
+    ],
+    "resumo": "Runway's interface is a cinematic reel brought to life as a website — a dark, editorial, film-production-grade design where full-bleed photography and video ARE the primary UI elements. This is not a typical tech product page; it's a visual",
+    "clima": [
+      "escuro",
+      "minimalista",
+      "corporativo",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#767d88",
+        "superficie": "#030303",
+        "texto": "#ffffff",
+        "textoSuave": "#a1a1aa",
+        "primaria": "#2563eb",
+        "acento": "#7c3aed",
+        "borda": "#27272a"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": true
+    }
+  },
+  {
+    "id": "sanity",
+    "nome": "Sanity",
+    "marca": "Sanity",
+    "resumo": "Sanity's website is a developer-content platform rendered as a nocturnal command center -- dark, precise, and deeply structured. The entire experience sits on a near-black canvas (`",
+    "clima": [
+      "escuro",
+      "tecnico",
+      "minimalista",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#0b0b0b",
+        "superficie": "#0b0b0b",
+        "texto": "#ffffff",
+        "textoSuave": "#a1a1aa",
+        "primaria": "#0052ef",
+        "acento": "#0052ef",
+        "borda": "#353535"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": true
+    }
+  },
+  {
+    "id": "sap",
+    "nome": "SAP",
+    "marca": "SAP",
+    "resumo": "An analysis of SAP's design language — an enterprise system that keeps almost everything on white and spends its structure on two greys and one blue. The chrome is deliberately quiet, a 60px light-grey bar over a product tab rail, so the pa",
+    "clima": [
+      "claro",
+      "corporativo"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f6f7f9",
+        "texto": "#000000",
+        "textoSuave": "#6b7280",
+        "primaria": "#0057d2",
+        "acento": "#0040b0",
+        "borda": "#475e75"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "9px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "sentry",
+    "nome": "Sentry",
+    "marca": "Sentry",
+    "resumo": "An inspired interpretation of Sentri's design language — a developer-tools brand built on a deep purple-violet midnight canvas, electric lime accents, and a slightly subversive illustrated personality. The system pairs a custom display sans",
+    "clima": [
+      "claro",
+      "tecnico",
+      "divertido"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f6f7f9",
+        "texto": "#1f1633",
+        "textoSuave": "#6b7280",
+        "primaria": "#150f23",
+        "acento": "#fa7faa",
+        "borda": "#e5e7eb"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Rubik\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "shopify",
+    "nome": "Shopify",
+    "marca": "Shopify",
+    "resumo": "An inspired interpretation of Shopifi's design language — a cinematic commerce platform that runs two parallel design tracks. The marketing-hero and product-narrative pages live on near-black canvases with full-bleed photography of merchant",
+    "clima": [
+      "claro",
+      "tecnico"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f6f7f9",
+        "texto": "#000000",
+        "textoSuave": "#6b7280",
+        "primaria": "#000000",
+        "acento": "#000000",
+        "borda": "#1e2c31"
+      },
+      "fontes": {
+        "titulo": "\"Helvetica\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "slack",
+    "nome": "Slack",
+    "marca": "Slack",
+    "resumo": "An inspired interpretation of Slacc's design language — a workplace messaging brand built on a deep aubergine primary, with cream-lavender hero gradients, blue inline links, and pill CTAs. The system pairs a proprietary humanist sans for di",
+    "clima": [
+      "claro"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f6f7f9",
+        "texto": "#1d1d1d",
+        "textoSuave": "#696969",
+        "primaria": "#4a154b",
+        "acento": "#481a54",
+        "borda": "#e6e6e6"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "spacex",
+    "nome": "SpaceX",
+    "marca": "SpaceX",
+    "resumo": "An inspired interpretation of Spasex's design language — a mission-oriented aerospace brand built on pure black canvas, full-bleed photographic and video heroes of rockets and Mars landscapes, and uppercase D-DIN display type set in tight v",
+    "clima": [
+      "claro",
+      "ousado",
+      "tecnico",
+      "minimalista"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f6f7f9",
+        "texto": "#000000",
+        "textoSuave": "#5a5a5f",
+        "primaria": "#000000",
+        "acento": "#000000",
+        "borda": "#e5e7eb"
+      },
+      "fontes": {
+        "titulo": "\"Arial\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Arial\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "16px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "spotify",
+    "nome": "Spotify",
+    "marca": "Spotify",
+    "resumo": "Spotify's web interface is a dark, immersive music player that wraps listeners in a near-black cocoon (`",
+    "clima": [
+      "escuro",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#121212",
+        "superficie": "#121212",
+        "texto": "#ffffff",
+        "textoSuave": "#b3b3b3",
+        "primaria": "#1ed760",
+        "acento": "#1ed760",
+        "borda": "#b3b3b3"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": true
+    }
+  },
+  {
+    "id": "starbucks",
+    "nome": "Starbucks",
+    "marca": "Starbucks",
+    "resumo": "Starbucks' design system is a **warm, confident retail flagship** wearing the green of their storefront apron across every surface. The canvas alternates between a neutral-warm cream (`",
+    "clima": [
+      "claro"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#f2f0eb",
+        "superficie": "#f2f0eb",
+        "texto": "#006241",
+        "textoSuave": "#6b7280",
+        "primaria": "#fbbc05",
+        "acento": "#fbbc05",
+        "borda": "#edebe9"
+      },
+      "fontes": {
+        "titulo": "\"Helvetica\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Helvetica\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "stripe",
+    "nome": "Stripe",
+    "marca": "Stripe",
+    "resumo": "An inspired interpretation of Stripi's design language — a financial-infrastructure brand built on a deep navy ink, an electric indigo primary, and a recurring atmospheric gradient mesh that occupies the upper third of nearly every marketin",
+    "clima": [
+      "claro",
+      "tecnico"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f6f9fc",
+        "texto": "#0d253d",
+        "textoSuave": "#64748d",
+        "primaria": "#533afd",
+        "acento": "#4434d4",
+        "borda": "#e3e8ee"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "supabase",
+    "nome": "Supabase",
+    "marca": "Supabase",
+    "resumo": "An inspired interpretation of Supabaze's design language — an open-source database platform built on a clean white-and-near-black system with a single signature emerald-green CTA, a custom humanist sans display tier, and dense product UI mo",
+    "clima": [
+      "claro",
+      "tecnico",
+      "minimalista"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#fafafa",
+        "texto": "#171717",
+        "textoSuave": "#707070",
+        "primaria": "#3ecf8e",
+        "acento": "#6b01c2",
+        "borda": "#dfdfdf"
+      },
+      "fontes": {
+        "titulo": "\"Helvetica\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Helvetica\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "superhuman",
+    "nome": "Superhuman",
+    "marca": "Superhuman",
+    "resumo": "An inspired interpretation of Superhumon's design language — a fast-email productivity brand split between an editorial dark hero (deep indigo navy with violet-sky atmospheric backdrop and a portrait subject) and a quiet white content body ",
+    "clima": [
+      "claro"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#fafaf8",
+        "texto": "#292827",
+        "textoSuave": "#73706d",
+        "primaria": "#1b1938",
+        "acento": "#0e0c1f",
+        "borda": "#e8e4dd"
+      },
+      "fontes": {
+        "titulo": "\"Roboto\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Roboto\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "tesla",
+    "nome": "Tesla",
+    "marca": "Tesla",
+    "resumo": "Tesla's website is an exercise in radical subtraction — a digital showroom where the product is everything and the interface is almost nothing. The page opens with a full-viewport hero that fills the entire screen with cinematic car photogr",
+    "clima": [
+      "claro",
+      "minimalista",
+      "tecnico",
+      "luxuoso"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#ffffff",
+        "texto": "#171a20",
+        "textoSuave": "#6b7280",
+        "primaria": "#3e6ae1",
+        "acento": "#3e6ae1",
+        "borda": "#eeeeee"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "4px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "theverge",
+    "nome": "The Verge",
+    "marca": "The Verge",
+    "aliases": [
+      "TheVerge"
+    ],
+    "resumo": "The Verge's 2024 redesign feels like somebody wired a Condé Nast magazine to a chiptune soundboard. The canvas is almost-black (`",
+    "clima": [
+      "escuro",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#131313",
+        "superficie": "#131313",
+        "texto": "#ffffff",
+        "textoSuave": "#949494",
+        "primaria": "#5200ff",
+        "acento": "#5200ff",
+        "borda": "#3d00bf"
+      },
+      "fontes": {
+        "titulo": "system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": true
+    }
+  },
+  {
+    "id": "together.ai",
+    "nome": "Together",
+    "marca": "Together",
+    "resumo": "An inspired interpretation of Together AI's design language — an AI infrastructure platform whose surface alternates between near-black hero bands (with a three-color orange-magenta-periwinkle gradient as the single piece of brand chrome) a",
+    "clima": [
+      "claro",
+      "tecnico"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f6f7f9",
+        "texto": "#000000",
+        "textoSuave": "#959494",
+        "primaria": "#000000",
+        "acento": "#fc4c02",
+        "borda": "#959494"
+      },
+      "fontes": {
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "uber",
+    "nome": "Uber",
+    "marca": "Uber",
+    "resumo": "An inspired interpretation of Uber's design language — a transportation-and-delivery super-app brand whose web surface is a black-and-white duet, framed by a custom geometric display sans, accented by a single signature pill shape (radius 9",
+    "clima": [
+      "claro"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#efefef",
+        "texto": "#000000",
+        "textoSuave": "#5e5e5e",
+        "primaria": "#000000",
+        "acento": "#0000ee",
+        "borda": "#e5e7eb"
+      },
+      "fontes": {
+        "titulo": "\"Arial\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Arial\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "vercel",
+    "nome": "Vercel",
+    "marca": "Vercel",
+    "resumo": "An inspired interpretation of Vercel's design language — a developer-platform brand whose surface is a stark black-and-ink duet on near-white canvas, broken at hero scale by a multi-color mesh gradient (cyan / blue / magenta / amber) that a",
+    "clima": [
+      "claro",
+      "tecnico",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#fafafa",
+        "texto": "#171717",
+        "textoSuave": "#4d4d4d",
+        "primaria": "#171717",
+        "acento": "#0070f3",
+        "borda": "#ebebeb"
+      },
+      "fontes": {
+        "titulo": "\"Geist\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Geist\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "16px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "vodafone",
+    "nome": "Vodafone",
+    "marca": "Vodafone",
+    "resumo": "An inspired interpretation of Vodafone's design language — a telecom super-brand whose web surface alternates between editorial photography hero bands with massive uppercase display headlines and clean white content bands, anchored by the c",
+    "clima": [
+      "claro"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f2f2f2",
+        "texto": "#25282b",
+        "textoSuave": "#7e7e7e",
+        "primaria": "#e60000",
+        "acento": "#e60000",
+        "borda": "#e5e7eb"
+      },
+      "fontes": {
+        "titulo": "\"Arial\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Arial\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "6px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "voltagent",
+    "nome": "VoltAgent",
+    "marca": "VoltAgent",
+    "resumo": "An inspired interpretation of Voltagent's design language — a developer-focused AI agent engineering platform whose surface is an unrelenting near-black canvas broken only by a single electric-green brand accent, code-editor mockups inside ",
+    "clima": [
+      "escuro",
+      "tecnico",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#101010",
+        "superficie": "#1a1a1a",
+        "texto": "#f2f2f2",
+        "textoSuave": "#bdbdbd",
+        "primaria": "#00d992",
+        "acento": "#10b981",
+        "borda": "#3d3a39"
+      },
+      "fontes": {
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "12px",
+      "escuro": true
+    }
+  },
+  {
+    "id": "warp",
+    "nome": "Warp",
+    "marca": "Warp",
+    "resumo": "An inspired interpretation of Warp's design language — an agentic terminal-and-development-environment brand whose surface is a warm near-charcoal canvas (a tint warmer than pure black), broken only by clean Inter typography, the occasional",
+    "clima": [
+      "escuro",
+      "tecnico",
+      "minimalista"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#2b2622",
+        "superficie": "#383330",
+        "texto": "#f7f5f0",
+        "textoSuave": "#c9c0ad",
+        "primaria": "#f7f5f0",
+        "acento": "#f7f5f0",
+        "borda": "#3f3a36"
+      },
+      "fontes": {
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "4px",
+      "espaco": "10px",
+      "escuro": true
+    }
+  },
+  {
+    "id": "webflow",
+    "nome": "Webflow",
+    "marca": "Webflow",
+    "resumo": "An inspired interpretation of Webflow's design language — a visual web development platform whose surface contrasts a deep near-black `#080808` primary against a generous white canvas, broken by a five-stop chromatic accent system (purple /",
+    "clima": [
+      "claro",
+      "tecnico",
+      "minimalista"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f6f7f9",
+        "texto": "#080808",
+        "textoSuave": "#363636",
+        "primaria": "#080808",
+        "acento": "#3b89ff",
+        "borda": "#d8d8d8"
+      },
+      "fontes": {
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "wired",
+    "nome": "Wired",
+    "marca": "Wired",
+    "resumo": "An inspired interpretation of Wired's design language — a flagship technology-magazine brand whose surface is a strict editorial duet of stark black wordmark on white canvas, anchored by a tall narrow custom display serif for hero headlines",
+    "clima": [
+      "claro",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#f5f5f5",
+        "texto": "#000000",
+        "textoSuave": "#757575",
+        "primaria": "#000000",
+        "acento": "#057dbc",
+        "borda": "#e0e0e0"
+      },
+      "fontes": {
+        "titulo": "\"Times New Roman\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Helvetica\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "wise",
+    "nome": "Wise",
+    "marca": "Wise",
+    "resumo": "An inspired interpretation of Wise's design language — a global money-transfer brand whose surface combines an unusually heavy near-black display sans (weight 900 at 64–126 px) with a vivid lime-green brand accent, sage-tinted surface neutr",
+    "clima": [
+      "claro",
+      "divertido",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#ffffff",
+        "superficie": "#e8ebe6",
+        "texto": "#0e0f0c",
+        "textoSuave": "#454745",
+        "primaria": "#9fe870",
+        "acento": "#ffc091",
+        "borda": "#e5e7eb"
+      },
+      "fontes": {
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "12px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  },
+  {
+    "id": "x.ai",
+    "nome": "xAI",
+    "marca": "xAI",
+    "aliases": [
+      "X",
+      "Grok"
+    ],
+    "resumo": "An inspired interpretation of xAI's design language — Elon Musk's frontier-AI company whose web surface is a strict near-black canvas broken only by white pill outlines, occasional warm sunset / dusk gradient accents, a custom geometric san",
+    "clima": [
+      "escuro",
+      "tecnico",
+      "ousado"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#0a0a0a",
+        "superficie": "#1a1c20",
+        "texto": "#ffffff",
+        "textoSuave": "#dadbdf",
+        "primaria": "#ffffff",
+        "acento": "#ffffff",
+        "borda": "#212327"
+      },
+      "fontes": {
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "8px",
+      "espaco": "12px",
+      "escuro": true
+    }
+  },
+  {
+    "id": "zapier",
+    "nome": "Zapier",
+    "marca": "Zapier",
+    "resumo": "An inspired interpretation of Zapier's design language — a workflow-automation platform whose surface combines warm-cream neutrals (`#fffefb` canvas, `#f8f4f0` soft cream) with deep coffee ink (`#201515`) and a single saturated orange CTA a",
+    "clima": [
+      "claro"
+    ],
+    "tokens": {
+      "cores": {
+        "fundo": "#fffefb",
+        "superficie": "#f8f4f0",
+        "texto": "#201515",
+        "textoSuave": "#605d52",
+        "primaria": "#ff4f00",
+        "acento": "#ff4f00",
+        "borda": "#e5e7eb"
+      },
+      "fontes": {
+        "titulo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif",
+        "corpo": "\"Inter\", system-ui, \"Segoe UI\", Roboto, sans-serif"
+      },
+      "raio": "12px",
+      "espaco": "12px",
+      "escuro": false
+    }
+  }
+]

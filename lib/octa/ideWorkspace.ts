@@ -113,3 +113,53 @@ export function esquecerVerCodigo(pref: Record<string, boolean>, caminhos: reado
   for (const p of caminhos) delete novo[p];
   return novo;
 }
+
+// ───────────────────────────── Tarefa 7: projeto do servidor ─────────────────────────────
+
+/**
+ * Os arquivos que vieram do servidor (GET do projeto, fim de um turno) viram o estado da IDE. Com `antes`, mantém as
+ * abas que ainda existem; sem aba nenhuma, abre o index.html (ou o 1º arquivo em ordem alfabética).
+ */
+export function estadoDoProjeto(arquivos: Workspace, antes?: Pick<EstadoIDE, "abertos" | "ativo">): EstadoIDE {
+  const abertos = (antes?.abertos ?? []).filter((p) => p in arquivos);
+  const ativo = antes?.ativo && antes.ativo in arquivos ? antes.ativo : abertos[0] ?? null;
+  if (abertos.length) return { arquivos, abertos, ativo };
+  const primeiro = "index.html" in arquivos ? "index.html" : Object.keys(arquivos).sort()[0];
+  return primeiro ? { arquivos, abertos: [primeiro], ativo: primeiro } : { arquivos, abertos: [], ativo: null };
+}
+
+/**
+ * HTML da prévia da página do projeto (vai num `<iframe sandbox="" srcDoc>`): o index.html com cada
+ * `<link rel="stylesheet" href="X.css">` LOCAL trocado pelo conteúdo do arquivo num <style> (srcDoc não tem como
+ * buscar o styles.css). Link externo (Google Fonts) fica. `</` dentro do CSS é escapado. Sem index.html → null.
+ */
+export function montarPrevia(arquivos: Workspace): string | null {
+  const html = arquivos["index.html"];
+  if (typeof html !== "string") return null;
+  return html.replace(/<link\b[^>]*>/gi, (tag) => {
+    if (!/\brel=["']?stylesheet["']?/i.test(tag)) return tag;
+    const href = tag.match(/\bhref=["']([^"']+)["']/i)?.[1];
+    if (!href || /^[a-z]+:|^\/\//i.test(href)) return tag;
+    const caminho = caminhoValido(href.split(/[?#]/)[0]);
+    const css = caminho ? arquivos[caminho] : undefined;
+    return typeof css === "string" ? `<style>${css.replace(/<\//g, "<\\/")}</style>` : tag;
+  });
+}
+
+/** Cache no navegador do projeto aberto (a fonte da verdade é o servidor; isto só mostra rápido ao reabrir). */
+const chaveProjeto = (id: string) => `zaeon.octa.proj.${id}`;
+export function carregarCacheProjeto(id: string): EstadoIDE | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(chaveProjeto(id)) || "null");
+    if (v && typeof v.arquivos === "object" && Array.isArray(v.abertos)) return v;
+  } catch { /* */ }
+  return null;
+}
+export function salvarCacheProjeto(id: string, e: EstadoIDE): void {
+  try { localStorage.setItem(chaveProjeto(id), JSON.stringify(e)); } catch { /* storage cheio/bloqueado: o servidor tem tudo */ }
+}
+
+/** O estilo da biblioteca que o DESIGN.md do projeto diz usar (marcador `<!-- zaeon-estilo: id -->` na 1ª linha). */
+export function estiloDoDesignMd(arquivos: Workspace): string | null {
+  return arquivos["DESIGN.md"]?.match(/^<!-- zaeon-estilo: ([^\s]+) -->/)?.[1] ?? null;
+}

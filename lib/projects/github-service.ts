@@ -90,7 +90,7 @@ export async function listRepos(octokit: AnyOctokit): Promise<{ fullName: string
 }
 
 /**
- * Create a new repository. With a GitHub App INSTALLATION token this works for an
+ * Create a new repository (private by default; `isPrivate: false` = public). With a GitHub App INSTALLATION token this works for an
  * ORG installation (needs Administration:write); creating in a PERSONAL account
  * needs a user OAuth token (POST /user/repos is user-to-server) → surfaced clearly.
  */
@@ -112,6 +112,38 @@ export async function createRepo(octokit: AnyOctokit, p: { name: string; isPriva
     }
     throw e;
   }
+}
+
+/** O repositório existe (e é visível para este token)? 404 = não; outros erros sobem. */
+export async function repoExiste(octokit: AnyOctokit, fullName: string): Promise<boolean> {
+  const { owner, repo } = splitRepo(fullName);
+  try {
+    await octokit.request("GET /repos/{owner}/{repo}", { owner, repo });
+    return true;
+  } catch (e: any) {
+    if (e?.status === 404) return false;
+    throw e;
+  }
+}
+
+/**
+ * Liga o GitHub Pages servindo `branch` na raiz. Se já estava ligado (409), lê o estado atual.
+ * Recém-ligado o site ainda não existe por ~1 min: status "publicando" (não é erro).
+ */
+export async function habilitarPages(
+  octokit: AnyOctokit,
+  p: { repo: string; branch: string },
+): Promise<{ url: string; status: "publicando" | "no_ar" }> {
+  const { owner, repo } = splitRepo(p.repo);
+  let data: any;
+  try {
+    data = (await octokit.request("POST /repos/{owner}/{repo}/pages", { owner, repo, source: { branch: p.branch, path: "/" } })).data;
+  } catch (e: any) {
+    if (e?.status !== 409) throw e;
+    data = (await octokit.request("GET /repos/{owner}/{repo}/pages", { owner, repo })).data;
+  }
+  const url = typeof data?.html_url === "string" && data.html_url ? data.html_url : `https://${owner.toLowerCase()}.github.io/${repo}/`;
+  return { url, status: data?.status === "built" ? "no_ar" : "publicando" };
 }
 
 async function resolveRef(octokit: AnyOctokit, owner: string, repo: string, ref?: string): Promise<string> {
