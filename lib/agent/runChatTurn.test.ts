@@ -79,7 +79,7 @@ describe("runChatTurn", () => {
     const base = { status: "ok", trechos: [{ texto: "luz é onda" }] };
     h.base.mockResolvedValue(base);
     await runChatTurn(null, params(), () => {});
-    expect(h.base).toHaveBeenCalledWith({ userId: "u1", pergunta: "o que é luz?" });
+    expect(h.base).toHaveBeenCalledWith({ userId: "u1", pergunta: "o que é luz?", areas: ["area:geral"] });
     expect(h.onStepOpts.baseConhecimento).toBe(base);
     expect(h.onStepOpts.systemContext).toBe("SYS\n\nMEM\n\nBUSSOLA"); // a base não entra no systemContext
   });
@@ -108,7 +108,7 @@ describe("runChatTurn", () => {
   it("RAG F2: anônimo chama a base com userId null (o módulo responde sem_usuario)", async () => {
     h.base.mockResolvedValue({ status: "sem_usuario", trechos: [] });
     await runChatTurn(null, params({ userId: null }), () => {});
-    expect(h.base).toHaveBeenCalledWith({ userId: null, pergunta: "o que é luz?" });
+    expect(h.base).toHaveBeenCalledWith({ userId: null, pergunta: "o que é luz?", areas: ["area:geral"] });
     expect(h.onStepOpts.baseConhecimento).toEqual({ status: "sem_usuario", trechos: [] });
   });
   it("o dono do turno vem do PARÂMETRO (o worker não tem sessão) e chega no ctx do harness", async () => {

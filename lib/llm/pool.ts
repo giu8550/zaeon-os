@@ -10,7 +10,7 @@
  */
 
 /** Provedor UPSTREAM que serviu a chamada. */
-export type Alvo = "vertex" | "gemini-free" | "cloudflare" | "groq" | "glm" | "contabo" | "huggingface";
+export type Alvo = "vertex" | "gemini-free" | "cloudflare" | "groq" | "cerebras" | "glm" | "contabo" | "huggingface";
 /** Provedores GRÁTIS DE TERCEIROS (com teto diário). A Contabo é nossa: grátis, sem teto de terceiro → fora.
  *  "huggingface" = a reserva PAGA do chat (lib/llm/reservaHf), também fora do pool. */
 export type AlvoPool = Exclude<Alvo, "vertex" | "contabo" | "huggingface">;
@@ -18,7 +18,7 @@ export type AlvoPool = Exclude<Alvo, "vertex" | "contabo" | "huggingface">;
 /** Grupo do LiteLLM. Os fallbacks (`-cf`, `-groq`, `-glm`) moram no config, não aqui. */
 export const MODELO_POOL = "zaeon-pool-lite";
 /** Todos os grupos do pool — o que `scripts/gateway-keys.mjs --pool` põe na allowlist da key. */
-export const GRUPOS_POOL = ["zaeon-pool-lite", "zaeon-pool-cf", "zaeon-pool-groq"] as const;
+export const GRUPOS_POOL = ["zaeon-pool-lite", "zaeon-pool-cerebras", "zaeon-pool-cf", "zaeon-pool-groq"] as const;
 
 /** O model pedido é do pool? (prefixo `zaeon-pool-`) — o envelope usa para NUNCA cair no Vertex. */
 export const ehModeloPool = (model: string | null | undefined): boolean => /^zaeon-pool-/.test(String(model ?? ""));
@@ -34,11 +34,12 @@ export const TETOS_DIA: Record<AlvoPool, { unidade: string; teto: number; renova
   "gemini-free": { unidade: "req", teto: 1000, renova: "dia" },        // AI Studio free, Flash-Lite — conferir no console do provedor
   cloudflare:    { unidade: "neurons", teto: 10_000, renova: "dia" },   // Workers AI free — conferir no console do provedor
   groq:          { unidade: "tokens/min", teto: 8_000, renova: "min" }, // free tier (handoff §9.3) — conferir no console do provedor
+  cerebras:      { unidade: "req", teto: 0, renova: "dia" },            // free tier — preencher com o limite do console da Cerebras
   glm:           { unidade: "req", teto: 0, renova: "dia" },            // off por padrão (§5.2) — conferir no console do provedor
 };
 
-const GRUPO_ALVO: Record<string, AlvoPool> = { "zaeon-pool-lite": "gemini-free", "zaeon-pool-cf": "cloudflare", "zaeon-pool-groq": "groq", "zaeon-pool-glm": "glm" };
-const ALVOS: readonly Alvo[] = ["vertex", "gemini-free", "cloudflare", "groq", "glm", "contabo", "huggingface"];
+const GRUPO_ALVO: Record<string, AlvoPool> = { "zaeon-pool-lite": "gemini-free", "zaeon-pool-cerebras": "cerebras", "zaeon-pool-cf": "cloudflare", "zaeon-pool-groq": "groq", "zaeon-pool-glm": "glm" };
+const ALVOS: readonly Alvo[] = ["vertex", "gemini-free", "cloudflare", "groq", "cerebras", "glm", "contabo", "huggingface"];
 
 /**
  * De onde veio a resposta. O header `x-litellm-model-id` é o `model_info.id` do deployment no
@@ -58,6 +59,7 @@ export function alvoDe(modelString: string | null | undefined, headerModelId?: s
   const base = m.replace(/^(?:gemini|groq|cloudflare|openai|vertex_ai)\//, "");
   if (m.startsWith("gemini/") || /^gemini-[\d.]+-flash-lite(?:-|$)/.test(base)) return "gemini-free";
   if (m.includes("@cf/") || m.startsWith("cloudflare/")) return "cloudflare";
+  if (m.startsWith("cerebras/")) return "cerebras";
   if (m.startsWith("groq/") || /(?:^|\/)gpt-oss-|(?:^|\/)llama-/.test(base)) return "groq";
   if (/(?:^|\/)glm-/.test(base)) return "glm";
   return "vertex";
@@ -70,6 +72,7 @@ const tem = (v: string | undefined) => Boolean(v && v.trim());
 export function poolConfigurado(env: Env = process.env): AlvoPool[] {
   const out: AlvoPool[] = [];
   if (tem(env.GEMINI_FREE_API_KEY)) out.push("gemini-free");
+  if (tem(env.CEREBRAS_API_KEY)) out.push("cerebras");
   if (tem(env.CLOUDFLARE_API_KEY) && tem(env.CLOUDFLARE_ACCOUNT_ID)) out.push("cloudflare");
   if (tem(env.GROQ_API_KEY)) out.push("groq");
   if (tem(env.ZHIPU_API_KEY)) out.push("glm");

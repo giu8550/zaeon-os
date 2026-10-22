@@ -68,7 +68,7 @@ export function lugaresDosNovatos(): Spot[] {
     const r = acasoDe("novatos", id);
     for (let t = 0, feitas = 0; t < n * 16 && feitas < n; t++) {
       const c = ponto(r); if (centros.some((o) => Math.hypot(o.x - c.x, o.z - c.z) < 3.6)) continue;
-      const k = 2 + Math.floor(r() * 4), raio = 0.75 + 0.22 * k, giro = r() * Math.PI * 2, senta = r() < 0.6;
+      const k = 2 + Math.floor(r() * 4), raio = 0.75 + 0.22 * k, giro = r() * Math.PI * 2, senta = r() < 0.9;   // (out/2026: a maior parte ESTUDANDO no chão com o tablet)
       const qs = Array.from({ length: k }, (_, j) => { const a = giro + (j / k) * Math.PI * 2; return { x: c.x + Math.cos(a) * raio, z: c.z + Math.sin(a) * raio }; });
       if (!livre(c) || !qs.every(livre)) continue;
       centros.push(c); feitas++;

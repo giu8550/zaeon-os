@@ -51,7 +51,7 @@ export function custoEstimadoUsd(model: string, u: Pick<Usage, "promptTokens" | 
 }
 
 /** Alvos que não cobram por token: o pool grátis (free tier) e a Contabo (nossa). */
-const ALVOS_GRATIS = new Set(["gemini-free", "cloudflare", "groq", "glm", "contabo"]);
+const ALVOS_GRATIS = new Set(["gemini-free", "cerebras", "cloudflare", "groq", "glm", "contabo"]);
 /** Custo pelo ALVO que serviu: pool grátis/Contabo = 0; vertex, huggingface (pago) ou null = tabela por modelo. */
 export function custoDoAlvoUsd(model: string, u: Pick<Usage, "promptTokens" | "completionTokens" | "cachedTokens">, alvo?: string | null): number {
   return alvo && ALVOS_GRATIS.has(alvo) ? 0 : custoEstimadoUsd(model, u);

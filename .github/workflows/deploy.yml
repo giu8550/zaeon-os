@@ -120,6 +120,7 @@ jobs:
           NEXT_PUBLIC_UNIFIED_RESEARCH_ROOM: ${{ vars.NEXT_PUBLIC_UNIFIED_RESEARCH_ROOM || '' }}
           NEXT_PUBLIC_MAP_HARNESS: ${{ vars.NEXT_PUBLIC_MAP_HARNESS || '' }}
           NEXT_PUBLIC_CHAT_UNICO: ${{ vars.NEXT_PUBLIC_CHAT_UNICO || '' }}
+          NEXT_PUBLIC_BLUEPRINT_PRATICO: ${{ vars.NEXT_PUBLIC_BLUEPRINT_PRATICO || '' }}
           NEXT_PUBLIC_LOUNGE_3D: ${{ vars.NEXT_PUBLIC_LOUNGE_3D || '' }}
           NEXT_PUBLIC_MOBILE_UI: ${{ vars.NEXT_PUBLIC_MOBILE_UI || '' }}
           NEXT_PUBLIC_PROJETOS: ${{ vars.NEXT_PUBLIC_PROJETOS || '' }}
@@ -134,6 +135,8 @@ jobs:
           # Flags de SERVIDOR (runtime): cérebro, gatekeeper, economia AURA.
           MAP_HARNESS: ${{ vars.MAP_HARNESS || '' }}
           CHAT_UNICO: ${{ vars.CHAT_UNICO || '' }}
+          BLUEPRINT_PRATICO: ${{ vars.BLUEPRINT_PRATICO || '' }}
+          GITHUB_TOKEN_BLUEPRINT: ${{ secrets.GITHUB_TOKEN_BLUEPRINT || '' }}
           ESTUDO_GATEKEEPER: ${{ vars.ESTUDO_GATEKEEPER || '' }}
           AURA_ECONOMY: ${{ vars.AURA_ECONOMY || '' }}
         with:
@@ -142,7 +145,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           command_timeout: 25m
-          envs: GOOGLE_CREDENTIALS_B64,GOOGLE_PROJECT_ID_VALUE,OCTA_CRON_SECRET,WITH_VOICE,DB_PUSH,DEPLOY_BRANCH,APP_URL,BETA_DOMAIN,ACME_EMAIL,NEXT_PUBLIC_ESCRITORIO_COWORK,NEXT_PUBLIC_AGENTS_ADMIN,NEXT_PUBLIC_AGENT_AVATARS,NEXT_PUBLIC_UNIFIED_RESEARCH_ROOM,NEXT_PUBLIC_MAP_HARNESS,NEXT_PUBLIC_LOUNGE_3D,NEXT_PUBLIC_CYBER_AVATAR_GLB,NEXT_PUBLIC_CYBER_LANDMARKS,NEXT_PUBLIC_AURA_ECONOMY,NEXT_PUBLIC_REALTIME,NEXT_PUBLIC_VOZ,NEXT_PUBLIC_MOBILE_UI,NEXT_PUBLIC_PROJETOS,NEXT_PUBLIC_MENTORES_TAB,NEXT_PUBLIC_OCTA_CODE,MAP_HARNESS,ESTUDO_GATEKEEPER,AURA_ECONOMY,NEXT_PUBLIC_CHAT_UNICO,CHAT_UNICO
+          envs: GOOGLE_CREDENTIALS_B64,GOOGLE_PROJECT_ID_VALUE,OCTA_CRON_SECRET,WITH_VOICE,DB_PUSH,DEPLOY_BRANCH,APP_URL,BETA_DOMAIN,ACME_EMAIL,NEXT_PUBLIC_ESCRITORIO_COWORK,NEXT_PUBLIC_AGENTS_ADMIN,NEXT_PUBLIC_AGENT_AVATARS,NEXT_PUBLIC_UNIFIED_RESEARCH_ROOM,NEXT_PUBLIC_MAP_HARNESS,NEXT_PUBLIC_LOUNGE_3D,NEXT_PUBLIC_CYBER_AVATAR_GLB,NEXT_PUBLIC_CYBER_LANDMARKS,NEXT_PUBLIC_AURA_ECONOMY,NEXT_PUBLIC_REALTIME,NEXT_PUBLIC_VOZ,NEXT_PUBLIC_MOBILE_UI,NEXT_PUBLIC_PROJETOS,NEXT_PUBLIC_MENTORES_TAB,NEXT_PUBLIC_OCTA_CODE,MAP_HARNESS,ESTUDO_GATEKEEPER,AURA_ECONOMY,NEXT_PUBLIC_CHAT_UNICO,CHAT_UNICO,NEXT_PUBLIC_BLUEPRINT_PRATICO,BLUEPRINT_PRATICO,GITHUB_TOKEN_BLUEPRINT
           script: |
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
@@ -200,14 +203,35 @@ jobs:
 
             # Flags do escritório: só exporta o que veio preenchido (string vazia no shell
             # SOBRESCREVERIA o .env do compose e viraria o default 0).
-            for k in NEXT_PUBLIC_ESCRITORIO_COWORK NEXT_PUBLIC_AGENTS_ADMIN NEXT_PUBLIC_AGENT_AVATARS NEXT_PUBLIC_UNIFIED_RESEARCH_ROOM NEXT_PUBLIC_MAP_HARNESS NEXT_PUBLIC_CHAT_UNICO NEXT_PUBLIC_LOUNGE_3D NEXT_PUBLIC_CYBER_AVATAR_GLB NEXT_PUBLIC_CYBER_LANDMARKS NEXT_PUBLIC_AURA_ECONOMY NEXT_PUBLIC_REALTIME NEXT_PUBLIC_VOZ NEXT_PUBLIC_MOBILE_UI NEXT_PUBLIC_PROJETOS NEXT_PUBLIC_MENTORES_TAB NEXT_PUBLIC_OCTA_CODE MAP_HARNESS CHAT_UNICO ESTUDO_GATEKEEPER AURA_ECONOMY; do
+            for k in NEXT_PUBLIC_ESCRITORIO_COWORK NEXT_PUBLIC_AGENTS_ADMIN NEXT_PUBLIC_AGENT_AVATARS NEXT_PUBLIC_UNIFIED_RESEARCH_ROOM NEXT_PUBLIC_MAP_HARNESS NEXT_PUBLIC_CHAT_UNICO NEXT_PUBLIC_LOUNGE_3D NEXT_PUBLIC_CYBER_AVATAR_GLB NEXT_PUBLIC_CYBER_LANDMARKS NEXT_PUBLIC_AURA_ECONOMY NEXT_PUBLIC_REALTIME NEXT_PUBLIC_VOZ NEXT_PUBLIC_MOBILE_UI NEXT_PUBLIC_PROJETOS NEXT_PUBLIC_MENTORES_TAB NEXT_PUBLIC_OCTA_CODE MAP_HARNESS CHAT_UNICO ESTUDO_GATEKEEPER AURA_ECONOMY NEXT_PUBLIC_BLUEPRINT_PRATICO BLUEPRINT_PRATICO; do
               if [ -n "${!k:-}" ]; then export "$k"; echo "→ flag de build $k=${!k}"; else unset "$k"; fi
             done
+            # token do GitHub do blueprint (Secret GITHUB_TOKEN_BLUEPRINT — o prefixo GITHUB_ é reservado nos Secrets): opcional
+            if [ -n "${GITHUB_TOKEN_BLUEPRINT:-}" ]; then export GITHUB_TOKEN="$GITHUB_TOKEN_BLUEPRINT"; fi
 
             echo "→ Subindo containers (coexist: não toca outras stacks)…"
             $DC up -d --build $NODEPS $SERVICES
             # web é runtime-only p/ a credencial → recria pra recarregar .env.secrets
             $DC up -d --force-recreate --no-deps web
+            # LiteLLM (gateway): não está na lista do deploy e só lê infra/litellm.config.yaml AO SUBIR — trocar
+            # um grupo de modelo (ex.: zaeon-local-lfm2, 2026-10-22) não valia até alguém reiniciar à mão. Recria
+            # quando o config OU a definição dele no compose (limite de memória, envs) mudam; senão não encosta
+            # (recriar derruba o gateway por alguns segundos). A impressão digital fica em .litellm-deploy.sha.
+            if docker ps --format '{{.Names}}' | grep -qx zaeon_litellm; then
+              LITELLM_SHA="$( { cat infra/litellm.config.yaml; $DC config litellm 2>/dev/null; } | sha256sum | cut -d' ' -f1 )"
+              if [ "$(cat .litellm-deploy.sha 2>/dev/null)" != "$LITELLM_SHA" ]; then
+                echo "→ LiteLLM: config/compose mudou — recriando o gateway…"
+                if $DC up -d --force-recreate --no-deps litellm; then
+                  echo "$LITELLM_SHA" > .litellm-deploy.sha
+                  for i in $(seq 1 30); do [ "$(docker inspect -f '{{.State.Health.Status}}' zaeon_litellm 2>/dev/null)" = healthy ] && break; sleep 3; done
+                  echo "  ✓ LiteLLM: $(docker inspect -f '{{.State.Health.Status}}' zaeon_litellm 2>/dev/null)"
+                else
+                  echo "::warning::não deu pra recriar o LiteLLM — segue com o config antigo"
+                fi
+              else
+                echo "→ LiteLLM: config igual, não mexe"
+              fi
+            fi
             # o volume dos arquivos gravados pelo app (/app/.studio) nasceu como root, mas o app roda como `zaeon`:
             # acerta o dono a cada deploy (idempotente) — sem isso, salvar música/podcast/imagem dava 500 (EACCES)
             $DC exec -T -u root web sh -c 'mkdir -p /app/.studio && chown -R zaeon:zaeon /app/.studio' \

@@ -12,8 +12,8 @@ import { CONFIG_PADRAO, aplicarMigracoes, novoLote, sanitizarConfig, totalDaFrot
 import { LIVRE_NA_CHEGADA, salaDoPonto, spotsDe } from "./lugares";
 import { nivelDoPonto } from "../niveis";
 import { NOS } from "../buracos";
-import { alturaNoComplexo, naPiramide } from "../temploCosmico";
-import { CIDADE, colisoresDaCidade, mundo, naSala, salaEm } from "../ceu";
+import { SALAO, alturaNoComplexo, naPiramide } from "../temploCosmico";
+import { ALTURA_LOUNGE, CIDADE, colisoresDaCidade, mundo, naSala, salaEm } from "../ceu";
 /** (estes testes são das regras de HORÁRIO da agenda — 9h, folga, festa à noite: com `semHorario` desligado) */
 const FLAGS_HORARIO = { ...FLAGS_PADRAO, semHorario: false };
 
@@ -363,6 +363,25 @@ describe("SEM HORÁRIO: todo mundo passeando pela Zaeon e pelos lounges (o padr�
       }
       expect(templo, `${min}`).toBeGreaterThanOrEqual(300); expect(zaeon, `${min}`).toBeGreaterThanOrEqual(50); expect(zaeon, `${min}`).toBeLessThanOrEqual(130);
     }
+  });
+  it("ao menos 80% ESTUDANDO (sentado com o tablet ou na cabine), pouca gente no salão da pirâmide, e motos voando dentro do Templo", () => {
+    const f5 = gerarFrota({ lotes: [{ ...FROTA_PADRAO.lotes[0]!, total: 500 }], tamanhoGrupo: 4 }), p5 = planejarDia(f5, DIA, FLAGS_PADRAO);
+    const L = CIDADE.salas.lounge, loc = (p: { x: number; z: number }) => naSala(L, p.x - CIDADE.centro.x, p.z - CIDADE.centro.z);
+    let motoNoTemplo = 0;
+    for (const min of [200, 640, 1100]) {
+      let vis = 0, estudando = 0, salao = 0;
+      for (const [id, { blocos }] of p5.agentes) {
+        const e = estadoDaIA(id, blocos, min, FLAGS_PADRAO, true, false); if (!e.visivel) continue;
+        vis++;
+        if (e.atividade?.startsWith("estudo") && e.pose !== "parado" && e.pose !== "andando" && e.pose !== "moto" && e.pose !== "mochila") estudando++;
+        const q = loc(e), naSalaLounge = areaDe(e, false) === "lounge";
+        if (naSalaLounge && Math.hypot(q.x - SALAO.x, q.z - SALAO.z) < SALAO.r && e.pose !== "moto" && Math.abs(e.y - (CIDADE.pisoY + ALTURA_LOUNGE - SALAO.desce)) < 1) salao++;
+        if (e.pose === "moto" && e.atividade === "estudo-lounge") motoNoTemplo++;   // (trocando de sala no Templo de moto)
+      }
+      expect(estudando / vis, `${min}`).toBeGreaterThanOrEqual(0.8);
+      expect(salao, `${min}`).toBeLessThanOrEqual(30);
+    }
+    expect(motoNoTemplo).toBeGreaterThan(0);
   });
   it("o passeio nos LOUNGES: só por piso (salão, pontes, escadas, campus, lounges), sem atravessar a pirâmide, e a pé contínuo", () => {
     const L = CIDADE.salas.lounge, loc = (p: { x: number; z: number }) => naSala(L, p.x - CIDADE.centro.x, p.z - CIDADE.centro.z);

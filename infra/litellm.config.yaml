@@ -58,6 +58,14 @@ model_list:
       rpm: 30
       tpm: 8000
     model_info: { id: groq }
+  # Cerebras (2026-10-22, decisão do dono: Groq "burro" fica fora da cadeia; Cerebras serve o gpt-oss-120b a ~1300
+  # tok/s). Só conteúdo PÚBLICO, como todo o pool. Sem CEREBRAS_API_KEY a chamada falha e cai na reserva Google.
+  # Limites do free tier: conferir no console do provedor.
+  - model_name: zaeon-pool-cerebras
+    litellm_params:
+      model: cerebras/gpt-oss-120b
+      api_key: os.environ/CEREBRAS_API_KEY
+    model_info: { id: cerebras }
   # ── RESERVA GOOGLE (decisão do dono, 2026-10-20) ─────────────────────────────────────────────
   # Pool grátis esgotado/fora → Vertex flash-lite, PAGO e barato. O pool só leva web pública e o Vertex
   # pago não treina com o que recebe: o risco aqui é só custo, e ele aparece — ledger com alvo "vertex"
@@ -133,7 +141,7 @@ router_settings:
   redis_port: 6379
   # Só o pool tem fallback, e só para a RESERVA GOOGLE (flash-lite pago, barato e no ledger) —
   # nunca zaeon-flash/zaeon-pro, que são o orçamento do chat. Era cf → groq até 2026-10-20 (decisão do dono).
-  fallbacks: [{"zaeon-pool-lite": ["zaeon-reserva-google"]}]
+  fallbacks: [{"zaeon-pool-lite": ["zaeon-pool-cerebras", "zaeon-reserva-google"]}, {"zaeon-pool-cerebras": ["zaeon-reserva-google"]}]
   allowed_fails: 2
   cooldown_time: 60
   num_retries: 1

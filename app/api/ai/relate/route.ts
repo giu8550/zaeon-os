@@ -10,6 +10,7 @@ import { prisma } from "@/src/lib/prisma";
 import { VertexAI } from "@google-cloud/vertexai";
 import { vertexCredentials, vertexTextClientOpts } from "@/lib/ai/vertex-credentials";
 import { geminiText } from "@/lib/ai/gemini-text";
+import { gerarTextoPublico } from "@/lib/llm/publico";
 import { cacheJson, hashKey } from "@/src/lib/cache";
 import { guard } from "@/src/lib/ratelimit";
 import { extractDocText, buildRelateTextContext } from "@/lib/ai/docContext";
@@ -84,7 +85,8 @@ export async function POST(req: Request) {
         try {
             // mesma dupla de metadados → mesma relação (7d).
             const text = await cacheJson(hashKey("relate", { a: { t: ma.title, ab: ma.abstract }, b: { t: mb.title, ab: mb.abstract } }), 60 * 60 * 24 * 7,
-              () => geminiText({ system: SYSTEM, prompt: ctx, temperature: 0.5 }));
+              // só METADADOS públicos dos dois artigos → pool grátis (lib/llm/publico); texto do aluno e PDFs ficam no Vertex
+              async () => (await gerarTextoPublico({ system: SYSTEM, prompt: ctx, temperature: 0.5, surface: "pesquisa", phase: "relacao-artigos", userId: dbUser.id })).texto);
             return NextResponse.json({ text, mode: "vercel" });
         } catch (e: any) {
             return NextResponse.json({ error: "ai_error", text: "Falha ao gerar a relação (leve)." }, { status: 502 });
