@@ -388,4 +388,16 @@ describe("OctaIDE · Corrigir com o Octa", () => {
     expect(corpo.pedido).toContain("o app React");
     expect(corpo.pedido).toContain("Unexpected token (src/App.jsx:3)");
   });
+
+  it("clicar em Corrigir não apaga o rascunho digitado na caixa", async () => {
+    sim.output = [{ type: "stderr", text: "NameError: x", ts: 1 }];
+    await abrirComPy();
+    const caixa = screen.getByPlaceholderText(/Peça ao Octa/) as HTMLTextAreaElement;
+    fireEvent.change(caixa, { target: { value: "depois quero um botão azul" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Corrigir com o Octa/ }));
+    await waitFor(() => expect(chamadas((u, i) => u === "/api/octa/turnos" && i?.method === "POST")).toHaveLength(1));
+    const corpo = JSON.parse(String(chamadas((u, i) => u === "/api/octa/turnos" && i?.method === "POST")[0][1]!.body));
+    expect(corpo.pedido).toContain("NameError: x");
+    expect(caixa.value).toBe("depois quero um botão azul");
+  });
 });

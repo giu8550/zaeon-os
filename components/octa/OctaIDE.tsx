@@ -488,7 +488,8 @@ export default function OctaIDE() {
     const pedido = texto.trim();
     const p = projetoRef.current;
     if (!pedido || !p || turno || enviando) return;
-    setInput(""); setAvisoAgente(null); setEnviando(true);
+    if (pedido === input.trim()) setInput(""); // texto de fora (Corrigir com o Octa) não apaga o rascunho do aluno
+    setAvisoAgente(null); setEnviando(true);
     try {
       await salvarAgora();
       const foto = ideRef.current;
