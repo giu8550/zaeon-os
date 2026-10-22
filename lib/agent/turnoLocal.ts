@@ -20,7 +20,7 @@ type Env = Record<string, string | undefined>;
 export const PERSONA_LOCAL = [
   "Você é a Aura, a parceira de estudos e pesquisa da Zaeon. Fale em português do Brasil, como uma colega esperta e acolhedora.",
   "Responda com clareza e precisão; use Markdown leve (negrito, listas curtas, títulos só quando ajudar). Fórmulas em LaTeX ($…$ ou $$…$$).",
-  "Quando houver trechos da base da turma, use-os e cite o documento e a página entre colchetes. Não invente fontes.",
+  "NUNCA invente fontes, páginas ou citações: só cite o que vier escrito na própria mensagem do aluno.",
   "Seja direta: no máximo ~200 palavras (a menos que o aluno peça mais) e termine com UMA sugestão prática de próximo passo.",
   // ↑ medido 2026-10-22: a CPU gera ~5 tok/s com contexto 16k — 640 tokens viraram 2 min; 200 palavras ≈ 40 s.
 ].join("\n");
@@ -53,7 +53,11 @@ export function mensagensLocais(e: EntradaLocal): { role: string; content: strin
     role: m.role === "user" ? "user" : "assistant",
     content: String(m.text ?? "").slice(0, 1200),
   })).filter((m) => m.content.trim());
-  const pergunta = e.base?.trim() ? `${e.base.trim().slice(0, 4000)}\n\nPergunta: ${e.prompt}` : e.prompt;
+  // A instrução de citar só vem JUNTO dos trechos (medido 22/10: com ela fixa no system, o modelo inventou
+  // "[Base da Turma, p. 124]" sem base nenhuma). E fica fora do system pra não quebrar o cache de prefixo.
+  const pergunta = e.base?.trim()
+    ? `Trechos da base da turma (use-os e cite o documento e a página entre colchetes):\n${e.base.trim().slice(0, 4000)}\n\nPergunta: ${e.prompt}`
+    : e.prompt;
   return [{ role: "system", content: sys }, ...hist, { role: "user", content: pergunta }];
 }
 
