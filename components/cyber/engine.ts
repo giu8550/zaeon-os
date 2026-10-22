@@ -2085,6 +2085,19 @@ export class CyberEngine {
   private rastros: { linhas: THREE.LineSegments; pos: Float32Array; p: THREE.Vector3[] } | null = null; private vinheta: HTMLDivElement | null = null;
   /** os RASTROS (poeira cósmica passando por você rumo ao centro, cada vez mais rápida e comprida), o TREMOR da câmera e a
    *  VINHETA violeta fechando as bordas — tudo crescendo com a tragada; fora dela, nada */
+  /** os ESTILHAÇOS que giram em volta do cubo no topo da torre de TI têm CORPO (out/2026, o dono: "não parecem ter
+   *  colisão"): quem encosta (a pé, voando ou de moto) é empurrado pra fora deles, com um tranco */
+  private empurrarEstilhacos() {
+    if (this.nivel !== "lounge" || !this.cidade || this.bordo || this.tunel || this.menu) return;
+    const eu = this.eu, cy = eu.alt + (this.moto !== null ? 0.6 : 0.9), folga = this.moto !== null ? 1.4 : 0.6;
+    for (const s of this.cidade.estilhacos()) {
+      const dx = eu.pos.x - s.x, dz = eu.pos.z - s.z, dy = cy - s.y, R = s.r + folga, d = Math.hypot(dx, dy, dz);
+      if (d >= R) continue;
+      const h = Math.hypot(dx, dz), k = R - d + 0.02;
+      if (h > 1e-3) { eu.pos.x += (dx / h) * k; eu.pos.z += (dz / h) * k; } else eu.pos.x += k;
+      this.tremor = Math.max(this.tremor, 0.06);
+    }
+  }
   private atmosferaTragada(dt: number) {
     const v = this.fio, k = v ? progressoTragada(v) : 0;
     this.travessiaBN(dt, k);
@@ -4948,6 +4961,7 @@ export class CyberEngine {
     const minha = this.moto !== null ? this.instMotos.get("eu:r") : undefined;
     for (const m of this.instMotos.values()) { if (m === minha) { if (this.regioes.has(m.g)) this.soltarRegiaoDe(m.g); continue; } this.regiaoPerto(m.g, "moto"); }
 
+    this.empurrarEstilhacos();
     this.atualizarCamera(dt);
     this.atmosferaTragada(dt);
     this.passoGravidade(dt, t);
