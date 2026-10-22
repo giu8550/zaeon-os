@@ -10,7 +10,8 @@ import { papelDe, podeEscrever, type Papel } from "@/lib/cartolina/access";
 import { fasesAprovadas } from "./fases";
 import { COMPOR_SYSTEM, lerPlano, mesclarComposicao, promptComposicao } from "./compor";
 import { buscarRepos } from "./github";
-import { SURFACE_BLUEPRINT, blueprintOn, docVazio, sanitizarDoc, type Area, type DocBlueprint, type Fase } from "./tipos";
+import { documentosDaResposta, juntarDocumentos } from "@/lib/videodoc/documentos";
+import { MAX_BASE, SURFACE_BLUEPRINT, blueprintOn, docVazio, sanitizarDoc, type Area, type DocBlueprint, type Documento, type Fase } from "./tipos";
 
 export const INTERVALO_RECOMPOR_MS = 120_000;
 const SURFACE_CONVERSA = "estudos";
@@ -104,9 +105,44 @@ export type EntradaTurno = {
   userId: string | null; scopeId: string | null;
   sinal: { estudavel: boolean; tituloSugerido: string } | null;
   prompt: string; answerTexto: string; history: { role: string; text: string }[];
+  /** a resposta estruturada do turno (as fontes, a base, os livros, o trabalho → os DOCUMENTOS do estudo) */
+  answer?: Parameters<typeof documentosDaResposta>[0];
   agora?: number; forcar?: boolean;
   db?: BlueprintDb; gen?: GenJson; repos?: typeof buscarRepos; passosBase?: (tema: string) => Promise<string[]>;
+  /** o vídeo de um documento-base (lib/videodoc/server.garantirVideo) — injetável nos testes */
+  videos?: GarantirVideo;
+  estadosVideos?: (ids: string[]) => Promise<Record<string, string>>;
 };
+type GarantirVideo = (i: { userId: string; documento: Documento; blueprintId: string }) => Promise<{ videoId: string } | { motivo: string }>;
+/** o estado de cada vídeo (pra soltar o lugar dos que falharam) — injetável nos testes */
+type EstadosVideos = (ids: string[]) => Promise<Record<string, string>>;
+const estadosReais: EstadosVideos = async (ids) => {
+  if (!ids.length) return {};
+  const [{ prisma }, { estadoVisivel }] = await Promise.all([import("@/src/lib/prisma"), import("@/lib/videodoc/server")]);
+  const arts = await prisma.studioArtifact.findMany({ where: { id: { in: ids } }, select: { id: true, status: true, createdAt: true, updatedAt: true } });
+  return Object.fromEntries(ids.map((id) => { const a = arts.find((x) => x.id === id); return [id, a ? estadoVisivel(a) : "error"]; }));
+};
+
+/** cada documento-BASE ganha o seu vídeo com a Zaeon holograma (flag VIDEO_DOC), no máximo MAX_BASE com vídeo por estudo */
+export async function videosDosDocumentosBase(id: string, userId: string, doc: DocBlueprint, db: BlueprintDb, garantir?: GarantirVideo, estados?: EstadosVideos): Promise<number> {
+  const vs = await import("@/lib/videodoc/server");
+  if (!garantir && !vs.videoDocOn()) return 0;
+  const g = garantir ?? vs.garantirVideo;
+  // vídeo que FALHOU (sem texto, erro, interrompido) não segura um dos 3 lugares do estudo: o documento solta o vídeo
+  // (e só continua base se a Zaeon o escolher de novo)
+  const st = await (estados ?? estadosReais)(doc.documentos.filter((d) => d.videoId).map((d) => d.videoId!)).catch(() => ({} as Record<string, string>));
+  const falhos = new Set(doc.documentos.filter((d) => d.videoId && st[d.videoId] === "error").map((d) => d.id));
+  const comVideo = doc.documentos.filter((d) => d.videoId && !falhos.has(d.id)).length;
+  const faltam = doc.documentos.filter((d) => d.base && !falhos.has(d.id) && !d.videoId).slice(0, Math.max(0, MAX_BASE - comVideo));
+  const ids: Record<string, string> = {};
+  for (const d of faltam) { const r = await g({ userId, documento: d, blueprintId: id }); if ("videoId" in r) ids[d.id] = r.videoId; }
+  if (!Object.keys(ids).length && !falhos.size) return 0;
+  await gravarDoc(id, userId, (atual) => ({ ...atual, documentos: atual.documentos.map((d) => {
+    if (falhos.has(d.id)) { const { videoId: _v, ...sem } = d; void _v; return { ...sem, base: false }; }
+    return ids[d.id] && !d.videoId ? { ...d, videoId: ids[d.id] } : d;
+  }) }), db);
+  return Object.keys(ids).length;
+}
 
 const genPadrao = (userId: string, scopeId: string): GenJson => async <T,>(system: string, user: string) => {
   const [{ geminiJson }, { GEMINI_MODEL_FLASH }] = await Promise.all([import("@/lib/scholar/gemini"), import("@/lib/ai/model")]);
@@ -129,8 +165,13 @@ export async function blueprintDoTurno(i: EntradaTurno): Promise<"off" | "nao-es
       linha = await db.cartolina.findUnique({ where: { id } });
       if (!linha) return "falhou";
     }
-    const doc = docDaLinha(linha);
-    if (!i.forcar && agora - doc.compostoEm < INTERVALO_RECOMPOR_MS) return "aguardando";
+    const novosDocs = documentosDaResposta(i.answer);
+    const doc0 = docDaLinha(linha), doc = { ...doc0, documentos: juntarDocumentos(doc0.documentos, novosDocs) };
+    if (!i.forcar && agora - doc.compostoEm < INTERVALO_RECOMPOR_MS) {
+      // sem recompor agora, mas os documentos do turno não se perdem
+      if (doc.documentos.length !== doc0.documentos.length) await gravarDoc(linha.id, userId, (atual) => ({ ...atual, documentos: juntarDocumentos(atual.documentos, novosDocs) }), db);
+      return "aguardando";
+    }
     const conversa = [...i.history.slice(-10), { role: "user", text: i.prompt }, { role: "assistant", text: i.answerTexto }].filter((m) => m.text?.trim());
     const passosBase = doc.turnos === 0 ? await (i.passosBase ?? passosPadrao)(doc.titulo).catch(() => []) : undefined;
     const gen = i.gen ?? genPadrao(userId, scopeId);
@@ -138,10 +179,11 @@ export async function blueprintDoTurno(i: EntradaTurno): Promise<"off" | "nao-es
     if (!plano) return "falhou";
     const achados = await (i.repos ?? buscarRepos)(plano.termosRepo).catch(() => []);
     const r = await gravarDoc(linha.id, userId, (atual) => {
-      const novo = mesclarComposicao(atual, plano, agora);
+      const novo = mesclarComposicao({ ...atual, documentos: juntarDocumentos(atual.documentos, novosDocs) }, plano, agora);
       if (achados.length) { const meus = atual.repos.filter((x) => x.meu); novo.repos = [...meus, ...achados.filter((x) => !meus.some((m) => m.nome === x.nome))]; }
       return novo;
     }, db);
+    if (r.ok) await videosDosDocumentosBase(linha.id, userId, r.view.doc, db, i.videos, i.estadosVideos).catch((e) => console.warn("[blueprint] vídeos:", e instanceof Error ? e.message : e));
     return r.ok ? "composto" : "falhou";
   } catch (e: unknown) {
     console.warn("[blueprint] turno falhou:", e instanceof Error ? e.message : e);

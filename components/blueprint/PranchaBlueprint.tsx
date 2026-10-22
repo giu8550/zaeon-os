@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { layoutBlueprint, type Caixa, type Fio } from "@/lib/blueprint/layout";
+import { videoDocUiOn } from "@/lib/videodoc/documentos";
 import type { DocBlueprint } from "@/lib/blueprint/tipos";
 import { COR, Modulo, type AcoesModulo } from "./Modulos";
 
@@ -21,7 +22,7 @@ export default function PranchaBlueprint({ id, doc, acoes, onFixar, sobre }: {
   const [alturas, setAlturas] = useState<Record<string, number>>({});
   useEffect(() => { setAlturas({}); }, [id]);   // os ids dos módulos ("passo:p1"…) se repetem entre blueprints
   const medir = useCallback((k: string, el: HTMLDivElement | null) => { if (!el) return; const h = el.offsetHeight; setAlturas((a) => (Math.abs((a[k] ?? 0) - h) > 1 ? { ...a, [k]: h } : a)); }, []);
-  const { caixas, fios } = useMemo(() => layoutBlueprint(doc, (k) => alturas[k] ?? ALTURA_PADRAO), [doc, alturas]);
+  const { caixas, fios } = useMemo(() => layoutBlueprint(doc, (k) => alturas[k] ?? ALTURA_PADRAO, { videos: videoDocUiOn() }), [doc, alturas]);
 
   // ── arrastar (fundo = pan; carimbo = mover e fixar o card) ──
   const arrasto = useRef<{ tipo: "pan" | "card"; id?: string; x0: number; y0: number; ox: number; oy: number } | null>(null);

@@ -7,10 +7,32 @@
 import type { ReactNode } from "react";
 import { NOME_FASE, type Critico, type DocBlueprint, type Fase } from "@/lib/blueprint/tipos";
 import FiguraIso from "./FiguraIso";
+import { MOTIVO_ERRO, duracaoTexto, useVideoDoc } from "@/components/videodoc/useVideoDoc";
+
+const NOME_TIPO_DOC: Record<string, string> = { artigo: "artigo", livro: "livro", base: "da sua base", trabalho: "seu trabalho" };
+/** o card do VÍDEO de um documento-base: o estado da geração e o ▶ que abre o player com a Zaeon holograma */
+function CardVideo({ carimbo, titulo, tipo, videoId, abrir, onArrastar }: { carimbo: string; titulo: string; tipo: string; videoId?: string; abrir?: (id: string) => void; onArrastar?: (e: React.PointerEvent) => void }) {
+  const { video, falhou } = useVideoDoc(videoId);
+  const st = !videoId ? "na fila" : falhou ? "erro" : !video ? "…" : video.status === "done" ? "pronto" : video.status === "error" ? "erro" : "gerando";
+  return (
+    <CardPrancha cor={COR.video} carimbo={carimbo} direita={<span className="font-mono text-[9.5px] text-sky-200/60">{NOME_TIPO_DOC[tipo] ?? tipo}</span>} onArrastar={onArrastar}>
+      <div className="flex items-start gap-3">
+        <button type="button" disabled={st !== "pronto"} onPointerDown={(e) => e.stopPropagation()} onClick={() => videoId && abrir?.(videoId)} aria-label="Assistir"
+          className="grid h-11 w-11 flex-none place-items-center rounded-full border text-[15px] transition hover:bg-white/10 disabled:opacity-40" style={{ borderColor: COR.video, color: COR.video, boxShadow: st === "pronto" ? `0 0 14px ${COR.video}55` : undefined }}>▶</button>
+        <div className="min-w-0">
+          <div className="line-clamp-2 font-mono text-[12.5px] font-semibold">{titulo}</div>
+          <div className="mt-1 font-mono text-[10.5px]" style={{ color: st === "erro" ? COR.critico : "rgba(186,230,253,.7)" }}>
+            {st === "pronto" ? `a Zaeon explica · ${duracaoTexto(video!.duracao)}` : st === "erro" ? (MOTIVO_ERRO[video?.erro ?? ""] ?? "não deu pra gerar") : st === "gerando" ? <><span className="animate-pulse">▮</span> a Zaeon está preparando o vídeo…</> : st === "na fila" ? "na fila (limite de vídeos de hoje ou aguardando a Zaeon)" : "…"}
+          </div>
+        </div>
+      </div>
+    </CardPrancha>
+  );
+}
 
 export const COR = {
   estudo: "#7fe0ff", passo: "#ffd36b", critico: "#ff4d5e", provado: "#7dffb0", figura: "#7fe0ff", repos: "#7fe0ff",
-  conversas: "#ff9ec7", demo: "#ffd36b", produto: "#c9b6ff", proximos: "#e8f6ff", nota: "#e8f6ff", avaliacao: "#ffd36b",
+  conversas: "#ff9ec7", demo: "#ffd36b", produto: "#c9b6ff", proximos: "#e8f6ff", nota: "#e8f6ff", avaliacao: "#ffd36b", video: "#8cf4ff",
 } as const;
 const MONO = "ui-monospace, SFMono-Regular, Menlo, monospace";
 const dois = (n: number) => String(n).padStart(2, "0");
@@ -65,7 +87,7 @@ function Botao({ children, cor, onClick, titulo, desabilitado }: { children: Rea
   return <button type="button" title={titulo} disabled={desabilitado} onPointerDown={(e) => e.stopPropagation()} onClick={onClick} className="rounded-sm border px-2 py-1 font-mono text-[10.5px] tracking-wide transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40" style={{ borderColor: `${cor}88`, color: cor }}>{children}</button>;
 }
 
-export type AcoesModulo = { avaliar?: () => void; avaliando?: boolean; recompor?: () => void; recompondo?: boolean; reorganizar?: () => void; temFixos?: boolean; podeEditar: boolean; extra?: (id: string) => ReactNode };
+export type AcoesModulo = { abrirVideo?: (videoId: string) => void; avaliar?: () => void; avaliando?: boolean; recompor?: () => void; recompondo?: boolean; reorganizar?: () => void; temFixos?: boolean; podeEditar: boolean; extra?: (id: string) => ReactNode };
 
 /** o card de um módulo pelo id do layout */
 export function Modulo({ id, doc, acoes, onArrastar }: { id: string; doc: DocBlueprint; acoes: AcoesModulo; onArrastar?: (e: React.PointerEvent) => void }) {
@@ -136,6 +158,11 @@ export function Modulo({ id, doc, acoes, onArrastar }: { id: string; doc: DocBlu
         {trava.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{trava.map((c) => <span key={c.id} className="rounded-sm border px-1.5 py-0.5 font-mono text-[10px]" style={{ borderColor: c.status === "provado" ? COR.provado : COR.critico, color: c.status === "provado" ? COR.provado : COR.critico }}>{c.status === "provado" ? "✓" : "●"} {codigoCritico(doc, c)} {c.status === "provado" ? "provado" : "trava"}</span>)}</div>}
       </CardPrancha>
     );
+  }
+  if (id.startsWith("video:")) {
+    const d = doc.documentos.find((k) => `video:${k.id}` === id)!;
+    const i = doc.documentos.filter((k) => k.base || k.videoId).indexOf(d);
+    return <CardVideo carimbo={`VÍDEO · V-${dois(i + 1)}`} titulo={d.titulo} tipo={d.tipo} videoId={d.videoId} abrir={acoes.abrirVideo} onArrastar={onArrastar} />;
   }
   if (id === "repos") {
     return (

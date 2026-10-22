@@ -26,6 +26,9 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const art = await prisma.studioArtifact.findUnique({ where: { id: params.id } });
   if (!art || art.ownerId !== userId) return NextResponse.json({ error: "Não encontrado" }, { status: 404 });
+  // o VÍDEO DO DOCUMENTO (lib/videodoc) é compartilhado (documento público serve a todo mundo) e conta no teto do dia:
+  // apagar quebraria o card dos outros e zeraria o teto — não sai por aqui
+  if (art.kind === "video-doc") return NextResponse.json({ error: "O vídeo do documento não se apaga por aqui." }, { status: 409 });
   if (art.storageRef) await deleteStudioFile(art.id, art.storageRef);
   // aula: um áudio por beat (.studio/<id>-<beat>.<ext>)
   if (art.kind === "aula") {

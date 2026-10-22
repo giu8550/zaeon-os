@@ -177,7 +177,7 @@ export async function runChatTurn(
           const [{ blueprintOn }, { textoDaResposta }] = await Promise.all([import("@/lib/blueprint/tipos"), import("@/lib/blueprint/patch")]);
           if (!blueprintOn()) return;
           const { blueprintDoTurno } = await import("@/lib/blueprint/server");
-          await blueprintDoTurno({ userId, scopeId, sinal, prompt, answerTexto: textoDaResposta(answer), history: params.history });
+          await blueprintDoTurno({ userId, scopeId, sinal, prompt, answerTexto: textoDaResposta(answer), history: params.history, answer: tcc ? { ...answer, tcc } : answer });
         })
         .catch(() => null);
     }

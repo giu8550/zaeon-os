@@ -42,6 +42,10 @@ export type Rubrica = { rigor: number; originalidade: number; usabilidade: numbe
 export const DIMENSOES: readonly (keyof Rubrica)[] = ["rigor", "originalidade", "usabilidade", "viabilidade", "impacto"];
 export type Avaliacao = { fase: Fase; em: number; nota: Rubrica; parecer: string; aprovada: boolean };
 export type Nota = { id: string; titulo?: string; corpo?: string; autor?: string };
+/** um DOCUMENTO citado na conversa ou da pessoa (lib/videodoc/documentos). Os `base` (até 3, a Zaeon marca) ganham VÍDEO */
+export type TipoDocumento = "artigo" | "livro" | "base" | "trabalho";
+export const TIPOS_DOCUMENTO: readonly TipoDocumento[] = ["artigo", "livro", "base", "trabalho"];
+export type Documento = { id: string; titulo: string; tipo: TipoDocumento; url?: string; ref?: string; base: boolean; videoId?: string };
 
 export type DocBlueprint = {
   v: 1; titulo: string; resumo: string; area: Area;
@@ -52,12 +56,15 @@ export type DocBlueprint = {
   passos: Passo[]; pecas: Peca[]; ligacoes: [string, string][]; criticos: Critico[];
   repos: Repo[]; termosRepo: string[]; participantes: Participante[]; proximos: string[];
   avaliacoes: Avaliacao[]; notas: Nota[];
+  /** os documentos do estudo (coletados das respostas da Aura) — os `base` viram vídeo com a Zaeon holograma */
+  documentos: Documento[];
   /** os módulos que a pessoa ARRASTOU (ficam onde foram soltos até "reorganizar") */
   fixos: Record<string, { x: number; y: number }>;
   compostoEm: number; turnos: number;
 };
 
 /** MAX_CRITICOS = os ABERTOS (até 3 por fase); os PROVADOS nunca são cortados por eles (entrega real não some) */
+export const MAX_DOCUMENTOS = 20, MAX_BASE = 3;
 export const MAX_PASSOS = 10, MAX_PECAS = 7, MAX_CRITICOS = 12, MAX_PROVADOS = 60, MAX_ABERTOS_POR_FASE = 3, MAX_REPOS = 6, MAX_PROXIMOS = 6, MAX_NOTAS = 30;
 const MAX_TITULO = 200, MAX_CORPO = 1200, MAX_FONTES = 6, MAX_PARTICIPANTES = 8, MAX_AVALIACOES = 12, MAX_FIXOS = 80;
 const ID_RE = /^[\w:.-]{1,64}$/;
@@ -76,7 +83,7 @@ export function docVazio(titulo: string, agora: number): DocBlueprint {
   return {
     v: 1, titulo: titulo.trim().slice(0, MAX_TITULO) || "Estudo", resumo: "", area: "outra", fase: 1, aguardandoMentor: false,
     passos: [], pecas: [], ligacoes: [], criticos: [], repos: [], termosRepo: [], participantes: [], proximos: [],
-    avaliacoes: [], notas: [], fixos: {}, compostoEm: 0, turnos: 0,
+    avaliacoes: [], notas: [], documentos: [], fixos: {}, compostoEm: 0, turnos: 0,
   };
 }
 
@@ -139,6 +146,16 @@ export function sanitizarNota(v: unknown): Nota | null {
   if (t) n.titulo = t; if (c) n.corpo = c; if (idOk(o.autor)) n.autor = o.autor;
   return n.titulo || n.corpo ? n : null;
 }
+const OID = /^[a-f0-9]{24}$/i;
+export function sanitizarDocumento(v: unknown): Documento | null {
+  const o = obj(v); const titulo = str(o?.titulo, 300);
+  if (!o || !idOk(o.id) || !titulo || !(TIPOS_DOCUMENTO as readonly unknown[]).includes(o.tipo)) return null;
+  const d: Documento = { id: o.id, titulo, tipo: o.tipo as TipoDocumento, base: o.base === true };
+  const url = urlSegura(o.url), ref = str(o.ref, 200);
+  if (url) d.url = url; if (ref) d.ref = ref;
+  if (typeof o.videoId === "string" && OID.test(o.videoId)) d.videoId = o.videoId;
+  return d;
+}
 const sanitizarTextos = (v: unknown, n: number, max: number) => arr(v).map((x) => str(x, max)).filter((x): x is string => !!x).slice(0, n);
 
 export function sanitizarDoc(raw: unknown): DocBlueprint | null {
@@ -168,6 +185,7 @@ export function sanitizarDoc(raw: unknown): DocBlueprint | null {
     proximos: sanitizarTextos(o.proximos, MAX_PROXIMOS, 240),
     avaliacoes: arr(o.avaliacoes).map(sanitizarAvaliacao).filter((a): a is Avaliacao => !!a).slice(-MAX_AVALIACOES),
     notas: unicos(arr(o.notas).map(sanitizarNota).filter((n): n is Nota => !!n)).slice(0, MAX_NOTAS),
+    documentos: unicos(arr(o.documentos).map(sanitizarDocumento).filter((x): x is Documento => !!x)).slice(0, MAX_DOCUMENTOS),
     fixos, compostoEm: Math.round(num(o.compostoEm, 0, 9e15) ?? 0), turnos: Math.round(num(o.turnos, 0, 1e9) ?? 0),
   };
   const produto = obj(o.produto), demo = obj(o.demo);
