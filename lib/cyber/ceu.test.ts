@@ -1,3 +1,4 @@
+import { LOTES } from "./motos";
 import { PLATS, RASTA } from "./temploCosmico";
 import { describe, expect, it } from "vitest";
 import { CAPELA_NA_ZAEON, PISTA, PISO_FESTA, BURACO_NEGRO, CIDADE, ESCADAS, FIO, alturaDoFio, alturaDaEscada, DEGRAU, ESCADA_LEVA, bocaDeEscada, chaoDaNave, colisoresDaCidade, foraDaIlha, mundo, resolverCidade, resolverCidadeLivre, naIlhaPrincipal, ilhotaEm, alturaIlhota, ILHOTAS, daSala, paredeDaSala, MOVEIS, PALCO, MESA_DJ, alturaNaCidade, naCabineDJ, naSala, pontoDaCabineDJ, rumoDoDJ, naPistaDeDanca, rumoDaPista, bocaDaEscada, bocaDoElevador, posDaViagem, TORRE_DJ, pontoDaEscada, uDaViagem, rumoDaViagem, VIAGEM_ESCADA, naEscadaDoLounge, rotDaSala, ALTURA_LOUNGE, ESCADA_LOUNGE, inicioDaPonta, naEscadaLocal, pisoNoAr, pisoDeVoo, LOUNGE_ANGULO, LOUNGE_MEIA_ABERTURA, DOCA_ANGULO, DOCA_MEIA_ABERTURA, solidosDaCidade, naTorreDJ, foraDaTorreDJ, CAMPO_DJ, BN_NA_SALA, TRELICA, type NomeSala } from "./ceu";
@@ -360,7 +361,7 @@ describe("MOTO na Zaeon mega (voo com os sólidos da cidade)", () => {
   });
   it("as vagas de moto da GARAGEM ficam em cima da laje dela e longe dos outros sólidos (dá pra decolar)", () => {
     const g = mundo(CIDADE.salas.garagem);
-    for (const v of vagas().filter((q) => q.ceu)) for (const s of solidosDaCidade()) {
+    for (const v of vagas().filter((q) => q.ceu && LOTES[q.lote]!.id === "garagem")) for (const s of solidosDaCidade()) {   // (a da PLATAFORMA da Zaeon fica no piso da central)
       if (Math.hypot(s.x - g.x, s.z - g.z) < 1e-6) { expect(Math.hypot(v.x - s.x, v.z - s.z)).toBeLessThan(s.r - 4); expect(v.alt).toBeGreaterThan(s.topo - CIDADE.pisoY - 0.01); }
       else expect(Math.hypot(v.x - s.x, v.z - s.z)).toBeGreaterThan(s.r + 2);
     }

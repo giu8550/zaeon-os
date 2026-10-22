@@ -15,23 +15,23 @@ import { BOCA_SAIDA_SALAO, SALAO } from "./temploCosmico";
 export type V3 = { x: number; y: number; z: number };
 export const FIO = {
   /** a distância (m, do centro da Zaeon) até o buraco negro do canto e o raio dele (o horizonte) */
-  alcance: 8000, bnR: 140,
+  alcance: 7500, bnR: 980,   // (out/2026, o dono: "buracos negros 7× maiores — massivos; perto deles somos pequenos": era 140)
   /** a altura (m, acima do piso) em que o buraco negro fica e o teto da pista no meio do caminho */
   bnY: 260, teto: 330,
   /** a ESPIRAL final: quantas voltas e de que raio começa (fecha até o horizonte) */
-  voltas: 1.2, espiralR: 600,
+  voltas: 1.2, espiralR: 1750,   // (≈1,8× o raio — com o buraco negro 7× maior)
   /** as curvas da pista: quantas e de que largura (m) */
   curvas: 2, largura: 160,
   /** a boca (o anel na borda, onde se pisa) */
   bocaR: 3.2,
   /** onde o efeito do buraco negro começa (m do centro dele): a tempestade, o vento */
-  zonaEfeito: 2400,
+  zonaEfeito: 6000,
   /** a que distância (m) da pista o FLUXO pega quem chega (a pé na borda, de mochila, de moto ou de carro) */
   captura: 9,
   /** a pista de SAÍDA de cada sala (da porta antiga pra fora, até o buraco negro que leva de volta pro hub): comprimento */
-  saidaComprimento: 480,
+  saidaComprimento: 2300,   // (o buraco negro de saída, 7× maior, mais longe da sala: ~1,8 km do horizonte até a porta)
   /** o buraco negro de SAÍDA de cada sala: menor que os dos cantos (e o magnetismo dele, proporcional) */
-  bnSaidaR: 60,
+  bnSaidaR: 420,
 } as const;
 
 /** cada sala tem a sua pista e o CANTO dela (o ângulo, local da ilha, do buraco negro) */
@@ -162,12 +162,20 @@ export function naAtracao(pistas: readonly FioCosmico[], p: V3): FioCosmico | nu
   for (const f of pistas) if (Math.hypot(p.x - f.bn.x, p.y - f.bn.y, p.z - f.bn.z) < f.bn.r + raioDeAtracao(f)) return f;
   return null;
 }
-export type Tragada = { f: FioCosmico; r0: number; r: number; ang: number; y: number; sentido: 1 | -1; abriu: boolean };
-/** começa a ser tragado de `p` (local da ilha): as coordenadas em volta do buraco negro (raio, ângulo, altura) */
-export function comecarTragada(f: FioCosmico, p: V3): Tragada {
+/** a CAPTURA (a 1ª cutscene — a entrada na zona de eventos; o dono, out/2026: "uma transição suave, coerente com a
+ *  distância"): nos primeiros `dur` s ninguém é arrancado — a pessoa segue DESLIZANDO na velocidade em que vinha,
+ *  freando, enquanto a órbita a assume aos poucos; depois, a espiral (a 2ª — até o núcleo) */
+export const CAPTURA = { dur: 6 } as const;
+export type Tragada = { f: FioCosmico; r0: number; r: number; ang: number; y: number; sentido: 1 | -1; abriu: boolean; /** s desde a captura, de onde e a que velocidade ela vinha */ t: number; p0: V3; v0: V3 };
+/** começa a ser tragado de `p` (local da ilha), vindo a `v0` (m/s): as coordenadas em volta do buraco negro */
+export function comecarTragada(f: FioCosmico, p: V3, v0: V3 = { x: 0, y: 0, z: 0 }): Tragada {
   const r = Math.max(f.bn.r * 1.2, Math.hypot(p.x - f.bn.x, p.z - f.bn.z)), ang = Math.atan2(p.z - f.bn.z, p.x - f.bn.x);
-  return { f, r0: r, r, ang, y: p.y, sentido: 1, abriu: false };
+  return { f, r0: r, r, ang, y: p.y, sentido: 1, abriu: false, t: 0, p0: { ...p }, v0: { ...v0 } };
 }
+/** ainda na CAPTURA (a 1ª cutscene)? e quanto dela já foi (0..1) */
+export const naCaptura = (v: Tragada) => v.t < CAPTURA.dur;
+export const progressoCaptura = (v: Tragada) => Math.max(0, Math.min(1, v.t / CAPTURA.dur));
+const s3c = (x: number) => { const c = Math.max(0, Math.min(1, x)); return c * c * (3 - 2 * c); };
 /** quanto da tragada já foi (0 = acabou de ser pego → 1 = no horizonte) */
 export const progressoTragada = (v: Tragada) => 1 - Math.max(0, Math.min(1, v.r / Math.max(1, v.r0)));
 /** um passo da tragada: o raio fecha (devagar no começo, cada vez mais rápido) rumo ao EIXO, o giro acelera e a altura
@@ -175,19 +183,31 @@ export const progressoTragada = (v: Tragada) => 1 - Math.max(0, Math.min(1, v.r 
  *  baixo sobe, e todo mundo cai no horizonte por cima. `chegou` = tocou o horizonte (o clarão, e o outro lado) */
 export function passoTragada(v: Tragada, dt: number): { chegou: boolean } {
   const R = v.f.bn.r, k = progressoTragada(v);
-  const vr = 22 + 360 * k * k, vt = 90 + 420 * k * (1 - k * 0.7);
+  v.t += dt;
+  // (na escala do buraco negro; na CAPTURA a órbita mal anda e vai assumindo — a pessoa ainda desliza no embalo dela)
+  const e = 0.08 + 0.92 * s3c(v.t / CAPTURA.dur);
+  const vr = R * (0.09 + 1.3 * k * k) * e, vt = R * (0.35 + 1.5 * k * (1 - k * 0.7)) * e;
   v.r = Math.max(0, v.r - vr * dt);
   v.ang += ((vt / Math.max(v.r, R * 0.5)) * dt) * v.sentido;
-  const yAlvo = v.f.bn.y + R * (1.05 + 1.6 * (1 - k));   // (bem acima do disco no começo, descendo até o polo)
+  // (acima do disco, fechando até o polo — com o buraco negro 7× maior, sem a escalada de quilômetros: no começo, perto
+  //  de onde se vinha, e só no fim por cima)
+  const yAlvo = v.f.bn.y + R * (1.05 + 0.25 * (1 - k)) * Math.min(1, 0.35 + k);
   v.y += (yAlvo - v.y) * Math.min(1, dt * (0.9 + 2.5 * k));
-  v.y = Math.max(v.y, v.f.bn.y + R * 0.4 + R * 0.65 * k);   // (nunca abaixo do eixo — e cada vez mais por cima)
+  v.y = Math.max(v.y, v.f.bn.y + R * 0.15 + R * 0.9 * k * k);   // (nunca abaixo do disco — e cada vez mais por cima)
   return { chegou: Math.hypot(v.r, v.y - v.f.bn.y) <= R * ATRACAO.abre };
 }
 /** onde a tragada está (local da ilha) e pra onde se olha (o rumo: girando e caindo pra dentro) */
 export function posDaTragada(v: Tragada): V3 & { rumo: number } {
   const c = Math.cos(v.ang), s = Math.sin(v.ang), b = v.f.bn;
   const dx = -s * v.sentido - c * 0.6, dz = c * v.sentido - s * 0.6;
-  return { x: b.x + c * v.r, y: v.y, z: b.z + s * v.r, rumo: Math.atan2(dx, dz) };
+  const orb = { x: b.x + c * v.r, y: v.y, z: b.z + s * v.r, rumo: Math.atan2(dx, dz) };
+  if (!naCaptura(v)) return orb;
+  // a CAPTURA: o embalo (freando até parar no fim dela) se misturando com a órbita
+  const D = CAPTURA.dur, tau = v.t - (v.t * v.t) / (2 * D), w = s3c(v.t / D);
+  const emb = { x: v.p0.x + v.v0.x * tau, y: v.p0.y + v.v0.y * tau, z: v.p0.z + v.v0.z * tau };
+  const vx = v.v0.x * (1 - v.t / D), vz = v.v0.z * (1 - v.t / D), rumoEmb = Math.hypot(vx, vz) > 1 ? Math.atan2(vx, vz) : orb.rumo;
+  let dr = orb.rumo - rumoEmb; while (dr > Math.PI) dr -= 2 * Math.PI; while (dr < -Math.PI) dr += 2 * Math.PI;
+  return { x: emb.x + (orb.x - emb.x) * w, y: emb.y + (orb.y - emb.y) * w, z: emb.z + (orb.z - emb.z) * w, rumo: rumoEmb + dr * w };
 }
 /** voando (de carro, de moto, de mochila) PERTO DO HORIZONTE de um buraco negro: a pista dele (cai nele — o fluxo leva
  *  pela espiral até o fim); `p` local da ilha */
