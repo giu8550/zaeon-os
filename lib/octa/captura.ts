@@ -30,7 +30,9 @@
  * `puppeteer-core` (Apache-2.0) é carregado por import dinâmico ESCONDIDO do webpack (mesmo truque de
  * secoes/render.ts e lib/queue): nunca entra no grafo do Next. Nenhum token/segredo passa por aqui.
  */
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 export type ErroCaptura = "sem_index" | "chromium_ausente" | "tempo_esgotado" | "falha_render";
 export type ResultadoCaptura =
@@ -163,19 +165,37 @@ function argsChromium(): string[] {
   return args;
 }
 
+let homeChromium: string | null = null;
+/**
+ * Ambiente do processo do Chromium: SÓ isto. Sem `env`, o Puppeteer repassa o process.env inteiro do `web`
+ * (DATABASE_URL, NEXTAUTH_SECRET, chaves de API…) e, sem sandbox, um bug no renderer poderia lê-lo.
+ * HOME numa pasta temporária própria (nada do usuário do servidor).
+ */
+export const CHAVES_ENV_CHROMIUM = ["PATH", "HOME", "LANG", "TZ"] as const;
+export function envChromium(): Record<(typeof CHAVES_ENV_CHROMIUM)[number], string> {
+  homeChromium ??= mkdtempSync(join(tmpdir(), "octa-chromium-"));
+  return { PATH: "/usr/local/bin:/usr/bin:/bin", HOME: homeChromium, LANG: "C.UTF-8", TZ: "UTC" };
+}
+
+/** Opções de launch do Puppeteer (puras, testadas: ambiente mínimo, pipe, args). */
+export function opcoesDeLancamento(caminho: string): Record<string, unknown> {
+  return {
+    executablePath: caminho,
+    headless: true,
+    pipe: true,
+    args: argsChromium(),
+    env: envChromium(),
+    defaultViewport: null,
+    handleSIGINT: false, handleSIGTERM: false, handleSIGHUP: false,
+  };
+}
+
 async function obterNavegador(caminho: string): Promise<any> {
   if (navegador?.connected) return navegador;
   if (abrindo) return abrindo;
   abrindo = (async () => {
     const pptr = await carregarPuppeteer();
-    const b = await pptr.launch({
-      executablePath: caminho,
-      headless: true,
-      pipe: true,
-      args: argsChromium(),
-      defaultViewport: null,
-      handleSIGINT: false, handleSIGTERM: false, handleSIGHUP: false,
-    });
+    const b = await pptr.launch(opcoesDeLancamento(caminho));
     b.on?.("disconnected", () => { if (navegador === b) navegador = null; });
     navegador = b;
     // Abriu depois de uma captura estourar o tempo (ninguém mais vai agendar): garante o fechamento por ócio.
@@ -183,6 +203,18 @@ async function obterNavegador(caminho: string): Promise<any> {
     return b;
   })().finally(() => { abrindo = null; });
   return abrindo;
+}
+
+type Matar = (pid: number, sinal: NodeJS.Signals) => unknown;
+/**
+ * Mata o Chromium e TODOS os filhos (renderer, GPU, utilitários). O Puppeteer o lança `detached`, então ele
+ * lidera o próprio grupo de processos: `kill(-pid)` pega o grupo inteiro. Matar só o líder deixaria os filhos
+ * órfãos pendurados no PID 1 do container (por isso o compose também liga `init: true`). Fallback: só o líder.
+ */
+export function matarProcesso(proc: { pid?: number; kill: (s: NodeJS.Signals) => unknown } | null | undefined, matar: Matar = process.kill) {
+  if (!proc?.pid) return;
+  try { matar(-proc.pid, "SIGKILL"); return; } catch { /* grupo já não existe (ESRCH) ou Windows */ }
+  try { proc.kill("SIGKILL"); } catch { /* já morreu */ }
 }
 
 /** Fecha (e, se travar, mata) o navegador atual. */
@@ -194,7 +226,8 @@ async function derrubarNavegador(): Promise<void> {
   try {
     await Promise.race([b.close(), new Promise((r) => setTimeout(r, 3_000))]);
   } catch { /* segue pro kill */ }
-  try { if (proc && proc.exitCode === null) proc.kill("SIGKILL"); } catch { /* já morreu */ }
+  // mesmo com o líder já encerrado, filhos podem ter ficado no grupo
+  matarProcesso(proc);
 }
 
 function agendarFechamento() {
@@ -220,8 +253,13 @@ function naFila<T>(fn: () => Promise<T>): Promise<T> {
 
 // ─────────────────────────── captura ───────────────────────────
 
-/** O que a captura viu (só para testes: decisões de rede, URLs do topo e dos quadros, DOM; espera extra antes da foto). */
-export type Diagnostico = { pedidos: { url: string; decisao: Decisao }[]; urlFinal?: string; quadros?: string[]; html?: string; esperaMs?: number };
+/** O que a captura viu (só para testes: decisões de rede, URLs do topo e dos quadros, DOM; esperas antes da foto). */
+export type Diagnostico = { pedidos: { url: string; decisao: Decisao }[]; urlFinal?: string; quadros?: string[]; html?: string;
+  /** Espera fixa antes da foto. */
+  esperaMs?: number;
+  /** Espera (até 5 s) até isto ser verdade antes da foto. */
+  esperarAte?: (d: Diagnostico) => boolean;
+};
 
 const limitar = (n: number | undefined, min: number, max: number, padrao: number) =>
   Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n as number))) : padrao;
@@ -258,7 +296,7 @@ export async function capturarComDiagnostico(
 
     const trabalho = (async (): Promise<ResultadoCaptura> => {
       const b = await obterNavegador(caminho);
-      contexto = await b.createBrowserContext();
+      contexto = await b.createBrowserContext({ downloadBehavior: { policy: "deny" } });
       if (estourou) { await contexto.close().catch(() => undefined); return { ok: false, erro: "tempo_esgotado" }; }
       const page = await contexto.newPage();
       await page.setJavaScriptEnabled(false);
@@ -293,6 +331,10 @@ export async function capturarComDiagnostico(
         if (e?.name !== "TimeoutError") throw e;
       }
       if (diag?.esperaMs) await new Promise((r) => setTimeout(r, diag.esperaMs));
+      if (diag?.esperarAte) {
+        const limite = Date.now() + 5_000;
+        while (!diag.esperarAte(diag) && Date.now() < limite && !estourou) await new Promise((r) => setTimeout(r, 50));
+      }
       if (estourou) return { ok: false, erro: "tempo_esgotado" };
       const buf: Uint8Array = await page.screenshot({ type: "jpeg", quality: QUALIDADE_JPEG, fullPage: false });
       if (diag) {

@@ -1,7 +1,7 @@
-import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import {
-  capturaDisponivel, capturarComDiagnostico, capturarPagina, decidirPedido, encerrarCaptura, tipoPorExtensao,
-  type Diagnostico,
+  CHAVES_ENV_CHROMIUM, capturaDisponivel, capturarComDiagnostico, capturarPagina, decidirPedido, encerrarCaptura,
+  matarProcesso, opcoesDeLancamento, tipoPorExtensao, type Diagnostico,
 } from "./captura";
 
 const CHROMIUM = capturaDisponivel();
@@ -29,6 +29,31 @@ describe("captura — sempre (sem navegador)", () => {
     process.env.OCTA_CHROMIUM_PATH = "/caminho/que/nao/existe/chromium";
     expect(capturaDisponivel()).toBe(false);
     expect(await capturarPagina({ "index.html": pagina("oi") })).toEqual({ ok: false, erro: "chromium_ausente" });
+  });
+
+  it("Chromium recebe só o ambiente mínimo (nenhum segredo do process.env)", () => {
+    process.env.SEGREDO_DE_TESTE = "nao-pode-vazar";
+    try {
+      const env = opcoesDeLancamento("/x/chromium").env as Record<string, string>;
+      expect(Object.keys(env).sort()).toEqual([...CHAVES_ENV_CHROMIUM].sort());
+      expect(Object.values(env)).not.toContain("nao-pode-vazar");
+      expect(env.HOME).not.toBe(process.env.HOME);
+      expect(opcoesDeLancamento("/x/chromium").pipe).toBe(true);
+    } finally { delete process.env.SEGREDO_DE_TESTE; }
+  });
+
+  it("matar o navegador mata o grupo de processos inteiro (pid negativo), com fallback no líder", () => {
+    const matar = vi.fn();
+    const proc = { pid: 4242, kill: vi.fn() };
+    matarProcesso(proc, matar);
+    expect(matar).toHaveBeenCalledWith(-4242, "SIGKILL");
+    expect(proc.kill).not.toHaveBeenCalled();
+
+    const falha = vi.fn(() => { throw Object.assign(new Error("ESRCH"), { code: "ESRCH" }); });
+    matarProcesso(proc, falha);
+    expect(proc.kill).toHaveBeenCalledWith("SIGKILL");
+
+    expect(() => matarProcesso(null, matar)).not.toThrow();
   });
 
   it("content-type pela extensão", () => {
@@ -110,12 +135,12 @@ describe.skipIf(!CHROMIUM)("captura — com Chromium", () => {
   }, 30_000);
 
   it("<meta http-equiv=refresh> não navega", async () => {
-    const diag: Diagnostico = { pedidos: [], esperaMs: 800 };
+    // espera o refresh disparar (o pedido pra evil aparecer), até 5 s — sem sono fixo
+    const diag: Diagnostico = { pedidos: [], esperarAte: (d) => d.pedidos.some((p) => p.url.startsWith("https://evil.example")) };
     const r = await capturarComDiagnostico({
       "index.html": pagina(`<p>FICA</p>`, `<meta http-equiv="refresh" content="0;url=https://evil.example">`),
     }, {}, diag);
     expect(r.ok).toBe(true);
-    // dá tempo do refresh disparar e conferir que a página continua a do projeto
     expect(diag.urlFinal).toBe("http://projeto.octa.invalid/index.html");
     expect(diag.html).toContain("FICA");
     expect(diag.pedidos).toContainEqual({ url: "https://evil.example/", decisao: "bloquear" });
