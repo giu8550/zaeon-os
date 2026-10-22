@@ -5,6 +5,8 @@
  *   Para quando chega `fim`/`erro`, ou quando o turno está esperando o aluno (`aguardando_aprovacao`: o evento
  *   `aprovacao` pode chegar um instante antes do status virar — aí pergunta mais uma vez). aprovar(sim/não) →
  *   POST …/aprovar e retoma o polling do mesmo seq. 409 turno_ativo = acompanha o turno que já roda no projeto.
+ * Sem evento novo por `semNovidadeMs` (padrão 12 min, acima do PRESO_MS do servidor): para de perguntar e marca
+ * `semNoticia` — a IDE oferece "verificar de novo" (retomarPolling). Normalmente o servidor colhe o turno preso antes.
  * Nada de segredo passa por aqui: os eventos já vêm redigidos do servidor.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -19,13 +21,19 @@ export type EstadoTurno = {
   resposta: string | null;
   /** A última pergunta ao servidor falhou (rede/5xx); continua tentando. */
   falhaRede: boolean;
+  /** Parou de perguntar: muito tempo sem evento novo. O turno pode estar vivo; retomarPolling() volta a olhar. */
+  semNoticia?: boolean;
 };
 export type InicioTurno = { ok: true; turnoId: string; jaAtivo?: boolean } | { ok: false; status: number; erro?: string };
 
 const MAX_FALHAS = 30; // ~1 min sem conseguir falar com o servidor → para (o aluno pode recarregar)
+/** Teto do polling sem novidade: acima do PRESO_MS (10 min) do servidor, que já devolve o turno preso como erro. */
+export const SEM_NOVIDADE_MS = 12 * 60_000;
 
-export function useTurnoOcta(opts: { intervaloMs?: number; onParou?: (t: EstadoTurno) => void } = {}) {
+export function useTurnoOcta(opts: { intervaloMs?: number; semNovidadeMs?: number; onParou?: (t: EstadoTurno) => void } = {}) {
   const intervalo = opts.intervaloMs ?? 1000;
+  const semNovidadeMs = opts.semNovidadeMs ?? SEM_NOVIDADE_MS;
+  const ultimaNovidade = useRef(0);
   const [turno, setTurno] = useState<EstadoTurno | null>(null);
   const atual = useRef<EstadoTurno | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -83,18 +91,21 @@ export function useTurnoOcta(opts: { intervaloMs?: number; onParou?: (t: EstadoT
       if (!prox.pendente && status === "rodando" && ultimo?.tipo === "aprovacao") {
         prox.pendente = { tool: String(ultimo.dados.tool ?? ""), ...(typeof ultimo.dados.path === "string" ? { path: ultimo.dados.path } : {}) };
       }
-      definir(prox);
+      if (novos.length || status !== t.status) ultimaNovidade.current = Date.now();
       const acabou = novos.some((e) => e.tipo === "fim" || e.tipo === "erro") || prox.status === "pronto" || prox.status === "erro" || prox.status === "aguardando_aprovacao";
-      if (acabou) { parar(); onParou.current?.(prox); return; }
+      if (acabou) { definir(prox); parar(); onParou.current?.(prox); return; }
+      if (Date.now() - ultimaNovidade.current >= semNovidadeMs) { definir({ ...prox, semNoticia: true }); parar(); return; }
+      definir(prox);
       timer.current = setTimeout(() => laco(g, 0)(), intervalo);
     };
     return passo;
-  }, [intervalo, parar]);
+  }, [intervalo, semNovidadeMs, parar]);
 
   /** Passa a acompanhar um turno (novo, retomado do cache ou o que já estava ativo no projeto). */
   const acompanhar = useCallback((turnoId: string, base?: Partial<EstadoTurno>) => {
     parar();
-    definir({ turnoId, eventos: [], status: "rodando", pendente: null, resposta: null, falhaRede: false, ...base });
+    definir({ turnoId, eventos: [], status: "rodando", pendente: null, resposta: null, falhaRede: false, ...base, semNoticia: false });
+    ultimaNovidade.current = Date.now();
     const g = geracao.current;
     timer.current = setTimeout(() => laco(g)(), 0);
   }, [laco, parar]);
@@ -126,9 +137,15 @@ export function useTurnoOcta(opts: { intervaloMs?: number; onParou?: (t: EstadoT
     return ok;
   }, [acompanhar]);
 
+  /** Volta a perguntar pelo turno que parou por falta de notícia (do último seq que já tem). */
+  const retomarPolling = useCallback(() => {
+    const t = atual.current;
+    if (t) acompanhar(t.turnoId, { eventos: t.eventos, status: t.status, pendente: t.pendente, resposta: t.resposta });
+  }, [acompanhar]);
+
   const limpar = useCallback(() => { parar(); definir(null); }, [parar]);
 
   useEffect(() => parar, [parar]);
 
-  return { turno, iniciar, acompanhar, aprovar, parar, limpar };
+  return { turno, iniciar, acompanhar, aprovar, retomarPolling, parar, limpar };
 }

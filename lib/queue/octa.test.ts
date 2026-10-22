@@ -181,6 +181,17 @@ describe("lib/queue/octa · turno em job", () => {
     expect(eventos(id).some((e) => e.tipo === "resultado" && e.dados.codigo === "recusado_pelo_aluno")).toBe(true);
   });
 
+  it("octa_publicar no turno passa pela MESMA checagem anti-marca do botão: index.html com a marca → recusa, zero commit", async () => {
+    const { designMdComMarcador } = await import("@/lib/octa/design/indice");
+    db.octaProjeto.rows[0].arquivos = { "DESIGN.md": designMdComMarcador("nintendo-2001"), "index.html": "<html><body><p>loja no estilo Nintendo</p></body></html>" };
+    modelo = roteiro([{ content: null, tool_calls: [call("p1", "octa_publicar", {})] }, { content: "vou reescrever" }]);
+    const id = await novoTurno("publica");
+    await processarTurno(deps, id);
+    expect(gh.commits).toHaveLength(0);
+    const res = eventos(id).find((e) => e.tipo === "resultado" && e.dados.tool === "octa_publicar")!;
+    expect(res.dados).toMatchObject({ ok: false, codigo: "marca_no_conteudo" });
+  });
+
   it("nenhum evento (nem o estado salvo) contém o token quando o GitHub lança erro com ele", async () => {
     gh = octokitFalso({ quebrar: true });
     modelo = roteiro([
@@ -250,6 +261,29 @@ describe("lib/queue/octa · turno em job", () => {
     expect(turno(preso)!.status).toBe("erro");
     expect(eventos(preso).at(-1)).toMatchObject({ tipo: "erro", dados: { codigo: "tempo_esgotado" } });
     await vi.waitFor(() => expect(turno(turnoId)!.status).toBe("pronto"));
+  });
+
+  it("listarEventos colhe o 'rodando' sem sinal de vida (restart no meio): devolve erro tempo_esgotado e destrava", async () => {
+    const preso = await novoTurno();
+    const r0 = await listarEventos(db as unknown as TurnosDb, { userId: "u1", turnoId: preso, depois: 0 }, agora);
+    expect(r0!.status).toBe("rodando"); // ainda fresco: nada muda
+    agora = new Date(agora.getTime() + 11 * 60_000);
+    const r = await listarEventos(db as unknown as TurnosDb, { userId: "u1", turnoId: preso, depois: 0 }, agora);
+    expect(r!.status).toBe("erro");
+    expect(r!.eventos.at(-1)).toMatchObject({ tipo: "erro", dados: { codigo: "tempo_esgotado" } });
+    expect(turno(preso)!.status).toBe("erro");
+    // aguardando_aprovacao não expira por aqui (espera o aluno)
+    const espera = await novoTurno();
+    turno(espera)!.status = "aguardando_aprovacao";
+    agora = new Date(agora.getTime() + 60 * 60_000);
+    expect((await listarEventos(db as unknown as TurnosDb, { userId: "u1", turnoId: espera, depois: 0 }, agora))!.status).toBe("aguardando_aprovacao");
+  });
+
+  it("listarEventos de outro dono não colhe o turno preso de ninguém", async () => {
+    const preso = await novoTurno();
+    agora = new Date(agora.getTime() + 11 * 60_000);
+    expect(await listarEventos(db as unknown as TurnosDb, { userId: "u2", turnoId: preso, depois: 0 }, agora)).toBeNull();
+    expect(turno(preso)!.status).toBe("rodando");
   });
 
   it("reapTurnosPresos marca só os 'rodando' velhos", async () => {

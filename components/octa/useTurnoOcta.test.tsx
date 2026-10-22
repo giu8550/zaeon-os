@@ -127,4 +127,28 @@ describe("useTurnoOcta", () => {
     expect(result.current.turno?.falhaRede).toBe(false);
     expect(result.current.turno?.status).toBe("pronto");
   });
+
+  it("sem evento novo por semNovidadeMs: para de perguntar, marca semNotícia e retomarPolling volta do último seq", async () => {
+    const onParou = vi.fn();
+    filas = [{ status: "rodando", eventos: [{ seq: 1, tipo: "pensando", dados: { passo: 1 } }] }];
+    const { result } = renderHook(() => useTurnoOcta({ onParou, semNovidadeMs: 5000 }));
+    await act(async () => { await result.current.iniciar("p1", "x"); await vi.advanceTimersByTimeAsync(0); });
+    // 1 s depois do evento: ainda perguntando
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(result.current.turno?.semNoticia).toBeFalsy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(result.current.turno?.semNoticia).toBe(true);
+    const n = chamadasEventos().length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect(chamadasEventos()).toHaveLength(n); // parou de verdade
+    expect(onParou).not.toHaveBeenCalled(); // o turno não acabou: só a IDE parou de perguntar
+    expect(result.current.turno?.status).toBe("rodando");
+
+    filas = [{ status: "erro", eventos: [{ seq: 2, tipo: "erro", dados: { codigo: "tempo_esgotado" } }] }];
+    await act(async () => { result.current.retomarPolling(); await vi.advanceTimersByTimeAsync(0); });
+    expect(chamadasEventos().at(-1)).toBe("/api/octa/turnos/t1/eventos?depois=1");
+    expect(result.current.turno?.status).toBe("erro");
+    expect(result.current.turno?.semNoticia).toBeFalsy();
+    expect(onParou).toHaveBeenCalledTimes(1);
+  });
 });

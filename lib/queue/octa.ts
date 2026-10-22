@@ -12,7 +12,8 @@
  *   só um turno `aguardando_aprovacao` aceita (troca atômica de status → aprovar 2× dá `nao_aguardando`).
  * - Eventos (OctaEvento, seq crescente por turno) nunca levam segredo: vêm do onEvento do laço (nome de tool,
  *   caminho, código, resumo já redigido) ou são códigos fixos daqui. Mensagem crua de erro (gateway, octokit) não entra.
- * - Um turno ativo por projeto. `rodando` sem sinal de vida há PRESO_MS vira `erro` (tempo_esgotado) e não trava.
+ * - Um turno ativo por projeto. `rodando` sem sinal de vida há PRESO_MS vira `erro` (tempo_esgotado) e não trava:
+ *   colhido no boot do worker, ao abrir turno novo e ao listar os eventos dele (a IDE que está olhando destrava).
  * - Uma execução por vez: processarTurno reivindica o turno (`runId`, troca atômica) e toda escrita dele é cercada
  *   por esse runId; job repetido/stalled não roda de novo (e o worker usa maxStalledCount: 0 — stalled = falha → reaper).
  *   `@@unique([turnoId, seq])` impede dois eventos com o mesmo seq; colisão = essa execução para.
@@ -135,12 +136,22 @@ export async function reapTurnosPresos(db: TurnosDb, agora = new Date(), onde: R
   return n;
 }
 
+/** `rodando` sem sinal de vida há mais de PRESO_MS? (o processo que rodava morreu: deploy, restart, OOM) */
+const estaPreso = (t: TurnoRow, agora: Date) => t.status === "rodando" && new Date(t.updatedAt).getTime() < agora.getTime() - PRESO_MS;
+
 export async function listarEventos(
-  db: TurnosDb, p: { userId: string; turnoId: string; depois: number },
+  db: TurnosDb, p: { userId: string; turnoId: string; depois: number }, agora = new Date(),
 ): Promise<{ status: StatusTurno; eventos: EventoRow[]; pendente: { tool: string; path?: string } | null; resposta: string | null } | null> {
   if (!ID_OBJECT.test(String(p.turnoId))) return null;
-  const t: TurnoRow | null = await db.octaTurno.findFirst({ where: { id: p.turnoId, userId: p.userId } });
-  if (!t) return null;
+  const achado: TurnoRow | null = await db.octaTurno.findFirst({ where: { id: p.turnoId, userId: p.userId } });
+  if (!achado) return null;
+  let t: TurnoRow = achado;
+  // o reaper só roda no boot do worker e ao abrir turno novo; quem está olhando o turno preso também o colhe,
+  // senão a IDE fica esperando (e só-leitura) pra sempre depois de um restart no meio do turno
+  if (estaPreso(t, agora)) {
+    await erroNoTurno(db, t.id, "tempo_esgotado", agora);
+    t = (await db.octaTurno.findFirst({ where: { id: t.id, userId: p.userId } })) ?? t;
+  }
   const eventos: EventoRow[] = await db.octaEvento.findMany({ where: { turnoId: t.id, seq: { gt: p.depois } }, orderBy: { seq: "asc" }, take: 500 });
   // da tool pendente o cliente só vê nome e caminho (args podem trazer o arquivo inteiro)
   const path = (t.pendente?.args as any)?.path;
