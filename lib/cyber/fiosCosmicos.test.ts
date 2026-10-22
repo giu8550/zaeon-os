@@ -1,3 +1,4 @@
+import { DETRITOS } from "./detritos";
 import { describe, expect, it } from "vitest";
 import { CIDADE, colisoresDaCidade, mundo } from "./ceu";
 import { VOO } from "./voo";
@@ -13,8 +14,8 @@ describe("as pistas cósmicas (os fluxos até os buracos negros dos cantos)", ()
     for (const f of fios) {
       const L = CIDADE.salas[f.sala], a = Math.atan2(L.z, L.x), b = Math.atan2(f.boca.z, f.boca.x);
       expect(Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)))).toBeLessThan(0.02);
-      expect(Math.hypot(f.bn.x, f.bn.z)).toBeGreaterThan(7000);   // (7,5 km: os buracos negros 7× maiores ficaram um pouco mais perto — o mapa de voo é de 9,8 km)   // MUITO longe da cidadela (o portal entre os níveis)
-      const w = mundo(f.bn); expect(Math.hypot(w.x, w.z) + FIO.espiralR).toBeLessThan(VOO.raioMapa);   // dentro do mapa de voo: dá pra ir até ele de carro, de moto ou de mochila
+      expect(Math.hypot(f.bn.x, f.bn.z)).toBeGreaterThan(8500);   // MUITO longe da cidadela — como reais buracos negros   // MUITO longe da cidadela (o portal entre os níveis)
+      const w = mundo(f.bn); expect(Math.hypot(w.x, w.z) - f.bn.r * DETRITOS.doce).toBeLessThan(VOO.raioMapa - 300);   // o ponto de CAPTURA dentro do mapa de voo: dá pra ir até lá de carro, de moto ou de mochila (dali, a tragada leva)
       cantos.add(Math.round(Math.atan2(f.bn.z, f.bn.x) * 10));
     }
     expect(cantos.size).toBe(4);
