@@ -64,3 +64,28 @@ describe("chamar pelo nome · #468 nome próprio em qualquer posição", () => {
     expect(chama("pode seguir em frente aura com a explicação")).toEqual([]);
   });
 });
+
+describe("chamar pelo nome · #551 falar SOBRE a agente não chama", () => {
+  const COM_NINA = [...AGENTES, { agentKey: "nina", nome: "Nina" }];
+  it.each([
+    ["teo explicou mal, explica você", []],
+    ["minha amiga nina também estuda isso", []],
+    ["pergunta pro teo depois", []],
+    ["teo e zenita são agentes de quê?", []],
+    ["o professor teo falou isso", []],
+    ["teo foi ótimo ontem", []],
+    ["ontem a zenita respondeu rápido", []],
+  ] as const)("não chama: %s", (t, esperado) => {
+    expect(chamadasPeloNome(t, COM_NINA)).toEqual(esperado);
+  });
+  it.each([
+    ["pode seguir em frente teo com a explicação", ["teo"]],
+    ["e aí teo tudo bem?", ["teo"]],
+    ["teo me ajuda com isso", ["teo"]],
+    ["teo, explicou bem, agora o resto", ["teo"]],
+    ["teo e zenita, me ajudem", ["teo", "zenita"]],
+    ["nina tem um exemplo?", ["nina"]],
+  ] as const)("chama: %s", (t, esperado) => {
+    expect(chamadasPeloNome(t, COM_NINA)).toEqual(esperado);
+  });
+});
