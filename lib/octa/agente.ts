@@ -221,7 +221,9 @@ export const FERRAMENTAS_LANDING: ToolDef[] = [
         for (const [p, c] of Object.entries(w)) if (/\.html?$/i.test(p) && mencionaMarca(c, marca)) return recusaMarca(marca, `em ${p}`);
       }
       const mensagem = typeof a?.mensagem === "string" && a.mensagem.trim() ? a.mensagem.trim().slice(0, 200) : undefined;
-      const r = await publicar({ arquivos: { ...w }, mensagem });
+      // DESIGN.md (marca de origem + marcador) nunca sai do Octa; caminhoPublicavel é a 2ª barreira
+      const arquivos = Object.fromEntries(Object.entries(w).filter(([p]) => p.split("/").pop()?.toLowerCase() !== "design.md"));
+      const r = await publicar({ arquivos, mensagem });
       if (!r.ok) return err(INSTRUCAO_PUBLICAR[r.erro] ?? "a publicação falhou; avise o aluno.", r.erro);
       const quando = r.status === "publicando" ? "no ar em ~1 min" : "no ar";
       const pulados = r.ignorados.length ? ` Não publicados (não são arquivos de site): ${r.ignorados.slice(0, 20).join(", ")}.` : "";

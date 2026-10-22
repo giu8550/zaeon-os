@@ -17,8 +17,11 @@
  *
  * Fluxo "landing" (montar e publicar a landing do aluno, até 24 passos): a ordem INVERTE. O primário (`local`) é o
  * Google (vertex_ai/<GEMINI_MODEL>) e a reserva é a Contabo — o CPU não dá conta de 24 passos com DESIGN.md no prompt.
- * Sem teto de prompt nem orçamento de tempo no primário (são proteções do CPU). Com OCTA_MODELO_LOCAL desligado a
- * reserva NÃO aponta pra Contabo (o kill switch vale aqui também): fica o Google "forte".
+ * Sem teto de prompt no primário (proteção do CPU). Com OCTA_MODELO_LOCAL desligado a reserva NÃO aponta pra Contabo
+ * (o kill switch vale aqui também): fica o Google "forte". Diferenças do chamador no landing:
+ *   - não gruda: cada passo tenta o Google de novo (a não ser que ele esteja em pausa por uma falha recente);
+ *   - a reserva tem teto por passo (OCTA_LOCAL_TIMEOUT_MS) e o tempo dela conta no orçamento do turno
+ *     (OCTA_LOCAL_ORCAMENTO_MS); orçamento gasto = o passo falha com erro claro em vez de esperar o CPU.
  */
 import type { ChamarModelo, MsgModelo, RespostaModelo } from "@/lib/octa/agente";
 import { modeloReal } from "@/lib/octa/litellm";
@@ -33,6 +36,8 @@ export type EscolhaOcta = {
   orcamentoMs: number;
   maxPromptTok: number;
   pausaMs: number;
+  /** Fluxo landing: primário = Google, sem grudar na reserva; `orcamentoMs` vale pra RESERVA (ver topo). */
+  landing?: true;
 };
 
 const SEM_TETO = Number.MAX_SAFE_INTEGER;
@@ -44,9 +49,10 @@ export function escolhaModeloOcta(env: Env = process.env, fluxo?: "landing"): Es
       local: modeloReal("padrao", env as NodeJS.ProcessEnv),
       reserva: ligado ? env.OCTA_MODELO_LOCAL_NOME || "zaeon-local-coder" : modeloReal("forte", env as NodeJS.ProcessEnv),
       timeoutMs: num(env.OCTA_LOCAL_TIMEOUT_MS, 120_000),
-      orcamentoMs: SEM_TETO,
+      orcamentoMs: num(env.OCTA_LOCAL_ORCAMENTO_MS, 240_000),
       maxPromptTok: SEM_TETO,
       pausaMs: num(env.OCTA_LOCAL_PAUSA_MS, 120_000),
+      landing: true,
     };
   }
   return {
@@ -90,6 +96,7 @@ export function criarChamadorOcta(
   let gastoLocal = 0;
 
   const f = (async (msgs: MsgModelo[]) => {
+    if (escolha.landing) return passoLanding(msgs);
     let motivo: string | undefined;
     const t0 = agora();
     if (escolha.local && !caiu) {
@@ -117,6 +124,35 @@ export function criarChamadorOcta(
     servidos.push({ modelo: escolha.reserva, modeloId: r.modeloId, ms: agora() - t1, motivo });
     return r;
   }) as ChamarModelo & { servidos: Servido[] };
+
+  // Landing: Google a cada passo; a reserva (CPU) com teto por passo e orçamento de tempo do turno.
+  let gastoReserva = 0;
+  async function passoLanding(msgs: MsgModelo[]) {
+    let motivo: string | undefined;
+    const primario = escolha.local;
+    if (primario && agora() < (pausadoAte.get(primario) ?? 0)) motivo = "local_em_pausa";
+    else if (primario) {
+      const t0 = agora();
+      try {
+        const r = await chamar(primario, msgs, AbortSignal.timeout(escolha.timeoutMs));
+        if (!vazia(r)) { servidos.push({ modelo: primario, modeloId: r.modeloId, ms: agora() - t0 }); return r; }
+        motivo = "resposta_vazia";
+      } catch (e: any) {
+        if (/orçamento/.test(String(e?.message))) throw e;
+        motivo = e?.name === "TimeoutError" || e?.name === "AbortError" ? "timeout" : `erro: ${String(e?.message ?? e).slice(0, 120)}`;
+        pausadoAte.set(primario, agora() + escolha.pausaMs);
+      }
+    }
+    const resta = escolha.orcamentoMs - gastoReserva;
+    // sem a palavra "orçamento": a rota trata essa como virtual key estourada (402)
+    if (resta <= 0) throw new Error(`reserva esgotada neste turno: o modelo principal falhou (${motivo}) e o tempo da reserva acabou`);
+    const t1 = agora();
+    try {
+      const r = await chamar(escolha.reserva, msgs, AbortSignal.timeout(Math.min(escolha.timeoutMs, resta)));
+      servidos.push({ modelo: escolha.reserva, modeloId: r.modeloId, ms: agora() - t1, motivo });
+      return r;
+    } finally { gastoReserva += agora() - t1; }
+  }
   f.servidos = servidos;
   return f;
 }

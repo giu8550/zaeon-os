@@ -191,7 +191,7 @@ describe("publicarProjeto", () => {
 
   it("caminhoPublicavel: lista de extensões e regras de segmento", () => {
     for (const ok of ["index.html", "css/a.css", "js/app.mjs", "img/a.JPG", "fonts/x.woff2", "site.webmanifest", "sobre/index.htm"]) expect(caminhoPublicavel(ok)).toBe(true);
-    for (const ruim of ["", ".github/workflows/x.yml", "../x.html", "/etc/x", "a/.env", "a/../b.html", "a/b.exe", "x.php", "a\u0000.html"]) expect(caminhoPublicavel(ruim)).toBe(false);
+    for (const ruim of ["", ".github/workflows/x.yml", "../x.html", "/etc/x", "a/.env", "a/../b.html", "a/b.exe", "x.php", "a\u0000.html", "DESIGN.md", "docs/design.md", "a/b/Design.MD"]) expect(caminhoPublicavel(ruim)).toBe(false);
   });
 
   it("Pages 409: usa a URL do GET; status no_ar se built, senão publicando", async () => {

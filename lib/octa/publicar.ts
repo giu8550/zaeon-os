@@ -46,13 +46,15 @@ const MAX_CAMINHO = 200;
 /**
  * Caminho que pode virar arquivo do repositório público: relativo, sem `..`, sem segmento que
  * comece com "." (`.github/`, `.env`, dotfiles), sem segmento vazio, sem `\` nem caractere de
- * controle, até 200 caracteres e com extensão de site estático.
+ * controle, até 200 caracteres, com extensão de site estático e que não seja DESIGN.md (em qualquer pasta).
  */
 export function caminhoPublicavel(caminho: string): boolean {
   if (typeof caminho !== "string" || !caminho || caminho.length > MAX_CAMINHO) return false;
   if (/[\\\x00-\x1f\x7f]/.test(caminho)) return false;
   const segmentos = caminho.split("/");
   if (segmentos.some((s) => !s || s.startsWith("."))) return false; // pega "/x", "a//b", "..", ".env"
+  // DESIGN.md nunca vai pro repo público: carrega o nome da marca de origem e o marcador zaeon-estilo
+  if (segmentos[segmentos.length - 1].toLowerCase() === "design.md") return false;
   const ext = segmentos[segmentos.length - 1].split(".");
   return ext.length > 1 && EXTENSOES_SITE.has(ext[ext.length - 1].toLowerCase());
 }
