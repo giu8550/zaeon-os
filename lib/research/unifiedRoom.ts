@@ -56,9 +56,13 @@ export function resolveLabTab(
   tab: unknown,
   unified: boolean,
   projetos: boolean = projetosOn(),
+  chatUnico: boolean = on(process.env.NEXT_PUBLIC_CHAT_UNICO),
 ): { tab: LabTab; subTab?: ResearchSubTab } | null {
   if (typeof tab !== "string" || !(LAB_TABS as readonly string[]).includes(tab)) return null;
   const t = tab as LabTab;
+  // CHAT ÚNICO (lib/chat/chatUnico): a Sala de Pesquisa não existe mais — vira o chat da Aura (o modo
+  // pesquisa liga por pedido de quem chamou). Projetos escondido cai no mesmo lugar.
+  if (chatUnico && (t === "pesquisa" || t === "pesquisas" || (t === "projetos" && !projetos))) return { tab: "sala-de-estudos" };
   // Projetos escondido: links/atalhos antigos (?tab=projetos, voz, localStorage) caem na Sala de Pesquisa.
   if (t === "projetos" && !projetos) return { tab: "pesquisa" };
   if (!unified) return { tab: t };
