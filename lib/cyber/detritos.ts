@@ -13,7 +13,7 @@ export type V3 = { x: number; y: number; z: number };
 
 export const DETRITOS = {
   /** o PONTO DOCE: a que distância do CENTRO do buraco negro (× o raio dele) ele puxa sozinho */
-  doce: 4.5,
+  doce: 3.5,   // (com os buracos negros 7× maiores, out/2026: ~3,4 km do centro — o enquadramento em que ele cabe na tela)
   /** quantos asteroides no campo (na borda da zona → chegando no ponto doce); no modo leve, `leve` × isso */
   n: [4, 18] as const, leve: 0.8,
   /** o TÚNEL: o raio em volta do eixo e até onde vai na frente (m) */

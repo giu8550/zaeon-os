@@ -49,7 +49,7 @@ export const ESCALA_MOTO = 1.25;
 
 export const MOTO = {
   /** teto ABSOLUTO aceito na presença (a regra de verdade é o teto acima do chão de baixo — lib/cyber/motoFisica) */
-  teto: VOO.yMax,
+  teto: 1700,   // (o espaço até os buracos negros — que são enormes — sobe livre; o servidor aceita até 1800)
   /** altura do QUADRIL do piloto sentado, JÁ na escala do render (o topo do banco fica em ~1,05 × ESCALA_MOTO) */
   banco: 1.14 * 1.25,
   /** quão perto pra montar (m, no plano) */

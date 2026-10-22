@@ -77,10 +77,9 @@ import { criarRifleCosmico, type RifleHandle } from "./RifleCosmico";
 import { CAMERA_MOTO_PERTO } from "@/lib/cyber/camera";
 import { criarCarroHex, type CarroHandle } from "./CarroHex";
 import { definirNivel, NIVEIS_SEPARADOS, type IdNivel } from "@/lib/cyber/nivelAtivo";
-import { criarTravessia, type TravessiaHandle } from "./TravessiaBN";
 import { criarDetritos, type DetritosHandle } from "./DetritosBN";
 import { DETRITOS, baseDoTunel, empurraoDaBatida, inicioDaZona, naZona, novoAsteroide, passoAsteroide, puxaoDaZona, tamanhoDoCampo, vaiAcertar, type Asteroide } from "@/lib/cyber/detritos";
-import { FIO as FIO_COSMICO, comecarTragada, fiosCosmicos, naAtracao, raioDeAtracao, passoTragada, pertoDoBuraco, posDaTragada, progressoTragada, saidaDaSala, type Tragada } from "@/lib/cyber/fiosCosmicos";
+import { CAPTURA, FIO as FIO_COSMICO, comecarTragada, fiosCosmicos, naAtracao, raioDeAtracao, naCaptura, progressoCaptura, passoTragada, pertoDoBuraco, posDaTragada, progressoTragada, saidaDaSala, type Tragada } from "@/lib/cyber/fiosCosmicos";
 import { nivelDoPonto, proximoNivel } from "@/lib/cyber/niveis";
 import { CARROS_NA_ZAEON, LOTES_CARRO, pisoDaVaga, posseDosCarros, vagaDoLote, vagasDeCarro, type CarroDirigido, type CarroLargado, type PosseCarro, type VagaCarro } from "@/lib/cyber/carros";
 import { criarPisoCarros, type PisoCarrosHandle } from "./EstacionamentoCarros";
@@ -2115,27 +2114,25 @@ export class CyberEngine {
     const a = 0.03 + 0.42 * k * k; this.cam.position.x += (Math.random() - 0.5) * a; this.cam.position.y += (Math.random() - 0.5) * a; this.cam.position.z += (Math.random() - 0.5) * a;
   }
   // ───────────── a TRAVESSIA do buraco negro: as fachadas psicodélicas, os raios, os cacos e a tempestade ─────────────
-  private travessia: TravessiaHandle | null = null; private somTempestade: LoopSom | null = null; private proxRaioBN = 0; private estourouBN = false;
+  private somTempestade: LoopSom | null = null; private proxRaioBN = 0; private estourouBN = false;
   /** (components/cyber/TravessiaBN) cresce com a tragada; no horizonte os cacos estouram; depois do clarão, apaga */
   private travessiaBN(dt: number, k: number) {
     const v = this.fio, s = this.som;
     if (v) {
       // (out/2026, o dono: "o psicodélico pra quando o personagem ATRAVESSAR" — as fachadas só no fim da tragada, no
       //  horizonte; antes, a atmosfera de sempre: os rastros, a vinheta, o tremor)
-      if (!this.travessia && k > 0.3) { this.travessia = criarTravessia({ low: this.o.low }); this.cena.scene.add(this.travessia.grupo); this.estourouBN = false; this.proxRaioBN = 0.5; }
+      if (k < 0.05 && this.estourouBN) this.estourouBN = false;
       const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, b = v.f.bn, w = mundo(b);
       this.tmpBN.set(w.x, ilhaY + b.y, w.z); this.tmpEu.set(this.eu.pos.x, this.eu.alt + 1, this.eu.pos.z);
-      this.travessia?.atualizar(dt, performance.now() / 1000, k, this.tmpEu, this.tmpBN, b.r);
       // os RAIOS: estalos e trovões cada vez mais seguidos
       this.proxRaioBN -= dt;
       if (this.proxRaioBN <= 0) { this.proxRaioBN = 0.35 + Math.random() * 1.1 * (1 - 0.7 * k); s.tocar(Math.random() < 0.65 ? "raio" : "trovao", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 0.45 + 0.55 * k }); }
-      if (k > 0.93 && !this.estourouBN && this.travessia) { this.estourouBN = true; this.travessia.estourar(); s.tocar("estilhacos", this.eu.av.group.position, { dist: DISTANCIA.eu }); }
+      if (k > 0.93 && !this.estourouBN) { this.estourouBN = true; s.tocar("estilhacos", this.eu.av.group.position, { dist: DISTANCIA.eu }); }
       this.somTempestade ??= s.loop("tempestade-cosmica", this.eu.av.group, { dist: DISTANCIA.eu, volume: 0 });
       s.volumeLoop(this.somTempestade, 0.35 + 0.65 * k, 3);
       return;
     }
     if (this.somTempestade) { s.volumeLoop(this.somTempestade, 0, 0.8); if (!this.clarao && !this.emergir) { s.soltarLoop(this.somTempestade); this.somTempestade = null; } }
-    if (this.travessia && this.travessia.apagar(dt)) { this.travessia.dispose(); this.travessia = null; }
   }
   private tmpBN = new THREE.Vector3(); private tmpEu = new THREE.Vector3();
   // ───────────── a APROXIMAÇÃO do buraco negro: os DETRITOS (lib/cyber/detritos) ─────────────
@@ -2217,7 +2214,7 @@ export class CyberEngine {
   private wTravessia = 0;
   private cameraDaTravessia(c: ReturnType<typeof poseDaCamera>, dt: number): ReturnType<typeof poseDaCamera> {
     const v = this.fio;
-    this.wTravessia += ((v ? 1 : 0) - this.wTravessia) * Math.min(1, dt * 1.6);
+    this.wTravessia += ((v ? 1 : 0) - this.wTravessia) * Math.min(1, dt * 0.7);   // (entra devagar: a 1ª cutscene começa no embalo)
     if (!v || this.wTravessia < 0.002) return c;
     const k = progressoTragada(v), ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, b = v.f.bn, w = mundo(b);
     const bn = { x: w.x, y: ilhaY + b.y, z: w.z }, eu = { x: this.eu.pos.x, y: this.eu.alt + 1.2, z: this.eu.pos.z };
@@ -2228,7 +2225,18 @@ export class CyberEngine {
     // (de LADO e um pouco atrás: você de perfil no primeiro plano, o túnel e o buraco negro na frente)
     const dist = 15 - 6 * k, alto = 2.2 + 1.5 * (1 - k);
     const pos = { x: eu.x + dx * dist * 0.5 + sx * dist * 0.9, y: eu.y + alto + dy * dist * 0.3, z: eu.z + dz * dist * 0.5 + sz * dist * 0.9 };
-    const olhar = { x: eu.x - dx * 6, y: eu.y - dy * 6 + 0.3, z: eu.z - dz * 6 };   // (um pouco à frente de você: você no quadro, o túnel atrás)
+    // (um pouco à frente de você, puxando pro buraco negro: você no quadro e ele atrás — 7× maior, ele não cabe mais)
+    let olhar = { x: eu.x - dx * 6 + (bn.x - eu.x) * 0.04, y: eu.y - dy * 6 + 0.3 + (bn.y - eu.y) * 0.04, z: eu.z - dz * 6 + (bn.z - eu.z) * 0.04 };
+    // a 1ª CUTSCENE (a captura, a entrada na zona de eventos): o plano ABERTO — bem atrás e de lado, alto, o buraco negro
+    // gigante enchendo o quadro e você pequeno na frente dele; vai fechando no plano da espiral (a 2ª) no fim da captura
+    if (naCaptura(v) || v.t < CAPTURA.dur + 3) {
+      const u = progressoCaptura(v), aberto = Math.max(0, Math.min(1, 1 - (v.t - CAPTURA.dur) / 3)), g = aberto * aberto * (3 - 2 * aberto);
+      // (atrás de você e acima, olhando pro buraco negro: você pequeno embaixo, ele gigante na frente, o disco cortando o quadro)
+      const longe = 55 - 15 * u, posA = { x: eu.x + dx * longe + sx * longe * 0.25, y: eu.y + 16 - 4 * u, z: eu.z + dz * longe + sz * longe * 0.25 };
+      const olharA = { x: eu.x + (bn.x - eu.x) * 0.5, y: eu.y + (bn.y - eu.y) * 0.5, z: eu.z + (bn.z - eu.z) * 0.5 };
+      pos.x += (posA.x - pos.x) * g; pos.y += (posA.y - pos.y) * g; pos.z += (posA.z - pos.z) * g;
+      olhar = { x: olhar.x + (olharA.x - olhar.x) * g, y: olhar.y + (olharA.y - olhar.y) * g, z: olhar.z + (olharA.z - olhar.z) * g };
+    }
     const kk = this.wTravessia * this.wTravessia * (3 - 2 * this.wTravessia);
     const mix = (a: { x: number; y: number; z: number }, b2: { x: number; y: number; z: number }) => ({ x: a.x + (b2.x - a.x) * kk, y: a.y + (b2.y - a.y) * kk, z: a.z + (b2.z - a.z) * kk });
     return { ...c, pos: mix(c.pos, pos), olhar: mix(c.olhar, olhar) };
@@ -2242,14 +2250,13 @@ export class CyberEngine {
     const c = this.clarao; if (!c) { if (this.claraoEl && this.claraoEl.style.opacity !== "0") this.claraoEl.style.opacity = "0"; return; }
     if (!this.claraoEl) {
       const el = document.createElement("div");
-      // (o clarão PSICODÉLICO: o branco no centro e as cores girando em volta — a travessia)
-      el.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:26;opacity:0;mix-blend-mode:screen;background:radial-gradient(circle at 50% 50%, #fff 0%, rgba(255,255,255,.9) 14%, transparent 46%), conic-gradient(from 0deg, #ff3cc7, #ffd24f, #5aff8a, #3cc8ff, #8b5cf6, #ff3cc7);";
+      el.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:26;opacity:0;mix-blend-mode:screen;background:radial-gradient(circle at 50% 50%, #fff 0%, #f4e9ff 18%, #b48cff 42%, #4a1e9e 72%, #0a0218 100%);";
       this.o.overlay.appendChild(el); this.claraoEl = el;
     }
     c.t += dt; const C = CyberEngine.CLARAO;
     if (!c.trocou && c.t >= C.sobe) { c.trocou = true; this.viajarDireto(); }   // (no auge do clarão, já está do outro lado)
     const op = c.t < C.sobe ? c.t / C.sobe : Math.max(0, 1 - (c.t - C.sobe) / C.desce);
-    this.claraoEl.style.opacity = (op * op * (3 - 2 * op)).toFixed(3); this.claraoEl.style.filter = `hue-rotate(${Math.round(c.t * 520)}deg)`;
+    this.claraoEl.style.opacity = (op * op * (3 - 2 * op)).toFixed(3);
     if (c.t >= C.sobe + C.desce) this.clarao = null;
   }
   /** a travessia direta, com a tela COBERTA pelo túnel: chega no destino */
@@ -2385,7 +2392,7 @@ export class CyberEngine {
     if (!this.fluxoArmado) return;   // (acabou de chegar de um túnel ali perto: só depois de se afastar)
     if (!z.doce) { this.passoAproximacao(f, z.k, dt); return; }
     this.fimDaAproximacao();
-    this.fio = comecarTragada(f, p); this.fluxoArmado = false;
+    this.fio = comecarTragada(f, p, this.minhaVel()); this.fluxoArmado = false;   // (a CAPTURA: segue no embalo de quem vinha)
     if (this.jet.noAr) { this.jet.noAr = false; this.jet.vy = 0; }
     this.alvo = null; this.alvoDepois = null; this.sitT = 0;
     // (out/2026, o dono: no lugar do "rise" e do assobio, a TEMPESTADE CÓSMICA — o trovão de entrada; o resto, na atmosfera)
@@ -2429,7 +2436,7 @@ export class CyberEngine {
     // só na tragada (a cutscene); chegando do outro lado, nada
     // (e depois de SAIR do outro lado: 7 s se desfazendo — `DISTORCAO_NA_CHEGADA` — e as cores voltam ao normal)
     if (!NIVEIS_SEPARADOS || this.menu) return 0;
-    if (this.fio) return 0.45 + 0.55 * progressoTragada(this.fio);
+    if (this.fio) return naCaptura(this.fio) ? 0.3 * progressoCaptura(this.fio) : 0.45 + 0.55 * progressoTragada(this.fio);
     const falta = this.distorcaoAte - this.agora;
     return falta > 0 ? 0.85 * Math.min(1, falta / CyberEngine.DISTORCAO_NA_CHEGADA) : 0;
   }
@@ -4512,7 +4519,7 @@ export class CyberEngine {
       const boostAntes = this.motoEst.boost;
       const r = this.emergir && this.passoEmergir(dt) ? { s: { ...this.motoEst, x: eu.pos.x, y: eu.alt, z: eu.pos.z, yaw: eu.facing, vx: 0, vy: 0, vz: 0 }, pousado: false }   // (SAINDO do buraco negro, montado: o arco leva a moto)
         : this.fio ? (() => { const q = this.posNoFluxo(); return { s: { ...this.motoEst, x: q.x, y: q.y, z: q.z, yaw: q.rumo, vx: 0, vy: 0, vz: 0 }, pousado: false }; })()   // (o FLUXO leva a moto com a pessoa)
-        : passoMotoSub(this.motoEst, c, dtReal, this.solidosDeVoo(), MOTO.teto);
+        : passoMotoSub(this.motoEst, c, dtReal, this.solidosDeVoo(), MOTO.teto, !!this.aprox);   // (no caminho de um buraco negro: o espaço sobe e desce livre)
       if (!r.pousado && rompeuBarreira(boostAntes, r.s.boost, Math.hypot(r.s.vx, r.s.vz))) this.ondaT = 0;   // acendeu o boost rápido: quebrou a barreira do som
       this.motoEst = r.s; this.motoPousado = r.pousado; if (r.pousado) this.autoPouso = false;
       if (this.corrida) this.passoDaCorrida(deCorrida, dtReal);

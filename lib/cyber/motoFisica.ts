@@ -64,6 +64,8 @@ export const PILOTAGEM = {
   /** ALTURA: teto acima do chão de baixo (m) — moto voa BAIXO (o dono pediu: "não deve voar muito acima do chão"); subida e descida (m/s) e quão rápido chega nelas; a descida forçada
    *  (acima do teto, ex.: saiu da borda da Zaeon) vai de `planaMin` a `planaMax` m/s conforme o quanto sobra */
   alturaMax: 8, sobe: 10, desce: 6, inerciaV: 2.4, planaMin: 6, planaMax: 22,
+  /** no ESPAÇO (os asteroides do caminho dos buracos negros): sobe e desce rápido (m/s) */
+  sobeEspaco: 26,
 } as const;
 
 /** a partir de que velocidade (m/s) ACENDER o boost rompe a barreira do som: 300 km/h */
@@ -83,10 +85,12 @@ export const motoParada = (x: number, y: number, z: number, yaw: number): Estado
 
 
 /** um passo da moto (dt pequeno; use `passoMotoSub` no loop) */
-export function passoMoto(s: EstadoMoto, c: ComandoMoto, dt: number, solidos: Pilar[] = [], teto: number = VOO.yMax): { s: EstadoMoto; pousado: boolean; chaoY: number } {
+export function passoMoto(s: EstadoMoto, c: ComandoMoto, dt: number, solidos: Pilar[] = [], teto: number = VOO.yMax, espaco = false): { s: EstadoMoto; pousado: boolean; chaoY: number } {
   const P = PILOTAGEM, acel = clamp(c.acel, -1, 1), giroCmd = clamp(c.giro, -1, 1);
   // rente ao chão a moto não anda (tem que decolar, igual à nave) — mas o guidão gira ela no lugar pra mirar
-  const chao = chaoDoVoo(s, solidos), rente = s.y - chao < VOO.decolar, tetoAqui = tetoDaMoto(s, chao);
+  // (no ESPAÇO — o caminho até um buraco negro, os asteroides: sem teto baixo, sobe e desce LIVRE e rápido; o dono,
+  //  out/2026: "o espaço não está subindo bem a moto — devemos subir independente do eixo contra os asteroides")
+  const chao = chaoDoVoo(s, solidos), rente = s.y - chao < VOO.decolar, tetoAqui = espaco ? teto : tetoDaMoto(s, chao);
   const fx = Math.sin(s.yaw), fz = Math.cos(s.yaw), lx = Math.cos(s.yaw), lz = -Math.sin(s.yaw);
   let frente = s.vx * fx + s.vz * fz, lado = s.vx * lx + s.vz * lz;
   // BOOST: só com a moto andando pra frente, no ar e com tanque; esvazia aceso, recarrega apagado
@@ -124,11 +128,11 @@ export function passoMoto(s: EstadoMoto, c: ComandoMoto, dt: number, solidos: Pi
   const vx = nfx * frente2 + nlx * lado2, vz = nfz * frente2 + nlz * lado2;
   // vertical: sobe devagar, desce mais devagar ainda; no teto (alturaMax acima do chão de baixo) não sobe mais;
   // acima dele (o chão "sumiu": passou da borda da Zaeon, do lounge) desce planando
-  let ty = (c.subir ? P.sobe : 0) - (c.descer ? P.desce : 0);
+  let ty = (c.subir ? (espaco ? P.sobeEspaco : P.sobe) : 0) - (c.descer ? (espaco ? P.sobeEspaco : P.desce) : 0);
   if (ty > 0 && s.y >= tetoAqui - 0.5) ty = 0;
   const acima = s.y - tetoAqui;
   if (acima > 1) ty = Math.min(ty, -Math.min(P.planaMax, P.planaMin + acima * 0.05));
-  let vy = s.vy + (ty - s.vy) * Math.min(1, dt * P.inerciaV);
+  let vy = s.vy + (ty - s.vy) * Math.min(1, dt * (espaco ? P.inerciaV * 1.8 : P.inerciaV));
   if (vy > 0 && s.y + vy * dt > tetoAqui) vy = Math.max(0, (tetoAqui - s.y) / dt) * 0.5;   // encosta no teto macio
   // INCLINAÇÃO de moto: tan θ = v·ω / g (g de jogo — ver PILOTAGEM.g) (deita pro lado de DENTRO da curva); no chão, reta
   const alvo = rente ? 0 : clamp(-Math.atan((frente2 * omega) / P.g), -P.inclinaMax, P.inclinaMax);
@@ -140,11 +144,11 @@ export function passoMoto(s: EstadoMoto, c: ComandoMoto, dt: number, solidos: Pi
 /** o mesmo passo, independente de FPS: subpassos de no máximo `VOO.subpasso` E de no máximo `PASSO_M` metros (a 1000
  *  km/h a moto anda 4,6 m num subpasso de 1/60 s — atravessaria parede) */
 const PASSO_M = 1.2;
-export function passoMotoSub(s: EstadoMoto, c: ComandoMoto, dt: number, solidos: Pilar[] = [], teto: number = VOO.yMax): { s: EstadoMoto; pousado: boolean; chaoY: number } {
+export function passoMotoSub(s: EstadoMoto, c: ComandoMoto, dt: number, solidos: Pilar[] = [], teto: number = VOO.yMax, espaco = false): { s: EstadoMoto; pousado: boolean; chaoY: number } {
   const total = Math.min(VOO.dtMax, Math.max(0, dt)), v = Math.hypot(s.vx, s.vz) + 20;
   const n = Math.max(1, Math.ceil(total / VOO.subpasso - 1e-9), Math.ceil((total * v) / PASSO_M)), h = total / n;
   let r = { s, pousado: false, chaoY: 0 };
-  for (let i = 0; i < n; i++) r = passoMoto(r.s, c, h, solidos, teto);
+  for (let i = 0; i < n; i++) r = passoMoto(r.s, c, h, solidos, teto, espaco);
   return r;
 }
 
