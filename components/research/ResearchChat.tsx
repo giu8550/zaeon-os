@@ -47,7 +47,8 @@ import CerebroPanel from "@/components/cerebro/CerebroPanel";
 import { useCerebro } from "@/components/cerebro/useCerebro";
 import { AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
-import { AvisoSoltar, ChipAnexo, useAnexoChat } from "@/components/chat/useAnexoChat";
+import { AvisoSoltar, ChipAnexo, ChipsLote, useAnexoChat } from "@/components/chat/useAnexoChat";
+import { contextoDoLote, rotuloDoLote } from "@/lib/chat/loteAnexos";
 import { BarraBase } from "@/components/chat/MinhaBase";
 import {
   carregarThreads, salvarThreads, criarThread, criarSubThread, fecharThread, renomearThread, tocarThread,
@@ -216,7 +217,7 @@ export default function ResearchChat({
   const focarComposer = () => requestAnimationFrame(() => rootRef.current?.querySelector("textarea")?.focus({ preventScroll: true }));
   const sendRef = useRef<(t?: string) => void>(() => {});
   // 📎 / soltar arquivo na conversa: a IA lê o PDF (não abre o leitor). ▶ da biblioteca também chega aqui.
-  const { anexo, anexoRef, tirar: tirarAnexo, anexarArquivos, soltar, arrastando, envios, versaoBase } = useAnexoChat("pesquisa", {
+  const { anexo, anexoRef, tirar: tirarAnexo, anexarArquivos, soltar, arrastando, envios, versaoBase, lote, loteRef, tirarDoLote } = useAnexoChat("pesquisa", {
     focar: focarComposer,
     perguntar: (t) => { onAtivar?.(); sendRef.current(t); },
     // Minha base (RAG F3): a Aura confirma o lote guardado na conversa
@@ -236,6 +237,7 @@ export default function ResearchChat({
     onAtivar?.();
     if (sending) return;
     if (anexoRef.current) tirarAnexo();   // conversa nova começa sem o arquivo da anterior
+    tirarDoLote();
     const { threads: lista, nova } = criarThread(threadsRef.current);
     threadsRef.current = lista; salvarThreads(localStorage, lista, ESCOPO_PESQUISA); setThreads(lista);
     abaAtivaRef.current = nova.id; setAbaAtiva(nova.id);
@@ -284,6 +286,7 @@ export default function ResearchChat({
     onAtivar?.();
     if (sending) return;
     if (anexoRef.current) tirarAnexo();
+    tirarDoLote();
     const pai = threadsRef.current.find((t) => t.id === paiId);
     let ctx = contexto;
     if (ctx === undefined && pai) {
@@ -399,7 +402,7 @@ export default function ResearchChat({
     const lendo = anexoRef.current;
     setMessages((prev) => [
       ...prev,
-      { id: uid(), role: "user", text: prompt, anexo: lendo?.nome },
+      { id: uid(), role: "user", text: prompt, anexo: lendo?.nome ?? rotuloDoLote(loteRef.current) },
       { id: asstId, role: "assistant", text: "" },
     ]);
     if (text === undefined) setInput("");   // envio direto preserva o rascunho do composer
@@ -433,7 +436,7 @@ export default function ResearchChat({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt, agent: "aura", surface: "pesquisa", history, stream: true,
-          systemContext: SYS(wt) + contextoDaSub() + (lendo ? ` O aluno anexou o arquivo "${lendo.nome}" (vai junto nesta mensagem): leia o CONTEÚDO dele e responda com base nele, citando a página/seção quando der.` : ""),
+          systemContext: SYS(wt) + contextoDaSub() + contextoDoLote(loteRef.current) + (lendo ? ` O aluno anexou o arquivo "${lendo.nome}" (vai junto nesta mensagem): leia o CONTEÚDO dele e responda com base nele, citando a página/seção quando der.` : ""),
           ...(lendo ? { fileData: lendo.dataUrl } : {}),
           // Memória por conversa: o grafo/cartolina é o da ABA ativa e o nó lembra de qual resposta veio.
           agentContext: { activeTab: "pesquisa", cartolinaScopeId: abaAtivaRef.current ?? undefined, cartolinaMsgId: asstId },
@@ -715,11 +718,12 @@ export default function ResearchChat({
             busy={sending}
             idle={messages.length === 0 && !sending}
             active={active}
-            placeholder={anexo ? `Pergunte sobre ${anexo.nome}…` : ""}
+            placeholder={anexo ? `Pergunte sobre ${anexo.nome}…` : lote.length ? `Pergunte sobre os ${lote.length} arquivos…` : ""}
             onFiles={(f) => void anexarArquivos(f)}
           >
             <BarraBase envios={envios} versao={versaoBase} />
             {anexo && <ChipAnexo anexo={anexo} onTirar={tirarAnexo} />}
+            <ChipsLote lote={lote} onTirar={tirarDoLote} />
             {paletteOpen && (
               <div className="flex flex-wrap items-center gap-1.5 px-1 pb-2">
                 {QUICK.map((q) => (
