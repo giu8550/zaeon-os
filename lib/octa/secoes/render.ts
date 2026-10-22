@@ -96,6 +96,78 @@ export function marcaMencionada(html: string, marcas: string | readonly string[]
   return lista.find((m) => casaMarca(corpo, m) || casaMarca(head, m)) ?? null;
 }
 
+/*
+ * ── Anti-marca no FONTE publicado (publicarProjeto) ──
+ * O repositório é público: além do que o visitante lê, quem abre o código também lê. Por isso, no publicar,
+ * varremos o fonte INTEIRO de cada arquivo de texto, exceto o que é código CSS (onde "linear-gradient",
+ * "linear" de easing etc. colidem com nomes de marca):
+ *   - HTML/SVG/XML: comentários <!-- -->, texto fora das tags, valores de TODOS os atributos (alt, title,
+ *     aria-label, content do <meta>, href, class…) exceto `style`; <style> como CSS; <script> como JS
+ *     (ld+json como texto).
+ *   - CSS: só comentários /* *\/ e o valor de `content:` (texto que aparece na página). Seletores, propriedades
+ *     e valores não entram.
+ *   - JS: comentários e strings literais (não identificadores); uma string que é só "linear" (easing) não conta.
+ *   - JSON/TXT/MD/webmanifest: o arquivo todo.
+ * Em tudo que entra, nomes de função de gradiente do CSS (linear-/radial-/conic-gradient, repeating-…) saem antes.
+ * renderPagina (octa_pagina_montar) não muda: a página gerada não tem comentários e segue com marcaMencionada.
+ */
+const SEM_GRADIENTE = (s: string) => s.replace(/(?:repeating-)?(?:linear|radial|conic)-gradient/gi, " ");
+const RE_JS_PECAS = /\/\*[\s\S]*?\*\/|\/\/[^\n]*|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\])*`/g;
+
+function textoDoCss(css: string): string[] {
+  return [
+    ...[...css.matchAll(/\/\*([\s\S]*?)\*\//g)].map((m) => m[1]),
+    ...[...css.matchAll(/\bcontent\s*:\s*([^;}]*)/gi)].map((m) => m[1]),
+  ];
+}
+
+function textoDoJs(js: string): string[] {
+  return [...js.matchAll(RE_JS_PECAS)].map((m) => {
+    const p = m[0];
+    if (p.startsWith("//")) return p.slice(2);
+    if (p.startsWith("/*")) return p.slice(2, -2);
+    const s = p.slice(1, -1);
+    return s.trim().toLowerCase() === "linear" ? "" : s; // easing "linear"
+  });
+}
+
+function textoDoHtml(html: string): string[] {
+  const pecas: string[] = [];
+  let resto = html.replace(/<!--([\s\S]*?)-->/g, (_, c: string) => { pecas.push(c); return " "; });
+  resto = resto.replace(/<(style|script)\b([^>]*)>([\s\S]*?)<\/\1\s*>/gi, (_, tag: string, attrs: string, corpo: string) => {
+    if (tag.toLowerCase() === "style") pecas.push(...textoDoCss(corpo));
+    else if (/type\s*=\s*["']?[^"'>]*json/i.test(attrs)) pecas.push(corpo);
+    else pecas.push(...textoDoJs(corpo));
+    return `<${tag}${attrs}>`; // os atributos da própria tag ainda são varridos abaixo
+  });
+  resto = resto.replace(/<[^>]*>/g, (tag) => {
+    for (const m of tag.matchAll(/([^\s=<>"'\/]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g)) {
+      if (m[1].toLowerCase() !== "style") pecas.push(m[2] ?? m[3] ?? m[4] ?? "");
+    }
+    return " ";
+  });
+  pecas.push(resto);
+  return pecas;
+}
+
+/**
+ * A 1ª forma do nome da marca (marca ou alias) no FONTE de um arquivo publicado, pela regra acima — ou null.
+ * Arquivo que não é de texto (imagem, fonte) devolve null. Só a palavra sai daqui.
+ */
+export function marcaNoFonte(caminho: string, conteudo: string, marcas: string | readonly string[]): string | null {
+  const lista = varriveis(marcas);
+  const ext = caminho.toLowerCase().split(".").pop() ?? "";
+  if (!lista.length) return null;
+  let pecas: string[];
+  if (["html", "htm", "svg", "xml"].includes(ext)) pecas = textoDoHtml(conteudo);
+  else if (ext === "css") pecas = textoDoCss(conteudo);
+  else if (ext === "js" || ext === "mjs") pecas = textoDoJs(conteudo);
+  else if (["json", "txt", "md", "webmanifest"].includes(ext)) pecas = [conteudo];
+  else return null;
+  const texto = SEM_GRADIENTE(pecas.join("\n"));
+  return lista.find((m) => casaMarca(texto, m)) ?? null;
+}
+
 /** O nome da marca (ou um alias) aparece no que o visitante da página lê? */
 export function mencionaMarca(html: string, marcas: string | readonly string[]): boolean {
   return marcaMencionada(html, marcas) !== null;

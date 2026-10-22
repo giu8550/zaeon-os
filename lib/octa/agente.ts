@@ -164,7 +164,9 @@ export const FERRAMENTAS_LANDING: ToolDef[] = [
   },
   {
     name: "octa_pagina_montar", runtime: "ts", risk: "write", minPlan: "free",
-    schema: schema("octa_pagina_montar", "Monta a landing (index.html + styles.css) a partir de seções, com os tokens do DESIGN.md.", {
+    schema: schema("octa_pagina_montar", "Monta a landing (index.html + styles.css) a partir de seções, com os tokens do DESIGN.md. " +
+      "Depoimentos/stats/citações = exemplos marcados: autor \"Cliente — Ana\" (só primeiro nome, sem sobrenome nem cargo), texto começando com " +
+      "\"Exemplo de depoimento:\"; nunca pessoas reais, jornalistas, veículos ou empresas, nem números inventados como fatos.", {
       secoes: `JSON: lista de {"id","type","props"}. type ∈ ${TIPOS_SECAO.join(", ")}. props: title, subtitle, description, eyebrow, ctaText, ctaLink, items[], stats[], bullets[]…`,
       titulo: "título da página (aba do navegador)",
       descricao: "descrição curta da página (busca e cartão de link)",
@@ -303,6 +305,16 @@ export type OpcoesOcta = {
 export const MAX_PASSOS = 8;
 export const MAX_PASSOS_LANDING = 24;
 
+/**
+ * Depoimentos, números e citações da landing são placeholders MARCADOS: o aluno publica num repo público, e
+ * depoimento inventado assinado por pessoa real (chef famosa, jornalista, veículo) vira avaliação falsa.
+ */
+const REGRA_PLACEHOLDERS =
+  "Depoimentos, números e citações de imprensa são SEMPRE exemplos marcados para o aluno trocar: assine só com primeiro nome genérico " +
+  "(\"Cliente — Ana\", \"Cliente — Pedro\"), sem sobrenome nem cargo, e comece o texto com \"Exemplo de depoimento:\". " +
+  "Nunca atribua falas a pessoas reais ou identificáveis, jornalistas, veículos, publicações ou empresas, e nunca invente números " +
+  "apresentados como fatos (use \"[seu número]\" ou diga que é exemplo).";
+
 function sistema(t: TurnoOcta): string {
   return [
     "Você é o Octa Code, o agente de código da Zaeon, operando a IDE do aluno. Responda em português, direto.",
@@ -317,6 +329,7 @@ function sistema(t: TurnoOcta): string {
       "3) Monte com octa_pagina_montar (secoes em JSON); ajustes finos com octa_escrever. 4) Publique com octa_publicar quando o aluno pedir.",
       "Nunca use o nome, o logo nem textos da marca de origem do estilo na página: o DESIGN.md é só referência visual.",
       "Imagens: só de licença aberta (com a fonte) ou SVG próprio gerado com octa_arte.",
+      REGRA_PLACEHOLDERS,
     ].join("\n") : "",
     `Antes de qualquer coisa extra, pergunte-se: ${PERGUNTAS_ANTES_DE_AGIR.join(" ")} Se não, não faça.`,
     REGRA_DADOS_NAO_COMANDOS,

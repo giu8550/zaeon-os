@@ -101,6 +101,22 @@ describe("octa · agente (fluxo landing)", () => {
     expect(nomes(ferramentasGateway("landing"))).toEqual(expect.arrayContaining(["octa_design_escolher", "octa_pagina_montar", "octa_publicar", "octa_escrever"]));
   });
 
+  it("depoimentos/números/citações: o prompt da landing e a tool exigem placeholders marcados, nunca pessoas reais", async () => {
+    const m = roteiro([{ content: "ok" }]);
+    await rodarAgenteOcta(landing(), m, { sessionId: "ld" });
+    const sistema = String(m.vistos[0].find((x: any) => x.role === "system")?.content ?? "");
+    expect(sistema).toContain("Exemplo de depoimento:");
+    expect(sistema).toMatch(/Cliente — Ana/);
+    expect(sistema).toMatch(/nunca.*pessoas reais/i);
+    expect(sistema).toMatch(/números.*fatos/i);
+    const montar = ferramentasGateway("landing").find((t) => t.function.name === "octa_pagina_montar")!;
+    expect(JSON.stringify(montar.function)).toContain("Exemplo de depoimento:");
+    // fora do fluxo landing a regra não polui o prompt
+    const fora = roteiro([{ content: "ok" }]);
+    await rodarAgenteOcta(base({ liberados: ["**"] }), fora, { sessionId: "ld2" });
+    expect(String(fora.vistos[0].find((x: any) => x.role === "system")?.content ?? "")).not.toContain("Exemplo de depoimento:");
+  });
+
   it("fora do fluxo landing, chamar uma tool nova é negado e nada muda", async () => {
     const pub = vi.fn(async () => OK_PUB);
     const m = roteiro([{ content: null, tool_calls: [call("1", "octa_design_escolher", { descricao: "escura" })] }, { content: "ok" }]);
