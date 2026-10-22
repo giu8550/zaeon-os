@@ -65,3 +65,31 @@ describe("os novatos (level 1) na Zaeon", () => {
     for (const s of n) expect(s.ambiente).toBe("zaeon");
   });
 });
+
+describe("as motos estacionam onde a IA pousa (qualquer chão aberto do Templo)", () => {
+  it("o pouso fica perto de onde ela vai, num piso, fora dos colisores e com o céu livre (desce na vertical)", async () => {
+    const { pousoPerto } = await import("./templo");
+    const { solidosDoComplexo } = await import("../temploCosmico");
+    const spots = spotsDoTemplo(), cs = colisoresDoComplexo(L.r), solidos = solidosDoComplexo();
+    const salas = new Set<string>();
+    spots.filter((_, k) => k % 9 === 0).forEach((s, k) => {
+      let n = k * 7 + 3; const r = () => ((n = (n * 1103515245 + 12345) % 2147483648) / 2147483648);
+      const p = pousoPerto(s.templo, r); salas.add(p.sala);
+      const h = alturaNoComplexo(p.q, p.yRel + 0.2); expect(h, `${s.id}→${p.sala}`).not.toBeNull(); expect(Math.abs(h! - p.yRel)).toBeLessThan(0.6);
+      for (const c of cs) expect(Math.hypot(p.q.x - c.x, p.q.z - c.z), `${s.id} pouso`).toBeGreaterThan(c.r + 0.5);
+      for (const o of solidos) if (Math.hypot(p.q.x - o.x, p.q.z - o.z) < o.r + 2) expect(o.topo, `${s.id} céu`).toBeLessThanOrEqual(p.yRel + 0.3);
+    });
+    expect(salas.size).toBeGreaterThanOrEqual(4);   // (não só o salão)
+  });
+  it("depois do trânsito, a moto fica parada no pouso enquanto ela está no lugar seguinte", async () => {
+    const { gerarFrota, LOTE_INICIAL } = await import("./frota"), { planejarDia } = await import("./plano"), { FLAGS_PADRAO } = await import("./agenda"), { estadoDaIA } = await import("./corpo");
+    const f = gerarFrota({ lotes: [{ ...LOTE_INICIAL, total: 300 }], tamanhoGrupo: 4 }), p = planejarDia(f, 20500, FLAGS_PADRAO);
+    let viu = 0;
+    for (const [id, { blocos }] of p.agentes) blocos.forEach((b, i) => {
+      if (!b.transito || !blocos[i + 1] || blocos[i + 1]!.transito || viu > 30) return;
+      const e = estadoDaIA(id, blocos, (blocos[i + 1]!.ini + blocos[i + 1]!.fim) / 2, FLAGS_PADRAO, true, false);
+      if (e.visivel && e.vagaMoto?.ambiente === "templo") viu++;
+    });
+    expect(viu).toBeGreaterThan(10);
+  });
+});

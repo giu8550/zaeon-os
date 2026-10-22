@@ -36,7 +36,7 @@ import { acasoDe, entre, inteiro, embaralhar, type Acaso } from "./aleatorio";
 import type { FlagsFrota } from "./agenda";
 import type { BlocoPlano } from "./plano";
 import { spotsDe, type Spot } from "./lugares";
-import { BOCA_NO_TEMPLO, CHEGADA_NO_TEMPLO, caminhoNoTemplo as caminhoPeloTemplo, doLayoutT, pousoNoSalao, type LugarNoTemplo, type SalaTemplo, type TrechoTemplo } from "./templo";
+import { BOCA_NO_TEMPLO, CHEGADA_NO_TEMPLO, caminhoNoTemplo as caminhoPeloTemplo, doLayoutT, pousoPerto, type LugarNoTemplo, type SalaTemplo, type TrechoTemplo } from "./templo";
 import type { VagaEstudo } from "../estacionamentosEstudo";
 
 type P3 = { x: number; y: number; z: number; /** é um lugar do TEMPLO CÓSMICO (o caminho a pé até ele — lib/cyber/frota/templo) */ templo?: LugarNoTemplo };
@@ -49,10 +49,12 @@ export type EstadoIA = {
   /** a moto (quando está nela) */
   moto: { vel: number; curva: number } | null;
   /** a MOTO DELA parada num estacionamento agora (chegou e está no lugar, ou ainda indo buscar) — o render desenha */
-  vagaMoto: VagaEstudo | null;
+  vagaMoto: VagaEstudo | MotoNoChao | null;
   /** índice do bloco e o tipo de atividade (pra conversa e debug) */
   bloco: number; atividade: BlocoPlano["atividade"] | null; ambiente: string | null; evento: string | null;
 };
+/** a moto de uma IA ESTACIONADA onde ela pousou (no Templo — o trânsito: em qualquer chão aberto) */
+export type MotoNoChao = { ambiente: "templo"; i: number; x: number; y: number; z: number; rumo: number; zaeon: true };
 export const OFFLINE: EstadoIA = { visivel: false, x: 0, y: 0, z: 0, rumo: 0, zaeon: false, pose: "parado", sentar: 0, tablet: 0, assentoY: 0.7, moto: null, vagaMoto: null, bloco: -1, atividade: null, ambiente: null, evento: null };
 
 /** as velocidades (m/s) e os tempos (s) */
@@ -356,6 +358,11 @@ function emergindoDeMoto(de: P3, para: P3, nivel: IdNivel): Viagem {
   return { modo: "moto", dur, em: (u) => { const k = s3(u), p = { x: de.x + (para.x - de.x) * k, y: de.y + (para.y - de.y) * u + Math.sin(Math.PI * u) * 8, z: de.z + (para.z - de.z) * k };
     return { ...p, rumo, modo: "moto", oculto: nivelDoPonto(p, p.y) !== nivel }; } };
 }
+/** a moto descendo na VERTICAL até o pouso (desacelerando) */
+function desceNaVertical(de: P3, para: P3): Viagem {
+  const dur = Math.max(2.5, (de.y - para.y) / 14), rumo = 0;
+  return { modo: "moto", dur, em: (u) => ({ x: para.x, y: de.y + (para.y - de.y) * (1 - (1 - u) * (1 - u)), z: para.z, rumo, modo: "moto" }) };
+}
 /** a moto PARADA num ponto `dur` s (a IA montando — a moto se materializa — ou descendo) */
 const motoParada = (p: P3, dur: number): Viagem => ({ modo: "moto", dur, em: () => ({ ...p, rumo: 0, modo: "moto" }) });
 /** o TRÂNSITO DE MOTO (out/2026, o dono: "os de level 2 pra cima passeiam entre o lounge cósmico e a cidadela, não
@@ -363,7 +370,7 @@ const motoParada = (p: P3, dur: number): Viagem => ({ modo: "moto", dur, em: () 
  *  Templo (no salão), MONTA e entra no buraco negro; SAI do portal da cidadela de moto, cruza a Zaeon VOANDO por cima
  *  da capela e mergulha no fio de uma sala (quase sempre a do Templo de novo); sai do buraco negro de lá e POUSA */
 const SALAS_DO_TRANSITO: readonly (readonly [NomeSala, number])[] = [["lounge", 0.75], ["biblioteca", 0.1], ["jardim", 0.1], ["garagem", 0.05]];
-export function transitoDeMoto(de: P3, agente: string, i: number): { v: Viagem; fim: Ponto } {
+export function transitoDeMoto(de: P3, agente: string, i: number, proximo?: LugarNoTemplo): { v: Viagem; fim: Ponto } {
   const r = acasoDe("transito", agente, i), pernas: Viagem[] = [];
   const nd = NIVEIS_SEPARADOS ? nivelDe(de) : "zaeon";
   if (ehSalaNivel(nd)) {   // 1) sai da sala: a pé até a boca (no Templo, pelas pontes), monta e some no túnel
@@ -384,9 +391,11 @@ export function transitoDeMoto(de: P3, agente: string, i: number): { v: Viagem; 
   // 4) sai do buraco negro da sala de moto e POUSA (no Templo, num canto do salão; nas outras, perto da chegada)
   const bn = noMundo(saidaDaSala(destino).bn);
   let pouso: P3;
-  if (destino === "lounge") pouso = noTemplo(pousoNoSalao(r));
+  if (destino === "lounge") pouso = noTemplo(pousoPerto(proximo, r));   // (pousa PERTO de onde vai ficar — qualquer chão aberto serve)
   else { const ch = NOS[destino].chegada, a = r() * Math.PI * 2; pouso = { x: ch.x + Math.cos(a) * (LIVRE_DO_POUSO + r() * 6), y: NOS[destino].y, z: ch.z + Math.sin(a) * (LIVRE_DO_POUSO + r() * 6) }; }
-  pernas.push(emergindoDeMoto(bn, pouso, destino), motoParada(pouso, 1.5));
+  // sai do buraco negro num arco até EM CIMA do pouso e DESCE na vertical (nada de cortar cobertura, cúpula ou laje)
+  const acima = { x: pouso.x, y: pouso.y + 38, z: pouso.z };
+  pernas.push(emergindoDeMoto(bn, acima, destino), desceNaVertical(acima, pouso), motoParada(pouso, 1.5));
   return { v: pernas.reduce(emSeguida), fim: { id: `pouso-${destino}`, ...pouso, estudo: false } };
 }
 /** quão longe da chegada (m) quem vem de moto pousa nas salas antigas */
@@ -454,6 +463,14 @@ export function viagemComVaga(de: P3, vagaDe: VagaEstudo | null, para: P3, vagaP
   const v = pernas.reduce(emSeguida);
   return { ...v, saida, chegada: vagaPara && cauda ? v.dur - cauda.dur : undefined };
 }
+/** a moto que ficou ESTACIONADA onde a IA pousou no trânsito do bloco anterior (no Templo): fica parada ali durante este
+ *  bloco (a IA vai a pé pro lugar dela); no próximo, some — o trânsito seguinte chama outra */
+function motoDoPouso(agente: string, blocos: readonly BlocoPlano[], i: number, flags: FlagsFrota): MotoNoChao | null {
+  const a = blocos[i - 1];
+  if (!a || !a.transito || a.fim < blocos[i]!.ini - 1 || blocos[i]!.transito) return null;
+  const f = movimentoCache(agente, blocos, i - 1, flags, false).fim; if (!f.templo) return null;
+  return { ambiente: "templo", i: Math.abs(Math.round(f.x * 7 + f.z * 13)), x: f.x, y: f.y, z: f.z, rumo: (Math.abs(Math.round(f.x + f.z)) % 628) / 100, zaeon: true };
+}
 /** a vaga onde a moto ficou no bloco ANTERIOR (se ele encosta neste) */
 const vagaAnterior = (blocos: readonly BlocoPlano[], i: number) => (i > 0 && blocos[i - 1]!.fim >= blocos[i]!.ini - 1 ? blocos[i - 1]!.vaga ?? null : null);
 /** qual moto parada é dela no instante `u` (s) de uma viagem `v` com estacionamento */
@@ -462,6 +479,12 @@ const motoParadaNa = (v: Viagem, u: number, vagaDe: VagaEstudo | null, vagaPara:
 
 /** o ESTADO de uma IA no minuto `min` (do dia). `musica` = está rolando som no lounge agora */
 export function estadoDaIA(agente: string, blocos: readonly BlocoPlano[], min: number, flags: FlagsFrota, musica: boolean, preciso = true): EstadoIA {
+  const e = estadoDoBloco(agente, blocos, min, flags, musica, preciso);
+  if (!e.visivel || e.vagaMoto || e.pose === "moto" || e.bloco < 0) return e;
+  const p = motoDoPouso(agente, blocos, e.bloco, flags);   // (a moto que ficou onde ela pousou)
+  return p ? { ...e, vagaMoto: p } : e;
+}
+function estadoDoBloco(agente: string, blocos: readonly BlocoPlano[], min: number, flags: FlagsFrota, musica: boolean, preciso: boolean): EstadoIA {
   const i = blocos.findIndex((b) => min >= b.ini && min < b.fim);
   if (i < 0) return OFFLINE;
   const b = blocos[i]!, t = (min - b.ini) * 60, durBloco = (b.fim - b.ini) * 60;
@@ -516,7 +539,7 @@ type Movimento = { ida: Viagem; idaDur: number; corrida: { dur: number; ritmo: n
 function movimento(agente: string, blocos: readonly BlocoPlano[], i: number, flags: FlagsFrota, preciso: boolean): Movimento {
   const b = blocos[i]!, durBloco = (b.fim - b.ini) * 60, ant = antDoBloco(agente, blocos, i, flags);
   if (b.atividade === "moto" && b.transito) {   // o TRÂNSITO: a viagem inteira (sem roteiro de passeio); depois, de pé onde pousou
-    const t = transitoDeMoto(ant, agente, i), idaDur = Math.min(t.v.dur, durBloco * 0.92);
+    const t = transitoDeMoto(ant, agente, i, blocos[i + 1]?.spot?.templo), idaDur = Math.min(t.v.dur, durBloco * 0.92);
     return { ida: t.v, idaDur, corrida: null, trechos: [], disponivel: durBloco - idaDur, fim: t.fim };
   }
   if (b.atividade === "moto") {

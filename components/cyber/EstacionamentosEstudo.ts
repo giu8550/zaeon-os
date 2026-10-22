@@ -12,6 +12,7 @@
 import * as THREE from "three";
 import { CIDADE } from "@/lib/cyber/ceu";
 import { estiloDaVaga, tamanhoDoLote } from "@/lib/cyber/motos";
+import type { MotoNoChao } from "@/lib/cyber/frota/corpo";
 import { AMBIENTES_COM_VAGA, ESTACIONAMENTOS, VAGAS_POR_ESTACIONAMENTO, type EstacionamentoEstudo, type VagaEstudo } from "@/lib/cyber/estacionamentosEstudo";
 import { GARAGEM_LOUNGE } from "@/lib/cyber/templo";
 import { criarPisoEstacionamento } from "./Estacionamento";
@@ -43,7 +44,7 @@ export function criarPisosEstudo(o: { low: boolean; onde: "zaeon" | "fora" }): T
   return g;
 }
 
-export type MotoParada = { vaga: VagaEstudo; cor: string };
+export type MotoParada = { vaga: VagaEstudo | MotoNoChao; cor: string };
 export type MotosEstacionadasHandle = {
   /** as motos paradas agora (a lista inteira — refaz as matrizes; chamar quando a varredura da frota fecha a volta) */
   definir(lista: readonly MotoParada[]): void;
@@ -75,7 +76,8 @@ export function criarMotosEstacionadas(o: { cena: THREE.Object3D; low: boolean }
     return { molde, pecas };
   });
 
-  const MAX = VAGAS_POR_ESTACIONAMENTO * AMBIENTES_COM_VAGA.length;
+  // (+ as motos estacionadas no TEMPLO, onde as IAs pousam do trânsito — qualquer chão aberto)
+  const MAX = VAGAS_POR_ESTACIONAMENTO * AMBIENTES_COM_VAGA.length + 120;
   /** um conjunto (Zaeon / fora) com as malhas instanciadas das 3 carenagens */
   const conjunto = (nome: string) => {
     const g = new THREE.Group(); g.name = nome; o.cena.add(g);

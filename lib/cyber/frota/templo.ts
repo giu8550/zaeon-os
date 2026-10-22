@@ -15,7 +15,7 @@ import { ALTURA_LOUNGE, CIDADE, daSala, mundo, naSala, rumoNaSala } from "../ceu
 import {
   ALTO_TI, ANDARES_ESTUDO, BOCA_SAIDA_SALAO, CABINES_TORRE, CABINE_TI, CAPELA_RASTA, CARACOL, CASAIS, CHEGADA_SALAO, CUBO_CYBER, CYBER, ESTACOES_TI,
   ARVORE_RASTA, FESTAS, PILARES_ALTO, PIRAMIDE, PLATS, POCOS_TC, PONTES, RASTA, SALAO, TEMPLO_RASTA, TORRE_TI, colisoresDaTorre, colisoresDoAndarEstudo,
-  colisoresDoComplexo, daCabineTI, doEstudoLocal, naPiramide, type PlatTC,
+  colisoresDoComplexo, daCabineTI, doEstudoLocal, naPiramide, solidosDoComplexo, type PlatTC,
 } from "../temploCosmico";
 import { acasoDe, entre } from "./aleatorio";
 import type { Spot } from "./lugares";
@@ -233,6 +233,37 @@ export function pousoNoSalao(r: () => number): LugarNoTemplo {
     if (livreDe(q, cs) && !naPiramide(q, 3) && Math.hypot(q.x - CHEGADA_SALAO.x, q.z - CHEGADA_SALAO.z) > 9 && !noCaminho(q)) return { sala: "salao", yRel: -SALAO.desce, andar: 0, q };
   }
   return { ...CHEGADA_NO_TEMPLO, q: { x: SALAO.x + 20, z: SALAO.z + 20 } };
+}
+/** o céu LIVRE em cima de um ponto (nenhuma laje, cobertura, cúpula ou teto acima) — pra moto descer na vertical */
+function ceuLivre(q: P2, yRel: number): boolean {
+  return solidosDoComplexo().every((o) => Math.hypot(q.x - o.x, q.z - o.z) > o.r + 2.5 || o.topo <= yRel + 0.3);
+}
+/** onde a moto POUSA perto de um lugar do Templo (out/2026, o dono: "qualquer lugar pode servir de estacionamento — as
+ *  motos não ficam só no salão principal"): um chão aberto (céu livre) da área de quem chega — o salão (pros que vão
+ *  pro salão, pros lounges estudantis e pro lounge cósmico, do lado da ponte deles), o disco rasta (rasta, capela,
+ *  festas, casais), a beirada do campus (na altura da cabine), a base ou o deck da torre — fora dos colisores e do
+ *  caminho das pontes */
+export function pousoPerto(l: LugarNoTemplo | undefined, r: () => number): LugarNoTemplo {
+  const cs = colisoresBase(), y0 = -SALAO.desce;
+  const bom = (q: P2, y: number, extra: readonly { x: number; z: number; r: number }[] = []) => livreDe(q, cs) && livreDe(q, extra) && !noCaminho(q) && !naPiramide(q, 4) && ceuLivre(q, y)
+    && Math.hypot(q.x - CHEGADA_SALAO.x, q.z - CHEGADA_SALAO.z) > 9 && Math.hypot(q.x - BOCA_SAIDA_SALAO.x, q.z - BOCA_SAIDA_SALAO.z) > 8;
+  const tenta = (ponto: () => P2, y: number, sala: SalaTemplo, andar = 0, extra: readonly { x: number; z: number; r: number }[] = []): LugarNoTemplo | null => {
+    for (let t = 0; t < 40; t++) { const q = ponto(); if (bom(q, y, extra)) return { sala, yRel: y, andar, q }; }
+    return null;
+  };
+  const noSalaoPara = (alvo: P2) => { const a0 = Math.atan2(alvo.z - SALAO.z, alvo.x - SALAO.x); return () => { const a = a0 + (r() - 0.5) * 1.2, d = 20 + r() * 24; return { x: SALAO.x + Math.cos(a) * d, z: SALAO.z + Math.sin(a) * d }; }; };
+  let p: LugarNoTemplo | null = null;
+  switch (l?.sala) {
+    case "rasta": case "capelaRasta": case "festas": case "casais": { const R = plat("rasta"); p = tenta(() => { const a = r() * Math.PI * 2, d = 14 + r() * (R.r - 20); return { x: R.x + Math.cos(a) * d, z: R.z + Math.sin(a) * d }; }, R.h, "rasta"); break; }
+    // (no CAMPUS: entre duas colunas de cabines, no meio do vão entre as fileiras — a beirada é dos racks)
+    case "campus": { const e = ESTACOES_TI.reduce((m, x) => (Math.abs(x.z - l.q.z) < Math.abs(m.z - l.q.z) ? x : m)); p = tenta(() => ({ x: SALAO.x + (r() < 0.5 ? -1 : 1) * (r() < 0.5 ? 14.5 : 21.5), z: e.z + (r() < 0.5 ? -4.5 : 4.5) }), y0, "campus"); break; }
+    // (a BASE da torre fica embaixo do deck: pousa no fim do campus, na frente dela)
+    case "torre": if (l.andar === 0) { p = tenta(() => ({ x: SALAO.x + (r() < 0.5 ? -1 : 1) * (r() < 0.5 ? 14.5 : 21.5), z: ESTACOES_TI.at(-1)!.z - 4.5 }), y0, "campus"); break; }
+      p = tenta(() => { const a = r() * Math.PI * 2, d = ALTO_TI.rOut + 4 + r() * (CYBER.r - ALTO_TI.rOut - 6.5); return { x: CYBER.x + Math.cos(a) * d, z: CYBER.z + Math.sin(a) * d }; }, CYBER.h, "torre", 1, colisoresDaTorre(1));
+      break;
+    default: p = l && l.sala !== "salao" ? tenta(noSalaoPara(l.q), y0, "salao") : null;
+  }
+  return p ?? pousoNoSalao(r);
 }
 /** um ponto do mundo no layout do Templo */
 export const noLayout = (w: P2): P2 => naSala(sala, w.x - CIDADE.centro.x, w.z - CIDADE.centro.z);
