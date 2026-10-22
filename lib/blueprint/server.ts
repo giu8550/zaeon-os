@@ -11,7 +11,7 @@ import { fasesAprovadas } from "./fases";
 import { COMPOR_SYSTEM, lerPlano, mesclarComposicao, promptComposicao } from "./compor";
 import { buscarRepos } from "./github";
 import { documentosDaResposta, juntarDocumentos } from "@/lib/videodoc/documentos";
-import { SURFACE_BLUEPRINT, blueprintOn, docVazio, sanitizarDoc, type Area, type DocBlueprint, type Fase } from "./tipos";
+import { MAX_BASE, SURFACE_BLUEPRINT, blueprintOn, docVazio, sanitizarDoc, type Area, type DocBlueprint, type Documento, type Fase } from "./tipos";
 
 export const INTERVALO_RECOMPOR_MS = 120_000;
 const SURFACE_CONVERSA = "estudos";
@@ -109,7 +109,24 @@ export type EntradaTurno = {
   answer?: Parameters<typeof documentosDaResposta>[0];
   agora?: number; forcar?: boolean;
   db?: BlueprintDb; gen?: GenJson; repos?: typeof buscarRepos; passosBase?: (tema: string) => Promise<string[]>;
+  /** o vídeo de um documento-base (lib/videodoc/server.garantirVideo) — injetável nos testes */
+  videos?: GarantirVideo;
 };
+type GarantirVideo = (i: { userId: string; documento: Documento; blueprintId: string }) => Promise<{ videoId: string } | { motivo: string }>;
+
+/** cada documento-BASE ganha o seu vídeo com a Zaeon holograma (flag VIDEO_DOC), no máximo MAX_BASE com vídeo por estudo */
+export async function videosDosDocumentosBase(id: string, userId: string, doc: DocBlueprint, db: BlueprintDb, garantir?: GarantirVideo): Promise<number> {
+  const vs = await import("@/lib/videodoc/server");
+  if (!garantir && !vs.videoDocOn()) return 0;
+  const g = garantir ?? vs.garantirVideo;
+  const comVideo = doc.documentos.filter((d) => d.videoId).length;
+  const faltam = doc.documentos.filter((d) => d.base && !d.videoId).slice(0, Math.max(0, MAX_BASE - comVideo));
+  const ids: Record<string, string> = {};
+  for (const d of faltam) { const r = await g({ userId, documento: d, blueprintId: id }); if ("videoId" in r) ids[d.id] = r.videoId; }
+  if (!Object.keys(ids).length) return 0;
+  await gravarDoc(id, userId, (atual) => ({ ...atual, documentos: atual.documentos.map((d) => (ids[d.id] && !d.videoId ? { ...d, videoId: ids[d.id] } : d)) }), db);
+  return Object.keys(ids).length;
+}
 
 const genPadrao = (userId: string, scopeId: string): GenJson => async <T,>(system: string, user: string) => {
   const [{ geminiJson }, { GEMINI_MODEL_FLASH }] = await Promise.all([import("@/lib/scholar/gemini"), import("@/lib/ai/model")]);
@@ -150,6 +167,7 @@ export async function blueprintDoTurno(i: EntradaTurno): Promise<"off" | "nao-es
       if (achados.length) { const meus = atual.repos.filter((x) => x.meu); novo.repos = [...meus, ...achados.filter((x) => !meus.some((m) => m.nome === x.nome))]; }
       return novo;
     }, db);
+    if (r.ok) await videosDosDocumentosBase(linha.id, userId, r.view.doc, db, i.videos).catch((e) => console.warn("[blueprint] vídeos:", e instanceof Error ? e.message : e));
     return r.ok ? "composto" : "falhou";
   } catch (e: unknown) {
     console.warn("[blueprint] turno falhou:", e instanceof Error ? e.message : e);

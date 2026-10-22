@@ -86,3 +86,17 @@ describe("documentos do turno", () => {
     expect((linhas[0]!.cards as DocBlueprint).documentos).toEqual([expect.objectContaining({ id, titulo: "Zether", base: true })]);
   });
 });
+
+describe("vídeos dos documentos-base", () => {
+  beforeEach(() => { process.env.BLUEPRINT_PRATICO = "1"; });
+  it("o documento que vira base ganha o vídeo (o id fica no blueprint); no máximo 3 por estudo", async () => {
+    const { db, linhas } = bancoFalso();
+    const sources = ["a", "b", "c", "d"].map((k) => ({ title: `Artigo ${k}`, url: `https://doi.org/10.1007/${k}` }));
+    const { documentosDaResposta } = await import("@/lib/videodoc/documentos");
+    const ids = documentosDaResposta({ sources }).map((d) => d.id);
+    let n = 0; const videos = async () => ({ videoId: (++n).toString(16).padStart(24, "f") });
+    await blueprintDoTurno({ ...base, sinal: { estudavel: true, tituloSugerido: "X" }, db, gen: gen({ ...plano, documentosBase: ids }), answer: { sources }, videos });
+    const docs = (linhas[0]!.cards as DocBlueprint).documentos;
+    expect(docs.filter((d) => d.videoId)).toHaveLength(3); expect(n).toBe(3);
+  });
+});
