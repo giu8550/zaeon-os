@@ -19,7 +19,11 @@ import { EVT_TCC_MUDOU, ROTULO_OP, ROTULO_ORIGEM, avisarTccMudou, tccApi, type R
 
 type Aba = "doc" | "sugestoes" | "historico";
 
-export default function TccPanel({ workId, onFechar }: { workId: string; onFechar: () => void }) {
+export default function TccPanel({ workId, onFechar, onTitulo }: {
+  workId: string; onFechar: () => void;
+  /** chat único: o título/tipo/status lido do banco (a pasta do trabalho no topo do chat se atualiza) */
+  onTitulo?: (t: { titulo: string; tipo: string; status: string }) => void;
+}) {
   const { data: session } = useSession();
   const [tcc, setTcc] = useState<TccDoc | null>(null);
   const [sugestoes, setSugestoes] = useState<Revisao[]>([]);
@@ -31,6 +35,8 @@ export default function TccPanel({ workId, onFechar }: { workId: string; onFecha
   const [exportando, setExportando] = useState(false);
   const [mudou, setMudou] = useState<Set<string>>(new Set()); // seções que mudaram no último poll (realce)
   const corposRef = useRef<Map<string, string>>(new Map());
+  const onTituloRef = useRef(onTitulo);
+  onTituloRef.current = onTitulo;
 
   const podeEscrever = tcc?.papel === "dono" || tcc?.papel === "editor";
 
@@ -44,6 +50,7 @@ export default function TccPanel({ workId, onFechar }: { workId: string; onFecha
       corposRef.current = new Map(d.tcc.secoes.map((s) => [s.id, s.corpo]));
       if (novas.size) setMudou(novas);
       setTcc(d.tcc); setSugestoes(d.sugestoes); setErro(null);
+      onTituloRef.current?.({ titulo: d.tcc.titulo, tipo: d.tcc.workType || "TCC", status: d.tcc.status });
     } catch (e: any) {
       setErro(e?.status === 404 ? "Este TCC não existe ou você não tem acesso." : "Não consegui carregar o TCC.");
     }

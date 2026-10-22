@@ -57,3 +57,13 @@ describe("flags", () => {
     vi.stubEnv("NEXT_PUBLIC_PROJETOS", "1"); expect(projetosOn()).toBe(true);
   });
 });
+
+describe("resolveLabTab · chat único", () => {
+  it("pesquisa/pesquisas/projetos escondido viram o chat da Aura (Sala de Estudos); o resto passa", () => {
+    expect(resolveLabTab("pesquisa", false, false, true)).toEqual({ tab: "sala-de-estudos" });
+    expect(resolveLabTab("pesquisas", true, false, true)).toEqual({ tab: "sala-de-estudos" });
+    expect(resolveLabTab("projetos", true, false, true)).toEqual({ tab: "sala-de-estudos" });
+    expect(resolveLabTab("projetos", true, true, true)).toEqual({ tab: "projetos" });
+    expect(resolveLabTab("escritorio", true, false, true)).toEqual({ tab: "escritorio" });
+  });
+});

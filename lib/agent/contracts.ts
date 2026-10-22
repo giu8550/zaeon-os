@@ -84,7 +84,7 @@ export type StructuredAnswer = {
   /** RAG: documentos da base (turma/pessoal) que a resposta citou — só trechos que a busca devolveu. `paginas` = "4" ou "4–5". */
   fontesBase?: { documentoId: string; titulo: string; paginas: string }[];
   /** TCC cross-sala (TCC_CROSS): o turno criou/editou o TCC desta conversa → o cliente abre a aba. */
-  tcc?: { workId: string; titulo: string; criado: boolean; alteradas: number; gerando?: boolean };
+  tcc?: { workId: string; titulo: string; criado: boolean; alteradas: number; gerando?: boolean; tipo?: string }; // tipo: chat único (TCC/Artigo/Relatório)
 };
 
 // ─────────────────────────── IntentRegistry (§8.1/8.3) ───────────────────────────

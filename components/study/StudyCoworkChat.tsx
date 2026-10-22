@@ -21,9 +21,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
-  PanelRightClose, PanelRightOpen, FileText, X, ChevronDown, GitBranch, GraduationCap,
+  PanelRightClose, PanelRightOpen, FileText, X, ChevronDown, GitBranch, GraduationCap, FlaskConical,
 } from "lucide-react";
-import { DIRETRIZ_ESTUDOS } from "@/lib/ai/salaPersona";
+import { DIRETRIZ_ESTUDOS, DIRETRIZ_PESQUISA } from "@/lib/ai/salaPersona";
 import CoworkComposer from "@/components/study/CoworkComposer";
 import ChatMarkdown from "@/components/study/ChatMarkdown";
 import LivrosCartao from "@/components/chat/LivrosCartao";
@@ -82,7 +82,8 @@ import { pedirAura } from "@/lib/chat/auraClient";
 import { criarEstudo, gerarArtefato } from "@/lib/studio/studioClient";
 import type { SkillNodeState } from "@/lib/skilltree/types";
 import type { SkillTreeData } from "@/components/study/SkillTreePanel";
-import { TCC_CROSS_ON, tccApi } from "@/lib/tcc/client";
+import { TCC_CROSS_ON, tccApi, type TrabalhoResumo } from "@/lib/tcc/client";
+import { chatUnicoOn, consumirPedidoChat, EVT_PEDIDO_CHAT, gravarModoPesquisa, modoPesquisaDa, type PedidoChat } from "@/lib/chat/chatUnico";
 
 const MeusEstudosFeed = dynamic(() => import("@/components/study/MeusEstudosFeed"), { ssr: false });
 // Árvore de habilidades GENERATIVA (React Flow) — opt-in, drawer ao lado da conversa.
@@ -91,6 +92,8 @@ const LoungeCartolina = dynamic(() => import("@/components/lounge/LoungeCartolin
 const CARTOLINA_ON = process.env.NEXT_PUBLIC_CARTOLINA_MEMORIA === "1";
 // TCC cross-sala: a aba do TCC da conversa (Estudos cria/edita · Pesquisa lapida). Só com a flag.
 const TccPanel = dynamic(() => import("@/components/tcc/TccPanel"), { ssr: false });
+// CHAT ÚNICO: a Sala de Pesquisa vira o MODO PESQUISA desta conversa, e a conversa pode ter vários trabalhos.
+const CHAT_UNICO = chatUnicoOn();
 const SkillTreePanel = dynamic(() => import("@/components/study/SkillTreePanel"), { ssr: false });
 
 const DT = "application/x-zaeon-item";
@@ -184,29 +187,73 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const [threads, setThreads] = useState<Thread[]>([]);
   const [abaAtiva, setAbaAtiva] = useState<string | null>(null);
   const [cartolinaAberta, setCartolinaAberta] = useState(false);
-  // TCC da conversa: id do work por aba (scopeId) + se a aba do TCC está aberta por cima do chat.
-  const [tccPorAba, setTccPorAba] = useState<Record<string, string>>({});
-  const [tccAberto, setTccAberto] = useState(false);
+  // TRABALHOS da conversa (TCC/artigo/relatório): os da aba (scopeId), na ordem em que nasceram, e o que
+  // está ABERTO no editor por cima do chat (null = nenhum). No chat único são vários; fora dele, no máximo um.
+  const [trabalhosPorAba, setTrabalhosPorAba] = useState<Record<string, TrabalhoResumo[]>>({});
+  const [trabalhoAberto, setTrabalhoAberto] = useState<string | null>(null);
+  // o trabalho em FOCO por conversa: o último aberto no editor — voltar pra conversa e pedir "continue a
+  // metodologia" mexe nele (o editor não precisa estar à mostra)
+  const focoPorAbaRef = useRef<Record<string, string>>({});
   const abaAtivaRef = useRef<string | null>(null);
   abaAtivaRef.current = abaAtiva;
+  /** Põe (ou atualiza no lugar) um trabalho na lista da conversa `aba`. */
+  const guardarTrabalho = useCallback((aba: string, t: TrabalhoResumo) => {
+    setTrabalhosPorAba((p) => {
+      const lista = p[aba] ?? [];
+      const ja = lista.some((x) => x.id === t.id);
+      return { ...p, [aba]: ja ? lista.map((x) => (x.id === t.id ? { ...x, ...t } : x)) : [...lista, t] };
+    });
+  }, []);
+  // MODO PESQUISA (chat único): por conversa, lembrado no aparelho. Ligado, o turno vai como a Sala de Pesquisa ia
+  // (superfície "pesquisa" → academicMode enforced: fonte acadêmica, citação, rigor).
+  const [modoPesquisa, setModoPesquisa] = useState(false);
+  const modoPesquisaRef = useRef(false);
+  modoPesquisaRef.current = modoPesquisa;
+  useEffect(() => {
+    if (!CHAT_UNICO) return;
+    try { setModoPesquisa(modoPesquisaDa(localStorage, abaAtiva)); } catch { setModoPesquisa(false); }
+  }, [abaAtiva]);
+  const ligarModoPesquisa = useCallback((v: boolean) => {
+    setModoPesquisa(v);
+    const aba = abaAtivaRef.current;
+    if (aba) try { gravarModoPesquisa(localStorage, aba, v); } catch { /* ignore */ }
+  }, []);
   // o CÉREBRO da conversa ativa (o mesmo da Sala de Pesquisa — HANDOFF_CEREBRO_AURA §3): o turno já marca a conversa
   // como estudável (lib/map/gatekeeper, pelo `cartolinaScopeId`); aqui entram a bolinha ("Gerar mapa") e o painel
   const [cerebroAberto, setCerebroAberto] = useState(false);
   const cerebro = useCerebro(abaAtiva, { aberto: cerebroAberto });
   const conferirCerebro = useRef(cerebro.conferirDepoisDoTurno); conferirCerebro.current = cerebro.conferirDepoisDoTurno;
   useEffect(() => { setCerebroAberto(false); }, [abaAtiva]);
-  const tccDaAba = TCC_CROSS_ON && abaAtiva ? tccPorAba[abaAtiva] ?? null : null;
-  // Trocar de aba fecha o TCC aberto (ele é DAQUELA conversa) e descobre se a nova aba tem TCC.
+  useEffect(() => { if (trabalhoAberto && abaAtiva) focoPorAbaRef.current[abaAtiva] = trabalhoAberto; }, [trabalhoAberto, abaAtiva]);
+  const trabalhosDaAba = TCC_CROSS_ON && abaAtiva ? trabalhosPorAba[abaAtiva] ?? [] : [];
+  // Trocar de aba fecha o trabalho aberto (ele é DAQUELA conversa) e descobre os trabalhos da nova aba.
   useEffect(() => {
-    setTccAberto(false);
-    if (!TCC_CROSS_ON || !abaAtiva || tccPorAba[abaAtiva]) return;
+    setTrabalhoAberto(null);
+    if (!TCC_CROSS_ON || !abaAtiva || trabalhosPorAba[abaAtiva]) return;
     let vivo = true;
-    tccApi.doEscopo(abaAtiva)
-      .then((d) => { if (vivo && d.tcc) setTccPorAba((p) => ({ ...p, [abaAtiva]: d.tcc!.id })); })
-      .catch(() => { /* sem TCC / flag off no servidor: o botão só não aparece */ });
+    const aba = abaAtiva;
+    (CHAT_UNICO
+      ? tccApi.daConversa(aba).then((d) => d.trabalhos)
+      : tccApi.doEscopo(aba).then((d) => (d.tcc ? [{ id: d.tcc.id, titulo: d.tcc.titulo, status: d.tcc.status, tipo: "TCC" }] : [])))
+      .then((lista) => { if (vivo && lista.length) setTrabalhosPorAba((p) => ({ ...p, [aba]: [...lista, ...(p[aba] ?? []).filter((x) => !lista.some((y) => y.id === x.id))] })); })
+      .catch(() => { /* sem trabalho / flag off no servidor: a pasta só não aparece */ });
     return () => { vivo = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abaAtiva]);
+  // Pedidos de fora (deep-link antigo da Sala de Pesquisa, sidebar): ligar o modo pesquisa / abrir um trabalho.
+  useEffect(() => {
+    if (!CHAT_UNICO || !abaAtiva) return;
+    const atender = (p: PedidoChat | null) => {
+      const aba = abaAtivaRef.current;
+      if (!p || !aba) return;
+      if (p.modoPesquisa) ligarModoPesquisa(true);
+      if (p.trabalhoId) { guardarTrabalho(aba, { id: p.trabalhoId, titulo: "Trabalho", status: "pronto", tipo: "Trabalho" }); setTrabalhoAberto(p.trabalhoId); }
+    };
+    atender(consumirPedidoChat());
+    const on = (e: Event) => { atender((e as CustomEvent<PedidoChat>).detail); consumirPedidoChat(); };
+    window.addEventListener(EVT_PEDIDO_CHAT, on);
+    return () => window.removeEventListener(EVT_PEDIDO_CHAT, on);
+  }, [abaAtiva !== null]); // eslint-disable-line react-hooks/exhaustive-deps
   // Espelho das abas pra ler o valor atual dentro de callbacks sem recriá-los.
   const threadsRef = useRef<Thread[]>([]);
   threadsRef.current = threads;
@@ -671,8 +718,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         // conversa de ORIGEM do turno (no retomado, a aba atual).
         if (TCC_CROSS_ON && a.tcc?.workId && abaDoTurno) {
           const workId = a.tcc.workId;
-          setTccPorAba((prev) => ({ ...prev, [abaDoTurno]: workId }));
-          if (abaAtivaRef.current === abaDoTurno) setTccAberto(true);
+          guardarTrabalho(abaDoTurno, { id: workId, titulo: a.tcc.titulo, status: a.tcc.gerando ? "gerando" : "pronto", tipo: a.tcc.tipo ?? "TCC" });
+          if (abaAtivaRef.current === abaDoTurno) { setTrabalhoAberto(workId); setDocAtivo(null); setCartolinaAberta(false); }
         }
         // Artefatos inline: reusa runStudioAction, anexando NA MESMA bolha (asstId).
         // O tópico é o `title` do ref, NÃO a pergunta inteira: "por que o café me
@@ -789,8 +836,12 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     let pararDatilografia = () => {}; // o `finally` garante que o laço de rAF nunca fica girando
 
     const focusTitles = focusIds.map(spaceTitle);
-    // MODO ACADÊMICO = FLEXÍVEL na Sala de Estudos (o rigor pleno é da Sala de Pesquisa).
-    const flexClause = " " + DIRETRIZ_ESTUDOS;
+    // MODO ACADÊMICO = FLEXÍVEL na Sala de Estudos; o MODO PESQUISA (chat único) liga o rigor pleno — o que a
+    // Sala de Pesquisa fazia: só fonte acadêmica, citação, linguagem formal.
+    const pesquisa = CHAT_UNICO && modoPesquisaRef.current;
+    const flexClause = pesquisa
+      ? " MODO PESQUISA LIGADO: você é a parceira científica do aluno — escreve e revisa trabalhos acadêmicos (artigo, TCC, relatório), sugere e verifica referências, explica com rigor e linguagem formal em PT-BR. " + DIRETRIZ_PESQUISA
+      : " " + DIRETRIZ_ESTUDOS;
     // AQUI MORAVA O CARDÁPIO. A linha sem foco terminava com "ofereça transformar o
     // assunto em artefatos do Studio (Guia, Mapa mental, Linha do tempo, Flashcards,
     // FAQ, Imagem, Podcast, Vídeo)" — em TODO turno. O modelo obedecia, e a conversa
@@ -835,8 +886,12 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         prompt,
         history,
         systemContext,
+        // modo pesquisa = a superfície da antiga Sala de Pesquisa (academicMode enforced no harness)
+        ...(pesquisa ? { surface: "pesquisa" } : {}),
         agentContext: {
-          activeTab: "sala-de-estudos",
+          activeTab: pesquisa ? "pesquisa" : "sala-de-estudos",
+          // chat único: a conversa tem VÁRIOS trabalhos; o aberto no editor é o que "continue a metodologia" edita
+          ...(CHAT_UNICO ? { chatUnico: true, trabalhoAbertoId: (abaAtivaRef.current && focoPorAbaRef.current[abaAtivaRef.current]) || undefined } : {}),
           currentStudyId: focusIds[0],
           focusedStudyIds: focusIds,
           // posição do aluno na árvore de habilidades → o mentor sabe onde você está (harness)
@@ -984,6 +1039,18 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     setInput(comeco);
     requestAnimationFrame(() => { const t = colunaRef.current?.querySelector<HTMLTextAreaElement>("textarea"); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); } });
   };
+  // o MAPA da conversa: aparece quando ela vira estudo ("Gerar mapa"); depois, "Ver mapa"
+  const bolinhaMapa = cerebro.ligado && abaAtiva ? (
+    <BolinhaCerebro
+      estado={cerebro.estado}
+      completude={cerebro.mapa?.completudeAprendizado ?? 0}
+      aberto={cerebroAberto}
+      onClick={() => {
+        if (cerebro.estado === "sugerida" || cerebro.estado === "vazia") { void cerebro.gerar(); setCerebroAberto(true); }
+        else setCerebroAberto((v) => !v);
+      }}
+    />
+  ) : null;
   return (
     <div className="relative h-full flex lg:flex-row flex-col" style={zoom.style}>
       {/* Borda-degradê navy na aresta esquerda (par visual com a sidebar da esquerda) — só no claro. */}
@@ -1037,14 +1104,27 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
               embedded surface="estudos" scopeId={abaAtiva} abrirDeInicio
               onFechar={() => setCartolinaAberta(false)}
               onAbrirConversa={(msgId) => { setCartolinaAberta(false); requestAnimationFrame(() => ancorar(msgId)); }}
-              onAbrirTcc={TCC_CROSS_ON ? (workId) => { setCartolinaAberta(false); setTccPorAba((p) => ({ ...p, [abaAtiva]: workId })); setTccAberto(true); } : undefined}
+              onAbrirTcc={TCC_CROSS_ON ? (workId) => {
+                setCartolinaAberta(false);
+                if (!(trabalhosPorAba[abaAtiva] ?? []).some((x) => x.id === workId)) guardarTrabalho(abaAtiva, { id: workId, titulo: "TCC", status: "pronto", tipo: "TCC" });
+                setTrabalhoAberto(workId);
+              } : undefined}
             />
           </div>
         )}
 
-        {tccDaAba && tccAberto && (
-          <div className="absolute inset-y-0 right-0 z-40 w-full sm:w-[min(620px,100%)] shadow-[-24px_0_60px_-30px_rgba(15,23,42,0.5)]">
-            <TccPanel workId={tccDaAba} onFechar={() => setTccAberto(false)} />
+        {/* O TRABALHO aberto: no chat único ocupa a sala como um documento (o editor estilo Word, abaixo das pastas);
+            fora dele, a gaveta à direita de antes. */}
+        {trabalhoAberto && TCC_CROSS_ON && (
+          <div className={CHAT_UNICO
+            ? "absolute inset-x-0 bottom-0 top-[46px] z-[35]"
+            : "absolute inset-y-0 right-0 z-40 w-full sm:w-[min(620px,100%)] shadow-[-24px_0_60px_-30px_rgba(15,23,42,0.5)]"}>
+            <TccPanel
+              key={trabalhoAberto}
+              workId={trabalhoAberto}
+              onFechar={() => setTrabalhoAberto(null)}
+              onTitulo={abaAtiva ? (t) => guardarTrabalho(abaAtiva, { id: trabalhoAberto, titulo: t.titulo, status: t.status, tipo: t.tipo }) : undefined}
+            />
           </div>
         )}
 
@@ -1077,31 +1157,25 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                 onFechar: () => { setDocs((xs) => xs.filter((x) => x.artifactId !== d.artifactId)); if (docAtivo === d.artifactId) setDocAtivo(null); },
               };
             }),
-            // o TCC da conversa (abre por cima do chat; só existe depois do "crie um TCC sobre…" ou do card na cartolina)
-            ...(tccDaAba ? [{ id: "tcc", rotulo: "TCC", titulo: "TCC desta conversa", icone: <GraduationCap size={13} /> }] : []),
+            // os TRABALHOS da conversa (abrem no editor; nascem do "escreva um artigo/TCC sobre…" ou do card na cartolina)
+            ...trabalhosDaAba.map((w): Pasta => ({
+              id: `trab:${w.id}`, rotulo: CHAT_UNICO ? w.titulo : "TCC", titulo: `${w.tipo}: ${w.titulo}`, icone: <GraduationCap size={13} />,
+              ...(CHAT_UNICO ? { onFechar: () => { setTrabalhosPorAba((p) => ({ ...p, [abaAtiva!]: (p[abaAtiva!] ?? []).filter((x) => x.id !== w.id) })); if (trabalhoAberto === w.id) setTrabalhoAberto(null); if (focoPorAbaRef.current[abaAtiva!] === w.id) delete focoPorAbaRef.current[abaAtiva!]; } } : {}),
+            })),
             // a cartolina da conversa (o board abre por cima; tap num card → volta à resposta)
             ...(CARTOLINA_ON && abaAtiva ? [{ id: "cartolina", rotulo: "Cartolina", titulo: "Cartolina desta conversa", icone: <FileText size={13} /> }] : []),
           ]}
-          ativa={cartolinaAberta && CARTOLINA_ON ? "cartolina" : tccAberto && tccDaAba ? "tcc" : docAtivo ?? "conversa"}
+          ativa={cartolinaAberta && CARTOLINA_ON ? "cartolina" : trabalhoAberto && TCC_CROSS_ON ? `trab:${trabalhoAberto}` : docAtivo ?? "conversa"}
           onAbrir={(id) => {
-            if (id === "tcc") { setTccAberto(true); setCartolinaAberta(false); return; }
+            if (id.startsWith("trab:")) { setTrabalhoAberto(id.slice(5)); setCartolinaAberta(false); return; }
             if (id === "cartolina") { setCartolinaAberta(true); return; }
-            setTccAberto(false); setCartolinaAberta(false);
+            setTrabalhoAberto(null); setCartolinaAberta(false);
             setDocAtivo(id === "conversa" ? null : id);
           }}
+          // chat único: o MAPA da conversa mora no canto de cima à ESQUERDA (onde ficava na Sala de Pesquisa)
+          antes={CHAT_UNICO ? bolinhaMapa : undefined}
           depois={<>
-            {/* o MAPA da conversa: aparece quando ela vira estudo ("Gerar mapa"); depois, "Ver mapa" */}
-            {cerebro.ligado && abaAtiva && (
-              <BolinhaCerebro
-                estado={cerebro.estado}
-                completude={cerebro.mapa?.completudeAprendizado ?? 0}
-                aberto={cerebroAberto}
-                onClick={() => {
-                  if (cerebro.estado === "sugerida" || cerebro.estado === "vazia") { void cerebro.gerar(); setCerebroAberto(true); }
-                  else setCerebroAberto((v) => !v);
-                }}
-              />
-            )}
+            {!CHAT_UNICO && bolinhaMapa}
             <ChatZoom escala={zoom.escala} menor={zoom.menor} maior={zoom.maior} />
           </>}
         />
@@ -1304,6 +1378,25 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
               {/* ⟁ Aura ▾ — seletor: Aura base ou um mentor plugado */}
               <div className="flex items-center gap-2">
                 <MentorPill value={activeMentor} onChange={(slug) => setActiveMentor(slug)} />
+                {/* MODO PESQUISA (chat único): o harness de pesquisa da antiga Sala de Pesquisa, ligado nesta conversa */}
+                {CHAT_UNICO && (
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={modoPesquisa}
+                    onClick={() => ligarModoPesquisa(!modoPesquisa)}
+                    title={modoPesquisa ? "Modo pesquisa ligado: fontes acadêmicas, citações e rigor ABNT. Clique para desligar." : "Ligar o modo pesquisa: fontes acadêmicas, citações, artigos/TCC no editor"}
+                    className={`inline-flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full text-[11.5px] font-bold font-tech border transition-colors
+                      ${modoPesquisa
+                        ? "bg-gradient-to-r from-violet-600/20 to-fuchsia-500/15 text-violet-800 dark:text-violet-200 border-violet-500/50"
+                        : "text-slate-500 dark:text-white/50 border-slate-200 dark:border-white/10 hover:text-violet-600 hover:border-violet-300"}`}
+                  >
+                    <span aria-hidden className={`relative inline-flex h-3.5 w-6 rounded-full transition-colors ${modoPesquisa ? "bg-violet-600" : "bg-slate-300 dark:bg-white/20"}`}>
+                      <span className={`absolute top-0.5 h-2.5 w-2.5 rounded-full bg-white shadow transition-[left] ${modoPesquisa ? "left-[12px]" : "left-0.5"}`} />
+                    </span>
+                    <FlaskConical size={12} /> Modo pesquisa
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setTreeOpen((v) => !v)}
