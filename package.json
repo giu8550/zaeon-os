@@ -54,6 +54,7 @@
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.11.1",
+    "@codesandbox/sandpack-react": "^2.20.0",
     "@colyseus/sdk": "^0.18.5",
     "@google-cloud/vertexai": "^1.10.0",
     "@google/generative-ai": "^0.24.1",

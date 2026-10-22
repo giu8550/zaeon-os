@@ -477,6 +477,17 @@ describe("octa · agente (octa_ver_pagina)", () => {
     expect(m.vistos[0][0].content).toMatch(/depois de montar ou editar a página, use octa_ver_pagina pelo menos uma vez antes de terminar/i);
   });
 
+  it("prompt do landing sabe montar app React (Vite, sem backend) e projeto Python", async () => {
+    const m = roteiro([{ content: "ok" }]);
+    await rodarAgenteOcta(landing(), m, { sessionId: "react1", capturar: capturaOk() });
+    const sis = String(m.vistos[0][0].content);
+    for (const arq of ["index.html", "package.json", "src/main.jsx", "src/App.jsx", "vite.config.js"]) expect(sis).toContain(arq);
+    expect(sis).toMatch(/react, react-dom e vite/i);
+    expect(sis).toMatch(/sem backend/i);
+    expect(sis).toMatch(/arquivos \.py/);
+    expect(sis).toMatch(/clica em Rodar/);
+  });
+
   it("parou pedindo aprovação no mesmo lote: msgs sem base64, e a contagem de capturas continua na retomada", async () => {
     const capturar = capturaOk();
     const pub = vi.fn(async () => OK_PUB);

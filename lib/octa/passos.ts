@@ -145,6 +145,7 @@ const ERROS_PUBLICAR: Record<string, string> = {
   falha_github: "O GitHub não respondeu agora. Tente de novo em alguns minutos.",
   projeto_inexistente: "Este projeto não existe mais no servidor.",
   sem_arquivos_publicaveis: "Ainda não há página para publicar: peça ao Octa para montar a landing (index.html).",
+  tipo_nao_publicavel: "Publicação de apps React chega na próxima fase",
 };
 export const textoErroPublicar = (codigo: string, palavra?: string) => {
   if (codigo === "marca_no_conteudo") {

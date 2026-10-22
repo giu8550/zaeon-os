@@ -147,6 +147,7 @@ const INSTRUCAO_PUBLICAR: Record<ErroPublicar, string> = {
   projeto_inexistente: "Este projeto não está salvo no servidor; peça ao aluno para salvar o projeto antes de publicar.",
   sem_arquivos_publicaveis: "Não há arquivos de site para publicar (index.html, .css…); monte a página antes.",
   marca_no_conteudo: "A página menciona o nome da marca de origem do estilo; reescreva o texto sem ele e tente de novo.",
+  tipo_nao_publicavel: "Este projeto é um app React e a publicação de apps React chega na próxima fase; avise o aluno que por enquanto ele roda na Prévia.",
 };
 
 const recusaMarca = (palavra: string, onde: string) =>
@@ -387,6 +388,18 @@ const REGRA_PLACEHOLDERS =
   "Nunca atribua falas a pessoas reais ou identificáveis, jornalistas, veículos, publicações ou empresas, e nunca invente números " +
   "apresentados como fatos (use \"[seu número]\" ou diga que é exemplo).";
 
+/**
+ * Pedido que não é landing: app React (roda no navegador do aluno, via Sandpack) ou Python (Pyodide, botão Rodar).
+ * Nada de backend: não há servidor do aluno nesta fase.
+ */
+const REGRA_APPS = [
+  "APP REACT: se o aluno pedir um app React (ou um app interativo), monte um projeto Vite com octa_escrever: index.html (com <div id=\"root\"></div> e <script type=\"module\" src=\"/src/main.jsx\"></script>), " +
+    "package.json com react, react-dom e vite (react e react-dom em dependencies; vite e @vitejs/plugin-react em devDependencies), vite.config.js (com @vitejs/plugin-react), src/main.jsx (createRoot no #root), src/App.jsx e o CSS (src/index.css). " +
+    "Sem backend, sem servidor, sem banco: tudo roda no navegador do aluno. Não use octa_pagina_montar nem octa_ver_pagina num app React (a captura não roda JavaScript); o aluno vê o app na aba Prévia. " +
+    "App React ainda não publica no GitHub Pages: se o aluno pedir, diga que a publicação de apps React chega na próxima fase.",
+  "PYTHON: se o aluno pedir um programa em Python, escreva arquivos .py (por exemplo main.py) com octa_escrever, sem index.html; o aluno abre o arquivo e clica em Rodar (o Python roda no navegador dele).",
+].join("\n");
+
 function sistema(t: TurnoOcta): string {
   return [
     "Você é o Octa Code, o agente de código da Zaeon, operando a IDE do aluno. Responda em português, direto.",
@@ -403,6 +416,7 @@ function sistema(t: TurnoOcta): string {
       "Nunca use o nome, o logo nem textos da marca de origem do estilo na página: o DESIGN.md é só referência visual.",
       "Imagens: só de licença aberta (com a fonte) ou SVG próprio gerado com octa_arte.",
       REGRA_PLACEHOLDERS,
+      REGRA_APPS,
     ].join("\n") : "",
     `Antes de qualquer coisa extra, pergunte-se: ${PERGUNTAS_ANTES_DE_AGIR.join(" ")} Se não, não faça.`,
     REGRA_DADOS_NAO_COMANDOS,

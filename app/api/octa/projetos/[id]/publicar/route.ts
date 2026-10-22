@@ -28,6 +28,7 @@ const STATUS: Record<Exclude<ErroPublicar, "projeto_inexistente">, number> = {
   limite_repos: 429,
   falha_github: 502,
   marca_no_conteudo: 409,
+  tipo_nao_publicavel: 409,
 };
 
 export async function POST(req: Request, { params }: Ctx) {

@@ -31,8 +31,15 @@ import PreviaSvg from "./PreviaSvg";
 import GaleriaDesign from "./GaleriaDesign";
 import { PassosTurno, CartaoAprovacao } from "./PassosTurno";
 import { useTurnoOcta, type EstadoTurno, type StatusTurno } from "./useTurnoOcta";
+import { tipoProjeto } from "@/lib/octa/tipoProjeto";
 
 const Monaco = dynamic(() => import("@monaco-editor/react").then((m) => m.default), {
+  ssr: false,
+  loading: () => <div className="grid place-items-center h-full text-[12px] text-[#7f848e]"><Loader2 className="w-4 h-4 animate-spin" /></div>,
+});
+
+// app React: o Sandpack só existe no navegador (iframe do bundler hospedado), nunca no servidor
+const PreviaReact = dynamic(() => import("./PreviaReact"), {
   ssr: false,
   loading: () => <div className="grid place-items-center h-full text-[12px] text-[#7f848e]"><Loader2 className="w-4 h-4 animate-spin" /></div>,
 });
@@ -171,6 +178,7 @@ export default function OctaIDE() {
   const [saidaAberta, setSaidaAberta] = useState(false);
   // #421: por arquivo .svg, mostrar o código em vez da imagem? (padrão: imagem)
   const [verCodigo, setVerCodigo] = useState<Record<string, boolean>>({});
+  const [errosReact, setErrosReact] = useState<string[]>([]); // compilação + console.error do app React (Sandpack)
   const { run, output, isRunning, isPyodideReady, clearOutput, iframeRef } = useCodeRunner();
   const fimChat = useRef<HTMLDivElement>(null);
   const abortar = useRef<AbortController | null>(null);
@@ -421,6 +429,8 @@ export default function OctaIDE() {
   const publicar = async () => {
     const p = projetoRef.current;
     if (!p || turnoVivo || pub.fase === "publicando") return;
+    // app React não publica nesta fase: avisa sem pedir GitHub nem o aviso público (o servidor barra de novo)
+    if (ideRef.current && tipoProjeto(ideRef.current.arquivos) === "react") { setPub({ fase: "erro", erro: "tipo_nao_publicavel" }); return; }
     if (gh && !gh.conectado) { setPub({ fase: "erro", erro: "github_reconectar" }); return; }
     await salvarAgora();
     if (!p.avisoPublicoAceito) { setPub({ fase: "aviso" }); return; }
@@ -502,7 +512,10 @@ export default function OctaIDE() {
   const ativo = ide?.ativo ?? null;
   const lang = ativo ? linguagem(ativo) : null;
   const estiloAtual = ide ? estiloDoDesignMd(ide.arquivos) ?? projeto?.designId ?? null : null;
-  const previaHtml = useMemo(() => (vista === "previa" && ide ? montarPrevia(ide.arquivos) : null), [vista, ide]);
+  const tipo = useMemo(() => tipoProjeto(ide?.arquivos), [ide?.arquivos]);
+  const previaHtml = useMemo(() => (vista === "previa" && ide && tipo !== "react" ? montarPrevia(ide.arquivos) : null), [vista, ide, tipo]);
+  // fora da prévia React os erros dela não valem mais (voltam quando o Sandpack monta de novo)
+  useEffect(() => { if (vista !== "previa" || tipo !== "react") setErrosReact([]); }, [vista, tipo]);
 
   const novoArquivo = () => {
     const p = caminhoValido(window.prompt("Nome do arquivo (ex.: src/app.ts)") ?? "");
@@ -716,6 +729,22 @@ export default function OctaIDE() {
                     const md = p.arquivos?.["DESIGN.md"];
                     if (typeof md === "string") setIde((e) => (e ? { ...e, arquivos: { ...e.arquivos, "DESIGN.md": md } } : e)); // o servidor já gravou
                   }} />
+              </div>
+            ) : vista === "previa" && tipo === "react" ? (
+              <div className="flex-1 min-h-0 flex flex-col">
+                <div className="h-8 shrink-0 flex items-center gap-2 px-3 text-[11.5px]" style={{ background: Z.painel, borderBottom: `1px solid ${Z.borda}`, color: Z.apagado }}>
+                  <Eye className="w-3.5 h-3.5" /> Prévia do app <span style={{ color: Z.fraco }}>React</span>
+                  <span className="ml-auto">a prévia React roda no seu navegador</span>
+                </div>
+                <div className="flex-1 min-h-0">
+                  <PreviaReact key={projeto?.id ?? "rascunho"} arquivos={ide.arquivos} onErros={setErrosReact} />
+                </div>
+                {errosReact.length > 0 && (
+                  <div role="status" aria-label="Erros do app" className="shrink-0 max-h-28 overflow-y-auto px-3 py-1.5 font-mono text-[11.5px] leading-relaxed"
+                    style={{ background: Z.painel, borderTop: `1px solid ${Z.borda}`, color: Z.erro }}>
+                    {errosReact.map((e, i) => <div key={i} className="truncate" title={e}>{e}</div>)}
+                  </div>
+                )}
               </div>
             ) : vista === "previa" ? (
               <div className="flex-1 min-h-0 flex flex-col">

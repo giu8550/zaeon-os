@@ -138,6 +138,33 @@ describe("OctaIDE · modo projeto", () => {
     expect(alerta.textContent).toMatch(/troque|edite/i);
   });
 
+  it("projeto React: a Prévia usa o Sandpack (sem srcdoc) e diz que roda no navegador; o estático segue igual", async () => {
+    projeto.arquivos = { "index.html": '<div id="root"></div>', "src/App.jsx": "export default () => <h1>oi</h1>" };
+    render(<OctaIDE />);
+    await screen.findByText("Confeitaria da Ana");
+    fireEvent.click(screen.getByRole("tab", { name: /Prévia/ }));
+    expect(await screen.findByText("a prévia React roda no seu navegador")).toBeTruthy();
+    expect(document.querySelector("iframe[srcdoc]")).toBeNull();
+    cleanup();
+
+    projeto.arquivos = { "index.html": "<h1>oi</h1>" };
+    render(<OctaIDE />);
+    await screen.findByText("Confeitaria da Ana");
+    fireEvent.click(screen.getByRole("tab", { name: /Prévia/ }));
+    await waitFor(() => expect(document.querySelector("iframe[srcdoc]")).toBeTruthy());
+    expect(screen.queryByText("a prévia React roda no seu navegador")).toBeNull();
+  });
+
+  it("Publicar projeto React: avisa que chega na próxima fase e não chama o servidor", async () => {
+    projeto.avisoPublicoAceito = true;
+    projeto.arquivos = { "index.html": "", "package.json": JSON.stringify({ dependencies: { react: "^18.3.1" } }), "src/main.jsx": "" };
+    render(<OctaIDE />);
+    await screen.findByText("ana-dev");
+    fireEvent.click(screen.getByRole("button", { name: /Publicar/ }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Publicação de apps React chega na próxima fase");
+    expect(chamadas((u) => u.endsWith("/publicar"))).toHaveLength(0);
+  });
+
   it("trocar a permissão grava no projeto (PATCH permissao)", async () => {
     render(<OctaIDE />);
     await screen.findByText("Confeitaria da Ana");
