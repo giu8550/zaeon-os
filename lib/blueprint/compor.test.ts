@@ -67,3 +67,12 @@ describe("o teto de críticos nunca come entrega provada", () => {
     expect(p.criticos).toHaveLength(3);
   });
 });
+
+describe("documentos-base", () => {
+  it("a Zaeon vê os documentos e marca a base; ids que não existem não marcam nada", () => {
+    const antes = doc({ documentos: [{ id: "da", titulo: "Zether", tipo: "artigo", base: false }, { id: "db", titulo: "Apostila", tipo: "base", ref: "x", base: false }] });
+    expect(promptComposicao({ doc: antes, conversa: [] })).toContain("da — artigo — Zether");
+    const r = mesclarComposicao(antes, plano({ documentosBase: ["db", "nada"] }), 1);
+    expect(r.documentos.map((d) => [d.id, d.base])).toEqual([["da", false], ["db", true]]);
+  });
+});

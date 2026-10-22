@@ -74,3 +74,15 @@ describe("duplicatas que escaparam da corrida", () => {
     expect(linhas.map((l) => l.id)).toEqual([primeiro]);
   });
 });
+
+describe("documentos do turno", () => {
+  beforeEach(() => { process.env.BLUEPRINT_PRATICO = "1"; });
+  it("as fontes da resposta entram no blueprint e a Zaeon marca a base", async () => {
+    const { db, linhas } = bancoFalso();
+    const answer = { sources: [{ title: "Zether", url: "https://doi.org/10.1007/zether" }] };
+    const { documentosDaResposta } = await import("@/lib/videodoc/documentos");
+    const id = documentosDaResposta(answer)[0]!.id;
+    await blueprintDoTurno({ ...base, sinal: { estudavel: true, tituloSugerido: "X" }, db, gen: gen({ ...plano, documentosBase: [id] }), answer });
+    expect((linhas[0]!.cards as DocBlueprint).documentos).toEqual([expect.objectContaining({ id, titulo: "Zether", base: true })]);
+  });
+});

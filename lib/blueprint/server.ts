@@ -10,6 +10,7 @@ import { papelDe, podeEscrever, type Papel } from "@/lib/cartolina/access";
 import { fasesAprovadas } from "./fases";
 import { COMPOR_SYSTEM, lerPlano, mesclarComposicao, promptComposicao } from "./compor";
 import { buscarRepos } from "./github";
+import { documentosDaResposta, juntarDocumentos } from "@/lib/videodoc/documentos";
 import { SURFACE_BLUEPRINT, blueprintOn, docVazio, sanitizarDoc, type Area, type DocBlueprint, type Fase } from "./tipos";
 
 export const INTERVALO_RECOMPOR_MS = 120_000;
@@ -104,6 +105,8 @@ export type EntradaTurno = {
   userId: string | null; scopeId: string | null;
   sinal: { estudavel: boolean; tituloSugerido: string } | null;
   prompt: string; answerTexto: string; history: { role: string; text: string }[];
+  /** a resposta estruturada do turno (as fontes, a base, os livros, o trabalho → os DOCUMENTOS do estudo) */
+  answer?: Parameters<typeof documentosDaResposta>[0];
   agora?: number; forcar?: boolean;
   db?: BlueprintDb; gen?: GenJson; repos?: typeof buscarRepos; passosBase?: (tema: string) => Promise<string[]>;
 };
@@ -129,8 +132,13 @@ export async function blueprintDoTurno(i: EntradaTurno): Promise<"off" | "nao-es
       linha = await db.cartolina.findUnique({ where: { id } });
       if (!linha) return "falhou";
     }
-    const doc = docDaLinha(linha);
-    if (!i.forcar && agora - doc.compostoEm < INTERVALO_RECOMPOR_MS) return "aguardando";
+    const novosDocs = documentosDaResposta(i.answer);
+    const doc0 = docDaLinha(linha), doc = { ...doc0, documentos: juntarDocumentos(doc0.documentos, novosDocs) };
+    if (!i.forcar && agora - doc.compostoEm < INTERVALO_RECOMPOR_MS) {
+      // sem recompor agora, mas os documentos do turno não se perdem
+      if (doc.documentos.length !== doc0.documentos.length) await gravarDoc(linha.id, userId, (atual) => ({ ...atual, documentos: juntarDocumentos(atual.documentos, novosDocs) }), db);
+      return "aguardando";
+    }
     const conversa = [...i.history.slice(-10), { role: "user", text: i.prompt }, { role: "assistant", text: i.answerTexto }].filter((m) => m.text?.trim());
     const passosBase = doc.turnos === 0 ? await (i.passosBase ?? passosPadrao)(doc.titulo).catch(() => []) : undefined;
     const gen = i.gen ?? genPadrao(userId, scopeId);
@@ -138,7 +146,7 @@ export async function blueprintDoTurno(i: EntradaTurno): Promise<"off" | "nao-es
     if (!plano) return "falhou";
     const achados = await (i.repos ?? buscarRepos)(plano.termosRepo).catch(() => []);
     const r = await gravarDoc(linha.id, userId, (atual) => {
-      const novo = mesclarComposicao(atual, plano, agora);
+      const novo = mesclarComposicao({ ...atual, documentos: juntarDocumentos(atual.documentos, novosDocs) }, plano, agora);
       if (achados.length) { const meus = atual.repos.filter((x) => x.meu); novo.repos = [...meus, ...achados.filter((x) => !meus.some((m) => m.nome === x.nome))]; }
       return novo;
     }, db);
