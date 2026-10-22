@@ -72,8 +72,12 @@ services:
       # BACKGROUND da Sala de Pesquisa: DESLIGADO por enquanto (modo inline, já testado).
       # Pra ligar: mude SCHOLAR_BG p/ "1" AQUI e suba o worker com `--profile worker`.
       SCHOLAR_BG: "0"
-      CHAT_BG: "0"          # Fase 3: chat da Aura em background. Só ligue com o worker de pé.
-      SCHOLAR_WORKER: "0"
+      # Chat da Aura em BACKGROUND (turno salvo no banco: conexão que cai não perde a resposta — o cliente
+      # retoma pelo X-Chat-Turn-Id). Vem do .env: CHAT_BG=1 + SCHOLAR_WORKER=1 roda o consumidor da fila
+      # "chat" DENTRO do web (sem o serviço `worker`). Deploy que recria o web ainda mata o turno em curso
+      # (o reaper marca erro no boot). Default 0 = inline, como antes.
+      CHAT_BG: ${CHAT_BG:-0}
+      SCHOLAR_WORKER: ${SCHOLAR_WORKER:-0}
       # Flags de SERVIDOR (runtime) do cérebro/AURA: vêm das Variables do repo (deploy.yml exporta) ou do
       # .env do VPS; default 0. Rollback = Variable "0" + redeploy (não precisa rebuild).
       MAP_HARNESS: ${MAP_HARNESS:-0}
