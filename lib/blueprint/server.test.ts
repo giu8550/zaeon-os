@@ -13,7 +13,7 @@ function bancoFalso(convEstudavel = false) {
     cartolina: {
       async findFirst({ where }) { await tique(); return linhas.filter((l) => casa(l, where)).sort(ordem)[0] ?? null; },
       async findUnique({ where }) { await tique(); return linhas.find((l) => l.id === where.id) ?? null; },
-      async findMany({ where }) { await tique(); return linhas.filter((l) => casa(l, where)); },
+      async findMany({ where }) { await tique(); return linhas.filter((l) => casa(l, where)).sort(ordem); },
       async create({ data }) { await tique(); const n = ++seq; const l = { ...data, id: n.toString(16).padStart(24, "0"), rev: 0, createdAt: new Date(1000 + n), updatedAt: new Date(1000 + n) }; linhas.push(l); return l; },
       async updateMany({ where, data }) { await tique(); const l = linhas.find((x) => x.id === where.id && x.rev === where.rev); if (!l) return { count: 0 }; Object.assign(l, data, { updatedAt: new Date() }); return { count: 1 }; },
       async deleteMany({ where }) { const i = linhas.findIndex((l) => l.id === where.id); if (i >= 0) linhas.splice(i, 1); return { count: i >= 0 ? 1 : 0 }; },
@@ -81,5 +81,16 @@ describe("a loja", () => {
   it("gravarDoc sem papel = not_found", async () => {
     const { db } = bancoFalso(); const c = await db.cartolina.create({ data: { ownerId: "o".repeat(24), surface: "blueprint", scopeId: "t", titulo: "X", cards: docVazio("X", 0) as never } });
     expect(await gravarDoc(c.id, "x".repeat(24), (d) => d, db)).toEqual({ ok: false, motivo: "not_found" });
+  });
+});
+
+describe("duplicatas que escaparam da corrida", () => {
+  beforeEach(() => { process.env.BLUEPRINT_PRATICO = "1"; });
+  it("o turno seguinte deixa só o mais antigo", async () => {
+    const { db, linhas } = bancoFalso(); const onde = { ownerId: base.userId, surface: "blueprint", scopeId: base.scopeId, titulo: "X", cards: docVazio("X", 0) as never };
+    await db.cartolina.create({ data: onde }); await db.cartolina.create({ data: onde });
+    expect(linhas).toHaveLength(2); const primeiro = linhas[0]!.id;
+    await blueprintDoTurno({ ...base, sinal: { estudavel: true, tituloSugerido: "X" }, db, gen: gen() });
+    expect(linhas.map((l) => l.id)).toEqual([primeiro]);
   });
 });
