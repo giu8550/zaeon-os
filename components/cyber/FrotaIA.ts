@@ -18,6 +18,7 @@
 import * as THREE from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { criarAvatarLuz, type AvatarLuzHandle, type Montado } from "./AvatarLuz";
+import { paletaFeminina } from "./CorpoAstronauta";
 import { criarMoto, loteMoto, type MotoHandle } from "./Moto";
 import { matrizDoAvatar } from "./matrizes";
 import { criarMultidao, type MultidaoHandle } from "./MultidaoGPU";
@@ -253,7 +254,9 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
           let k = corpos.find((x) => !x.id);
           if (!k && corpos.length < MAX && !criou) { k = novoCorpo(); corpos.push(k); criou = true; }
           if (!k) break;
-          const a = porId.get(id)!; k.id = id; k.av.recolorir(a.cor); crachar(k, a); k.desvio = { x: 0, z: 0 }; k.motoK = 0;
+          const a = porId.get(id)!; k.id = id; k.av.recolorir(a.cor); crachar(k, a);
+          // o TRAJE (out/2026, o dono: os homens com VARIAÇÕES do traje dele em outras cores; as mulheres com o traje feminino)
+          k.av.traje(true, { paleta: a.genero === "f" ? paletaFeminina(a.cor) : (a.cor as `#${string}`), modelo: a.genero === "f" ? "f" : "m" }); k.desvio = { x: 0, z: 0 }; k.motoK = 0;
         }
       }
       // 1b) as SILHUETAS: todo mundo que aparece e NÃO tem corpo completo (quem se move é refeito a cada quadro)

@@ -6,8 +6,10 @@ import { gerarFrota } from "./frota/frota";
 import { FLAGS_PADRAO } from "./frota/agenda";
 import { planejarDia } from "./frota/plano";
 import { estadoDaIA } from "./frota/corpo";
+/** (estes testes são das regras de HORÁRIO da agenda — 9h, folga, festa à noite: com `semHorario` desligado) */
+const FLAGS_HORARIO = { ...FLAGS_PADRAO, semHorario: false };
 
-const frota = gerarFrota(), plano = planejarDia(frota, 20734, FLAGS_PADRAO);
+const frota = gerarFrota(), plano = planejarDia(frota, 20734, FLAGS_HORARIO);
 
 describe("os estacionamentos das plataformas de estudo", () => {
   it("um por lugar de estudo, 33 vagas cada, todas em lugares diferentes (sem universidades no mapa: só os da Zaeon)", () => {
@@ -42,16 +44,16 @@ describe("os estacionamentos das plataformas de estudo", () => {
     for (const { agente, blocos } of [...plano.agentes.values()].slice(0, 300)) blocos.forEach((b, i) => {
       if (!b.vaga || !b.atividade.startsWith("estudo") || i === 0 || blocos[i - 1]!.fim < b.ini - 1) return;
       const poses: string[] = [];
-      for (let m = b.ini + 0.005; m < b.ini + 5; m += 1 / 30) poses.push(estadoDaIA(agente.id, blocos, m, FLAGS_PADRAO, true, false).pose);
+      for (let m = b.ini + 0.005; m < b.ini + 5; m += 1 / 30) poses.push(estadoDaIA(agente.id, blocos, m, FLAGS_HORARIO, true, false).pose);
       expect(poses).toContain("moto");
       // estudando: a moto dela está na vaga
-      const meio = estadoDaIA(agente.id, blocos, (b.ini + b.fim) / 2, FLAGS_PADRAO, true, false);
+      const meio = estadoDaIA(agente.id, blocos, (b.ini + b.fim) / 2, FLAGS_HORARIO, true, false);
       expect(meio.vagaMoto).toEqual(b.vaga);
       // no começo do bloco SEGUINTE, enquanto volta pra vaga, a moto ainda está lá; depois, não
       const prox = blocos[i + 1];
       if (prox && prox.ini <= b.fim + 1 && !(prox.vaga && prox.vaga.ambiente === b.vaga.ambiente)) {
-        expect(estadoDaIA(agente.id, blocos, prox.ini + 0.001, FLAGS_PADRAO, true, false).vagaMoto).toEqual(b.vaga);
-        expect(estadoDaIA(agente.id, blocos, prox.fim - 0.01, FLAGS_PADRAO, true, false).vagaMoto?.ambiente === b.vaga.ambiente && estadoDaIA(agente.id, blocos, prox.fim - 0.01, FLAGS_PADRAO, true, false).vagaMoto?.i === b.vaga.i && prox.vaga !== undefined).toBe(false);
+        expect(estadoDaIA(agente.id, blocos, prox.ini + 0.001, FLAGS_HORARIO, true, false).vagaMoto).toEqual(b.vaga);
+        expect(estadoDaIA(agente.id, blocos, prox.fim - 0.01, FLAGS_HORARIO, true, false).vagaMoto?.ambiente === b.vaga.ambiente && estadoDaIA(agente.id, blocos, prox.fim - 0.01, FLAGS_HORARIO, true, false).vagaMoto?.i === b.vaga.i && prox.vaga !== undefined).toBe(false);
       }
       vistos++;
     });
@@ -59,7 +61,7 @@ describe("os estacionamentos das plataformas de estudo", () => {
   });
   it("num horário cheio, os estacionamentos têm motos paradas (e nunca mais de 33 por lugar)", () => {
     const porLugar = new Map<string, number>();
-    for (const { agente, blocos } of plano.agentes.values()) { const e = estadoDaIA(agente.id, blocos, 15 * 60, FLAGS_PADRAO, true, false); if (e.vagaMoto) porLugar.set(e.vagaMoto.ambiente, (porLugar.get(e.vagaMoto.ambiente) ?? 0) + 1); }
+    for (const { agente, blocos } of plano.agentes.values()) { const e = estadoDaIA(agente.id, blocos, 15 * 60, FLAGS_HORARIO, true, false); if (e.vagaMoto) porLugar.set(e.vagaMoto.ambiente, (porLugar.get(e.vagaMoto.ambiente) ?? 0) + 1); }
     expect([...porLugar.values()].reduce((s, n) => s + n, 0)).toBeGreaterThan(40);   // (2 lugares agora: o lounge perdeu a garagem)
     for (const n of porLugar.values()) expect(n).toBeLessThanOrEqual(33);
   });
