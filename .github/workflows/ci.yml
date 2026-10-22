@@ -103,8 +103,14 @@ jobs:
       - name: Typecheck (tsc --noEmit)
         run: npm run typecheck
 
+      # A captura do Octa (lib/octa/captura.test.ts) usa o Google Chrome que já vem no runner ubuntu-latest:
+      # sem isto os testes de segurança dela (JS off, allowlist, sem navegação) seriam pulados. --no-sandbox
+      # pelo mesmo motivo do container (AppArmor do runner barra user namespaces).
       - name: Tests (vitest)
         run: npm test
+        env:
+          OCTA_CHROMIUM_PATH: /usr/bin/google-chrome
+          OCTA_CHROMIUM_SEM_SANDBOX: "1"
 
       - name: Realtime Colyseus — typecheck + testes (sala, token, regras)
         working-directory: server/colyseus

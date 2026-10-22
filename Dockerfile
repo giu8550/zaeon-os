@@ -91,8 +91,15 @@ ENV NODE_ENV=production \
 # openssl em runtime pra localizar o Query Engine. Sem isso a detecção caía em
 # debian-openssl-1.1.x e não achava o engine → toda query Prisma dava 500.
 # ffmpeg: montagem do Vídeo Overview do Studio (slides Imagen + narração → mp4).
+# chromium + fontes: captura de tela da página do Octa pro agente (lib/octa/captura.ts, via puppeteer-core).
+# O sandbox do Chromium não sobe aqui (usuário não-root, sem user namespaces no seccomp padrão do Docker):
+# OCTA_CHROMIUM_SEM_SANDBOX=1 liga --no-sandbox, aceitável SÓ com as camadas do captura.ts juntas
+# (JS desligado, rede em allowlist + DNS travado, sem navegação/file:, contexto novo por captura, teto de tempo).
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates ffmpeg \
+       chromium fonts-liberation fonts-noto-core \
     && rm -rf /var/lib/apt/lists/*
+ENV OCTA_CHROMIUM_PATH=/usr/bin/chromium \
+    OCTA_CHROMIUM_SEM_SANDBOX=1
 
 RUN useradd --create-home --uid 10001 zaeon
 # Copia o app já buildado + node_modules (inclui socket.io e o client Prisma gerado)
