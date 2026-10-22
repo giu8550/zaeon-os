@@ -17,7 +17,8 @@ const CIANO = "#7fe0ff", AMARELO = "#ffd36b";
 export default function PlayerVideoDoc({ videoId, onFechar, tela }: { videoId: string; onFechar: () => void; /** por cima da tela inteira (no chat) em vez de por cima da prancha */ tela?: boolean }) {
   const { video, falhou } = useVideoDoc(videoId);
   const audio = useRef<HTMLAudioElement>(null);
-  const analisador = useRef<AnalyserNode | null>(null), dados = useRef<Uint8Array | null>(null);
+  const analisador = useRef<AnalyserNode | null>(null), dados = useRef<Uint8Array | null>(null), ctxAudio = useRef<AudioContext | null>(null);
+  useEffect(() => () => { void ctxAudio.current?.close().catch(() => null); }, []);   // fechar o player solta o áudio
   const [t, setT] = useState(0), [tocando, setTocando] = useState(false), [legenda, setLegenda] = useState(true);
   const pronto = video?.status === "done" && !!video.roteiro && !!video.tempos;
   const pos = useMemo(() => (pronto ? posicaoNoVideo(video!.roteiro!, video!.tempos!, t) : null), [pronto, video, t]);
@@ -29,6 +30,7 @@ export default function PlayerVideoDoc({ videoId, onFechar, tela }: { videoId: s
       const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       const ctx = new Ctx(), src = ctx.createMediaElementSource(audio.current), an = ctx.createAnalyser();
       an.fftSize = 512; src.connect(an); an.connect(ctx.destination);
+      ctxAudio.current = ctx; void ctx.resume().catch(() => null);
       analisador.current = an; dados.current = new Uint8Array(an.fftSize);
     } catch { /* sem WebAudio: a boca cai no sorteio do holograma */ }
   }, []);
@@ -47,6 +49,9 @@ export default function PlayerVideoDoc({ videoId, onFechar, tela }: { videoId: s
   }, [pos]);
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
+      // digitando em outro campo (o composer do chat), as teclas são do campo
+      const alvo = e.target as HTMLElement | null;
+      if (alvo && (alvo.tagName === "INPUT" || alvo.tagName === "TEXTAREA" || alvo.isContentEditable)) return;
       if (e.key === "Escape") onFechar();
       else if (e.key === " ") { e.preventDefault(); tocar(); }
       else if (e.key === "ArrowRight") irSlide(1);

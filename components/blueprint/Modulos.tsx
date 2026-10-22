@@ -12,8 +12,8 @@ import { MOTIVO_ERRO, duracaoTexto, useVideoDoc } from "@/components/videodoc/us
 const NOME_TIPO_DOC: Record<string, string> = { artigo: "artigo", livro: "livro", base: "da sua base", trabalho: "seu trabalho" };
 /** o card do VÍDEO de um documento-base: o estado da geração e o ▶ que abre o player com a Zaeon holograma */
 function CardVideo({ carimbo, titulo, tipo, videoId, abrir, onArrastar }: { carimbo: string; titulo: string; tipo: string; videoId?: string; abrir?: (id: string) => void; onArrastar?: (e: React.PointerEvent) => void }) {
-  const { video } = useVideoDoc(videoId);
-  const st = !videoId ? "na fila" : !video ? "…" : video.status === "done" ? "pronto" : video.status === "error" ? "erro" : "gerando";
+  const { video, falhou } = useVideoDoc(videoId);
+  const st = !videoId ? "na fila" : falhou ? "erro" : !video ? "…" : video.status === "done" ? "pronto" : video.status === "error" ? "erro" : "gerando";
   return (
     <CardPrancha cor={COR.video} carimbo={carimbo} direita={<span className="font-mono text-[9.5px] text-sky-200/60">{NOME_TIPO_DOC[tipo] ?? tipo}</span>} onArrastar={onArrastar}>
       <div className="flex items-start gap-3">

@@ -14,21 +14,32 @@ import { MAX_BASE, MAX_DOCUMENTOS, sanitizarDocumento, type Documento } from "@/
 /** a UI dos vídeos (valor de BUILD): os cards de vídeo na prancha e o player */
 export const videoDocUiOn = (): boolean => process.env.NEXT_PUBLIC_VIDEO_DOC === "1";
 
-const RE_DOI = /(?:doi\.org\/|^doi:)(10\.\d{4,9}\/[^\s?#]+)/i;
+const RE_DOI = /^(10\.\d{4,9}\/[^\s?#]+)$/i;
+/** o DOI SÓ quando a URL é do próprio doi.org (no caminho) — "evil.tld/x.pdf?doi.org/10…" não vira o DOI de ninguém */
+function doiDaUrl(url: string): string | undefined {
+  try { const u = new URL(url); if (!/^(dx\.)?doi\.org$/i.test(u.hostname)) return undefined; return RE_DOI.exec(decodeURIComponent(u.pathname.replace(/^\/+/, "")))?.[1]; } catch { return undefined; }
+}
 
 /** a chave do documento: doi:… | url:… | base:… | trabalho:… */
 export function chaveDocumento(d: Pick<Documento, "tipo" | "url" | "ref">): string {
   if (d.tipo === "base" && d.ref) return `base:${d.ref}`;
   if (d.tipo === "trabalho" && d.ref) return `trabalho:${d.ref}`;
-  const doi = d.ref && /^10\./.test(d.ref) ? d.ref : d.url ? RE_DOI.exec(decodeURIComponent(d.url))?.[1] : undefined;
+  const doi = d.ref && RE_DOI.test(d.ref) ? d.ref : d.url ? doiDaUrl(d.url) : undefined;
   if (doi) return `doi:${doi.toLowerCase()}`;
   if (d.url) {
     try { const u = new URL(d.url); return `url:${u.host.replace(/^www\./, "")}${u.pathname.replace(/\/+$/, "")}`.toLowerCase(); } catch { /* cai abaixo */ }
   }
   return `ref:${(d.ref ?? "").toLowerCase()}`;
 }
-/** documento PÚBLICO (artigo/livro com DOI ou URL): o vídeo dele é um só pra todo mundo */
-export const documentoPublico = (d: Pick<Documento, "tipo" | "url" | "ref">): boolean => (d.tipo === "artigo" || d.tipo === "livro") && /^(doi|url):/.test(chaveDocumento(d));
+/** documento PÚBLICO = tem DOI (do doi.org): o texto vem resolvido PELO DOI (Unpaywall/arXiv — nunca pela URL que a
+ *  resposta da IA citou), então o vídeo é um só pra todo mundo. URL sem DOI é por pessoa (a URL pode ser qualquer uma). */
+export const documentoPublico = (d: Pick<Documento, "tipo" | "url" | "ref">): boolean => (d.tipo === "artigo" || d.tipo === "livro") && chaveDocumento(d).startsWith("doi:");
+/** dá pra tirar texto? (DOI, PDF por URL, base ou trabalho) — sem isso nem cria o vídeo (não gasta o teto do dia) */
+export function temFonteDeTexto(d: Pick<Documento, "tipo" | "url" | "ref">): boolean {
+  if (d.tipo === "base" || d.tipo === "trabalho") return !!d.ref;
+  if (chaveDocumento(d).startsWith("doi:")) return true;
+  try { return !!d.url && /\.pdf$/i.test(new URL(d.url).pathname); } catch { return false; }
+}
 
 const idDe = (chave: string) => `d${(() => { let h = 5381; for (let i = 0; i < chave.length; i++) h = ((h << 5) + h + chave.charCodeAt(i)) >>> 0; return h.toString(36); })()}`;
 

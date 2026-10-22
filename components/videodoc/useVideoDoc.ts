@@ -1,5 +1,6 @@
 "use client";
-/** useVideoDoc — o estado de um vídeo de documento (GET /api/videodoc/:id); enquanto gera, confere a cada 5 s */
+/** useVideoDoc — o estado de um vídeo de documento (GET /api/videodoc/:id); enquanto gera, confere a cada 5 s. Limite
+ *  (429) ou erro do servidor = tenta de novo mais devagar; só 404/403 é "não existe" */
 import { useEffect, useState } from "react";
 import type { Roteiro } from "@/lib/videodoc/roteiro";
 
@@ -9,11 +10,13 @@ export function useVideoDoc(id: string | null | undefined) {
   const [v, setV] = useState<VideoDocCliente | null>(null), [falhou, setFalhou] = useState(false);
   useEffect(() => {
     if (!id) return;
-    let vivo = true, t: ReturnType<typeof setTimeout> | undefined;
+    let vivo = true, t: ReturnType<typeof setTimeout> | undefined, espera = 5000;
     const ler = async () => {
       try {
         const r = await fetch(`/api/videodoc/${id}`, { cache: "no-store" });
-        if (!r.ok) { if (vivo) setFalhou(true); return; }
+        if (r.status === 404 || r.status === 403 || r.status === 401) { if (vivo) setFalhou(true); return; }
+        if (!r.ok) { espera = Math.min(60_000, espera * 2); if (vivo) t = setTimeout(ler, espera); return; }
+        espera = 5000;
         const j = (await r.json()) as VideoDocCliente;
         if (!vivo) return;
         setV(j);

@@ -111,20 +111,36 @@ export type EntradaTurno = {
   db?: BlueprintDb; gen?: GenJson; repos?: typeof buscarRepos; passosBase?: (tema: string) => Promise<string[]>;
   /** o vídeo de um documento-base (lib/videodoc/server.garantirVideo) — injetável nos testes */
   videos?: GarantirVideo;
+  estadosVideos?: (ids: string[]) => Promise<Record<string, string>>;
 };
 type GarantirVideo = (i: { userId: string; documento: Documento; blueprintId: string }) => Promise<{ videoId: string } | { motivo: string }>;
+/** o estado de cada vídeo (pra soltar o lugar dos que falharam) — injetável nos testes */
+type EstadosVideos = (ids: string[]) => Promise<Record<string, string>>;
+const estadosReais: EstadosVideos = async (ids) => {
+  if (!ids.length) return {};
+  const [{ prisma }, { estadoVisivel }] = await Promise.all([import("@/src/lib/prisma"), import("@/lib/videodoc/server")]);
+  const arts = await prisma.studioArtifact.findMany({ where: { id: { in: ids } }, select: { id: true, status: true, createdAt: true, updatedAt: true } });
+  return Object.fromEntries(ids.map((id) => { const a = arts.find((x) => x.id === id); return [id, a ? estadoVisivel(a) : "error"]; }));
+};
 
 /** cada documento-BASE ganha o seu vídeo com a Zaeon holograma (flag VIDEO_DOC), no máximo MAX_BASE com vídeo por estudo */
-export async function videosDosDocumentosBase(id: string, userId: string, doc: DocBlueprint, db: BlueprintDb, garantir?: GarantirVideo): Promise<number> {
+export async function videosDosDocumentosBase(id: string, userId: string, doc: DocBlueprint, db: BlueprintDb, garantir?: GarantirVideo, estados?: EstadosVideos): Promise<number> {
   const vs = await import("@/lib/videodoc/server");
   if (!garantir && !vs.videoDocOn()) return 0;
   const g = garantir ?? vs.garantirVideo;
-  const comVideo = doc.documentos.filter((d) => d.videoId).length;
-  const faltam = doc.documentos.filter((d) => d.base && !d.videoId).slice(0, Math.max(0, MAX_BASE - comVideo));
+  // vídeo que FALHOU (sem texto, erro, interrompido) não segura um dos 3 lugares do estudo: o documento solta o vídeo
+  // (e só continua base se a Zaeon o escolher de novo)
+  const st = await (estados ?? estadosReais)(doc.documentos.filter((d) => d.videoId).map((d) => d.videoId!)).catch(() => ({} as Record<string, string>));
+  const falhos = new Set(doc.documentos.filter((d) => d.videoId && st[d.videoId] === "error").map((d) => d.id));
+  const comVideo = doc.documentos.filter((d) => d.videoId && !falhos.has(d.id)).length;
+  const faltam = doc.documentos.filter((d) => d.base && !falhos.has(d.id) && !d.videoId).slice(0, Math.max(0, MAX_BASE - comVideo));
   const ids: Record<string, string> = {};
   for (const d of faltam) { const r = await g({ userId, documento: d, blueprintId: id }); if ("videoId" in r) ids[d.id] = r.videoId; }
-  if (!Object.keys(ids).length) return 0;
-  await gravarDoc(id, userId, (atual) => ({ ...atual, documentos: atual.documentos.map((d) => (ids[d.id] && !d.videoId ? { ...d, videoId: ids[d.id] } : d)) }), db);
+  if (!Object.keys(ids).length && !falhos.size) return 0;
+  await gravarDoc(id, userId, (atual) => ({ ...atual, documentos: atual.documentos.map((d) => {
+    if (falhos.has(d.id)) { const { videoId: _v, ...sem } = d; void _v; return { ...sem, base: false }; }
+    return ids[d.id] && !d.videoId ? { ...d, videoId: ids[d.id] } : d;
+  }) }), db);
   return Object.keys(ids).length;
 }
 
@@ -167,7 +183,7 @@ export async function blueprintDoTurno(i: EntradaTurno): Promise<"off" | "nao-es
       if (achados.length) { const meus = atual.repos.filter((x) => x.meu); novo.repos = [...meus, ...achados.filter((x) => !meus.some((m) => m.nome === x.nome))]; }
       return novo;
     }, db);
-    if (r.ok) await videosDosDocumentosBase(linha.id, userId, r.view.doc, db, i.videos).catch((e) => console.warn("[blueprint] vídeos:", e instanceof Error ? e.message : e));
+    if (r.ok) await videosDosDocumentosBase(linha.id, userId, r.view.doc, db, i.videos, i.estadosVideos).catch((e) => console.warn("[blueprint] vídeos:", e instanceof Error ? e.message : e));
     return r.ok ? "composto" : "falhou";
   } catch (e: unknown) {
     console.warn("[blueprint] turno falhou:", e instanceof Error ? e.message : e);

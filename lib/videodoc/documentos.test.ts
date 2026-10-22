@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chaveDocumento, documentoPublico, documentosDaResposta, juntarDocumentos, marcarBase } from "./documentos";
+import { chaveDocumento, documentoPublico, documentosDaResposta, juntarDocumentos, marcarBase, temFonteDeTexto } from "./documentos";
 import type { Documento } from "@/lib/blueprint/tipos";
 
 describe("os documentos do estudo — o que a conversa citou e o que é da pessoa", () => {
@@ -19,6 +19,10 @@ describe("os documentos do estudo — o que a conversa citou e o que é da pesso
     expect(chaveDocumento({ tipo: "artigo", url: "https://www.arxiv.org/abs/1/" })).toBe("url:arxiv.org/abs/1");
     expect(documentoPublico({ tipo: "artigo", url: "https://doi.org/10.1007/x" })).toBe(true);
     expect(documentoPublico({ tipo: "base", ref: "abc" })).toBe(false);
+    // o DOI só vale do doi.org (cache de vídeo público não se envenena por query string)
+    expect(chaveDocumento({ tipo: "artigo", url: "https://evil.tld/a.pdf?doi.org/10.1038/nature12373" })).not.toContain("doi:");
+    expect(documentoPublico({ tipo: "artigo", url: "https://evil.tld/a.pdf?doi.org/10.1038/nature12373" })).toBe(false);
+    expect(documentoPublico({ tipo: "artigo", url: "https://arxiv.org/pdf/1.pdf" })).toBe(false);
   });
   it("juntar mantém base e vídeo dos que já existiam", () => {
     const velho: Documento = { id: "d1", titulo: "Zether", tipo: "artigo", url: "https://doi.org/10.1/x", base: true, videoId: "a".repeat(24) };
@@ -31,5 +35,14 @@ describe("os documentos do estudo — o que a conversa citou e o que é da pesso
     ds[4] = { ...ds[4]!, videoId: "b".repeat(24) };
     const r = marcarBase(ds, ["a", "b", "c", "d"]);
     expect(r.filter((d) => d.base).map((d) => d.id)).toEqual(["a", "b", "c", "e"]);
+  });
+});
+
+describe("temFonteDeTexto", () => {
+  it("DOI, PDF por URL, base e trabalho sim; página web solta não (nem cria o vídeo)", () => {
+    expect(temFonteDeTexto({ tipo: "artigo", url: "https://doi.org/10.1007/x" })).toBe(true);
+    expect(temFonteDeTexto({ tipo: "livro", url: "https://x.org/livro.pdf" })).toBe(true);
+    expect(temFonteDeTexto({ tipo: "artigo", url: "https://blog.example.org/post" })).toBe(false);
+    expect(temFonteDeTexto({ tipo: "base", ref: "r1" })).toBe(true);
   });
 });

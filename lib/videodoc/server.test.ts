@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { garantirVideo, naFila, podeVerVideo, type VideoDb } from "./server";
+import { artefatoMorto, estadoVisivel, garantirVideo, naFila, podeVerVideo, type VideoDb } from "./server";
 import type { Documento } from "@/lib/blueprint/tipos";
 
 function bancoArtefatos() {
@@ -22,6 +22,7 @@ function bancoArtefatos() {
 }
 const artigo: Documento = { id: "d1", titulo: "Zether", tipo: "artigo", url: "https://doi.org/10.1007/zether", base: true };
 const minha: Documento = { id: "d2", titulo: "Apostila", tipo: "base", ref: "rag1", base: true };
+const web: Documento = { id: "d3", titulo: "Post", tipo: "artigo", url: "https://blog.example.org/post", base: true };
 const espera = () => new Promise((r) => setTimeout(r, 5));
 
 describe("garantirVideo — um vídeo por documento", () => {
@@ -61,5 +62,31 @@ describe("fila e acesso", () => {
     const priv = { ownerId: "u1", meta: { publico: false, blueprints: ["b1"] } };
     expect(podeVerVideo(priv, "u1", [])).toBe(true); expect(podeVerVideo(priv, "u2", [])).toBe(false); expect(podeVerVideo(priv, "u2", ["b1"])).toBe(true);
     expect(podeVerVideo({ ownerId: "u1", meta: { publico: true } }, "u9", [])).toBe(true);
+  });
+});
+
+describe("correções da revisão", () => {
+  it("página web sem PDF nem DOI: nem cria o vídeo (não gasta o teto)", async () => {
+    const { db, arts } = bancoArtefatos();
+    expect(await garantirVideo({ userId: "u1", documento: web, blueprintId: "b", db, texto: async () => "t", gerar: async () => null })).toEqual({ motivo: "sem_fonte" });
+    expect(arts).toHaveLength(0);
+  });
+  it("dois pedidos ao mesmo tempo do mesmo artigo: um vídeo só", async () => {
+    const { db, arts } = bancoArtefatos();
+    await Promise.all([garantirVideo({ userId: "u1", documento: artigo, blueprintId: "b1", db, texto: async () => "t", gerar: async () => null }), garantirVideo({ userId: "u2", documento: artigo, blueprintId: "b2", db, texto: async () => "t", gerar: async () => null })]);
+    expect(arts).toHaveLength(1);
+  });
+  it("o teto do dia segura pedidos em paralelo", async () => {
+    const { db, arts } = bancoArtefatos();
+    await Promise.all(Array.from({ length: 10 }, (_, k) => garantirVideo({ userId: "u1", documento: { ...minha, ref: `r${k}` }, blueprintId: "b", db, texto: async () => "t", gerar: async () => null })));
+    expect(arts).toHaveLength(6);
+  });
+  it("job parado há mais de 30 min (restart) é refeito; o card não gira pra sempre", async () => {
+    const { db, arts } = bancoArtefatos(); const agora = Date.now();
+    await garantirVideo({ userId: "u1", documento: minha, blueprintId: "b", db, texto: async () => "t", gerar: async () => new Promise(() => null) });
+    const velho = arts[0]!; velho.createdAt = new Date(agora - 40 * 60 * 1000); (velho as unknown as { updatedAt: Date }).updatedAt = velho.createdAt;
+    expect(estadoVisivel(velho as never, agora)).toBe("error"); expect(artefatoMorto(velho as never, agora)).toBe(true);
+    const r = await garantirVideo({ userId: "u1", documento: minha, blueprintId: "b", db, texto: async () => "t", gerar: async () => null, agora });
+    expect(r).toMatchObject({ novo: true }); expect(arts[0]!.status).toBe("error");
   });
 });

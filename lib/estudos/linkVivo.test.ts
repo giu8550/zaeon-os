@@ -21,3 +21,12 @@ describe("linkVivo — a checagem de link não vira scanner da rede interna", ()
     expect(err).toBeTruthy();
   });
 });
+
+describe("baixarPdfSeguro", () => {
+  it("recusa host interno e não-http sem conectar", async () => {
+    const { baixarPdfSeguro } = await import("./linkVivo");
+    expect(await baixarPdfSeguro("http://web:3000/a.pdf", 1e6)).toBeNull();
+    expect(await baixarPdfSeguro("http://100.113.137.74:4000/a.pdf", 1e6)).toBeNull();
+    expect(await baixarPdfSeguro("file:///etc/passwd", 1e6)).toBeNull();
+  });
+});
