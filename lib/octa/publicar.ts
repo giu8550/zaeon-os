@@ -8,8 +8,10 @@
  *   (inclusive o README.md do auto_init), senão arquivo apagado continuaria no site público.
  * - Só caminhos de site estático vão para o GitHub (caminhoPublicavel): nada de `.github/workflows`,
  *   dotfiles, `..` ou extensão fora da lista. Os pulados voltam em `ignorados` (só os caminhos).
- * - Regra anti-marca: nenhum .html publicado menciona a marca de origem do estilo do projeto (marca + aliases,
- *   pelo marcador zaeon-estilo do DESIGN.md) — vale pro botão Publicar da IDE e pra tool octa_publicar.
+ * - Regra anti-marca: nenhum arquivo de texto publicado menciona a marca de origem do estilo do projeto (marca +
+ *   aliases, pelo marcador zaeon-estilo do DESIGN.md) — no FONTE, não só no texto visível: comentários, atributos,
+ *   strings de JS; CSS só nos comentários e em `content:` (regra completa em marcaNoFonte, secoes/render.ts).
+ *   Vale pro botão Publicar da IDE e pra tool octa_publicar.
  *   Devolve `marca_no_conteudo` + só a palavra; nada do conteúdo.
  * - Repo do Octa apagado pelo aluno (GET 404): o destino é limpo e o caminho é o de repo novo (conta no limite).
  * - Limites por aluno por dia (LIMITES); publicação que falha não conta.
@@ -20,7 +22,7 @@
 import { lerProjeto, contarPublicacoesHoje, gravarDestinoPublicado, registrarPublicacao, type ProjetosDb } from "./projetos";
 import { createRepo, commitChanges, habilitarPages, readRepoTree, repoExiste } from "@/lib/projects/github-service";
 import { estiloDoProjeto, palavrasDaMarca } from "./design/indice";
-import { marcaMencionada } from "./secoes/render";
+import { marcaNoFonte } from "./secoes/render";
 
 type AnyOctokit = any;
 
@@ -112,8 +114,7 @@ export async function publicarProjeto(
   const marcas = palavrasDaMarca(estiloDoProjeto(projeto.arquivos)?.estilo);
   if (marcas.length) {
     for (const f of files) {
-      if (!/\.html?$/i.test(f.path)) continue;
-      const palavra = marcaMencionada(f.content, marcas);
+      const palavra = marcaNoFonte(f.path, f.content, marcas); // fonte inteiro, não só o texto visível
       if (palavra) return { ok: false, erro: "marca_no_conteudo", palavra };
     }
   }

@@ -196,6 +196,36 @@ describe("publicarProjeto", () => {
     expect(await publicarProjeto(deps(semMarcador.db, octoFalso().octokit), P)).toMatchObject({ ok: true });
   });
 
+  it("anti-marca varre o FONTE inteiro: comentário HTML, alt, CSS/JS com a marca bloqueiam; linear-gradient/easing não", async () => {
+    const bugatti = "<!-- zaeon-estilo: bugatti -->\n# x\n";
+    const caso = async (arquivos: Record<string, string>, design = bugatti) => {
+      const { db, pubs } = dbFalso({ arquivos: { "DESIGN.md": design, ...arquivos } });
+      const { octokit, chamadas } = octoFalso();
+      const r = await publicarProjeto(deps(db, octokit), P);
+      if (!r.ok) { expect(chamadas).toHaveLength(0); expect(pubs).toHaveLength(0); }
+      return r;
+    };
+    const bloqueado = { ok: false, erro: "marca_no_conteudo", palavra: "Bugatti" };
+    expect(await caso({ "index.html": "<html><body><p>oi</p>\n<!-- Footer (Estilo Bugatti) -->\n<footer>fim</footer></body></html>" })).toEqual(bloqueado);
+    expect(await caso({ "index.html": '<html><body><img src="a.png" alt="Bugatti"></body></html>' })).toEqual(bloqueado);
+    expect(await caso({ "index.html": "<html><head><style>/* paleta bugatti */ h1{color:red}</style></head><body>oi</body></html>" })).toEqual(bloqueado);
+    expect(await caso({ "index.html": "<h1>oi</h1>", "styles.css": "/* tipo Bugatti */\nh1{color:red}" })).toEqual(bloqueado);
+    expect(await caso({ "index.html": "<h1>oi</h1>", "app.js": "// carrossel estilo Bugatti\nconst x = 1;" })).toEqual(bloqueado);
+    expect(await caso({ "index.html": "<h1>oi</h1>", "app.js": "document.title = 'Bugatti';" })).toEqual(bloqueado);
+    expect(await caso({ "index.html": "<h1>oi</h1>", "manifest.webmanifest": '{"name":"Bugatti"}' })).toEqual(bloqueado);
+    expect(await caso({ "index.html": "<h1>oi</h1>", "README.md": "Feito no estilo Bugatti" })).toEqual(bloqueado);
+
+    // linear.app: funções/palavras-chave de CSS que colidem com a marca não contam
+    const linear = "<!-- zaeon-estilo: linear.app -->\n# x\n";
+    const limpo = await caso({
+      "index.html": '<html><head><style>.h{background:linear-gradient(90deg,red,blue);transition:all .2s linear}</style></head><body><div style="background:linear-gradient(red,blue)">oi</div><script>el.animate([], { easing: "linear" }); const g = "repeating-linear-gradient(red, blue)";</script></body></html>',
+      "styles.css": "a{background:linear-gradient(red,blue);transition:opacity 1s linear;animation-timing-function:linear}",
+      "app.js": "el.style.transitionTimingFunction = 'linear';",
+    }, linear);
+    expect(limpo).toMatchObject({ ok: true });
+    expect(await caso({ "index.html": "<h1>oi</h1>", "styles.css": "/* inspirado no Linear */ a{}" }, linear)).toEqual({ ok: false, erro: "marca_no_conteudo", palavra: "Linear" });
+  });
+
   it("republicar sem um arquivo: o segundo commit apaga o que saiu do projeto", async () => {
     const { db, projetos } = dbFalso({ arquivos: { "index.html": "<h1>oi</h1>", "a.css": "h1{}" } });
     const { octokit, chamadas, arvores } = octoFalso();
