@@ -44,6 +44,9 @@ model_list:
       model: ollama_chat/qwen3:30b-a3b-instruct-2507-q4_K_M
       api_base: http://ollama:11434
       num_thread: 8                          # ver nota THREADS no topo
+      # Contexto 16k (o Ollama abre com 4096 e CORTA o resto): é o modelo do chat local (lib/agent/turnoLocal).
+      # Um valor só pra todo uso dele — mudar num_ctx entre pedidos recarrega o modelo. KV de 16k ≈ +1,5 GB.
+      num_ctx: 16384
 
   - model_name: llama-guard                  # moderação/segurança
     litellm_params:

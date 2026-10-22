@@ -18,6 +18,12 @@ export const PROGRESS_SENTINEL = "@@PROGRESS@@";
 export type Progresso = { fase: string; rotulo: string };
 
 /**
+ * Evento ESPECIAL no mesmo canal: quem respondeu de verdade (o modelo que o servidor usou, inclusive um
+ * fallback). Não é fase — `faseCorrente` o ignora; o chat lê com `modeloDoTurno` e mostra no selo da resposta.
+ */
+export const FASE_MODELO = "modelo";
+
+/**
  * As sentinelas que encerram o progresso. Depois de qualquer uma delas vem o payload
  * final, e lá dentro `@@PROGRESS@@` é CONTEÚDO, não protocolo — o aluno pode ter escrito
  * isso na pergunta, e a resposta pode citá-lo de volta.
@@ -32,7 +38,7 @@ export const TERMINAIS = ["@@STRUCTURED@@", "@@STUDIO_ACTION@@", "@@RESEARCH_ACT
  * O recado não se perde: ele continua chegando, com o rótulo certo da fase.
  */
 const FASES = new Set([
-  "acordar", "memoria", "route", "plan", "gather", "reason", "draft", "critique", "finalize",
+  "acordar", "memoria", "route", "plan", "gather", "reason", "draft", "critique", "finalize", FASE_MODELO,
 ]);
 
 /** Lado servidor: um evento pronto pro fio. */
@@ -102,7 +108,19 @@ export function separarProgresso(
   return { limpo: limpo + cauda, eventos };
 }
 
-/** A fase corrente é a última que chegou. Sem evento nenhum, não há fase. */
+/** A fase corrente é a última que chegou (o evento de modelo não conta). Sem evento nenhum, não há fase. */
 export function faseCorrente(eventos: readonly Progresso[]): Progresso | null {
-  return eventos.length ? eventos[eventos.length - 1] : null;
+  for (let i = eventos.length - 1; i >= 0; i--) if (eventos[i].fase !== FASE_MODELO) return eventos[i];
+  return null;
+}
+
+/** Lado servidor: "quem respondeu" pro fio (nome pra tela, já resolvido por lib/chat/modelos). */
+export function serializarModelo(nome: string): string {
+  return serializarProgresso({ fase: FASE_MODELO, rotulo: nome });
+}
+
+/** Lado cliente: o último "quem respondeu" que chegou, ou null. */
+export function modeloDoTurno(eventos: readonly Progresso[]): string | null {
+  for (let i = eventos.length - 1; i >= 0; i--) if (eventos[i].fase === FASE_MODELO) return eventos[i].rotulo;
+  return null;
 }

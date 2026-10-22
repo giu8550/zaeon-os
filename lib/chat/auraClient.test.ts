@@ -23,7 +23,7 @@ describe("pedirAura", () => {
   it("manda agent=aura + stream e devolve o texto limpo", async () => {
     const f = fetchCom(respostaStream([P("Planejando"), S]));
     const r = await pedirAura({ prompt: "luz?", history: [] }, { fetch: f });
-    expect(r).toEqual({ ok: true, limpo: S, turnId: null });
+    expect(r).toEqual({ ok: true, limpo: S, turnId: null, modelo: null });
     expect(JSON.parse(f.mock.calls[0][1].body)).toMatchObject({ agent: "aura", stream: true, prompt: "luz?" });
   });
   it("http != 2xx e rede caída viram resultado, nunca exceção", async () => {
@@ -37,7 +37,7 @@ describe("pedirAura", () => {
     expect(onTurnId).toHaveBeenCalledWith("T1");
     expect(esperar.mock.calls[0][0]).toBe("T1");
     expect(onFase).toHaveBeenLastCalledWith("Revisando");
-    expect(r).toEqual({ ok: true, limpo: S, turnId: "T1" });
+    expect(r).toEqual({ ok: true, limpo: S, turnId: "T1", modelo: null });
   });
   it("modo BG com payload no stream: não espera à toa", async () => {
     const esperar = vi.fn();
@@ -48,7 +48,7 @@ describe("pedirAura", () => {
     expect(await pedirAura({ prompt: "x" }, { fetch: fetchCom(respostaStream(["meio"], { erroNoFim: true })) })).toEqual({ ok: false, motivo: "rede" });
     const esperar = vi.fn(async () => ({ tipo: "pronto", acumulado: S }) as const);
     const r = await pedirAura({ prompt: "x" }, { fetch: fetchCom(respostaStream(["meio"], { erroNoFim: true, headers: { "X-Chat-Turn-Id": "T2" } })), esperar: esperar as any });
-    expect(r).toEqual({ ok: true, limpo: S, turnId: "T2" });
+    expect(r).toEqual({ ok: true, limpo: S, turnId: "T2", modelo: null });
   });
   it("turno terminou em erro: a mensagem amigável vira o texto", async () => {
     const esperar = vi.fn(async () => ({ tipo: "erro", mensagem: "Tenta de novo." }) as const);
@@ -76,5 +76,17 @@ describe("interpretarFinal / visivel / temPayload", () => {
     expect(temPayload("  ")).toBe(false);
     expect(temPayload("a")).toBe(true);
     expect(temPayload(S)).toBe(true);
+  });
+});
+
+describe("pedirAura — quem respondeu", () => {
+  it("o evento de modelo do fio vira `modelo` (e onModelo), sem aparecer no texto", async () => {
+    const { serializarModelo } = await import("@/lib/agent/progresso");
+    const corpo = "Olá!" + serializarModelo("Qwen3 30B · local");
+    const f = vi.fn(async () => new Response(corpo, { status: 200 }));
+    const vistos: string[] = [];
+    const r = await pedirAura({ prompt: "oi" }, { fetch: f as any, onModelo: (n) => vistos.push(n) });
+    expect(r).toEqual({ ok: true, limpo: "Olá!", turnId: null, modelo: "Qwen3 30B · local" });
+    expect(vistos).toEqual(["Qwen3 30B · local"]);
   });
 });

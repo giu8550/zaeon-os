@@ -6,7 +6,7 @@
  * (parseStructuredStream / sentinelas). A UI decide como mostrar: o desktop datilografa,
  * o mobile só pinta.
  */
-import { separarProgresso, faseCorrente } from "@/lib/agent/progresso";
+import { separarProgresso, faseCorrente, modeloDoTurno } from "@/lib/agent/progresso";
 import { parseStructuredStream } from "@/lib/agent/structured-client";
 import { STUDIO_SENTINEL } from "@/lib/agent/chat-turn-wire";
 import { esperarTurno, TURNO_HEADER } from "@/lib/chat/turnoRetomavel";
@@ -20,6 +20,8 @@ export type AuraCallbacks = {
   onFase?: (rotulo: string) => void;
   /** Texto limpo acumulado a cada pedaço que chega (pra datilografar/pintar ao vivo). */
   onLimpo?: (limpo: string) => void;
+  /** Quem respondeu DE VERDADE (o servidor manda no fim; nome pronto pra tela). */
+  onModelo?: (nome: string) => void;
   signal?: AbortSignal;
   /** Injetáveis pra teste. */
   fetch?: typeof fetch;
@@ -27,7 +29,7 @@ export type AuraCallbacks = {
 };
 
 export type AuraResultado =
-  | { ok: true; limpo: string; turnId: string | null }
+  | { ok: true; limpo: string; turnId: string | null; modelo: string | null }
   | { ok: false; motivo: "http"; status: number }
   | { ok: false; motivo: "rede" };
 
@@ -36,12 +38,13 @@ export const temPayload = (limpo: string): boolean =>
   !!parseStructuredStream(limpo) || limpo.includes(STUDIO_SENTINEL) || !!limpo.trim();
 
 /** Lê o corpo do stream separando progresso de conteúdo. */
-export async function lerStreamAura(body: ReadableStream<Uint8Array>, cb: Pick<AuraCallbacks, "onFase" | "onLimpo"> = {}): Promise<string> {
+export async function lerStreamAura(body: ReadableStream<Uint8Array>, cb: Pick<AuraCallbacks, "onFase" | "onLimpo" | "onModelo"> = {}): Promise<string> {
   const reader = body.getReader();
   const dec = new TextDecoder();
   let acc = "";
   let limpo = "";
   let faseVista = "";
+  let modeloVisto = "";
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -51,6 +54,8 @@ export async function lerStreamAura(body: ReadableStream<Uint8Array>, cb: Pick<A
     limpo = lp;
     const f = faseCorrente(eventos);
     if (f && f.rotulo !== faseVista) { faseVista = f.rotulo; cb.onFase?.(f.rotulo); }
+    const quem = modeloDoTurno(eventos);
+    if (quem && quem !== modeloVisto) { modeloVisto = quem; cb.onModelo?.(quem); }
     cb.onLimpo?.(limpo);
   }
   return limpo;
@@ -73,8 +78,10 @@ export async function pedirAura(pedido: AuraPedido, cb: AuraCallbacks = {}): Pro
   const turnId = r.headers.get(TURNO_HEADER);
   if (turnId) cb.onTurnId?.(turnId);
   let limpo: string;
+  let modelo: string | null = null;
+  const comModelo = { ...cb, onModelo: (n: string) => { modelo = n; cb.onModelo?.(n); } };
   try {
-    limpo = await lerStreamAura(r.body, cb);
+    limpo = await lerStreamAura(r.body, comModelo);
   } catch {
     // stream caiu no meio: sem turno no worker não há o que recuperar; com turno, espera
     if (!turnId) return { ok: false, motivo: "rede" };
@@ -86,10 +93,15 @@ export async function pedirAura(pedido: AuraPedido, cb: AuraCallbacks = {}): Pro
       cancelado: () => !!cb.signal?.aborted,
       onParcial: (p) => { const fa = faseCorrente(separarProgresso(p).eventos); if (fa) cb.onFase?.(fa.rotulo); },
     });
-    if (res.tipo === "pronto") limpo = separarProgresso(res.acumulado).limpo;
+    if (res.tipo === "pronto") {
+      const sep = separarProgresso(res.acumulado);
+      limpo = sep.limpo;
+      const quem = modeloDoTurno(sep.eventos);
+      if (quem) { modelo = quem; cb.onModelo?.(quem); }
+    }
     else if (res.tipo === "erro") limpo = res.mensagem;
   }
-  return { ok: true, limpo, turnId };
+  return { ok: true, limpo, turnId, modelo };
 }
 
 export type FinalAura =
