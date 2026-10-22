@@ -108,6 +108,9 @@ COPY --from=builder /app ./
 # roda como `zaeon`: a pasta tem que ser DELE — volume novo herda o dono daqui; o que já existe o deploy acerta
 # (chown no deploy.yml). Sem isso, toda gravação dava EACCES → 500.
 RUN mkdir -p /app/.studio && chown -R zaeon:zaeon /app/.studio
+# Cache do otimizador de imagem do Next (/app/.next/cache/images): sem dono `zaeon`, cada <Image> dava
+# "Failed to write image to cache … EACCES" e era REotimizada a cada pedido (CPU à toa, imagem lenta).
+RUN mkdir -p /app/.next/cache/images && chown -R zaeon:zaeon /app/.next/cache
 USER zaeon
 
 EXPOSE 3000

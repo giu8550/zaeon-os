@@ -98,9 +98,9 @@ describe("infra/litellm.config.yaml — pool grátis", () => {
     expect(corpo).toMatch(/id:\s*vertex\b/);
   });
 
-  it("modelos próprios (Contabo): 6 zaeon-local-*, todos litellm_proxy/ com URL e key só por env, nunca Vertex", () => {
+  it("modelos próprios (Contabo): 7 zaeon-local-*, todos litellm_proxy/ com URL e key só por env, nunca Vertex", () => {
     const locais = deps.filter((d) => d.nome.startsWith("zaeon-local-"));
-    expect(locais.map((d) => d.nome).sort()).toEqual(["zaeon-local-coder", "zaeon-local-embed", "zaeon-local-geral", "zaeon-local-guard", "zaeon-local-mini", "zaeon-local-rerank"]);
+    expect(locais.map((d) => d.nome).sort()).toEqual(["zaeon-local-coder", "zaeon-local-embed", "zaeon-local-geral", "zaeon-local-guard", "zaeon-local-mini", "zaeon-local-qwen30", "zaeon-local-rerank"]);
     for (const d of locais) {
       const corpo = d.linhas.join("\n");
       expect(corpo, d.nome).toMatch(/model:\s*litellm_proxy\//);

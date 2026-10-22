@@ -103,14 +103,16 @@ function feminizar(d) {
   const cintura = spine1.y, quadril = hips.y - H * 0.03, peito = spine2.y + H * 0.02;
   // a largura do tronco ao longo da altura (fator em x; em z um pouco menos)
   const largura = (y) => {
-    const pts = [[quadril - H * 0.12, 1.0], [quadril, 1.09], [cintura - H * 0.02, 0.83], [peito, 0.88], [neck.y, 0.84]];
+    const pts = [[quadril - H * 0.14, 1.0], [quadril - H * 0.06, 1.1], [quadril, 1.15], [cintura - H * 0.02, 0.76], [peito, 0.88], [neck.y, 0.84]];
     if (y <= pts[0][0]) return pts[0][1];
     for (let i = 1; i < pts.length; i++) if (y <= pts[i][0]) { const t = (y - pts[i - 1][0]) / (pts[i][0] - pts[i - 1][0]); return pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * t; }
     return pts[pts.length - 1][1];
   };
   const radial = { Shoulder: 0.82, Arm: 0.86, ForeArm: 0.87, Hand: 0.9, UpLeg: 0.95, Leg: 0.9, Foot: 0.92, ToeBase: 0.92, Neck: 0.86 };
   const TRONCO = new Set(["Hips", "Spine", "Spine1", "Spine2"]);
-  const busto = { y: peito - H * 0.015, x: H * 0.055, frente: H * 0.024, raio: H * 0.048 };
+  const busto = { y: peito - H * 0.015, x: H * 0.055, frente: H * 0.05, raio: H * 0.056 };
+  /** os GLÚTEOS: dois montes redondos atrás, logo abaixo do quadril */
+  const gluteo = { y: quadril - H * 0.05, x: H * 0.052, tras: H * 0.04, raio: H * 0.06 };
   const centroZ = spine2.z;
   const v = new THREE.Vector3(), out = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), p = new THREE.Vector3(), acc = new THREE.Vector3();
   const nomeDe = sk.bones.map((x) => x.name.replace(/^mixamorig/, ""));
@@ -125,6 +127,13 @@ function feminizar(d) {
       if (TRONCO.has(nome) || (tipo === "UpLeg" && v.y > quadril - H * 0.1)) {
         const k = largura(v.y);
         out.x = v.x * k; out.z = centroZ + (v.z - centroZ) * (1 - (1 - k) * 0.6);
+        if (nome === "Hips" || tipo === "UpLeg") {   // os GLÚTEOS: atrás (−z), arredondados
+          const dz = centroZ - v.z;
+          if (dz > 0) for (const s of [-1, 1]) {
+            const r = Math.hypot(v.x - s * gluteo.x, (v.y - gluteo.y) * 0.85) / gluteo.raio;
+            if (r < 2.2) out.z -= gluteo.tras * Math.exp(-r * r * 1.2) * Math.min(1, dz / (H * 0.03));
+          }
+        }
         if (nome === "Spine2" || nome === "Spine1") {   // o BUSTO: dois montes suaves na frente do peito
           const dz = v.z - centroZ;
           if (dz > 0) for (const s of [-1, 1]) {
