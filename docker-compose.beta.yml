@@ -107,7 +107,7 @@ services:
       start_period: 60s
     deploy:
       resources:
-        limits: { memory: 1536m }
+        limits: { memory: 3g }   # era 1536m; o web roda os workers (chat/scholar/cérebro) desde o #526 — a VPS tem 23 GB e usava 3
 
   # ── SearXNG: busca web self-hosted (metabuscador, sem key, sem custo por query) ──
   # Rede interna (expose, sem porta pública). Config em ./searxng/settings.yml (JSON habilitado).
@@ -225,7 +225,7 @@ services:
     restart: unless-stopped
     deploy:
       resources:
-        limits: { memory: 384m }
+        limits: { memory: 1g }
 
   # Evolution API v1.x (sem Postgres; estado em volume). Instância ÚNICA da plataforma,
   # conectada 1× por QR pelo admin (número da Zaeon). Webhook da instância → agent-bridge.
@@ -311,7 +311,7 @@ services:
       start_period: 40s
     deploy:
       resources:
-        limits: { memory: 768m }
+        limits: { memory: 2g }   # era 768m: 747 MB reais, bateu no teto 1411× (memory.max) — cada aperto deixava o gateway lento
 
   litellm-db:
     image: postgres:16-alpine
@@ -335,7 +335,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: zaeon_redis
-    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "768mb", "--maxmemory-policy", "noeviction"]   # BullMQ exige noeviction: com allkeys-lru o Redis podia jogar fora um turno do chat (CHAT_BG)
     volumes: ["redis_data:/data"]
     restart: unless-stopped
     deploy:
