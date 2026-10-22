@@ -77,6 +77,7 @@ import { criarRifleCosmico, type RifleHandle } from "./RifleCosmico";
 import { CAMERA_MOTO_PERTO } from "@/lib/cyber/camera";
 import { criarCarroHex, type CarroHandle } from "./CarroHex";
 import { definirNivel, NIVEIS_SEPARADOS, type IdNivel } from "@/lib/cyber/nivelAtivo";
+import { criarTravessia, type TravessiaHandle } from "./TravessiaBN";
 import { FIO as FIO_COSMICO, comecarTragada, fiosCosmicos, naAtracao, passoTragada, pertoDoBuraco, posDaTragada, progressoTragada, saidaDaSala, type Tragada } from "@/lib/cyber/fiosCosmicos";
 import { nivelDoPonto, proximoNivel } from "@/lib/cyber/niveis";
 import { CARROS_NA_ZAEON, LOTES_CARRO, pisoDaVaga, posseDosCarros, vagaDoLote, vagasDeCarro, type CarroDirigido, type CarroLargado, type PosseCarro, type VagaCarro } from "@/lib/cyber/carros";
@@ -151,6 +152,8 @@ export type PessoaCyber = { id: string; name: string; color: string; fundador?: 
  *  está em uso — 17 carros × 5 loops parados era desperdício) */
 type CarroFrota = { h: CarroHandle; vaga: VagaCarro; est: EstadoMoto; pousado: boolean; fase: "parado" | "entrando" | "fechando" | "dirigindo" | "abrindo" | "saindo"; k: number; ligado: number; potencia: number; acel: number; velAnt: number; boost: boolean; loops: Record<(typeof LOOPS_CARRO)[number], LoopSom> | null; somPerto: boolean;
   /** o índice na frota (o `c` da presença) e quem está com ele ONLINE (outra pessoa dirigindo/estacionou) — null = livre */ i: number; posse: PosseCarro | null };
+/** a moto que se materializa pra travessia do buraco negro (a "vaga" de origem dela — só pro desenho) */
+const MOTO_DO_BURACO = 0;
 export type TunelAberto = { origem: IdNo; destinos: { id: IdNo; nome: string; desc: string }[] };
 /** o TOUR da anfitriã (lib/cyber/onboarding): o passo atual — o React mostra a fala */
 export type EstadoGuia = { passo: number; total: number; id: string; titulo: string; agente: string; cor: string };
@@ -2082,6 +2085,7 @@ export class CyberEngine {
    *  VINHETA violeta fechando as bordas — tudo crescendo com a tragada; fora dela, nada */
   private atmosferaTragada(dt: number) {
     const v = this.fio, k = v ? progressoTragada(v) : 0;
+    this.travessiaBN(dt, k);
     if (!this.vinheta) { const el = document.createElement("div"); el.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:25;opacity:0;background:radial-gradient(ellipse at 50% 50%, transparent 38%, rgba(60,10,110,.55) 72%, rgba(8,0,20,.92) 100%);"; this.o.overlay.appendChild(el); this.vinheta = el; }
     const op = v ? 0.25 + 0.75 * k : 0; if (this.vinheta.style.opacity !== op.toFixed(2)) this.vinheta.style.opacity = op.toFixed(2);
     if (!v) { if (this.rastros) this.rastros.linhas.visible = false; return; }
@@ -2108,6 +2112,49 @@ export class CyberEngine {
     // o TREMOR: a câmera chacoalha (mais forte chegando)
     const a = 0.03 + 0.42 * k * k; this.cam.position.x += (Math.random() - 0.5) * a; this.cam.position.y += (Math.random() - 0.5) * a; this.cam.position.z += (Math.random() - 0.5) * a;
   }
+  // ───────────── a TRAVESSIA do buraco negro: as fachadas psicodélicas, os raios, os cacos e a tempestade ─────────────
+  private travessia: TravessiaHandle | null = null; private somTempestade: LoopSom | null = null; private proxRaioBN = 0; private estourouBN = false;
+  /** (components/cyber/TravessiaBN) cresce com a tragada; no horizonte os cacos estouram; depois do clarão, apaga */
+  private travessiaBN(dt: number, k: number) {
+    const v = this.fio, s = this.som;
+    if (v) {
+      if (!this.travessia) { this.travessia = criarTravessia({ low: this.o.low }); this.cena.scene.add(this.travessia.grupo); this.estourouBN = false; this.proxRaioBN = 0.5; }
+      const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, b = v.f.bn, w = mundo(b);
+      this.tmpBN.set(w.x, ilhaY + b.y, w.z); this.tmpEu.set(this.eu.pos.x, this.eu.alt + 1, this.eu.pos.z);
+      this.travessia.atualizar(dt, performance.now() / 1000, k, this.tmpEu, this.tmpBN, b.r);
+      // os RAIOS: estalos e trovões cada vez mais seguidos
+      this.proxRaioBN -= dt;
+      if (this.proxRaioBN <= 0) { this.proxRaioBN = 0.35 + Math.random() * 1.1 * (1 - 0.7 * k); s.tocar(Math.random() < 0.65 ? "raio" : "trovao", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 0.45 + 0.55 * k }); }
+      if (k > 0.93 && !this.estourouBN) { this.estourouBN = true; this.travessia.estourar(); s.tocar("estilhacos", this.eu.av.group.position, { dist: DISTANCIA.eu }); }
+      this.somTempestade ??= s.loop("tempestade-cosmica", this.eu.av.group, { dist: DISTANCIA.eu, volume: 0 });
+      s.volumeLoop(this.somTempestade, 0.35 + 0.65 * k, 3);
+      return;
+    }
+    if (this.somTempestade) { s.volumeLoop(this.somTempestade, 0, 0.8); if (!this.clarao && !this.emergir) { s.soltarLoop(this.somTempestade); this.somTempestade = null; } }
+    if (this.travessia && this.travessia.apagar(dt)) { this.travessia.dispose(); this.travessia = null; }
+  }
+  private tmpBN = new THREE.Vector3(); private tmpEu = new THREE.Vector3();
+  /** a CÂMERA da travessia (o dono: "uma cutscene focando no buraco negro"): sai de trás do personagem pra um plano
+   *  aberto de lado — você em primeiro plano, o buraco negro e as fachadas no fundo —, e vai fechando junto com a tragada */
+  private wTravessia = 0;
+  private cameraDaTravessia(c: ReturnType<typeof poseDaCamera>, dt: number): ReturnType<typeof poseDaCamera> {
+    const v = this.fio;
+    this.wTravessia += ((v ? 1 : 0) - this.wTravessia) * Math.min(1, dt * 1.6);
+    if (!v || this.wTravessia < 0.002) return c;
+    const k = progressoTragada(v), ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, b = v.f.bn, w = mundo(b);
+    const bn = { x: w.x, y: ilhaY + b.y, z: w.z }, eu = { x: this.eu.pos.x, y: this.eu.alt + 1.2, z: this.eu.pos.z };
+    let dx = eu.x - bn.x, dy = eu.y - bn.y, dz = eu.z - bn.z; const L = Math.hypot(dx, dy, dz) || 1; dx /= L; dy /= L; dz /= L;
+    // o lado (horizontal, perpendicular ao eixo) gira devagar — a câmera orbita enquanto fecha
+    const giro = 0.9 + k * 0.8, lx = -dz, lz = dx, ln = Math.hypot(lx, lz) || 1;
+    const sx = (lx / ln) * Math.cos(giro) - 0 * Math.sin(giro), sz = (lz / ln) * Math.cos(giro);
+    // (de LADO e um pouco atrás: você de perfil no primeiro plano, o túnel e o buraco negro na frente)
+    const dist = 15 - 6 * k, alto = 2.2 + 1.5 * (1 - k);
+    const pos = { x: eu.x + dx * dist * 0.5 + sx * dist * 0.9, y: eu.y + alto + dy * dist * 0.3, z: eu.z + dz * dist * 0.5 + sz * dist * 0.9 };
+    const olhar = { x: eu.x - dx * 6, y: eu.y - dy * 6 + 0.3, z: eu.z - dz * 6 };   // (um pouco à frente de você: você no quadro, o túnel atrás)
+    const kk = this.wTravessia * this.wTravessia * (3 - 2 * this.wTravessia);
+    const mix = (a: { x: number; y: number; z: number }, b2: { x: number; y: number; z: number }) => ({ x: a.x + (b2.x - a.x) * kk, y: a.y + (b2.y - a.y) * kk, z: a.z + (b2.z - a.z) * kk });
+    return { ...c, pos: mix(c.pos, pos), olhar: mix(c.olhar, olhar) };
+  }
   // ───────────── a TRAVESSIA CÓSMICA: o clarão, e do outro lado o personagem SAINDO do buraco negro ─────────────
   private clarao: { t: number; trocou: boolean } | null = null; private claraoEl: HTMLDivElement | null = null;
   /** saindo do buraco negro do destino: de dentro dele (a boca, MUNDO) até o ponto de chegada, num arco */
@@ -2117,21 +2164,24 @@ export class CyberEngine {
     const c = this.clarao; if (!c) { if (this.claraoEl && this.claraoEl.style.opacity !== "0") this.claraoEl.style.opacity = "0"; return; }
     if (!this.claraoEl) {
       const el = document.createElement("div");
-      el.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:26;opacity:0;mix-blend-mode:screen;background:radial-gradient(circle at 50% 50%, #fff 0%, #f4e9ff 18%, #b48cff 42%, #4a1e9e 72%, #0a0218 100%);";
+      // (o clarão PSICODÉLICO: o branco no centro e as cores girando em volta — a travessia)
+      el.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:26;opacity:0;mix-blend-mode:screen;background:radial-gradient(circle at 50% 50%, #fff 0%, rgba(255,255,255,.9) 14%, transparent 46%), conic-gradient(from 0deg, #ff3cc7, #ffd24f, #5aff8a, #3cc8ff, #8b5cf6, #ff3cc7);";
       this.o.overlay.appendChild(el); this.claraoEl = el;
     }
     c.t += dt; const C = CyberEngine.CLARAO;
     if (!c.trocou && c.t >= C.sobe) { c.trocou = true; this.viajarDireto(); }   // (no auge do clarão, já está do outro lado)
     const op = c.t < C.sobe ? c.t / C.sobe : Math.max(0, 1 - (c.t - C.sobe) / C.desce);
-    this.claraoEl.style.opacity = (op * op * (3 - 2 * op)).toFixed(3);
+    this.claraoEl.style.opacity = (op * op * (3 - 2 * op)).toFixed(3); this.claraoEl.style.filter = `hue-rotate(${Math.round(c.t * 520)}deg)`;
     if (c.t >= C.sobe + C.desce) this.clarao = null;
   }
   /** a travessia direta, com a tela COBERTA pelo túnel: chega no destino */
   viajarDireto() {
     const d = this.direto; if (!d) return;
     this.direto = null; this.fio = null;
-    this.largarVeiculoNoFluxo();   // (o carro/a moto que veio pelo fluxo fica: a pessoa chega a pé)
+    const comMoto = this.moto !== null && !this.noCarro();
+    this.largarVeiculoNoFluxo(comMoto);   // (o carro que veio pelo fluxo fica; a MOTO atravessa com a pessoa — out/2026)
     this.irParaNo(d.para, d.pose ?? NOS[d.para].chegada);
+    if (comMoto) { this.altoEm = null; this.yNav = 0; this.plat = null; this.motoPousado = false; this.autoPouso = false; }
     this.fluxoArmado = false;   // (só pega de novo depois de se afastar do buraco negro)
     // do outro lado: o personagem SAI do buraco negro do destino (o de saída da sala — perto dela — ou o da cidade, no hub)
     const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY;
@@ -2194,7 +2244,7 @@ export class CyberEngine {
     const x = e.de.x + (e.para.x - e.de.x) * u, z = e.de.z + (e.para.z - e.de.z) * u;
     const y = (1 - u) * (1 - u) * e.de.y + 2 * (1 - u) * u * alto + u * u * e.para.y;
     eu.pos.set(x, 0, z); eu.alt = y; eu.facing = Math.atan2(e.para.x - e.de.x, e.para.z - e.de.z);
-    eu.av.group.scale.setScalar(0.25 + 0.75 * Math.min(1, k / 0.3));
+    eu.av.group.scale.setScalar(this.moto !== null ? 1 : 0.25 + 0.75 * Math.min(1, k / 0.3));   // (de moto, sai inteiro: a moto não encolhe)
     this.alvo = null; this.alvoDepois = null;
     if (k >= 1) { this.emergir = null; eu.av.group.scale.setScalar(1); eu.facing = e.rumo; }
     return true;
@@ -2222,10 +2272,10 @@ export class CyberEngine {
     this.irParaNo("zaeon", this.chegadaPertoDoCarro()); return true;
   }
   /** o carro/a moto que o fluxo levou: o carro volta pra vaga dele, a moto some (a fábrica repõe) — a pessoa chega a pé */
-  private largarVeiculoNoFluxo() {
+  private largarVeiculoNoFluxo(ficaComAMoto = false) {
     const c = this.carro;
     if (c && c.fase !== "parado") { c.fase = "parado"; c.k = 0; c.ligado = 0; c.h.abrir(0); this.carro = null; this.carroLargado = null; }
-    if (this.moto !== null) { this.moto = null; this.motoDe = undefined; this.motoLargada = null; this.autoPouso = false; }
+    if (this.moto !== null && !ficaComAMoto) { this.moto = null; this.motoDe = undefined; this.motoLargada = null; this.autoPouso = false; }
     this.jet.noAr = false; this.jet.vy = 0;
   }
   /** o MAGNETISMO dos buracos negros (out/2026, o dono): o caminho até eles é LIVRE (de carro, de moto, de mochila); a
@@ -2248,7 +2298,14 @@ export class CyberEngine {
     this.fio = comecarTragada(f, p); this.fluxoArmado = false;
     if (this.jet.noAr) { this.jet.noAr = false; this.jet.vy = 0; }
     this.alvo = null; this.alvoDepois = null; this.sitT = 0;
-    this.som.tocar("rise", eu.av.group.position, { dist: DISTANCIA.perto });
+    // (out/2026, o dono: no lugar do "rise" e do assobio, a TEMPESTADE CÓSMICA — o trovão de entrada; o resto, na atmosfera)
+    this.som.tocar("trovao", eu.av.group.position, { dist: DISTANCIA.eu });
+    // a travessia é DE MOTO (quem já liberou as motos): a pé, ela se materializa embaixo — e sai com você do outro lado
+    if (this.moto === null && !this.noCarro() && this.podeMoto()) {
+      this.moto = MOTO_DO_BURACO; this.motoDe = undefined; this.motoEst = motoParada(eu.pos.x, eu.alt + 0.5, eu.pos.z, eu.facing);
+      this.motoPousado = false; this.autoPouso = false; this.altoEm = null; this.yNav = 0; this.plat = null; this.ilhota = null;
+      this.som.tocar("moto-partida", eu.av.group.position, { dist: DISTANCIA.eu });
+    }
   }
   /** onde a tragada está levando agora (MUNDO) e o rumo — a pessoa, ou o carro/a moto com ela */
   private posNoFluxo() {
@@ -4149,6 +4206,7 @@ export class CyberEngine {
     }
     let c = poseDaCamera({ olho: olhoCam, az: this.camAz, pitch: this.camPitch, dist, chaoY: this.eu.alt });
     c = this.cameraDaCapsula(c, dt);   // numa CÁPSULA da torre: a vista de dentro, parada em relação a ela
+    c = this.cameraDaTravessia(c, dt);   // sendo tragado: o plano de cinema com o buraco negro
     c = this.aplicarCena(c, dt);   // a CUTSCENE do tutorial (se houver) leva a câmera pra outro enquadramento
     this.cam.position.set(c.pos.x, c.pos.y, c.pos.z);
     this.cam.lookAt(c.olhar.x, c.olhar.y, c.olhar.z);
@@ -4356,7 +4414,8 @@ export class CyberEngine {
       const deCorrida = { x: this.motoEst.x, y: this.motoEst.y, z: this.motoEst.z };
       if (this.corrida?.c.fase === "contagem" || (this.ck && faseCk(this.ck.c, Date.now()).fase === "contagem")) { c.acel = 0; c.boost = false; c.subir = c.descer = false; }   // no grid: o motor ronca, a moto não sai
       const boostAntes = this.motoEst.boost;
-      const r = this.fio ? (() => { const q = this.posNoFluxo(); return { s: { ...this.motoEst, x: q.x, y: q.y, z: q.z, yaw: q.rumo, vx: 0, vy: 0, vz: 0 }, pousado: false }; })()   // (o FLUXO leva a moto com a pessoa)
+      const r = this.emergir && this.passoEmergir(dt) ? { s: { ...this.motoEst, x: eu.pos.x, y: eu.alt, z: eu.pos.z, yaw: eu.facing, vx: 0, vy: 0, vz: 0 }, pousado: false }   // (SAINDO do buraco negro, montado: o arco leva a moto)
+        : this.fio ? (() => { const q = this.posNoFluxo(); return { s: { ...this.motoEst, x: q.x, y: q.y, z: q.z, yaw: q.rumo, vx: 0, vy: 0, vz: 0 }, pousado: false }; })()   // (o FLUXO leva a moto com a pessoa)
         : passoMotoSub(this.motoEst, c, dtReal, this.solidosDeVoo(), MOTO.teto);
       if (!r.pousado && rompeuBarreira(boostAntes, r.s.boost, Math.hypot(r.s.vx, r.s.vz))) this.ondaT = 0;   // acendeu o boost rápido: quebrou a barreira do som
       this.motoEst = r.s; this.motoPousado = r.pousado; if (r.pousado) this.autoPouso = false;
@@ -4579,7 +4638,7 @@ export class CyberEngine {
     // a PRANCHA CÓSMICA (out/2026, o dono: "uma nova forma de sprint — não mais correndo, numa prancha estilo hoverboard"):
     // no SPRINT, a pé no chão, sobe na prancha de luz (a mesma do fluxo cósmico) e desliza
     const naPrancha = this.wSprint > 0.5 && !this.jet.noAr && this.moto === null && !this.noCarro() && !this.pilotando && !this.menu;
-    eu.surf = (eu.surf ?? 0) + ((this.fio || this.viagem?.tipo === "elevador" || this.viagem?.tipo === "garagem" || naPrancha ? 1 : 0) - (eu.surf ?? 0)) * Math.min(1, dt * (naPrancha ? 8 : 5));
+    eu.surf = (eu.surf ?? 0) + ((this.viagem?.tipo === "elevador" || this.viagem?.tipo === "garagem" || naPrancha ? 1 : 0) - (eu.surf ?? 0)) * Math.min(1, dt * (naPrancha ? 8 : 5));
     this.somDaPrancha(naPrancha, dt); this.naPrancha = naPrancha && !this.fio && !this.viagem;
     eu.puxa = (eu.puxa ?? 0) + ((this.viagem?.tipo === "escada" ? 1 : 0) - (eu.puxa ?? 0)) * Math.min(1, dt * 5);
     // DANÇA: parado na PISTA do lounge → dança virado pro palco
@@ -4654,7 +4713,8 @@ export class CyberEngine {
     { const c = noCorpo(this.velRifle, eu.facing), comRifle = this.wRifle > 0.01 && !!this.rifle;
       eu.av.rifle(comRifle ? { naMao: this.wRifle, mira: this.wMira, frente: eu.moving ? c.frente : 0, lado: eu.moving ? c.lado : 0, coice: this.coice, alvo: this.alvoMira, arma: this.rifle!.group } : null);
       this.vestirTraje(eu); }   // o corpo de ASTRONAUTA (o personagem stock de todos)
-    eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null && !this.noCarro() && (eu.surf ?? 0) < 0.5, correndo: (!!(this.keys.shift || this.correr) || this.dashAtivo) && eu.moving && this.moto === null && (eu.surf ?? 0) < 0.5 && (this.wRifle < 0.4 || Math.hypot(this.velRifle.x, this.velRifle.z) > 5), sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving, vel: Math.hypot(this.jetV.x, this.jetV.z) } : null, acao: this.moto === null && !this.pilotando ? { sprint: this.wSprint * (1 - Math.min(1, eu.surf ?? 0)), dash: this.wDash, alerta: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena), alertaT: this.wGuardaArena > pesoAlerta(t - this.tFimDash) ? 4 : t - this.tFimDash, espada: this.revela > 0.02 ? { golpe: this.ataque && !golpeAcabou(this.ataque, t) ? { n: this.ataque.golpe.n, u: (t - this.ataque.ini) / this.ataque.golpe.dur, ativo: [this.ataque.golpe.ativoIni / this.ataque.golpe.dur, this.ataque.golpe.ativoFim / this.ataque.golpe.dur] } : null, guarda: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena) } : null, heroi: t - this.tHeroi < 1.3 ? t - this.tHeroi : null, decola: t - this.tDecolou < this.esperaDecolou + 0.7 ? { t: t - this.tDecolou, espera: this.esperaDecolou } : null } : null, montado: this.moto !== null ? this.naMoto(eu.av, ocupadas.get(this.eu)) : this.noCarro() ? this.naCarro(eu.av) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, prancha: this.naPrancha, puxado: eu.puxa ?? 0, descanso: { sentar: eu.sofa ?? 0, deitar: eu.deita ?? 0, assentoY: eu.assentoY ?? 0.7, relaxa: eu.relaxa ?? 0, pes: eu.pes, estilo: eu.poseL }, tablet: eu.tab ?? 0, dt: t < this.pausaAte ? 0 : this.moto === null && !this.jet.noAr && eu.moving && this.wRifle < 0.4 ? dt * Math.min(2, Math.max(1, this.velAPe / 7.5)) : dt, t });   // (hit-stop: a pose congela)   // (no sprint as pernas giram mais rápido)
+    const tragadoAPe = !!this.fio && this.moto === null && !this.noCarro();   // (sem moto: voando de mochila pro buraco negro — não mais a prancha)
+    eu.av.animar({ andando: eu.moving && !this.jet.noAr && this.moto === null && !this.noCarro() && (eu.surf ?? 0) < 0.5, correndo: (!!(this.keys.shift || this.correr) || this.dashAtivo) && eu.moving && this.moto === null && (eu.surf ?? 0) < 0.5 && (this.wRifle < 0.4 || Math.hypot(this.velRifle.x, this.velRifle.z) > 5), sentado: this.menu || this.pilotando ? 0 : this.sitT, meditando: this.menu && !this.pilotando ? 1 : 0, pilotando: this.pilotando ? 1 : 0, jato: this.jet.noAr ? (this.jet.tecla ? 1 : this.impulsoFrente ? 0.9 : 0.35) : tragadoAPe ? 0.9 : 0, ar: this.jet.noAr ? { vy: this.jet.vy, movendo: eu.moving, vel: Math.hypot(this.jetV.x, this.jetV.z) } : tragadoAPe ? { vy: 1, movendo: true, vel: 24 } : null, acao: this.moto === null && !this.pilotando ? { sprint: this.wSprint * (1 - Math.min(1, eu.surf ?? 0)), dash: this.wDash, alerta: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena), alertaT: this.wGuardaArena > pesoAlerta(t - this.tFimDash) ? 4 : t - this.tFimDash, espada: this.revela > 0.02 ? { golpe: this.ataque && !golpeAcabou(this.ataque, t) ? { n: this.ataque.golpe.n, u: (t - this.ataque.ini) / this.ataque.golpe.dur, ativo: [this.ataque.golpe.ativoIni / this.ataque.golpe.dur, this.ataque.golpe.ativoFim / this.ataque.golpe.dur] } : null, guarda: Math.max(pesoAlerta(t - this.tFimDash), this.wGuardaArena) } : null, heroi: t - this.tHeroi < 1.3 ? t - this.tHeroi : null, decola: t - this.tDecolou < this.esperaDecolou + 0.7 ? { t: t - this.tDecolou, espera: this.esperaDecolou } : null } : null, montado: this.moto !== null ? this.naMoto(eu.av, ocupadas.get(this.eu)) : this.noCarro() ? this.naCarro(eu.av) : null, dj: eu.dj ?? 0, danca: eu.danca ?? 0, surf: eu.surf ?? 0, prancha: this.naPrancha, puxado: eu.puxa ?? 0, descanso: { sentar: eu.sofa ?? 0, deitar: eu.deita ?? 0, assentoY: eu.assentoY ?? 0.7, relaxa: eu.relaxa ?? 0, pes: eu.pes, estilo: eu.poseL }, tablet: eu.tab ?? 0, dt: t < this.pausaAte ? 0 : this.moto === null && !this.jet.noAr && eu.moving && this.wRifle < 0.4 ? dt * Math.min(2, Math.max(1, this.velAPe / 7.5)) : dt, t });   // (hit-stop: a pose congela)   // (no sprint as pernas giram mais rápido)
     for (const a of this.remotos.values()) {
       const pilota = !!a.nave && !a.naveP, monta = a.moto ? ocupadas.get(a) ?? null : null;
       const ehDJ = !!a.ceu && !a.moving && a.jet === undefined && !pilota && monta === null && naCabineDJ(a.pos);   // a posição dele já vem puxada pra cabine pelo engine dele
