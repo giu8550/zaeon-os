@@ -14,7 +14,7 @@ import { MOTIVO_ERRO, duracaoTexto, useVideoDoc } from "./useVideoDoc";
 const HoloZaeonCena = dynamic(() => import("./HoloZaeonCena"), { ssr: false });
 const CIANO = "#7fe0ff", AMARELO = "#ffd36b";
 
-export default function PlayerVideoDoc({ videoId, onFechar }: { videoId: string; onFechar: () => void }) {
+export default function PlayerVideoDoc({ videoId, onFechar, tela }: { videoId: string; onFechar: () => void; /** por cima da tela inteira (no chat) em vez de por cima da prancha */ tela?: boolean }) {
   const { video, falhou } = useVideoDoc(videoId);
   const audio = useRef<HTMLAudioElement>(null);
   const analisador = useRef<AnalyserNode | null>(null), dados = useRef<Uint8Array | null>(null);
@@ -58,7 +58,7 @@ export default function PlayerVideoDoc({ videoId, onFechar }: { videoId: string;
   const slide = pronto && pos ? video!.roteiro!.slides[pos.slide]! : null;
   const total = video?.duracao ?? 0;
   return (
-    <div className="absolute inset-0 z-[120] flex items-center justify-center bg-[#020c18]/80 p-3 backdrop-blur-sm md:p-6" onPointerDown={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) onFechar(); }}>
+    <div className={`${tela ? "fixed z-[1000]" : "absolute z-[120]"} inset-0 flex items-center justify-center bg-[#020c18]/80 p-3 backdrop-blur-sm md:p-6`} onPointerDown={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) onFechar(); }}>
       <div className="relative flex h-full max-h-[720px] w-full max-w-[1180px] flex-col overflow-hidden rounded-[4px] border" style={{ borderColor: CIANO, background: "#0b2c4d", boxShadow: "0 0 40px rgba(127,224,255,.18)" }}>
         {/* o cabeçalho de prancha */}
         <div className="flex flex-none items-center gap-3 border-b px-4 py-2 font-mono text-[11px] tracking-[0.16em]" style={{ borderColor: "rgba(127,224,255,.3)", color: CIANO }}>

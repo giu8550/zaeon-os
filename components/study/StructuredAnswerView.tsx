@@ -21,6 +21,8 @@ import { fonteChat } from "@/lib/ui/chatFontScale";
 import { ArrowUpRight, Quote } from "lucide-react";
 import type { StructuredAnswer, Source } from "@/lib/agent/contracts";
 import ChatMarkdown from "@/components/study/ChatMarkdown";
+import CardVideoChat from "@/components/videodoc/CardVideoChat";
+import { videoDocUiOn } from "@/lib/videodoc/documentos";
 
 // O texto da resposta passa pelo MESMO formatador do chat (ChatMarkdown): negrito/itálico, títulos, bullets,
 // links e MATEMÁTICA ($…$, $$…$$ em KaTeX, ```grafico). Antes era um formatador próprio só com **negrito** —
@@ -142,6 +144,9 @@ export default function StructuredAnswerView({
           {rest && children && (
             <div className="z-up mt-4" style={{ animationDelay: delay("art") }}>{children}</div>
           )}
+
+          {/* o VÍDEO do documento pedido no chat (lib/videodoc): o ▶ abre a Zaeon holograma explicando */}
+          {rest && answer.videoDoc?.videoId && videoDocUiOn() ? <CardVideoChat videoId={answer.videoDoc.videoId} titulo={answer.videoDoc.titulo} /> : null}
 
           {/* mini-ações da mensagem (ordem: conteúdo → ações → botões do harness → Fontes) */}
           {rest && acoes}

@@ -161,6 +161,15 @@ export async function runChatTurn(
     // O texto das seções mora na ABA do TCC (e a Aura relê as seções pela bússola do TCC): a bolha
     // do chat leva só o núcleo + o aviso `tcc`, sem repetir o documento.
     if (tcc && out.mode === "structured") out.answer = { ...out.answer, work: undefined, tcc };
+    // VÍDEO DO DOCUMENTO pedido no chat ("faz um vídeo desse artigo" — lib/videodoc): AGUARDADO (só banco; a geração
+    // corre em segundo plano) porque o card com ▶ vai NESTA resposta. Best-effort: falhou, a resposta segue sem ele.
+    if (userId && out.mode === "structured") {
+      const vd = await import("@/lib/videodoc/server");
+      if (vd.videoDocOn() && (await import("@/lib/videodoc/pedido")).pedidoDeVideo(prompt)) {
+        const videoDoc = await (await import("@/lib/videodoc/chat-server")).videoDoChat({ userId, scopeId: typeof ac.cartolinaScopeId === "string" ? ac.cartolinaScopeId : null, prompt, answer: tcc ? { ...answer, tcc } : answer }).catch(() => null);
+        if (videoDoc) out.answer = { ...out.answer, videoDoc };
+      }
+    }
     // Chat → memória: o turno entra no grafo do estudo (e a cartolina recebe a projeção) — ÚNICO
     // ponto de escrita por turno. Fire-and-forget. Seções que foram pro TCC não viram notas soltas.
     if (userId) void cartolina.fixarTurno({ userId, scopeId: ac.cartolinaScopeId, prompt, answer: tcc ? { ...answer, work: undefined } : answer, msgId: ac.cartolinaMsgId });

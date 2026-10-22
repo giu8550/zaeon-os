@@ -75,12 +75,12 @@ export async function garantirVideo(i: { userId: string; documento: Documento; b
   if (ja && !velhoComErro) {
     // o blueprint passa a poder ver o vídeo (compartilhado ou do mesmo dono)
     const meta = (ja.meta ?? {}) as MetaVideoDoc;
-    if (!meta.blueprints?.includes(i.blueprintId)) await db.studioArtifact.update({ where: { id: ja.id }, data: { meta: { ...meta, blueprints: [...(meta.blueprints ?? []), i.blueprintId].slice(-50) } } });
+    if (i.blueprintId && !meta.blueprints?.includes(i.blueprintId)) await db.studioArtifact.update({ where: { id: ja.id }, data: { meta: { ...meta, blueprints: [...(meta.blueprints ?? []), i.blueprintId].slice(-50) } } });
     return { videoId: ja.id, novo: false };
   }
   const hoje = await db.studioArtifact.count({ where: { ownerId: i.userId, kind: KIND_VIDEO_DOC, createdAt: { gte: inicioDoDia(agora) } } });
   if (hoje >= MAX_POR_DIA) return { motivo: "limite_do_dia" };
-  const meta: MetaVideoDoc = { chave, publico, blueprints: [i.blueprintId], documento: { titulo: i.documento.titulo, tipo: i.documento.tipo, ...(i.documento.url ? { url: i.documento.url } : {}) } };
+  const meta: MetaVideoDoc = { chave, publico, blueprints: i.blueprintId ? [i.blueprintId] : [], documento: { titulo: i.documento.titulo, tipo: i.documento.tipo, ...(i.documento.url ? { url: i.documento.url } : {}) } };
   const art = await db.studioArtifact.create({ data: { ownerId: i.userId, kind: KIND_VIDEO_DOC, status: "queued", title: i.documento.titulo.slice(0, 200), sourceIds: [chave], meta } });
   const doc = i.documento, userId = i.userId;
   const gerar = i.gerar ?? (async (artId: string, titulo: string, texto: string, m: MetaVideoDoc, uid: string) => gerarVideoDoc(artId, { titulo, texto, meta: m }, await depsReais(uid)));
