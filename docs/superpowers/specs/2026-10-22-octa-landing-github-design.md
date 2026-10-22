@@ -145,7 +145,8 @@ O porquê: o aluno aprende construindo e sai com algo real e compartilhável, qu
 - **Projeto no servidor:** um registro por projeto (dono, id do repositório, nome, URL do Pages, estilo) **e os arquivos salvos no servidor**, pra trocar de aparelho não perder o vínculo com o repositório. Cada aluno pode ter vários projetos, com uma lista simples de projetos na IDE. O localStorage vira cache.
 - **Turnos longos:** o fluxo roda como **job em segundo plano** (há BullMQ/Redis no app) e a janela do agente mostra os passos ao vivo (stream de eventos), com um orçamento de passos maior que o `MAX_PASSOS=8` atual.
 - **"Pedir antes":** o agente **para e pergunta no chat**. Quando o aluno responde, o job retoma do ponto salvo. Os 3 níveis ficam **por cima** das regras atuais (modos review/change e `liberados`), que continuam valendo.
-- **Vault por aluno:** chave única (dono + nome) e **começar do zero**. Não há segredo em produção, porque o `OCTA_VAULT_KEY` nunca existiu lá. O `OCTA_VAULT_KEY` é gerado na VPS sem ser impresso.
+- **Token do aluno (revisto ao planejar):** em vez de tornar o vault do Octa por aluno, reaproveitar `User.githubUserToken`/`githubRefreshToken`, que já são por usuário e cifrados (`lib/projects/crypto.ts`), junto com o connect/callback que já existem. Em produção, `TOKEN_ENC_KEY` passa a ser obrigatória (sem fallback).
+- **(substituído pelo item acima) Vault por aluno:** chave única (dono + nome) e **começar do zero**. Não há segredo em produção, porque o `OCTA_VAULT_KEY` nunca existiu lá. O `OCTA_VAULT_KEY` é gerado na VPS sem ser impresso.
 - **Limites:** 10 publicações e 3 repositórios novos por aluno por dia. Publicação que falha não conta.
 - **Galeria:** a prévia de cada estilo é gerada com **as nossas seções + os tokens do estilo**, e não com o `preview.html` da coleção, que traz nome e logo da marca original. Crédito à coleção na galeria.
 
