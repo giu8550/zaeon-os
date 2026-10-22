@@ -504,6 +504,8 @@ describe("octa · agente (octa_ver_pagina)", () => {
     const limpo = semImagens(r1.msgs);
     expect(JSON.stringify(limpo)).not.toContain("/9j/");
     expect(JSON.stringify(limpo)).toContain(CAPTURA_OMITIDA);
+    // a retomada não pode convidar o modelo a "avaliar" uma imagem que ele não vê mais
+    expect(JSON.stringify(limpo)).not.toContain("Avalie o layout");
     const m2 = roteiro([{ content: null, tool_calls: [call("v3", "octa_ver_pagina", {})] }, { content: null, tool_calls: [call("v4", "octa_ver_pagina", {})] }, { content: "fim" }]);
     await rodarAgenteOcta(t, m2, { sessionId: "vp13", capturar, permissao: "antes_de_publicar", octaPublicar: pub, retomar: { msgs: limpo, aprovado: true } });
     expect(capturar).toHaveBeenCalledTimes(3);
@@ -512,14 +514,15 @@ describe("octa · agente (octa_ver_pagina)", () => {
     expect(m2.vistos[2].find((x: any) => x.tool_call_id === "v4").content).toContain("limite de capturas neste turno");
   });
 
-  it("semImagens: troca a parte imagem pelo texto fixo e não mexe no resto", () => {
+  it("semImagens: a mensagem da captura vira INTEIRA uma nota neutra (sem o pedido de avaliar) e não mexe no resto", () => {
     const msgs: any[] = [
       { role: "system", content: "s" },
       { role: "user", content: [{ type: "text", text: "olhe" }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${JPEG}` } }] },
       { role: "tool", tool_call_id: "1", content: "x" },
     ];
     const r = semImagens(msgs);
-    expect(r[1]).toEqual({ role: "user", content: `olhe\n${CAPTURA_OMITIDA}` });
+    expect(r[1]).toEqual({ role: "user", content: CAPTURA_OMITIDA });
+    expect(CAPTURA_OMITIDA).toBe("(captura de tela vista antes; imagem não guardada)");
     expect(r[0]).toBe(msgs[0]);
     expect(msgs[1].content[1].type).toBe("image_url"); // não muta a entrada
   });

@@ -11,7 +11,7 @@
  * e octa_publicar (GitHub do aluno, via closure injetada: a tool nunca vê token nem email). Sem o fluxo, essas tools nem
  * são oferecidas e chamá-las é negado.
  * Captura: a tool devolve só texto ("captura anexada: …"); o LAÇO anexa a imagem numa mensagem `user` depois das
- * respostas das tools do lote (só a captura mais recente fica como imagem; as antigas viram CAPTURA_OMITIDA). A imagem
+ * respostas das tools do lote (só a captura mais recente fica como imagem; as antigas viram a nota CAPTURA_OMITIDA). A imagem
  * é sempre a que o servidor gerou (JPEG validado), nunca uma URL vinda do modelo. `semImagens` limpa as msgs antes de
  * gravar (lib/queue/octa) ou de mandar pra um modelo que não lê imagem (lib/octa/modelo).
  * Permissão do projeto (`opts.permissao`, lib/octa/permissao): a tool que precisa do aluno PARA o laço e volta como
@@ -361,16 +361,24 @@ export type OpcoesOcta = {
   capturar?: CapturarOcta;
 };
 
-/** O que fica no lugar da imagem nas msgs gravadas ou mandadas a um modelo sem visão. */
-export const CAPTURA_OMITIDA = "[captura de tela omitida]";
+/**
+ * O que fica no lugar da mensagem da captura nas msgs gravadas ou mandadas a um modelo sem visão. Neutro de propósito:
+ * a mensagem INTEIRA vira esta nota (some o "Avalie o layout…"), senão o modelo inventa uma avaliação da imagem que não vê.
+ */
+export const CAPTURA_OMITIDA = "(captura de tela vista antes; imagem não guardada)";
 const INSTRUCAO_AVALIAR = "Avalie o layout contra o DESIGN.md: contraste, alinhamento, espaçamento, hierarquia; corrija o que estiver ruim.";
 
 const temImagem = (m: MsgModelo) => m.role === "user" && Array.isArray(m.content) && m.content.some((p) => p.type === "image_url");
-/** As msgs sem nenhuma imagem: a mensagem com imagem vira texto puro (imagem → CAPTURA_OMITIDA). Não muta a entrada. */
+/**
+ * As msgs sem nenhuma imagem: a mensagem com imagem (a da captura) vira INTEIRA a nota CAPTURA_OMITIDA; outra mensagem
+ * em partes vira o texto delas. Não muta a entrada.
+ */
 export function semImagens(msgs: readonly MsgModelo[]): MsgModelo[] {
-  return msgs.map((m) => (m.role === "user" && Array.isArray(m.content)
-    ? { role: "user", content: m.content.map((p) => (p.type === "text" ? p.text : CAPTURA_OMITIDA)).join("\n") }
-    : m));
+  return msgs.map((m): MsgModelo => {
+    if (m.role !== "user" || !Array.isArray(m.content)) return m;
+    if (temImagem(m)) return { role: "user", content: CAPTURA_OMITIDA };
+    return { role: "user", content: m.content.map((p) => (p.type === "text" ? p.text : "")).join("\n") };
+  });
 }
 
 const capturarPadrao: CapturarOcta = async (arquivos, o) => (await import("@/lib/octa/captura")).capturarPagina(arquivos, o);

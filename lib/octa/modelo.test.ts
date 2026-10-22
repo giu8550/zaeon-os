@@ -199,7 +199,7 @@ describe("octa · escolha do modelo no fluxo landing", () => {
     expect((await criarChamadorOcta(g, e)(comImg)).content).toBe("contabo");
     expect(JSON.stringify(vistos["vertex_ai/gemini-3.5-flash"])).toContain(url);
     expect(JSON.stringify(vistos["zaeon-local-coder"])).not.toContain("base64");
-    expect(vistos["zaeon-local-coder"][1]).toEqual({ role: "user", content: "olhe\n[captura de tela omitida]" });
+    expect(vistos["zaeon-local-coder"][1]).toEqual({ role: "user", content: "(captura de tela vista antes; imagem não guardada)" });
     // sem a flag do local, a reserva é o Google "forte" (lê imagem): vai inteira
     _resetPausaOcta();
     const e2 = escolhaModeloOcta(PROD, "landing");

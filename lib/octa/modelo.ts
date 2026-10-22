@@ -23,7 +23,7 @@
  *   - a reserva tem teto por passo (OCTA_LOCAL_TIMEOUT_MS) e o tempo dela conta no orçamento do turno
  *     (OCTA_LOCAL_ORCAMENTO_MS); orçamento gasto = o passo falha com erro claro em vez de esperar o CPU;
  *   - captura de tela (octa_ver_pagina): o Google lê a imagem; a reserva da Contabo (qwen3-coder) NÃO é multimodal, então
- *     quando ela responde um passo a imagem vira o texto "[captura de tela omitida]" (`reservaSemImagem`). O passo segue
+ *     quando ela responde um passo a mensagem da captura vira a nota CAPTURA_OMITIDA (`reservaSemImagem`). O passo segue
  *     só com o texto, em vez de falhar o turno.
  */
 import { semImagens, type ChamarModelo, type MsgModelo, type RespostaModelo } from "@/lib/octa/agente";

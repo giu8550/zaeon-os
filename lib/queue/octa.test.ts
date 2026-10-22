@@ -481,7 +481,8 @@ describe("lib/queue/octa · turno em job", () => {
     const gravado = JSON.stringify(turno(id)!.estado);
     expect(gravado).not.toContain("/9j/");
     expect(gravado).not.toContain("base64");
-    expect(gravado).toContain("[captura de tela omitida]");
+    expect(gravado).toContain("(captura de tela vista antes; imagem não guardada)");
+    expect(gravado).not.toContain("Avalie o layout");
     const evs = eventos(id);
     const cap = evs.find((e) => e.tipo === "captura")!;
     expect(cap.dados).toMatchObject({ tool: "octa_ver_pagina", tela: "desktop", miniatura: MINI });

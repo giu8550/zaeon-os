@@ -9,7 +9,7 @@
  * - Todo turno daqui é `fluxo: "landing"`, `modo: "change"`, `liberados: ["**"]` (o projeto é inteiro do aluno) e
  *   a `permissao` vem do PROJETO (OctaProjeto.permissao), nunca do pedido.
  * - O estado para retomar (msgs + a tool pendente) mora SÓ no OctaTurno, e SEM imagem: a captura de tela que o modelo
- *   viu vira "[captura de tela omitida]" antes de gravar (semImagens). O evento `captura` leva só a miniatura (≤ 60 KB).
+ *   viu vira a nota neutra CAPTURA_OMITIDA (a mensagem inteira) antes de gravar (semImagens). O evento `captura` leva só a miniatura (≤ 60 KB).
  * - Aprovar = o cliente manda `{ aprovado }`;
  *   só um turno `aguardando_aprovacao` aceita (troca atômica de status → aprovar 2× dá `nao_aguardando`).
  * - Eventos (OctaEvento, seq crescente por turno) nunca levam segredo: vêm do onEvento do laço (nome de tool,
