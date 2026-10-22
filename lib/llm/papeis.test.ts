@@ -36,7 +36,7 @@ describe("papelLocalLigado — flag por papel", () => {
 });
 
 describe("gerarPapel — escolha do modelo local", () => {
-  it("curto → zaeon-local-mini (qwen3 4B instruct) no gateway, key local; ledger alvo contabo", async () => {
+  it("curto → zaeon-local-qwen30 (qwen3 30B-A3B instruct) no gateway, key local; ledger alvo contabo", async () => {
     const f = vi.fn(async () => okLocal('{"estudavel":true}'));
     const d = deps({ fetchImpl: f as any });
     const r = await gerarPapel("curto", { system: "s", user: "pergunta", json: true, ctx }, d);
@@ -45,7 +45,7 @@ describe("gerarPapel — escolha do modelo local", () => {
     expect(url).toBe("http://litellm:4000/v1/chat/completions");
     expect(init.headers.Authorization).toBe("Bearer sk-local");
     const body = JSON.parse(init.body);
-    expect(body.model).toBe("zaeon-local-mini"); expect(body.reasoning_effort).toBe("low");
+    expect(body.model).toBe("zaeon-local-qwen30"); expect(body.reasoning_effort).toBe("low");
     expect(body.messages.at(-1).content).toBe("pergunta");
     expect(d.vertexModelos).toEqual([]);
     await tick();

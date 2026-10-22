@@ -37,6 +37,14 @@ model_list:
       api_base: http://ollama:11434
       num_thread: 8                          # ver nota THREADS no topo
 
+  - model_name: qwen3-30b                    # MoE 30B com 3B ativos: papel "curto" (gatekeeper/juiz) desde 2026-10-22
+    litellm_params:
+      # Mesma velocidade do 4B na CPU (o gargalo é ler o prompt, ~20–26 tok/s) e bem mais qualidade —
+      # medido 2026-10-22: gatekeeper 2,4 s, juiz 14,9 s, resumo 7,4 tok/s (4B: 2,7 / 17,5 / 5,3).
+      model: ollama_chat/qwen3:30b-a3b-instruct-2507-q4_K_M
+      api_base: http://ollama:11434
+      num_thread: 8                          # ver nota THREADS no topo
+
   - model_name: llama-guard                  # moderação/segurança
     litellm_params:
       model: ollama_chat/llama-guard3:8b

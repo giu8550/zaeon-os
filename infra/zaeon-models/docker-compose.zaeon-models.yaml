@@ -38,9 +38,10 @@ services:
     environment:
       # Teto de modelos carregados AO MESMO TEMPO. Impede estourar a RAM: ao pedir
       # um 3º/4º grande, o Ollama DESCARREGA o LRU em vez de dar OOM.
-      OLLAMA_MAX_LOADED_MODELS: "3"
-      # Descarrega modelo ocioso depois de 30min (libera RAM sozinho).
-      OLLAMA_KEEP_ALIVE: "30m"
+      OLLAMA_MAX_LOADED_MODELS: "4"   # era 3 (2026-10-22): guard 5,6 + mini 3,2 + gpt-oss 13 + coder 18 GB cabem juntos
+      # Descarrega modelo ocioso depois de 6h (era 30min: quase toda chamada da moderação pegava o modelo
+      # FRIO — 21 s de média contra 0,6 s quente). A RAM sobra: 94 GB na box, a ChipFlow usa ~5.
+      OLLAMA_KEEP_ALIVE: "6h"
       # 1 geração pesada por vez (em CPU, paralelismo só deixaria tudo lento).
       OLLAMA_NUM_PARALLEL: "1"
       OLLAMA_HOST: "0.0.0.0:11434"
@@ -49,7 +50,7 @@ services:
     volumes:
       - ollama_models:/root/.ollama     # pesos baixados (persistem entre restarts)
     # SEM host port: só a rede interna (LiteLLM) alcança. Zero exposição.
-    mem_limit: 42g        # cabe ~2 grandes + residentes leves; acima disso, Ollama evicta
+    mem_limit: 56g        # era 42g (2026-10-22): nossa soma máx. ~73 GB (ollama+TEI×2+pg+litellm) + ChipFlow ~5–10 < 94
     healthcheck:
       test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
       interval: 30s

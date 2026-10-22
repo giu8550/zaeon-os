@@ -98,6 +98,13 @@ model_list:
       api_key: os.environ/CONTABO_LLM_KEY
       timeout: 300
     model_info: { id: contabo-mini }
+  - model_name: zaeon-local-qwen30         # qwen3 30B-A3B instruct — papel "curto" (gatekeeper/juiz), 2026-10-22
+    litellm_params:
+      model: litellm_proxy/qwen3-30b
+      api_base: os.environ/CONTABO_LLM_URL
+      api_key: os.environ/CONTABO_LLM_KEY
+      timeout: 300
+    model_info: { id: contabo-qwen30 }
   - model_name: zaeon-local-guard          # llama-guard3 8B — moderação
     litellm_params:
       model: litellm_proxy/llama-guard
