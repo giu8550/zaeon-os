@@ -156,4 +156,13 @@ describe("anexarFontesBase — só cita o que a busca devolveu", () => {
     const out = anexarFontesBase({ nucleo: "N" }, dois, [1, 2]);
     expect(out.nucleo).toBe("N\n\n**Da sua base:** Apostila 3 (p. 4–5) · Slides da aula 2 (p. 2)");
   });
+
+  it("referência pública da área: sem página, numa linha própria de Referências", () => {
+    const pub = tr({ trechoId: "t3", documentoId: "d3", titulo: "Entropia — Wikipédia", publico: true, paginaIni: 1, paginaFim: 1 });
+    expect(blocoDaBase(ok([pub]))).toContain("[B1] Entropia — Wikipédia (referência pública da área)\n");
+    const out = anexarFontesBase({ nucleo: "N" }, ok([tr(), pub]), [1, 2]);
+    expect(out.nucleo).toBe("N\n\n**Da sua base:** Apostila 3 (p. 4–5)\n**Referências:** Entropia — Wikipédia");
+    expect(out.fontesBase?.[1]).toEqual({ documentoId: "d3", titulo: "Entropia — Wikipédia", paginas: "1", publico: true });
+    expect(anexarFontesBase({ nucleo: "N" }, ok([pub]), [1]).nucleo).toBe("N\n\n**Referências:** Entropia — Wikipédia");
+  });
 });

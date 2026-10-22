@@ -46,6 +46,8 @@ export type TrechoAchado = {
   similaridade: number | null;
   /** O trecho também (ou só) casou pelo ramo texto. */
   porTexto: boolean;
+  /** Base pública por área (lib/rag/areas: só `area:*`, sem dono) — referência, não material da pessoa; sem página. */
+  publico?: boolean;
 };
 
 export type BuscaDeps = {
@@ -196,5 +198,6 @@ export async function buscar(deps: BuscaDeps, e: EscopoRag, pergunta: string, k:
       score: Number(t.score ?? 0) || 0,
       similaridade: t.similaridade == null ? null : Number(t.similaridade),
       porTexto: t.por_texto === true,
+      publico: !(t.dono_ids ?? []).length && (t.turma_ids ?? []).length > 0 && (t.turma_ids ?? []).every((id: string) => id.startsWith("area:")),
     }));
 }
