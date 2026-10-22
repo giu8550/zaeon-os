@@ -21,9 +21,9 @@ import { detectShit, PERGUNTAS_ANTES_DE_AGIR, type ShitFlag } from "@/lib/octa/s
 import { REGRA_DADOS_NAO_COMANDOS } from "@/lib/octa/untrusted";
 import { custoDoRun, type Trace } from "@/lib/octa/trace";
 import { gerarPeca, verificarDeterminismo } from "@/lib/octa/genart";
-import { carregarIndice, candidatosPorDescricao, designMdComMarcador, type EstiloDesign } from "@/lib/octa/design/indice";
+import { carregarIndice, candidatosPorDescricao, designMdComMarcador, estiloDoProjeto, palavrasDaMarca, type EstiloDesign } from "@/lib/octa/design/indice";
 import { extrairTokens } from "@/lib/octa/design/tokens";
-import { renderPagina, mencionaMarca, ErroMarca } from "@/lib/octa/secoes/render";
+import { renderPagina, marcaMencionada, ErroMarca } from "@/lib/octa/secoes/render";
 import { validarSecoes, TIPOS_SECAO } from "@/lib/octa/secoes/tipos";
 import { precisaAprovacao } from "@/lib/octa/permissao";
 import type { PermissaoOcta } from "@/lib/octa/projetos";
@@ -117,16 +117,8 @@ FERRAMENTAS.forEach(registerTool);
 
 // ───────────────────────────── ferramentas do fluxo landing ─────────────────────────────
 export { MARCADOR_ESTILO } from "@/lib/octa/design/indice";
-const RE_MARCADOR = /^<!-- zaeon-estilo: ([^\s]+) -->\r?\n?/;
-
 /** O DESIGN.md do workspace: o estilo de origem (se veio da biblioteca) e o markdown sem o marcador. */
-function designDoWorkspace(w: Workspace): { estilo?: EstiloDesign; md: string } | null {
-  const bruto = w["DESIGN.md"];
-  if (typeof bruto !== "string") return null;
-  const m = bruto.match(RE_MARCADOR);
-  const estilo = m ? carregarIndice().find((e) => e.id === m[1]) : undefined;
-  return { estilo, md: m ? bruto.slice(m[0].length) : bruto };
-}
+const designDoWorkspace = (w: Workspace) => estiloDoProjeto(w);
 
 function gravarDesign(w: Workspace, e: EstiloDesign): void {
   w["DESIGN.md"] = designMdComMarcador(e.id);
@@ -194,10 +186,10 @@ export const FERRAMENTAS_LANDING: ToolDef[] = [
         if (e) { gravarDesign(w, e); aviso = ` Sem DESIGN.md: escolhi o estilo ${e.nome} (id ${e.id}) e gravei DESIGN.md.`; }
       }
       const d = designDoWorkspace(w);
-      const tokens = extrairTokens(d?.md ?? "", d?.estilo?.marca);
-      let pagina: ReturnType<typeof renderPagina>;
+      const tokens = extrairTokens(d?.md ?? "", palavrasDaMarca(d?.estilo).join(" "));
+      let pagina: Awaited<ReturnType<typeof renderPagina>>;
       try {
-        pagina = renderPagina({ titulo, descricao, secoes, tokens, marcaProibida: d?.estilo?.marca });
+        pagina = await renderPagina({ titulo, descricao, secoes, tokens, marcaProibida: palavrasDaMarca(d?.estilo) });
       } catch (e) {
         if (e instanceof ErroMarca) return recusaMarca(e.palavra, "na página (texto, título ou descrição)");
         throw e;
@@ -217,9 +209,10 @@ export const FERRAMENTAS_LANDING: ToolDef[] = [
       const publicar = (ctx as CtxOcta).octaPublicar;
       if (!publicar) return err("publicação indisponível neste turno", "sem_publicador");
       const w = ws(ctx);
-      const marca = designDoWorkspace(w)?.estilo?.marca;
-      if (marca) {
-        for (const [p, c] of Object.entries(w)) if (/\.html?$/i.test(p) && mencionaMarca(c, marca)) return recusaMarca(marca, `em ${p}`);
+      const marcas = palavrasDaMarca(designDoWorkspace(w)?.estilo);
+      for (const [p, c] of Object.entries(w)) {
+        const palavra = /\.html?$/i.test(p) ? marcaMencionada(c, marcas) : null;
+        if (palavra) return recusaMarca(palavra, `em ${p}`);
       }
       const mensagem = typeof a?.mensagem === "string" && a.mensagem.trim() ? a.mensagem.trim().slice(0, 200) : undefined;
       // DESIGN.md (marca de origem + marcador) nunca sai do Octa; caminhoPublicavel é a 2ª barreira

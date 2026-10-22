@@ -19,7 +19,7 @@ const TARBALL = "https://codeload.github.com/VoltAgent/awesome-design-md/tar.gz/
 const ID_VALIDO = /^[a-z0-9][a-z0-9.-]*$/;
 
 const { extrairTokens } = await tsImport("../lib/octa/design/tokens.ts", import.meta.url);
-const { extrairClima, marcaDaPasta } = await tsImport("../lib/octa/design/indice.ts", import.meta.url);
+const { extrairClima, marcaDoEstilo } = await tsImport("../lib/octa/design/indice.ts", import.meta.url);
 
 const tmp = mkdtempSync(join(tmpdir(), "design-md-"));
 try {
@@ -45,12 +45,13 @@ try {
     mkdirSync(join(DESTINO, id));
     writeFileSync(join(DESTINO, id, "DESIGN.md"), md);
 
-    const marca = marcaDaPasta(id);
-    const tokens = extrairTokens(md, marca);
-    const nome = md.match(/^#\s*Design System Inspired by\s+(.+?)\s*$/m)?.[1] ?? marca;
+    // marca + aliases (MARCAS_EXPLICITAS em lib/octa/design/indice.ts onde a pasta não é o nome da marca)
+    const { marca, aliases, nome: rotulo } = marcaDoEstilo(id);
+    const tokens = extrairTokens(md, [marca, ...aliases].join(" "));
+    const nome = md.match(/^#\s*Design System Inspired by\s+(.+?)\s*$/m)?.[1] ?? rotulo;
     const descricao = md.match(/^description:\s*"?(.+?)"?\s*$/m)?.[1] ?? md.match(/##\s*1\.[^\n]*\n+([^\n#]+)/)?.[1] ?? "";
     const resumo = descricao.replace(/\s+/g, " ").trim().slice(0, 240);
-    indice.push({ id, nome, marca, resumo, clima: extrairClima(md, tokens.escuro), tokens });
+    indice.push({ id, nome, marca, ...(aliases.length ? { aliases } : {}), resumo, clima: extrairClima(md, tokens.escuro), tokens });
   }
   writeFileSync(join(DESTINO, "indice.json"), JSON.stringify(indice, null, 2) + "\n");
   console.log(`vendor/design-md: ${indice.length} estilos`);

@@ -6,7 +6,7 @@
  */
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
-import { carregarIndice } from "@/lib/octa/design/indice";
+import { carregarIndice, palavrasDaMarca } from "@/lib/octa/design/indice";
 import { renderPagina } from "@/lib/octa/secoes/render";
 import type { Secao } from "@/lib/octa/secoes/tipos";
 
@@ -38,13 +38,13 @@ export async function GET(_req: Request, { params }: Ctx) {
   const e = carregarIndice().find((x) => x.id === params.id);
   if (!e) return new Response(JSON.stringify({ error: "Estilo não encontrado" }), { status: 404, headers: { "content-type": "application/json" } });
 
-  const pagina = renderPagina({
+  const pagina = await renderPagina({
     titulo: "Prévia do estilo",
     descricao: "Página de exemplo com o visual deste estilo.",
     secoes: SECOES,
     tokens: e.tokens,
-    marcaProibida: e.marca,
+    marcaProibida: palavrasDaMarca(e),
   });
-  const html = pagina["index.html"].replace('<link rel="stylesheet" href="styles.css">', `<style>${cssSeguro(pagina["styles.css"])}</style>`);
+  const html = pagina["index.html"].replace('<link rel="stylesheet" href="styles.css">', () => `<style>${cssSeguro(pagina["styles.css"])}</style>`);
   return new Response(html, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "private, max-age=3600" } });
 }

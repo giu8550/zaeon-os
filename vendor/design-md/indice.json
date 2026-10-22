@@ -85,8 +85,11 @@
   },
   {
     "id": "aljazeera",
-    "nome": "Aljazeera",
-    "marca": "Aljazeera",
+    "nome": "Al Jazeera",
+    "marca": "Al Jazeera",
+    "aliases": [
+      "Aljazeera"
+    ],
     "resumo": "An analysis of Al Jazeera's design language — a hard-news editorial system built on flat white paper and dense Roboto headline stacks, signed by one saturated orange used as logo block and section-eyebrow bar, punctuated by a live-red that ",
     "clima": [
       "claro",
@@ -169,8 +172,8 @@
   },
   {
     "id": "bmw",
-    "nome": "Bmw",
-    "marca": "Bmw",
+    "nome": "BMW",
+    "marca": "BMW",
     "resumo": "BMW's corporate site — distinct from BMW M's motorsport-bombastic variant, this is a measured and settled corporate-automotive interface. On a light (cream-tinted white) canvas, BMW corporate blue (#1c69d4) carries every primary CTA; dark n",
     "clima": [
       "claro",
@@ -198,8 +201,8 @@
   },
   {
     "id": "bmw-m",
-    "nome": "Bmw M",
-    "marca": "Bmw M",
+    "nome": "BMW M",
+    "marca": "BMW",
     "resumo": "A motorsport-engineering interface anchored on a near-black canvas with white BMW Type Next Latin display headlines in confident UPPERCASE. The brand carries no decorative voltage — its energy comes from full-bleed automotive photography (c",
     "clima": [
       "escuro",
@@ -346,8 +349,8 @@
   },
   {
     "id": "clickhouse",
-    "nome": "Clickhouse",
-    "marca": "Clickhouse",
+    "nome": "ClickHouse",
+    "marca": "ClickHouse",
     "resumo": "A high-performance database interface anchored on near-pure black canvas with electric yellow as the brand voltage. White typography in confident sans, yellow CTAs, and yellow-text stat numbers carry the brand voice across every page. Code ",
     "clima": [
       "escuro",
@@ -492,7 +495,7 @@
   {
     "id": "dell-1996",
     "nome": "Dell 1996",
-    "marca": "Dell 1996",
+    "marca": "Dell",
     "resumo": "An inspired interpretation of Dell.com's 1996 design language — a catalog-era enterprise web design built around a literal black page frame, vivid flat color-block \"ribbon cards\" tinted in sage, salmon, periwinkle, sky, peach and lime, chun",
     "clima": [
       "claro",
@@ -520,8 +523,8 @@
   },
   {
     "id": "dji",
-    "nome": "Dji",
-    "marca": "Dji",
+    "nome": "DJI",
+    "marca": "DJI",
     "resumo": "An analysis of DJI's design language — a product-photography showroom for drones and cameras, where full-bleed studio renders sit in square, gutter-separated tiles on a white canvas, every action is a rounded pill in a single engineering bl",
     "clima": [
       "claro",
@@ -548,8 +551,8 @@
   },
   {
     "id": "elevenlabs",
-    "nome": "Elevenlabs",
-    "marca": "Elevenlabs",
+    "nome": "ElevenLabs",
+    "marca": "ElevenLabs",
     "resumo": "A voice-AI brand whose marketing surfaces read like a quietly editorial print magazine. The base canvas is off-white (`#f5f5f5`) holding warm near-black ink (`#292524`); the brand voltage is photographic, not chromatic — soft pastel atmosph",
     "clima": [
       "claro",
@@ -692,8 +695,8 @@
   },
   {
     "id": "hashicorp",
-    "nome": "Hashicorp",
-    "marca": "Hashicorp",
+    "nome": "HashiCorp",
+    "marca": "HashiCorp",
     "resumo": "An enterprise-infrastructure marketing canvas built around a near-black ground (#000000) and a system of per-product accent colors — Terraform purple, Vault yellow, Consul pink, Waypoint cyan, Vagrant blue — that act as identity tokens rath",
     "clima": [
       "escuro",
@@ -721,8 +724,8 @@
   },
   {
     "id": "hp",
-    "nome": "Hp",
-    "marca": "Hp",
+    "nome": "HP",
+    "marca": "HP",
     "resumo": "An inspired interpretation of HP's design language — a white-paper enterprise-consumer system anchored by HP Electric Blue (`#024ad8`) as the lone signal CTA, near-black ink (`#1a1a1a`) for headlines, geometric Forma-DJR sans throughout, an",
     "clima": [
       "claro",
@@ -750,8 +753,8 @@
   },
   {
     "id": "ibm",
-    "nome": "Ibm",
-    "marca": "Ibm",
+    "nome": "IBM",
+    "marca": "IBM",
     "resumo": "An enterprise-marketing canvas faithful to Carbon Design System: white surfaces, charcoal type, IBM Blue (#0f62fe) as the single confident accent, and a deliberately flat-square aesthetic where corners stay at 0–4px. Type runs IBM Plex Sans",
     "clima": [
       "claro",
@@ -1039,8 +1042,8 @@
   },
   {
     "id": "minimax",
-    "nome": "Minimax",
-    "marca": "Minimax",
+    "nome": "MiniMax",
+    "marca": "MiniMax",
     "resumo": "MiniMax presents itself as a premium AI infrastructure brand through a striking duality — bold black-pill CTAs and stark white canvas for marketing, paired with vibrant gradient product cards (orange-red, magenta-pink, purple, blue) that tu",
     "clima": [
       "claro",
@@ -1158,8 +1161,8 @@
   },
   {
     "id": "mongodb",
-    "nome": "Mongodb",
-    "marca": "Mongodb",
+    "nome": "MongoDB",
+    "marca": "MongoDB",
     "resumo": "MongoDB carries a strong dual-mode visual identity — dark deep-teal hero bands with bright MongoDB green ({colors.brand-green}) CTAs paired with stark white documentation surfaces. The signature green pill button is unmistakable across prod",
     "clima": [
       "claro",
@@ -1217,8 +1220,8 @@
   },
   {
     "id": "nerdwallet",
-    "nome": "Nerdwallet",
-    "marca": "Nerdwallet",
+    "nome": "NerdWallet",
+    "marca": "NerdWallet",
     "resumo": "An analysis of NerdWallet's design language — a personal-finance comparison platform built almost entirely from one deep green and a ladder of mints beneath it. Editorial pages open on a green gradient band, then drop to near-white where de",
     "clima": [
       "claro",
@@ -1275,7 +1278,7 @@
   {
     "id": "nintendo-2001",
     "nome": "Nintendo 2001",
-    "marca": "Nintendo 2001",
+    "marca": "Nintendo",
     "resumo": "An analysis of Nintendo.com's 2001 design language — a brushed-periwinkle \"console chrome\" interface where every panel is a beveled metal plate, navigation glows amber over a halftone-dotted carbon bar, and bold outlined display type sits o",
     "clima": [
       "claro",
@@ -1390,8 +1393,8 @@
   },
   {
     "id": "opencode.ai",
-    "nome": "Opencode",
-    "marca": "Opencode",
+    "nome": "OpenCode",
+    "marca": "OpenCode",
     "resumo": "|",
     "clima": [
       "claro",
@@ -1504,8 +1507,8 @@
   },
   {
     "id": "playstation",
-    "nome": "Playstation",
-    "marca": "Playstation",
+    "nome": "PlayStation",
+    "marca": "PlayStation",
     "resumo": "|",
     "clima": [
       "claro",
@@ -1533,8 +1536,8 @@
   },
   {
     "id": "posthog",
-    "nome": "Posthog",
-    "marca": "Posthog",
+    "nome": "PostHog",
+    "marca": "PostHog",
     "resumo": "|",
     "clima": [
       "claro",
@@ -1705,7 +1708,10 @@
   {
     "id": "runwayml",
     "nome": "Runway",
-    "marca": "Runwayml",
+    "marca": "Runway",
+    "aliases": [
+      "RunwayML"
+    ],
     "resumo": "Runway's interface is a cinematic reel brought to life as a website — a dark, editorial, film-production-grade design where full-bleed photography and video ARE the primary UI elements. This is not a typical tech product page; it's a visual",
     "clima": [
       "escuro",
@@ -1764,8 +1770,8 @@
   },
   {
     "id": "sap",
-    "nome": "Sap",
-    "marca": "Sap",
+    "nome": "SAP",
+    "marca": "SAP",
     "resumo": "An analysis of SAP's design language — an enterprise system that keeps almost everything on white and spends its structure on two greys and one blue. The chrome is deliberately quiet, a 60px light-grey bar over a product tab rail, so the pa",
     "clima": [
       "claro",
@@ -1876,8 +1882,8 @@
   },
   {
     "id": "spacex",
-    "nome": "Spacex",
-    "marca": "Spacex",
+    "nome": "SpaceX",
+    "marca": "SpaceX",
     "resumo": "An inspired interpretation of Spasex's design language — a mission-oriented aerospace brand built on pure black canvas, full-bleed photographic and video heroes of rockets and Mars landscapes, and uppercase D-DIN display type set in tight v",
     "clima": [
       "claro",
@@ -2076,7 +2082,10 @@
   {
     "id": "theverge",
     "nome": "The Verge",
-    "marca": "Theverge",
+    "marca": "The Verge",
+    "aliases": [
+      "TheVerge"
+    ],
     "resumo": "The Verge's 2024 redesign feels like somebody wired a Condé Nast magazine to a chiptune soundboard. The canvas is almost-black (`",
     "clima": [
       "escuro",
@@ -2214,8 +2223,8 @@
   },
   {
     "id": "voltagent",
-    "nome": "Voltagent",
-    "marca": "Voltagent",
+    "nome": "VoltAgent",
+    "marca": "VoltAgent",
     "resumo": "An inspired interpretation of Voltagent's design language — a developer-focused AI agent engineering platform whose surface is an unrelenting near-black canvas broken only by a single electric-green brand accent, code-editor mockups inside ",
     "clima": [
       "escuro",
@@ -2358,8 +2367,12 @@
   },
   {
     "id": "x.ai",
-    "nome": "X",
-    "marca": "X",
+    "nome": "xAI",
+    "marca": "xAI",
+    "aliases": [
+      "X",
+      "Grok"
+    ],
     "resumo": "An inspired interpretation of xAI's design language — Elon Musk's frontier-AI company whose web surface is a strict near-black canvas broken only by white pill outlines, occasional warm sunset / dusk gradient accents, a custom geometric san",
     "clima": [
       "escuro",

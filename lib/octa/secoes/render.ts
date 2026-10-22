@@ -6,8 +6,6 @@
  * Só roda no servidor (lê secoes.css de process.cwd(): o Dockerfile copia a raiz, como em design/indice.ts).
  */
 import { createElement } from "react";
-// react-dom/server: não importar este módulo de páginas/layouts RSC nem de "use server" actions (route handlers podem).
-import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { FONTES_ABERTAS, tokensComoCss, type TokensDesign } from "../design/tokens";
@@ -15,6 +13,21 @@ import { REGISTRO } from "./registro";
 import type { PropsSecao, Secao } from "./tipos";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+type RenderToStaticMarkup = (el: ReturnType<typeof createElement>) => string;
+let renderCache: Promise<RenderToStaticMarkup> | null = null;
+/**
+ * `react-dom/server` carregado sob demanda e ESCONDIDO do webpack (mesmo truque do bullmq em lib/queue):
+ * o Next 14 recusa no build qualquer import estático dele no grafo do app (rota, instrumentation…).
+ * Aqui é o Node quem resolve, em runtime, do node_modules (a imagem não usa `output: standalone`).
+ */
+function carregarRender(): Promise<RenderToStaticMarkup> {
+  return (renderCache ??= (async () => {
+    const spec = "react-dom/" + "server";
+    const mod = await import(/* webpackIgnore: true */ spec);
+    return (mod.renderToStaticMarkup ?? mod.default?.renderToStaticMarkup) as RenderToStaticMarkup;
+  })());
+}
 
 let cssCache: string | null = null;
 function secoesCss(): string {
@@ -67,10 +80,25 @@ function textoDoHead(html: string): string {
 const casaMarca = (texto: string, marca: string) =>
   new RegExp(`(^|[^\\p{L}\\p{N}])${marca.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "iu").test(texto);
 
-/** O nome da marca aparece no que o visitante da página lê (corpo, atributos de conteúdo, título, descrição)? */
-export function mencionaMarca(html: string, marca: string): boolean {
-  const m = marca.trim();
-  return !!m && (casaMarca(textoVisivel(html), m) || casaMarca(textoDoHead(html), m));
+/** As formas do nome que valem a varredura: 1 letra ("X" de xAI) casaria com `x.com` e qualquer "x" solto. */
+const varriveis = (marcas: string | readonly string[]) =>
+  (typeof marcas === "string" ? [marcas] : [...marcas]).map((m) => String(m ?? "").trim()).filter((m) => m.length >= 2);
+
+/**
+ * A 1ª forma do nome da marca (marca ou alias) que aparece no que o visitante da página lê (corpo, atributos de
+ * conteúdo, título, descrição) — ou null. Devolve só a palavra, nada do conteúdo.
+ */
+export function marcaMencionada(html: string, marcas: string | readonly string[]): string | null {
+  const lista = varriveis(marcas);
+  if (!lista.length) return null;
+  const corpo = textoVisivel(html);
+  const head = textoDoHead(html);
+  return lista.find((m) => casaMarca(corpo, m) || casaMarca(head, m)) ?? null;
+}
+
+/** O nome da marca (ou um alias) aparece no que o visitante da página lê? */
+export function mencionaMarca(html: string, marcas: string | readonly string[]): boolean {
+  return marcaMencionada(html, marcas) !== null;
 }
 
 /** Erro da regra anti-marca. `palavra` = o nome da marca que apareceu (o agente repassa pro modelo reescrever). */
@@ -86,11 +114,14 @@ export type EntradaPagina = {
   descricao: string;
   secoes: Secao[];
   tokens: TokensDesign;
-  /** Nome da marca de origem do estilo. Se aparecer na página, a montagem falha (regra anti-marca). */
-  marcaProibida?: string;
+  /** Nome da marca de origem do estilo (ou marca + aliases). Se aparecer na página, a montagem falha (regra anti-marca). */
+  marcaProibida?: string | readonly string[];
 };
 
-export function renderPagina(p: EntradaPagina): { "index.html": string; "styles.css": string } {
+export type PaginaMontada = { "index.html": string; "styles.css": string };
+
+export async function renderPagina(p: EntradaPagina): Promise<PaginaMontada> {
+  const renderToStaticMarkup = await carregarRender();
   let contato = false;
   const blocos = p.secoes.map((s) => {
     const Comp = REGISTRO[s.type];
@@ -120,8 +151,10 @@ export function renderPagina(p: EntradaPagina): { "index.html": string; "styles.
     "",
   ].filter((l) => l !== "").join("\n");
 
-  const marca = p.marcaProibida?.trim();
-  if (marca && (mencionaMarca(html, marca) || casaMarca(`${p.titulo} ${p.descricao}`, marca))) throw new ErroMarca(marca);
+  if (p.marcaProibida) {
+    const achada = marcaMencionada(html, p.marcaProibida) ?? varriveis(p.marcaProibida).find((m) => casaMarca(`${p.titulo} ${p.descricao}`, m));
+    if (achada) throw new ErroMarca(achada);
+  }
 
   return { "index.html": html, "styles.css": `${tokensComoCss(p.tokens)}\n${secoesCss()}` };
 }

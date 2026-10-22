@@ -5,7 +5,9 @@
  *   lerDesignMd(id)               markdown bruto de um estilo do índice
  *   designMdComMarcador(id)       o DESIGN.md do projeto (marcador zaeon-estilo + markdown)
  *   candidatosPorDescricao(...)   ranking puro por clima + nome, para o agente escolher o estilo
- *   extrairClima / marcaDaPasta   usados pelo script de sync ao montar o índice
+ *   extrairClima / marcaDoEstilo  usados pelo script de sync ao montar o índice
+ *   palavrasDaMarca(e)            marca + aliases: o que a página do aluno nunca pode dizer
+ *   estiloDoProjeto(arquivos)     o estilo do projeto, pelo marcador zaeon-estilo do DESIGN.md
  *
  * Só roda no servidor (fs). Lê de process.cwd(): o Dockerfile copia a raiz inteira (COPY . .).
  */
@@ -16,8 +18,10 @@ import type { TokensDesign } from "./tokens";
 export type EstiloDesign = {
   id: string;
   nome: string;
-  /** Nome da marca de origem. A página do aluno nunca pode conter isto (regra anti-marca). */
+  /** Nome da marca de origem (rótulo/crédito na galeria). A página do aluno nunca pode conter isto (regra anti-marca). */
   marca: string;
+  /** Outras formas do nome da marca, também proibidas na página ("RunwayML", "Grok"…). */
+  aliases?: string[];
   resumo: string;
   clima: string[];
   tokens: TokensDesign;
@@ -48,7 +52,7 @@ export function designMdComMarcador(id: string): string {
   return `${MARCADOR_ESTILO(id)}\n${lerDesignMd(id)}`;
 }
 
-/** `linear.app` → "Linear", `bmw-m` → "Bmw M", `x.ai` → "X". */
+/** `linear.app` → "Linear", `bmw-m` → "Bmw M", `x.ai` → "X". Só o fallback: veja MARCAS_EXPLICITAS. */
 export function marcaDaPasta(pasta: string): string {
   const base = pasta.replace(/\.(app|ai|com|io|dev)$/i, "");
   return base
@@ -56,6 +60,67 @@ export function marcaDaPasta(pasta: string): string {
     .filter(Boolean)
     .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
     .join(" ");
+}
+
+/**
+ * Onde o nome da pasta não é o nome da marca (ano/sufixo no id, palavras grudadas, sigla). A regra anti-marca
+ * casa palavra inteira, então "Nintendo 2001" deixaria passar "Nintendo" e "Theverge" deixaria "The Verge".
+ */
+export const MARCAS_EXPLICITAS: Record<string, { marca: string; aliases?: string[]; /** rótulo na galeria, se não for a marca */ nome?: string }> = {
+  aljazeera: { marca: "Al Jazeera", aliases: ["Aljazeera"] },
+  bmw: { marca: "BMW" },
+  "bmw-m": { marca: "BMW", nome: "BMW M" },
+  "dell-1996": { marca: "Dell", nome: "Dell 1996" },
+  "nintendo-2001": { marca: "Nintendo", nome: "Nintendo 2001" },
+  runwayml: { marca: "Runway", aliases: ["RunwayML"] },
+  theverge: { marca: "The Verge", aliases: ["TheVerge"] },
+  // "X" sozinho casaria com x.com e com qualquer "x" solto: fica como alias (não varrido, 1 letra)
+  "x.ai": { marca: "xAI", aliases: ["X", "Grok"] },
+  dji: { marca: "DJI" },
+  hp: { marca: "HP" },
+  ibm: { marca: "IBM" },
+  sap: { marca: "SAP" },
+  mongodb: { marca: "MongoDB" },
+  elevenlabs: { marca: "ElevenLabs" },
+  hashicorp: { marca: "HashiCorp" },
+  posthog: { marca: "PostHog" },
+  spacex: { marca: "SpaceX" },
+  clickhouse: { marca: "ClickHouse" },
+  playstation: { marca: "PlayStation" },
+  nerdwallet: { marca: "NerdWallet" },
+  "opencode.ai": { marca: "OpenCode" },
+  voltagent: { marca: "VoltAgent" },
+  minimax: { marca: "MiniMax" },
+};
+
+/** Marca + aliases de um estilo pelo id da pasta (o sync grava isto no índice). */
+export function marcaDoEstilo(pasta: string): { marca: string; aliases: string[]; nome: string } {
+  const o = MARCAS_EXPLICITAS[pasta];
+  if (!o) { const marca = marcaDaPasta(pasta); return { marca, aliases: [], nome: marca }; }
+  return { marca: o.marca, aliases: [...(o.aliases ?? [])], nome: o.nome ?? o.marca };
+}
+
+/** Todas as formas do nome da marca (sem repetir). Quem varre o texto pula as de 1 letra. */
+export function palavrasDaMarca(e: Pick<EstiloDesign, "marca" | "aliases"> | undefined | null): string[] {
+  if (!e) return [];
+  const vistas = new Set<string>();
+  return [e.marca, ...(e.aliases ?? [])].map((w) => String(w ?? "").trim()).filter((w) => {
+    const k = w.toLowerCase();
+    if (!w || vistas.has(k)) return false;
+    vistas.add(k);
+    return true;
+  });
+}
+
+const RE_MARCADOR = /^<!-- zaeon-estilo: ([^\s]+) -->\r?\n?/;
+
+/** O DESIGN.md do projeto (raiz): o estilo de origem (se veio da biblioteca) e o markdown sem o marcador. */
+export function estiloDoProjeto(arquivos: Record<string, string> | null | undefined): { estilo?: EstiloDesign; md: string } | null {
+  const bruto = arquivos?.["DESIGN.md"];
+  if (typeof bruto !== "string") return null;
+  const m = bruto.match(RE_MARCADOR);
+  const estilo = m ? carregarIndice().find((e) => e.id === m[1]) : undefined;
+  return { estilo, md: m ? bruto.slice(m[0].length) : bruto };
 }
 
 /** Palavras do DESIGN.md → rótulos de clima em pt. Conta ocorrências; precisa de 2+ para valer. */

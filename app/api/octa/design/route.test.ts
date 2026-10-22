@@ -6,7 +6,7 @@ vi.mock("@/src/lib/auth", () => ({ authOptions: {} }));
 
 import { GET } from "./route";
 import { GET as PREVIA } from "./[id]/previa/route";
-import { carregarIndice, lerDesignMd } from "@/lib/octa/design/indice";
+import { carregarIndice, lerDesignMd, palavrasDaMarca } from "@/lib/octa/design/indice";
 import { mencionaMarca } from "@/lib/octa/secoes/render";
 
 const req = (u = "http://x/api/octa/design") => new Request(u);
@@ -58,7 +58,7 @@ describe("GET /api/octa/design/[id]/previa", () => {
       expect(html).not.toContain('href="styles.css"');
       expect(html).not.toMatch(/<script/i);
       expect(html).toContain(e.tokens.cores.fundo);
-      expect(mencionaMarca(html, e.marca), `${e.id} menciona ${e.marca}`).toBe(false);
+      expect(mencionaMarca(html, palavrasDaMarca(e)), `${e.id} menciona ${palavrasDaMarca(e).join("/")}`).toBe(false);
     }
   });
 });
