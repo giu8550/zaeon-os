@@ -17,6 +17,7 @@ export default function PranchaBlueprint({ id, doc, acoes, onFixar, sobre }: {
 }) {
   const raiz = useRef<HTMLDivElement>(null);
   const [cam, setCam] = useState({ x: 0, y: 0, z: 0.8 });
+  const mexeu = useRef(false);   // a pessoa mexeu na câmera (pan/zoom): para de reenquadrar sozinho
   const [alturas, setAlturas] = useState<Record<string, number>>({});
   useEffect(() => { setAlturas({}); }, [id]);   // os ids dos módulos ("passo:p1"…) se repetem entre blueprints
   const medir = useCallback((k: string, el: HTMLDivElement | null) => { if (!el) return; const h = el.offsetHeight; setAlturas((a) => (Math.abs((a[k] ?? 0) - h) > 1 ? { ...a, [k]: h } : a)); }, []);
@@ -25,7 +26,7 @@ export default function PranchaBlueprint({ id, doc, acoes, onFixar, sobre }: {
   // ── arrastar (fundo = pan; carimbo = mover e fixar o card) ──
   const arrasto = useRef<{ tipo: "pan" | "card"; id?: string; x0: number; y0: number; ox: number; oy: number } | null>(null);
   const [arrastando, setArrastando] = useState<{ id: string; x: number; y: number } | null>(null);
-  const onPointerDown = (e: React.PointerEvent) => { if (e.button !== 0) return; arrasto.current = { tipo: "pan", x0: e.clientX, y0: e.clientY, ox: cam.x, oy: cam.y }; (e.target as HTMLElement).setPointerCapture?.(e.pointerId); };
+  const onPointerDown = (e: React.PointerEvent) => { if (e.button !== 0) return; mexeu.current = true; arrasto.current = { tipo: "pan", x0: e.clientX, y0: e.clientY, ox: cam.x, oy: cam.y }; (e.target as HTMLElement).setPointerCapture?.(e.pointerId); };
   const comecarCard = (e: React.PointerEvent, c: Caixa) => {
     if (!acoes.podeEditar || e.button !== 0) return; e.stopPropagation();
     arrasto.current = { tipo: "card", id: c.id, x0: e.clientX, y0: e.clientY, ox: c.x, oy: c.y }; (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
@@ -42,6 +43,7 @@ export default function PranchaBlueprint({ id, doc, acoes, onFixar, sobre }: {
     setArrastando(null);
   };
   const onWheel = (e: React.WheelEvent) => {
+    mexeu.current = true;
     const r = raiz.current!.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
     setCam((c) => { const z = Math.max(0.25, Math.min(2, c.z * (e.deltaY > 0 ? 0.9 : 1.1))); return { z, x: mx - ((mx - c.x) / c.z) * z, y: my - ((my - c.y) / c.z) * z }; });
   };
@@ -55,13 +57,14 @@ export default function PranchaBlueprint({ id, doc, acoes, onFixar, sobre }: {
     const z = Math.max(0.3, Math.min(1, (r.width - 80) / Math.max(1, x1 - x0), (r.height - 90) / Math.max(1, y1 - y0)));
     setCam({ z, x: r.width / 2 - ((x0 + x1) / 2) * z, y: 30 + (r.height - 60 - (y1 - y0) * z) / 2 - y0 * z });
   }, [caixas]);
-  const encaixado = useRef<string | null>(null), mediu = Object.keys(alturas).length;
+  // segue reenquadrando enquanto o layout assenta (alturas medidas, a Zaeon recompondo) — até a pessoa mexer na câmera
+  const mediu = Object.keys(alturas).length;
+  useEffect(() => { mexeu.current = false; }, [id]);
   useEffect(() => {
-    const chave = `${id}:${caixas.length}`;
-    if (encaixado.current === chave || !mediu) return;
-    const t = setTimeout(() => { encaixado.current = chave; encaixar(); }, 60);
+    if (mexeu.current || !mediu) return;
+    const t = setTimeout(encaixar, 80);
     return () => clearTimeout(t);
-  }, [id, caixas.length, mediu, encaixar]);
+  }, [mediu, encaixar]);
 
   const porId = new Map(caixas.map((c) => [c.id, pos(c)] as const));
   const linha = (f: Fio) => {
@@ -107,9 +110,9 @@ export default function PranchaBlueprint({ id, doc, acoes, onFixar, sobre }: {
 
       {sobre}
       <div className="absolute bottom-3 right-3 z-[90] flex items-center gap-1 font-mono text-[11px] text-sky-100" onPointerDown={(e) => e.stopPropagation()}>
-        <button type="button" className="rounded-sm border border-sky-300/40 px-2 py-1 hover:bg-white/10" onClick={() => setCam((c) => ({ ...c, z: Math.max(0.25, c.z * 0.85) }))}>−</button>
+        <button type="button" className="rounded-sm border border-sky-300/40 px-2 py-1 hover:bg-white/10" onClick={() => { mexeu.current = true; setCam((c) => ({ ...c, z: Math.max(0.25, c.z * 0.85) })); }}>−</button>
         <span className="w-12 text-center">{Math.round(cam.z * 100)}%</span>
-        <button type="button" className="rounded-sm border border-sky-300/40 px-2 py-1 hover:bg-white/10" onClick={() => setCam((c) => ({ ...c, z: Math.min(2, c.z * 1.15) }))}>+</button>
+        <button type="button" className="rounded-sm border border-sky-300/40 px-2 py-1 hover:bg-white/10" onClick={() => { mexeu.current = true; setCam((c) => ({ ...c, z: Math.min(2, c.z * 1.15) })); }}>+</button>
         <button type="button" className="ml-1 rounded-sm border border-sky-300/40 px-2 py-1 hover:bg-white/10" title="Enquadrar a prancha inteira" onClick={encaixar}>⤢</button>
       </div>
       <div className="pointer-events-none absolute bottom-3 left-3 z-[90] font-mono text-[10.5px] tracking-[0.16em] text-sky-200/55">
