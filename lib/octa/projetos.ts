@@ -34,6 +34,7 @@ export type ProjetosDb = {
   };
   octaPublicacao: {
     findMany(args: { where: { userId: string; ok: boolean; em: { gte: Date } } }): Promise<{ repoNovo: boolean }[]>;
+    create(args: { data: { userId: string; projetoId: string; ok: boolean; repoNovo: boolean; em: Date } }): Promise<any>;
   };
 };
 
@@ -80,6 +81,25 @@ export async function atualizarProjeto(db: ProjetosDb, userId: string, id: strin
   if (patch.permissao !== undefined) data.permissao = patch.permissao;
   if (patch.avisoPublicoAceito !== undefined) data.avisoPublicoAceito = patch.avisoPublicoAceito;
   return db.octaProjeto.update({ where: { id: p.id }, data });
+}
+
+export type DestinoPublicado = Partial<Pick<Projeto, "repoFullName" | "repoCriadoPeloOcta" | "pagesUrl">>;
+
+// Só o servidor (publicar.ts) grava o repositório/Pages — a rota PATCH passa por atualizarProjeto,
+// que não aceita esses campos (senão o aluno apontaria o Octa para um repositório que não é dele).
+export async function gravarDestinoPublicado(db: ProjetosDb, userId: string, id: string, destino: DestinoPublicado): Promise<Projeto | null> {
+  const p = await lerProjeto(db, userId, id);
+  if (!p) return null;
+  const data: DestinoPublicado = {};
+  if (destino.repoFullName !== undefined) data.repoFullName = destino.repoFullName;
+  if (destino.repoCriadoPeloOcta !== undefined) data.repoCriadoPeloOcta = destino.repoCriadoPeloOcta;
+  if (destino.pagesUrl !== undefined) data.pagesUrl = destino.pagesUrl;
+  return db.octaProjeto.update({ where: { id: p.id }, data });
+}
+
+// Uma tentativa de publicação (ok:false não conta nos limites — ver contarPublicacoesHoje).
+export async function registrarPublicacao(db: ProjetosDb, r: { userId: string; projetoId: string; ok: boolean; repoNovo: boolean; em: Date }): Promise<void> {
+  await db.octaPublicacao.create({ data: { userId: r.userId, projetoId: r.projetoId, ok: r.ok, repoNovo: r.repoNovo, em: r.em } });
 }
 
 export async function apagarProjeto(db: ProjetosDb, userId: string, id: string): Promise<boolean> {

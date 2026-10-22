@@ -82,12 +82,62 @@ export async function getUserConnection(email: string): Promise<{ connected: boo
   return { connected: !!u?.githubUserToken, login: u?.githubUserLogin ?? null };
 }
 
-/** Octokit autenticado COMO O USUÁRIO (token dele). null se não conectado. */
+// Renova quando o token já venceu ou faltam menos de 5 min (a publicação inteira cabe nessa margem).
+const MARGEM_RENOVACAO_MS = 5 * 60_000;
+
+/**
+ * Troca o refresh token por um access token novo e regrava os dois cifrados.
+ * Qualquer falha (sem refresh, resposta sem token, rede, chave ausente) → null; o motivo
+ * não é logado nem propagado — a resposta do GitHub pode ecoar o token.
+ */
+async function renovarToken(email: string, refreshCifrado: string | null | undefined): Promise<string | null> {
+  if (!refreshCifrado || !isUserOAuthConfigured()) return null;
+  try {
+    const res = await fetch("https://github.com/login/oauth/access_token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        client_id: process.env.GITHUB_APP_CLIENT_ID,
+        client_secret: process.env.GITHUB_APP_CLIENT_SECRET,
+        grant_type: "refresh_token",
+        refresh_token: decryptToken(refreshCifrado),
+      }),
+    });
+    const data: any = await res.json().catch(() => ({}));
+    if (typeof data?.access_token !== "string" || !data.access_token) return null;
+    await prisma.user.update({
+      where: { email },
+      data: {
+        githubUserToken: encryptToken(data.access_token),
+        // o GitHub gira o refresh token a cada uso; sem um novo, o antigo já não vale
+        githubRefreshToken: data.refresh_token ? encryptToken(data.refresh_token) : null,
+        githubTokenExpiresAt: data.expires_in ? new Date(Date.now() + data.expires_in * 1000) : null,
+      } as any,
+    });
+    return data.access_token;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Octokit autenticado COMO O USUÁRIO (token dele). null se não conectado ou se o token
+ * venceu e a renovação falhou (→ o aluno reconecta).
+ */
 export async function getUserOctokit(email: string): Promise<AnyOctokit | null> {
-  const u: any = await prisma.user.findUnique({ where: { email }, select: { githubUserToken: true } as any });
+  const u: any = await prisma.user.findUnique({
+    where: { email },
+    select: { githubUserToken: true, githubRefreshToken: true, githubTokenExpiresAt: true } as any,
+  });
   if (!u?.githubUserToken) return null;
-  let token: string;
-  try { token = decryptToken(u.githubUserToken); } catch { return null; }
+  let token: string | null;
+  const expira = u.githubTokenExpiresAt ? new Date(u.githubTokenExpiresAt).getTime() : null;
+  if (expira !== null && expira - Date.now() < MARGEM_RENOVACAO_MS) {
+    token = await renovarToken(email, u.githubRefreshToken);
+  } else {
+    try { token = decryptToken(u.githubUserToken); } catch { token = null; }
+  }
+  if (!token) return null;
   let mod: any;
   try { mod = await import("octokit"); } catch { return null; }
   return new mod.Octokit({ auth: token });

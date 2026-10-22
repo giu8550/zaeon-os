@@ -14,6 +14,7 @@ function dbFalso(pubs: { userId: string; ok: boolean; repoNovo: boolean; em: Dat
     },
     octaPublicacao: {
       findMany: async ({ where }: any) => pubs.filter((p) => p.userId === where.userId && p.ok === where.ok && p.em >= where.em.gte),
+      create: async ({ data }: any) => { pubs.push(data); return data; },
     },
   };
 }
