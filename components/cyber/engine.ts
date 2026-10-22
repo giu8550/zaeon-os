@@ -78,7 +78,9 @@ import { CAMERA_MOTO_PERTO } from "@/lib/cyber/camera";
 import { criarCarroHex, type CarroHandle } from "./CarroHex";
 import { definirNivel, NIVEIS_SEPARADOS, type IdNivel } from "@/lib/cyber/nivelAtivo";
 import { criarTravessia, type TravessiaHandle } from "./TravessiaBN";
-import { FIO as FIO_COSMICO, comecarTragada, fiosCosmicos, naAtracao, passoTragada, pertoDoBuraco, posDaTragada, progressoTragada, saidaDaSala, type Tragada } from "@/lib/cyber/fiosCosmicos";
+import { criarDetritos, type DetritosHandle } from "./DetritosBN";
+import { DETRITOS, empurraoDaBatida, lancarDetrito, naZona, passoDetrito, proximoLancamento, puxaoDaZona, vaiAcertar, type Detrito } from "@/lib/cyber/detritos";
+import { FIO as FIO_COSMICO, comecarTragada, fiosCosmicos, naAtracao, raioDeAtracao, passoTragada, pertoDoBuraco, posDaTragada, progressoTragada, saidaDaSala, type Tragada } from "@/lib/cyber/fiosCosmicos";
 import { nivelDoPonto, proximoNivel } from "@/lib/cyber/niveis";
 import { CARROS_NA_ZAEON, LOTES_CARRO, pisoDaVaga, posseDosCarros, vagaDoLote, vagasDeCarro, type CarroDirigido, type CarroLargado, type PosseCarro, type VagaCarro } from "@/lib/cyber/carros";
 import { criarPisoCarros, type PisoCarrosHandle } from "./EstacionamentoCarros";
@@ -2118,14 +2120,16 @@ export class CyberEngine {
   private travessiaBN(dt: number, k: number) {
     const v = this.fio, s = this.som;
     if (v) {
-      if (!this.travessia) { this.travessia = criarTravessia({ low: this.o.low }); this.cena.scene.add(this.travessia.grupo); this.estourouBN = false; this.proxRaioBN = 0.5; }
+      // (out/2026, o dono: "o psicodélico pra quando o personagem ATRAVESSAR" — as fachadas só no fim da tragada, no
+      //  horizonte; antes, a atmosfera de sempre: os rastros, a vinheta, o tremor)
+      if (!this.travessia && k > 0.8) { this.travessia = criarTravessia({ low: this.o.low }); this.cena.scene.add(this.travessia.grupo); this.estourouBN = false; this.proxRaioBN = 0.5; }
       const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, b = v.f.bn, w = mundo(b);
       this.tmpBN.set(w.x, ilhaY + b.y, w.z); this.tmpEu.set(this.eu.pos.x, this.eu.alt + 1, this.eu.pos.z);
-      this.travessia.atualizar(dt, performance.now() / 1000, k, this.tmpEu, this.tmpBN, b.r);
+      this.travessia?.atualizar(dt, performance.now() / 1000, k, this.tmpEu, this.tmpBN, b.r);
       // os RAIOS: estalos e trovões cada vez mais seguidos
       this.proxRaioBN -= dt;
       if (this.proxRaioBN <= 0) { this.proxRaioBN = 0.35 + Math.random() * 1.1 * (1 - 0.7 * k); s.tocar(Math.random() < 0.65 ? "raio" : "trovao", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 0.45 + 0.55 * k }); }
-      if (k > 0.93 && !this.estourouBN) { this.estourouBN = true; this.travessia.estourar(); s.tocar("estilhacos", this.eu.av.group.position, { dist: DISTANCIA.eu }); }
+      if (k > 0.93 && !this.estourouBN && this.travessia) { this.estourouBN = true; this.travessia.estourar(); s.tocar("estilhacos", this.eu.av.group.position, { dist: DISTANCIA.eu }); }
       this.somTempestade ??= s.loop("tempestade-cosmica", this.eu.av.group, { dist: DISTANCIA.eu, volume: 0 });
       s.volumeLoop(this.somTempestade, 0.35 + 0.65 * k, 3);
       return;
@@ -2134,6 +2138,71 @@ export class CyberEngine {
     if (this.travessia && this.travessia.apagar(dt)) { this.travessia.dispose(); this.travessia = null; }
   }
   private tmpBN = new THREE.Vector3(); private tmpEu = new THREE.Vector3();
+  // ───────────── a APROXIMAÇÃO do buraco negro: os DETRITOS (lib/cyber/detritos) ─────────────
+  private aprox: { bn: THREE.Vector3; k: number; lista: Detrito[]; prox: number; id: number } | null = null;
+  private detritosVis: DetritosHandle | null = null; private wAprox = 0; private tremorBatida = -Infinity; private flashBatida: HTMLDivElement | null = null;
+  /** a minha velocidade agora (mundo): a da moto, do carro ou da mochila */
+  private minhaVel(): { x: number; y: number; z: number } {
+    if (this.noCarro()) { const e = this.carro!.est; return { x: e.vx, y: e.vy, z: e.vz }; }
+    if (this.moto !== null) return { x: this.motoEst.vx, y: this.motoEst.vy, z: this.motoEst.vz };
+    return this.jet.noAr ? { x: this.jetV.x, y: this.jet.vy, z: this.jetV.z } : { x: 0, y: 0, z: 0 };
+  }
+  /** soma uma velocidade (o empurrão de uma batida, o magnetismo) no que eu estiver pilotando */
+  private empurrarVeiculo(d: { x: number; y: number; z: number }) {
+    if (this.noCarro()) { const c = this.carro!; c.est = { ...c.est, vx: c.est.vx + d.x, vy: c.est.vy + d.y, vz: c.est.vz + d.z }; return; }
+    if (this.moto !== null) { this.motoEst = { ...this.motoEst, vx: this.motoEst.vx + d.x, vy: this.motoEst.vy + d.y, vz: this.motoEst.vz + d.z }; this.motoPousado = false; return; }
+    if (this.jet.noAr) { this.jetV = { x: this.jetV.x + d.x, z: this.jetV.z + d.z }; this.jet.vy += d.y; return; }
+    this.empurrao = { x: this.empurrao.x + d.x * 0.3, z: this.empurrao.z + d.z * 0.3 };
+  }
+  /** um quadro dentro da ZONA: o magnetismo puxa de leve, os detritos saem do buraco negro mirando em mim; acertou,
+   *  empurra pra trás, tira vida e a tela treme */
+  private passoAproximacao(f: { bn: { x: number; y: number; z: number; r: number } }, k: number, dt: number) {
+    const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, w = mundo(f.bn);
+    const a = (this.aprox ??= { bn: new THREE.Vector3(), k, lista: [], prox: 1.2, id: 0 });
+    a.bn.set(w.x, ilhaY + f.bn.y, w.z); a.k = k;
+    const eu = { x: this.eu.pos.x, y: this.eu.alt + 1, z: this.eu.pos.z }, vel = this.minhaVel(), bn = { x: a.bn.x, y: a.bn.y, z: a.bn.z };
+    const pu = puxaoDaZona(eu, bn, k); this.empurrarVeiculo({ x: pu.x * dt, y: pu.y * dt, z: pu.z * dt });
+    a.prox -= dt;
+    if (a.prox <= 0) { a.prox = proximoLancamento(k, Math.random); if (a.lista.length < DETRITOS.max) a.lista.push(lancarDetrito(Math.random, a.id++, eu, vel, bn, k)); }
+    const perigo = new Set<number>();
+    a.lista = a.lista.filter((d) => {
+      const r = passoDetrito(d, dt, eu);
+      if (r.acertou) { this.batidaDeDetrito(d, eu, bn); return false; }
+      if (!r.morreu && vaiAcertar(d, eu, vel)) perigo.add(d.id);
+      return !r.morreu;
+    });
+    if (!this.detritosVis) { this.detritosVis = criarDetritos({ low: this.o.low, max: DETRITOS.max }); this.cena.scene.add(this.detritosVis.grupo); }
+    this.detritosVis.desenhar(a.lista, perigo, this.cam, performance.now() / 1000);
+  }
+  private batidaDeDetrito(d: Detrito, eu: { x: number; y: number; z: number }, bn: { x: number; y: number; z: number }) {
+    this.empurrarVeiculo(empurraoDaBatida(d, eu, bn));
+    this.vida = Math.max(1, this.vida - DETRITOS.dano);   // (a batida machuca, não mata)
+    this.tremorBatida = this.agora + 0.45;
+    this.som.tocar("impacto-heroi", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 0.8 });
+    this.som.tocar("estilhacos", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 0.45 });
+    if (!this.flashBatida) { const el = document.createElement("div"); el.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:24;opacity:0;transition:opacity .35s ease-out;background:radial-gradient(ellipse at 50% 50%, transparent 45%, rgba(255,40,60,.55) 100%);"; this.o.overlay.appendChild(el); this.flashBatida = el; }
+    const fl = this.flashBatida; fl.style.transition = "none"; fl.style.opacity = "1"; requestAnimationFrame(() => { fl.style.transition = "opacity .45s ease-out"; fl.style.opacity = "0"; });
+  }
+  /** saiu da zona (ou chegou no ponto doce): os detritos somem */
+  private fimDaAproximacao() {
+    if (!this.aprox) return;
+    this.aprox = null; this.detritosVis?.desenhar([], new Set(), this.cam, 0);
+  }
+  /** a CÂMERA da aproximação (o dono: "uma mudança de câmera que beneficie o 3D e permita identificar e desviar"): mais
+   *  alta e mais atrás, olhando pro buraco negro — você no terço de baixo, os detritos vindo de frente com profundidade */
+  private cameraDaAproximacao(c: ReturnType<typeof poseDaCamera>, dt: number): ReturnType<typeof poseDaCamera> {
+    const a = this.aprox, ativo = !!a && !this.fio;
+    this.wAprox += ((ativo ? 1 : 0) - this.wAprox) * Math.min(1, dt * 1.8);
+    if (!a || this.wAprox < 0.002) return c;
+    const eu = { x: this.eu.pos.x, y: this.eu.alt + 1.2, z: this.eu.pos.z };
+    let dx = a.bn.x - eu.x, dy = a.bn.y - eu.y, dz = a.bn.z - eu.z; const L = Math.hypot(dx, dy, dz) || 1; dx /= L; dy /= L; dz /= L;
+    const h = Math.hypot(dx, dz) || 1, lx = -dz / h, lz = dx / h;
+    const pos = { x: eu.x - dx * 20 + lx * 3, y: eu.y - dy * 20 + 8.5, z: eu.z - dz * 20 + lz * 3 };
+    const olhar = { x: eu.x + dx * 40, y: eu.y + dy * 40 + 2, z: eu.z + dz * 40 };
+    const k = this.wAprox * this.wAprox * (3 - 2 * this.wAprox);
+    const mix = (p: { x: number; y: number; z: number }, q: { x: number; y: number; z: number }) => ({ x: p.x + (q.x - p.x) * k, y: p.y + (q.y - p.y) * k, z: p.z + (q.z - p.z) * k });
+    return { ...c, pos: mix(c.pos, pos), olhar: mix(c.olhar, olhar) };
+  }
   /** a CÂMERA da travessia (o dono: "uma cutscene focando no buraco negro"): sai de trás do personagem pra um plano
    *  aberto de lado — você em primeiro plano, o buraco negro e as fachadas no fundo —, e vai fechando junto com a tragada */
   private wTravessia = 0;
@@ -2293,8 +2362,12 @@ export class CyberEngine {
     if (!pistas) return;
     const p = { x: eu.pos.x - CIDADE.centro.x, y: eu.alt - ilhaY, z: eu.pos.z - CIDADE.centro.z };
     const f = naAtracao(pistas, p);
-    if (!f) { this.fluxoArmado = true; return; }
+    if (!f) { this.fluxoArmado = true; this.fimDaAproximacao(); return; }
     if (!this.fluxoArmado) return;   // (acabou de chegar de um túnel ali perto: só depois de se afastar)
+    // (out/2026, o dono) a APROXIMAÇÃO: os DETRITOS tentam te acertar até o PONTO DOCE — só lá ele te puxa sozinho
+    const z = naZona(p, f.bn, f.bn.r, raioDeAtracao(f));
+    if (z && !z.doce) { this.passoAproximacao(f, z.k, dt); return; }
+    this.fimDaAproximacao();
     this.fio = comecarTragada(f, p); this.fluxoArmado = false;
     if (this.jet.noAr) { this.jet.noAr = false; this.jet.vy = 0; }
     this.alvo = null; this.alvoDepois = null; this.sitT = 0;
@@ -4206,10 +4279,12 @@ export class CyberEngine {
     }
     let c = poseDaCamera({ olho: olhoCam, az: this.camAz, pitch: this.camPitch, dist, chaoY: this.eu.alt });
     c = this.cameraDaCapsula(c, dt);   // numa CÁPSULA da torre: a vista de dentro, parada em relação a ela
+    c = this.cameraDaAproximacao(c, dt);   // chegando num buraco negro: a câmera alta, de trás, pra ver os detritos vindo
     c = this.cameraDaTravessia(c, dt);   // sendo tragado: o plano de cinema com o buraco negro
     c = this.aplicarCena(c, dt);   // a CUTSCENE do tutorial (se houver) leva a câmera pra outro enquadramento
     this.cam.position.set(c.pos.x, c.pos.y, c.pos.z);
     this.cam.lookAt(c.olhar.x, c.olhar.y, c.olhar.z);
+    if (this.agora < this.tremorBatida) { const a = 0.9 * (this.tremorBatida - this.agora) / 0.45; this.cam.position.x += (Math.random() - 0.5) * a; this.cam.position.y += (Math.random() - 0.5) * a; this.cam.position.z += (Math.random() - 0.5) * a; }   // (a batida de um detrito)
     // SENSAÇÃO DE VELOCIDADE (moto): o FOV abre com a velocidade (+12°, ~+14° no boost) e, no boost, a câmera treme de leve
     // a pé / mochila: a velocidade de verdade no plano (sprint, dash, voo turbo — lib/cyber/movimento); teleporte não conta
     if (this.posAnt) { const v = Math.hypot(this.eu.pos.x - this.posAnt.x, this.eu.pos.z - this.posAnt.z) / Math.max(dt, 1e-3); this.velPlano += ((v > 80 ? 0 : v) - this.velPlano) * Math.min(1, dt * 10); }
@@ -4220,7 +4295,7 @@ export class CyberEngine {
     const alvoVel = Math.max(this.moto !== null && !this.motoPousado ? sensacaoDeVelocidade(this.motoEst) : 0, aPe, naveTurbo);
     this.velTela += (alvoVel - this.velTela) * (1 - Math.exp(-dt * (alvoVel > this.velTela ? 3 : 1.8)));
     if (!this.fovBase) this.fovBase = this.cam.fov;
-    let fov = this.fovBase + 12 * Math.min(1.15, this.velTela);
+    let fov = this.fovBase + 12 * Math.min(1.15, this.velTela) + 12 * this.wAprox;   // (na aproximação do buraco negro, a lente abre: ver os detritos chegando)
     if (this.wMira > 0.001) fov += (RIFLE.fovMira - fov) * this.wMira;   // (mirando: o zoom)
     if (Math.abs(fov - this.cam.fov) > 0.02) { this.cam.fov = fov; this.cam.updateProjectionMatrix(); }
     // tremor: no boost, mais acima da barreira do som e um SOCO na hora em que ela quebra
