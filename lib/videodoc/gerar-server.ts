@@ -58,6 +58,15 @@ export async function depsReais(userId: string): Promise<GerarDeps> {
     tts: async (texto) => { const a = await synthGeminiTTS(texto, VOZ_ZAEON, 45_000); if (!a?.audio_base64) throw new Error("a voz da Zaeon falhou"); return Buffer.from(a.audio_base64, "base64"); },
     concat: concatWav,
     gravar: async (artId, wav) => { await writeStudioFile(artId, "wav", wav); },
-    marcar: async (artId, data) => { await prisma.studioArtifact.update({ where: { id: artId }, data: data as never }); },
+    // o `meta` é relido e MESCLADO: blueprints que ganharam acesso durante a geração (minutos) não se perdem
+    marcar: async (artId, data) => {
+      let d: Record<string, unknown> = data;
+      if (data.meta) {
+        const atual = await prisma.studioArtifact.findUnique({ where: { id: artId }, select: { meta: true } });
+        const m0 = (atual?.meta ?? {}) as Partial<MetaVideoDoc>, m1 = data.meta as MetaVideoDoc;
+        d = { ...data, meta: { ...m0, ...m1, blueprints: [...new Set([...(m0.blueprints ?? []), ...(m1.blueprints ?? [])])].slice(-50) } };
+      }
+      await prisma.studioArtifact.update({ where: { id: artId }, data: d as never });
+    },
   };
 }

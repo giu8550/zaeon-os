@@ -95,8 +95,26 @@ describe("vídeos dos documentos-base", () => {
     const { documentosDaResposta } = await import("@/lib/videodoc/documentos");
     const ids = documentosDaResposta({ sources }).map((d) => d.id);
     let n = 0; const videos = async () => ({ videoId: (++n).toString(16).padStart(24, "f") });
-    await blueprintDoTurno({ ...base, sinal: { estudavel: true, tituloSugerido: "X" }, db, gen: gen({ ...plano, documentosBase: ids }), answer: { sources }, videos });
+    await blueprintDoTurno({ ...base, sinal: { estudavel: true, tituloSugerido: "X" }, db, gen: gen({ ...plano, documentosBase: ids }), answer: { sources }, videos, estadosVideos: async () => ({}) });
     const docs = (linhas[0]!.cards as DocBlueprint).documentos;
     expect(docs.filter((d) => d.videoId)).toHaveLength(3); expect(n).toBe(3);
+  });
+});
+
+describe("vídeo que falhou não segura lugar", () => {
+  it("o documento com vídeo em erro solta o vídeo e o lugar vai pra outro base", async () => {
+    const { db, linhas } = bancoFalso();
+    const { docVazio: dv } = await import("./tipos");
+    const d0 = { ...dv("X", 0), documentos: [
+      { id: "a", titulo: "A", tipo: "artigo" as const, url: "https://doi.org/10.1007/a", base: true, videoId: "a".repeat(24) },
+      { id: "b", titulo: "B", tipo: "artigo" as const, url: "https://doi.org/10.1007/b", base: true },
+    ] };
+    const l = await db.cartolina.create({ data: { ownerId: base.userId, surface: "blueprint", scopeId: "t", titulo: "X", cards: d0 as never } });
+    const { videosDosDocumentosBase } = await import("./server");
+    const n = await videosDosDocumentosBase(l.id, base.userId, d0, db, async () => ({ videoId: "b".repeat(24) }), async () => ({ ["a".repeat(24)]: "error" }));
+    expect(n).toBe(1);
+    const docs = (linhas[0]!.cards as DocBlueprint).documentos;
+    expect(docs.find((d) => d.id === "a")).toMatchObject({ base: false }); expect(docs.find((d) => d.id === "a")!.videoId).toBeUndefined();
+    expect(docs.find((d) => d.id === "b")!.videoId).toBe("b".repeat(24));
   });
 });

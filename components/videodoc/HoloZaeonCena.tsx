@@ -46,7 +46,13 @@ export default function HoloZaeonCena({ nivel, falando }: { nivel: () => number 
       R.render(cena, cam);
     };
     raf = requestAnimationFrame(quadro);
-    return () => { cancelAnimationFrame(raf); ro.disconnect(); document.removeEventListener("visibilitychange", vis); holo.dispose(); R.dispose(); R.domElement.remove(); };
+    return () => {
+      cancelAnimationFrame(raf); ro.disconnect(); document.removeEventListener("visibilitychange", vis);
+      holo.dispose();
+      for (const m of [globo, aroGlobo]) { m.geometry.dispose(); (m.material as THREE.Material).dispose(); }
+      // solta o CONTEXTO WebGL de verdade (o navegador derruba o mais velho depois de ~16 — podia ser o do jogo)
+      R.dispose(); R.forceContextLoss(); R.domElement.remove();
+    };
   }, []);
   return <div ref={ref} className="h-full w-full" aria-label="A Zaeon em holograma apresentando o documento" />;
 }

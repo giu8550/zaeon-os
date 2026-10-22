@@ -83,3 +83,31 @@ export async function vivo(url: string): Promise<boolean> {
   }
   return false;
 }
+
+/** baixa um PDF de uma URL pública com as mesmas travas (DNS conferido no lookup, rede interna fora), seguindo no
+ *  máximo 3 redirecionamentos (cada salto conferido de novo) e parando em `maxBytes` — o PDF de um link vindo de uma
+ *  resposta da IA não pode virar SSRF nem estourar a memória. null = não é PDF, grande demais ou não respondeu. */
+export async function baixarPdfSeguro(url: string, maxBytes: number, saltos = 3): Promise<Uint8Array | null> {
+  if (!isSafePublicHttpUrl(url)) return null;
+  let u: URL; try { u = new URL(url); } catch { return null; }
+  if (!hostAceitavel(u.hostname)) return null;
+  const r = await new Promise<{ status: number; location?: string; bytes?: Uint8Array } | null>((resolve) => {
+    const mod = u.protocol === "https:" ? https : http;
+    const req = mod.request(u, { method: "GET", lookup: lookupSeguro as never, timeout: 20_000, headers: { "User-Agent": "ZaeonPdf/1.0", Accept: "application/pdf" } }, (res) => {
+      const status = res.statusCode ?? 0;
+      if (status >= 300 && status < 400) { resolve({ status, location: res.headers.location }); res.destroy(); return; }
+      if (status >= 400 || Number(res.headers["content-length"] ?? 0) > maxBytes) { resolve({ status: 0 }); res.destroy(); return; }
+      const partes: Buffer[] = []; let total = 0;
+      res.on("data", (c: Buffer) => { total += c.length; if (total > maxBytes) { res.destroy(); resolve({ status: 0 }); return; } partes.push(c); });
+      res.on("end", () => resolve({ status, bytes: new Uint8Array(Buffer.concat(partes)) }));
+      res.on("error", () => resolve(null));
+    });
+    req.on("timeout", () => req.destroy());
+    req.on("error", () => resolve(null));
+    req.end();
+  });
+  if (!r) return null;
+  if (r.location) { if (saltos <= 0) return null; try { return baixarPdfSeguro(new URL(r.location, u).toString(), maxBytes, saltos - 1); } catch { return null; } }
+  const b = r.bytes;
+  return b && b.length > 4 && Buffer.from(b.subarray(0, 4)).toString("latin1") === "%PDF" ? b : null;
+}
