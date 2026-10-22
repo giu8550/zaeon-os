@@ -21,19 +21,24 @@ import { PRACA, naPracaLocal } from "./praca";
  *  Zaeon), `filas` × `porFila` vagas, `espacamento` entre vagas de uma fila e `entreFilas` entre as filas (m) */
 /** `alt` = quanto o piso do lote fica acima do piso dele: o da Zaeon (`ceu`: a garagem fica na altura das salas) ou o
  *  da praça (lib/cyber/praca `CHAO`) */
-export type Lote = { id: "chao" | "garagem" | "estudo"; x: number; z: number; rot: number; ceu: boolean; alt: number; filas: number; porFila: number; espacamento: number; entreFilas: number;
+export type Lote = { id: "chao" | "garagem" | "estudo" | "zaeon"; x: number; z: number; rot: number; ceu: boolean; alt: number; filas: number; porFila: number; espacamento: number; entreFilas: number;
   /** o VÃO no meio das filas (m): a calçada passa por ele (o pátio do lounge) */ corredor?: number };
 const lote = (id: Lote["id"], x: number, z: number, cx: number, cz: number, ceu: boolean, filas: number, porFila: number): Lote =>
   ({ id, x, z, rot: Math.atan2(cx - x, cz - z), ceu, alt: 0, filas, porFila, espacamento: 4.6, entreFilas: 8 });
 /** os 2 lotes da GARAGEM no referencial da SALA (+z = a porta, rumo à Zaeon): um atrás do outro, virados pra porta */
 export const LOTES_GARAGEM_SALA = [{ x: 0, z: -24 }, { x: 0, z: 0 }] as const;
-const garagem = (q: { x: number; z: number }): Lote => {
+const garagem = (q: { x: number; z: number }, filas = 2): Lote => {
   const s = CIDADE.salas.garagem, w = mundo(daSala(s, q.x, q.z));
-  return { id: "garagem", x: w.x, z: w.z, rot: rotDaSala(s), ceu: true, alt: ALTURA_LOUNGE + 0.16, filas: 2, porFila: 7, espacamento: 4.6, entreFilas: 8 };
+  return { id: "garagem", x: w.x, z: w.z, rot: rotDaSala(s), ceu: true, alt: ALTURA_LOUNGE + 0.16, filas, porFila: 7, espacamento: 4.6, entreFilas: 8 };
 };
+/** o estacionamento na PLATAFORMA da Zaeon (out/2026, o dono: pra sair de moto direto pros buracos negros): do lado de
+ *  quem chega (a chegada do hub, ~34 m), virado pro centro da ilha. (O total de vagas fica em 32 — o teto do servidor,
+ *  server/colyseus `VAGAS_MOTO`: o 2º lote da garagem ficou com uma fila só) */
+export const LOTE_ZAEON_LOCAL = (() => { const a = (120 * Math.PI) / 180, r = 96; return { x: Math.cos(a) * r, z: Math.sin(a) * r }; })();
 export const LOTES: Lote[] = [
   lote("chao", naPracaLocal(-34, 16).x, naPracaLocal(-34, 16).z, PRACA.x, PRACA.z, false, 1, 4),   // na ilha da PRAÇA (lib/cyber/praca): cabe dentro da borda — o piso é o CHAO
-  ...LOTES_GARAGEM_SALA.map(garagem),         // a GARAGEM da Zaeon (todas as motos de lá)
+  garagem(LOTES_GARAGEM_SALA[0]), garagem(LOTES_GARAGEM_SALA[1], 1),   // a GARAGEM da Zaeon
+  (() => { const w = mundo(LOTE_ZAEON_LOCAL); return { ...lote("zaeon", w.x, w.z, CIDADE.centro.x, CIDADE.centro.z, true, 1, 7), alt: 0 }; })(),   // a PLATAFORMA da Zaeon
 ];
 /** largura (ao longo das filas) e profundidade (m) do piso de um lote, e o raio que ele ocupa */
 export const tamanhoDoLote = (l: Lote) => { const larg = l.porFila * l.espacamento + 3 + (l.corredor ?? 0), prof = (l.filas - 1) * l.entreFilas + 7.2; return { larg, prof, r: Math.hypot(larg, prof) / 2 }; };

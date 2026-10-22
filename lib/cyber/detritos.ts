@@ -15,13 +15,15 @@ export const DETRITOS = {
   /** o PONTO DOCE: a que distância do CENTRO do buraco negro (× o raio dele) ele puxa sozinho */
   doce: 2.4,
   /** quantos asteroides no campo (na borda da zona → chegando no ponto doce); no modo leve, `leve` × isso */
-  n: [55, 120] as const, leve: 0.55,
+  n: [8, 50] as const, leve: 0.6,
   /** o TÚNEL: o raio em volta do eixo e até onde vai na frente (m) */
   tunelR: 48, fundo: 340, perto: 18,
   /** a velocidade (m/s) com que vêm (na borda → perto) e o raio (m) — a maior parte pequena, uns grandes */
-  vel: [55, 125] as const, raio: [1.4, 9] as const,
-  /** a fração dos que vêm MIRADOS em você */
-  mirados: 0.12,
+  vel: [38, 115] as const, raio: [1.4, 9] as const,
+  /** a fração dos que vêm MIRADOS em você (no começo do caminho → chegando) */
+  mirados: [0.03, 0.16] as const,
+  /** a zona começa a quantos metros DEPOIS da boca da pista (saiu da Zaeon rumo ao buraco negro: já começa) */
+  depoisDaBoca: 40,
   /** o meu raio (m) e o que conta como raspão (m além do contato) */
   euR: 1.7, raspao: 5,
   /** a batida: o empurrão (m/s) e o dano */
@@ -34,9 +36,13 @@ export type Asteroide = { id: number; p: V3; v: V3; r: number; gira: V3; forma: 
 
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 
-/** onde estou na ZONA de um buraco negro: `k` 0 na borda → 1 no ponto doce (ou null fora); `doce` = já chegou */
-export function naZona(p: V3, bn: V3, R: number, alcance: number): { k: number; d: number; doce: boolean } | null {
-  const d = Math.hypot(p.x - bn.x, p.y - bn.y, p.z - bn.z), fora = R + alcance, dentro = R * DETRITOS.doce;
+/** onde a ZONA de um buraco negro começa (m do centro dele): logo depois da BOCA da pista — assim que se sai rumo a ele
+ *  (o dono, out/2026: "assim que iniciamos nosso caminho a um buraco negro, já deve começar") */
+export const inicioDaZona = (boca: V3, bn: V3) => Math.hypot(boca.x - bn.x, boca.y - bn.y, boca.z - bn.z) - DETRITOS.depoisDaBoca;
+/** onde estou na ZONA de um buraco negro (começa a `inicio` m do centro): `k` 0 no começo → 1 no ponto doce (ou null
+ *  fora); `doce` = já chegou */
+export function naZona(p: V3, bn: V3, R: number, inicio: number): { k: number; d: number; doce: boolean } | null {
+  const d = Math.hypot(p.x - bn.x, p.y - bn.y, p.z - bn.z), fora = inicio, dentro = R * DETRITOS.doce;
   if (d > fora) return null;
   const k = Math.max(0, Math.min(1, (fora - d) / Math.max(1, fora - dentro)));
   return { k, d, doce: d <= dentro };
@@ -54,7 +60,7 @@ export function novoAsteroide(rnd: () => number, id: number, eu: V3, euVel: V3, 
   const D = DETRITOS, b = baseDoTunel(eu, bn);
   const a = rnd() * Math.PI * 2, rr = D.tunelR * Math.sqrt(rnd()), fundo = Math.min(prof, Math.max(D.perto, b.dist - 60));   // (nunca dentro do buraco negro)
   const p = { x: eu.x + b.f.x * fundo + b.l.x * Math.cos(a) * rr + b.c.x * Math.sin(a) * rr, y: eu.y + b.f.y * fundo + b.c.y * Math.sin(a) * rr, z: eu.z + b.f.z * fundo + b.l.z * Math.cos(a) * rr + b.c.z * Math.sin(a) * rr };
-  const vel = lerp(D.vel[0], D.vel[1], k) * (0.75 + 0.5 * rnd()), mirado = rnd() < D.mirados;
+  const vel = lerp(D.vel[0], D.vel[1], k) * (0.75 + 0.5 * rnd()), mirado = rnd() < lerp(D.mirados[0], D.mirados[1], k);
   let v: V3;
   if (mirado) {   // o MIRADO: vai pra onde você vai estar
     const tc = Math.hypot(eu.x - p.x, eu.y - p.y, eu.z - p.z) / vel, al = { x: eu.x + euVel.x * tc - p.x, y: eu.y + euVel.y * tc - p.y, z: eu.z + euVel.z * tc - p.z }, n = Math.hypot(al.x, al.y, al.z) || 1;

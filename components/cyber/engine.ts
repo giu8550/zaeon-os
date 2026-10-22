@@ -79,7 +79,7 @@ import { criarCarroHex, type CarroHandle } from "./CarroHex";
 import { definirNivel, NIVEIS_SEPARADOS, type IdNivel } from "@/lib/cyber/nivelAtivo";
 import { criarTravessia, type TravessiaHandle } from "./TravessiaBN";
 import { criarDetritos, type DetritosHandle } from "./DetritosBN";
-import { DETRITOS, baseDoTunel, empurraoDaBatida, naZona, novoAsteroide, passoAsteroide, puxaoDaZona, tamanhoDoCampo, vaiAcertar, type Asteroide } from "@/lib/cyber/detritos";
+import { DETRITOS, baseDoTunel, empurraoDaBatida, inicioDaZona, naZona, novoAsteroide, passoAsteroide, puxaoDaZona, tamanhoDoCampo, vaiAcertar, type Asteroide } from "@/lib/cyber/detritos";
 import { FIO as FIO_COSMICO, comecarTragada, fiosCosmicos, naAtracao, raioDeAtracao, passoTragada, pertoDoBuraco, posDaTragada, progressoTragada, saidaDaSala, type Tragada } from "@/lib/cyber/fiosCosmicos";
 import { nivelDoPonto, proximoNivel } from "@/lib/cyber/niveis";
 import { CARROS_NA_ZAEON, LOTES_CARRO, pisoDaVaga, posseDosCarros, vagaDoLote, vagasDeCarro, type CarroDirigido, type CarroLargado, type PosseCarro, type VagaCarro } from "@/lib/cyber/carros";
@@ -2369,12 +2369,13 @@ export class CyberEngine {
     const pistas = this.nivel === "zaeon" ? fiosCosmicos() : ehSala(this.nivel) ? [saidaDaSala(this.nivel)] : null;
     if (!pistas) return;
     const p = { x: eu.pos.x - CIDADE.centro.x, y: eu.alt - ilhaY, z: eu.pos.z - CIDADE.centro.z };
-    const f = naAtracao(pistas, p);
-    if (!f) { this.fluxoArmado = true; this.fimDaAproximacao(); return; }
+    // (out/2026, o dono) o CAMINHO: assim que se sai rumo a um buraco negro (passou da boca da pista), o CAMPO DE
+    // ASTEROIDES — fácil no começo, cada vez pior; só no PONTO DOCE ele te puxa sozinho
+    let f: (typeof pistas)[number] | null = null, z: ReturnType<typeof naZona> = null;
+    for (const q of pistas) { const zz = naZona(p, q.bn, q.bn.r, inicioDaZona(q.boca, q.bn)); if (zz && (!z || zz.d < z.d)) { f = q; z = zz; } }
+    if (!f || !z) { this.fluxoArmado = true; this.fimDaAproximacao(); return; }
     if (!this.fluxoArmado) return;   // (acabou de chegar de um túnel ali perto: só depois de se afastar)
-    // (out/2026, o dono) a APROXIMAÇÃO: os DETRITOS tentam te acertar até o PONTO DOCE — só lá ele te puxa sozinho
-    const z = naZona(p, f.bn, f.bn.r, raioDeAtracao(f));
-    if (z && !z.doce) { this.passoAproximacao(f, z.k, dt); return; }
+    if (!z.doce) { this.passoAproximacao(f, z.k, dt); return; }
     this.fimDaAproximacao();
     this.fio = comecarTragada(f, p); this.fluxoArmado = false;
     if (this.jet.noAr) { this.jet.noAr = false; this.jet.vy = 0; }

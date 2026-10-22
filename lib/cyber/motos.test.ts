@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ALTURA_LANCAMENTO, FABRICA, LOTES, MOTO, PLATAFORMA_MOTO, TOTAL_VAGAS, lookDaVaga, baseDoRobo, esvaziou, fabricaNova, largadasValidas, motoDe, motoLargadaDe, motoParaMontar, moverRobo, passoFabrica, progressoDaVaga, tamanhoDoLote, vagas } from "./motos";
-import { ALTURA_LOUNGE, CIDADE, colisoresDaCidade, mundo, naIlhaPrincipal } from "./ceu";
+import { ALTURA_LOUNGE, CIDADE, alturaNaCidade, colisoresDaCidade, mundo, naIlhaPrincipal } from "./ceu";
 import { NOS } from "./buracos";
 import { PRACA } from "./praca";
 import { BASES_CEU_LOCAIS } from "./bases";
@@ -34,7 +34,17 @@ describe("motos voadoras — estacionamentos (chão + GARAGEM da Zaeon)", () => 
         for (const c of cs) expect(Math.hypot(v.x - c.x, v.z - c.z)).toBeGreaterThan(c.r + 2);
       }
     }
-    for (const v of vagas().filter((x) => x.ceu)) expect(Math.hypot(v.x - CIDADE.centro.x, v.z - CIDADE.centro.z)).toBeGreaterThan(CIDADE.bordaR);   // nada na central
+    const zaeon = LOTES.findIndex((l) => l.id === "zaeon");
+    for (const v of vagas().filter((x) => x.ceu && x.lote !== zaeon)) expect(Math.hypot(v.x - CIDADE.centro.x, v.z - CIDADE.centro.z)).toBeGreaterThan(CIDADE.bordaR);   // (a garagem fica fora da central)
+  });
+  it("o lote da PLATAFORMA da Zaeon (out/2026): no piso da central, longe dos colisores e de onde se chega; o total cabe no servidor (32)", () => {
+    const cs = colisoresDaCidade(), z = LOTES.findIndex((l) => l.id === "zaeon"), ch = NOS.zaeon.chegada;
+    expect(z).toBeGreaterThan(0); expect(TOTAL_VAGAS).toBeLessThanOrEqual(32);
+    for (const v of vagas().filter((x) => x.lote === z)) {
+      expect(naIlhaPrincipal(v)).toBe(true); expect(alturaNaCidade(v)).toBe(0);
+      for (const c of cs) expect(Math.hypot(v.x - c.x, v.z - c.z)).toBeGreaterThan(c.r + 2);
+      expect(Math.hypot(v.x - ch.x, v.z - ch.z)).toBeGreaterThan(15);
+    }
   });
   it("o lote da praça cabe na ilha (sem chão!) e não encosta no heliporto nem em marcos sólidos", () => {
     const l = LOTES[0]!, r = tamanhoDoLote(l).r;
