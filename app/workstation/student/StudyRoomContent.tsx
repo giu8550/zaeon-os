@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { isSuperAdminEmail } from "@/lib/auth/roles";
 import { unifiedResearchRoom } from "@/lib/research/unifiedRoom";
+import { blueprintUiOn } from "@/lib/blueprint/tipos";
 import { EVT_ESTUDOS_VISTA } from "@/lib/onboarding/tutorialLab";
 import { EVT_ESTUDOS_CHAT, EVT_PEDIDO_CONVERSA, EVT_ESTUDOS_IR, anunciarAbaEstudos, consumirAbaEstudos, type AbaEstudos } from "@/lib/chat/conversasNav";
 import { OmegaScholarProvider } from "./omega/OmegaScholarContext";
@@ -190,6 +191,9 @@ const MeusEstudosFeed = dynamic(() => import("@/components/study/MeusEstudosFeed
 const BoardEstudos = dynamic(() => import("@/components/estudos/BoardEstudos"), { ssr: false });
 // "Estudos" abre na VITRINE de blueprints (lib/estudos/vitrine); a busca na literatura (o Omega) fica a um clique
 const VitrineEstudos = dynamic(() => import("@/components/estudos/VitrineEstudos"), { ssr: false });
+// BLUEPRINT PRÁTICO (lib/blueprint, flag NEXT_PUBLIC_BLUEPRINT_PRATICO): a "Sala de Estudos" vira o blueprint dos estudos
+// nascidos no chat; o board livre (e o caderno antigo) seguem a um clique, na "prancha antiga"
+const SalaBlueprint = dynamic(() => import("@/components/blueprint/SalaBlueprint"), { ssr: false });
 const MeusAlunosPanel = dynamic(() => import("@/app/workstation/student/MeusAlunosPanel"), { ssr: false });
 
 /**
@@ -261,6 +265,7 @@ export default function StudyRoomContent({ flushTop = false, unified = false, ab
     // o BOARD de Meus Estudos aberto por um link de convite (?board=<id>&convite=<token>) e o caderno antigo por cima
     const [boardDoLink, setBoardDoLink] = useState<{ id: string | null; convite: string | null }>({ id: null, convite: null });
     const [cadernoAberto, setCadernoAberto] = useState(false);
+    const [pranchaAntiga, setPranchaAntiga] = useState(false);
     const [estudosVista, setEstudosVista] = useState<"vitrine" | "pesquisar">("vitrine");
     // o tutorial do tablet abre o Marketplace direto na pesquisa (a tela roxa)
     useEffect(() => {
@@ -271,7 +276,7 @@ export default function StudyRoomContent({ flushTop = false, unified = false, ab
     useEffect(() => {
         try {
             const sp = new URLSearchParams(window.location.search), id = sp.get("board");
-            if (id && /^[a-f0-9]{24}$/i.test(id)) { setBoardDoLink({ id, convite: sp.get("convite") }); setActiveTab("feed"); }
+            if (id && /^[a-f0-9]{24}$/i.test(id)) { setBoardDoLink({ id, convite: sp.get("convite") }); setPranchaAntiga(true); setActiveTab("feed"); }
             if (sp.get("space")) setCadernoAberto(true);   // (o link de um estudo do caderno antigo)
         } catch { /* ignore */ }
     }, []);
@@ -464,12 +469,26 @@ export default function StudyRoomContent({ flushTop = false, unified = false, ab
                         {activeTab === "feed" ? (
                             // "Meus Estudos" = o BOARD (cards colados e arrastados, mais de uma pessoa ao mesmo
                             // tempo); o caderno antigo abre por cima, pelo botão do canto
+                            blueprintUiOn() && !pranchaAntiga ? (
+                                <div className="relative h-full">
+                                    <SalaBlueprint />
+                                    <button type="button" onClick={() => setPranchaAntiga(true)} className="absolute bottom-3 left-1/2 z-[95] -translate-x-1/2 rounded-full border border-sky-300/30 bg-[#05162a]/85 px-3 py-1 font-mono text-[10.5px] tracking-wide text-sky-100/80 backdrop-blur hover:text-white">
+                                        abrir a prancha antiga
+                                    </button>
+                                </div>
+                            ) : (
                             <div className="relative h-full">
                                 {cadernoAberto ? <MeusEstudosFeed /> : <BoardEstudos boardInicialId={boardDoLink.id} convite={boardDoLink.convite} />}
-                                <button type="button" onClick={() => setCadernoAberto((v) => !v)} className="absolute bottom-3 left-1/2 z-[95] -translate-x-1/2 rounded-full border border-sky-300/30 bg-[#05162a]/85 px-3 py-1 font-mono text-[10.5px] tracking-wide text-sky-100/80 backdrop-blur hover:text-white">
-                                    {cadernoAberto ? "← voltar pro board" : "abrir o caderno antigo"}
-                                </button>
+                                <div className="absolute bottom-3 left-1/2 z-[95] flex -translate-x-1/2 gap-2">
+                                    {blueprintUiOn() && (
+                                        <button type="button" onClick={() => { setPranchaAntiga(false); setCadernoAberto(false); }} className="rounded-full border border-sky-300/30 bg-[#05162a]/85 px-3 py-1 font-mono text-[10.5px] tracking-wide text-sky-100/80 backdrop-blur hover:text-white">← blueprints</button>
+                                    )}
+                                    <button type="button" onClick={() => setCadernoAberto((v) => !v)} className="rounded-full border border-sky-300/30 bg-[#05162a]/85 px-3 py-1 font-mono text-[10.5px] tracking-wide text-sky-100/80 backdrop-blur hover:text-white">
+                                        {cadernoAberto ? "← voltar pro board" : "abrir o caderno antigo"}
+                                    </button>
+                                </div>
                             </div>
+                            )
                         ) : activeTab === "meus-estudos" ? null : activeTab === "community" ? (
                             <div className="relative h-full">
                                 {estudosVista === "vitrine" ? <VitrineEstudos /> : <OmegaScholarWorkspace />}

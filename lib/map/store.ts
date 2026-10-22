@@ -46,7 +46,7 @@ export async function getMapaForUser(id: string, userId: string): Promise<{ mapa
   if (!row) return null;
   if (row.ownerId === userId) return { mapa: viewDeLinha(row), papel: "dono" };
   // Estudo compartilhado: a permissão vem da cartolina do mesmo (ownerId, scopeId) — uma só regra.
-  const board = await prisma.cartolina.findFirst({ where: { ownerId: row.ownerId, scopeId: row.scopeId }, select: { id: true } });
+  const board = await prisma.cartolina.findFirst({ where: { ownerId: row.ownerId, surface: "estudos", scopeId: row.scopeId }, select: { id: true } });
   if (!board) return null;
   const m = await prisma.cartolinaMembro.findUnique({ where: { cartolinaId_userId: { cartolinaId: board.id, userId } }, select: { papel: true } });
   if (!m || (m.papel !== "editor" && m.papel !== "leitor")) return null;
