@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { TOKENS_PADRAO, tokensComoCss, type TokensDesign } from "../design/tokens";
 import { carregarIndice } from "../design/indice";
-import { renderPagina } from "./render";
+import { ErroMarca, mencionaMarca, renderPagina } from "./render";
 import { PROPS_MINIMAS, TIPOS_SECAO, VARIANTES_POR_CLIMA, validarSecoes, type Secao } from "./tipos";
 
 const base = { titulo: "Padaria Aurora", descricao: "Pães artesanais em Fortaleza", tokens: TOKENS_PADRAO };
@@ -214,6 +214,31 @@ describe("com tokens reais do índice", () => {
         secoes: TIPOS_SECAO.map((t, i) => sec(t, PROPS_MINIMAS[t], `s${i}`)),
       });
       expect(out["styles.css"].startsWith(":root{")).toBe(true);
+    }
+  });
+});
+
+describe("mencionaMarca (anti-marca sobre HTML pronto)", () => {
+  it("acha a marca como palavra inteira no corpo, atributos, título e descrição", () => {
+    expect(mencionaMarca("<html><body><p>estilo Linear</p></body></html>", "Linear")).toBe(true);
+    expect(mencionaMarca('<html><body><img alt="logo linear"></body></html>', "Linear")).toBe(true);
+    expect(mencionaMarca("<html><head><title>Linear</title></head><body></body></html>", "Linear")).toBe(true);
+    expect(mencionaMarca('<html><head><meta name="description" content="tipo Linear"></head><body></body></html>', "Linear")).toBe(true);
+  });
+
+  it("ignora CSS inline, script e palavras que só contêm a marca", () => {
+    const html = '<html><body><style>.a{background:linear-gradient(red,blue)}</style><div style="background:linear-gradient(red,blue)">crescimento linearmente</div><script>var linear=1</script></body></html>';
+    expect(mencionaMarca(html, "Linear")).toBe(false);
+    expect(mencionaMarca("<body>oi</body>", "  ")).toBe(false);
+  });
+
+  it("renderPagina lança ErroMarca com a palavra", () => {
+    try {
+      renderPagina({ ...base, marcaProibida: "Linear", secoes: [sec("hero", { title: "Feito com Linear" })] });
+      throw new Error("não lançou");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ErroMarca);
+      expect((e as ErroMarca).palavra).toBe("Linear");
     }
   });
 });

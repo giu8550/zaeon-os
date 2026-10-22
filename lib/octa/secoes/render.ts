@@ -49,9 +49,36 @@ const idSeguro = (id: string) => (/^[a-z][a-z0-9_-]{0,40}$/i.test(id) ? id : "")
 
 /** Texto visível + atributos de conteúdo do <body>: o que a regra anti-marca precisa varrer (o CSS tem "linear-gradient"). */
 function textoVisivel(html: string): string {
-  const corpo = html.slice(html.indexOf("<body"));
+  const i = html.indexOf("<body");
+  // <style>/<script> inline (o agente pode escrever HTML à mão) não é texto: "linear-gradient" não é a marca.
+  const corpo = (i >= 0 ? html.slice(i) : html).replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1>/gi, " ").replace(/\sstyle="[^"]*"/gi, " ");
   const attrs = [...corpo.matchAll(/\s(?:alt|title|aria-label|placeholder|href|src)="([^"]*)"/g)].map((m) => m[1]);
   return corpo.replace(/<[^>]+>/g, " ") + " " + attrs.join(" ");
+}
+
+/** <title> e <meta name="description">: também aparecem pro visitante (aba, busca, cartão de link). */
+function textoDoHead(html: string): string {
+  const titulo = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "";
+  const desc = html.match(/<meta\s+name="description"\s+content="([^"]*)"/i)?.[1] ?? "";
+  return `${titulo} ${desc}`;
+}
+
+/** A marca como PALAVRA INTEIRA (Unicode, sem diferenciar maiúsculas): "Linear" casa, "linear-gradient" no CSS não entra na varredura. */
+const casaMarca = (texto: string, marca: string) =>
+  new RegExp(`(^|[^\\p{L}\\p{N}])${marca.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "iu").test(texto);
+
+/** O nome da marca aparece no que o visitante da página lê (corpo, atributos de conteúdo, título, descrição)? */
+export function mencionaMarca(html: string, marca: string): boolean {
+  const m = marca.trim();
+  return !!m && (casaMarca(textoVisivel(html), m) || casaMarca(textoDoHead(html), m));
+}
+
+/** Erro da regra anti-marca. `palavra` = o nome da marca que apareceu (o agente repassa pro modelo reescrever). */
+export class ErroMarca extends Error {
+  constructor(readonly palavra: string) {
+    super(`A página menciona o nome da marca de origem do estilo ("${palavra}"); reescreva o texto sem ele.`);
+    this.name = "ErroMarca";
+  }
 }
 
 export type EntradaPagina = {
@@ -94,12 +121,7 @@ export function renderPagina(p: EntradaPagina): { "index.html": string; "styles.
   ].filter((l) => l !== "").join("\n");
 
   const marca = p.marcaProibida?.trim();
-  if (marca) {
-    const re = new RegExp(`(^|[^\\p{L}\\p{N}])${marca.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "iu");
-    if (re.test(textoVisivel(html)) || re.test(`${p.titulo} ${p.descricao}`)) {
-      throw new Error("A página menciona o nome da marca de origem do estilo; reescreva o texto sem ele.");
-    }
-  }
+  if (marca && (mencionaMarca(html, marca) || casaMarca(`${p.titulo} ${p.descricao}`, marca))) throw new ErroMarca(marca);
 
   return { "index.html": html, "styles.css": `${tokensComoCss(p.tokens)}\n${secoesCss()}` };
 }

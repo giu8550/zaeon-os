@@ -156,3 +156,45 @@ describe("octa · chamador com reserva", () => {
     expect(vistoPeloGoogle[0].some((m) => m.role === "tool")).toBe(true);
   });
 });
+
+describe("octa · escolha do modelo no fluxo landing", () => {
+  it("Google primeiro (vertex_ai/<GEMINI_MODEL>), Contabo de reserva", () => {
+    const e = escolhaModeloOcta({ ...PROD, OCTA_MODELO_LOCAL: "1" }, "landing");
+    expect(e.local).toBe("vertex_ai/gemini-3.5-flash");
+    expect(e.reserva).toBe("zaeon-local-coder");
+    // o Google aguenta o prompt inteiro e o turno longo: sem teto de prompt nem orçamento curto do CPU
+    expect(e.maxPromptTok).toBeGreaterThan(1_000_000);
+    expect(e.orcamentoMs).toBeGreaterThan(3_600_000);
+  });
+
+  it("GEMINI_MODEL vale também sem a flag do local", () => {
+    expect(escolhaModeloOcta(PROD, "landing").local).toBe("vertex_ai/gemini-3.5-flash");
+  });
+
+  it("flag do local desligada: a reserva não aponta pra Contabo (kill switch respeitado)", () => {
+    expect(escolhaModeloOcta(PROD, "landing").reserva).toBe("vertex_ai/gemini-2.5-pro");
+  });
+
+  it("no chamador: Google responde e a Contabo nem é tocada; Google falha → Contabo", async () => {
+    const e = escolhaModeloOcta({ ...PROD, OCTA_MODELO_LOCAL: "1" }, "landing");
+    const ok = gateway({ "vertex_ai/gemini-3.5-flash": async () => resp("google") });
+    expect((await criarChamadorOcta(ok.g, e)([{ role: "user", content: "x".repeat(50_000) }])).content).toBe("google");
+    expect(ok.chamados).toEqual(["vertex_ai/gemini-3.5-flash"]);
+    _resetPausaOcta();
+    const falha = gateway({ "vertex_ai/gemini-3.5-flash": async () => { throw new Error("429"); }, "zaeon-local-coder": async () => resp("contabo") });
+    expect((await criarChamadorOcta(falha.g, e)(msgs)).content).toBe("contabo");
+  });
+
+  it("Google caindo no landing não pausa a Contabo dos turnos normais", async () => {
+    const env = { ...PROD, OCTA_MODELO_LOCAL: "1" };
+    const { g, chamados } = gateway({
+      "vertex_ai/gemini-3.5-flash": async () => { throw new Error("503"); },
+      "zaeon-local-coder": async () => resp("contabo"),
+    });
+    await criarChamadorOcta(g, escolhaModeloOcta(env, "landing"))(msgs);
+    const normal = criarChamadorOcta(g, escolhaModeloOcta(env));
+    expect((await normal(msgs)).content).toBe("contabo");
+    expect(normal.servidos[0].motivo).toBeUndefined();
+    expect(chamados).toEqual(["vertex_ai/gemini-3.5-flash", "zaeon-local-coder", "zaeon-local-coder"]);
+  });
+});

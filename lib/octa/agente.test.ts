@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { rodarAgenteOcta, type ChamarModelo, type RespostaModelo, type TurnoOcta } from "./agente";
+import { vi } from "vitest";
+import { rodarAgenteOcta, ferramentasGateway, FERRAMENTAS_GATEWAY, MARCADOR_ESTILO, type ChamarModelo, type RespostaModelo, type TurnoOcta } from "./agente";
+import { carregarIndice, candidatosPorDescricao, lerDesignMd } from "./design/indice";
+import { PROPS_MINIMAS } from "./secoes/tipos";
+import type { ResultadoPublicar } from "./publicar";
 
 /** Modelo de mentira que segue um roteiro de respostas. */
 const roteiro = (passos: RespostaModelo[]): ChamarModelo & { vistos: any[][] } => {
@@ -74,5 +78,162 @@ describe("octa · agente (IDE)", () => {
     const m = roteiro([{ content: null, tool_calls: [call("1", "octa_listar", {})] }]);
     const r = await rodarAgenteOcta(base(), m, { sessionId: "s6" });
     expect(r.resposta).toMatch(/limite de passos/);
+  });
+});
+
+// ───────────────────────────── fluxo landing ─────────────────────────────
+const landing = (over: Partial<TurnoOcta> = {}): TurnoOcta => ({
+  historico: [], pedido: "uma landing escura e minimalista pra minha padaria", modo: "change", liberados: ["**"], workspace: {}, fluxo: "landing", ...over,
+});
+const SECOES = JSON.stringify([
+  { id: "h", type: "hero", props: PROPS_MINIMAS.hero },
+  { id: "c", type: "cta", props: PROPS_MINIMAS.cta },
+]);
+const designDe = (id: string) => `${MARCADOR_ESTILO(id)}\n${lerDesignMd(id)}`;
+const toolMsgs = (m: { vistos: any[][] }) => m.vistos[m.vistos.length - 1].filter((x: any) => x.role === "tool").map((x: any) => x.content as string);
+const OK_PUB: ResultadoPublicar = { ok: true, repoUrl: "https://github.com/aluno/padaria", pagesUrl: "https://aluno.github.io/padaria/", status: "publicando", ignorados: [] };
+
+describe("octa · agente (fluxo landing)", () => {
+  it("as 3 tools novas só são oferecidas no fluxo landing", () => {
+    const nomes = (l: typeof FERRAMENTAS_GATEWAY) => l.map((t) => t.function.name);
+    expect(nomes(FERRAMENTAS_GATEWAY)).not.toContain("octa_publicar");
+    expect(nomes(ferramentasGateway())).toEqual(nomes(FERRAMENTAS_GATEWAY));
+    expect(nomes(ferramentasGateway("landing"))).toEqual(expect.arrayContaining(["octa_design_escolher", "octa_pagina_montar", "octa_publicar", "octa_escrever"]));
+  });
+
+  it("fora do fluxo landing, chamar uma tool nova é negado e nada muda", async () => {
+    const pub = vi.fn(async () => OK_PUB);
+    const m = roteiro([{ content: null, tool_calls: [call("1", "octa_design_escolher", { descricao: "escura" })] }, { content: "ok" }]);
+    const r = await rodarAgenteOcta(base({ liberados: ["**"] }), m, { sessionId: "l0", octaPublicar: pub });
+    expect(r.edicoes).toEqual({});
+    expect(r.negados[0]).toEqual({ tool: "octa_design_escolher", motivo: "tool_fora_do_fluxo" });
+  });
+
+  it("octa_design_escolher grava DESIGN.md e diz ao modelo o id e o nome do estilo", async () => {
+    const esperado = candidatosPorDescricao("escura e minimalista", carregarIndice())[0];
+    const m = roteiro([{ content: null, tool_calls: [call("1", "octa_design_escolher", { descricao: "escura e minimalista" })] }, { content: "escolhi" }]);
+    const r = await rodarAgenteOcta(landing(), m, { sessionId: "l1" });
+    expect(r.negados).toEqual([]);
+    expect(r.edicoes["DESIGN.md"].startsWith(MARCADOR_ESTILO(esperado.id))).toBe(true);
+    expect(r.edicoes["DESIGN.md"]).toContain(lerDesignMd(esperado.id));
+    const [msg] = toolMsgs(m);
+    expect(msg).toContain(esperado.id);
+    expect(msg).toContain(esperado.nome);
+  });
+
+  it("octa_pagina_montar grava index.html e styles.css com o estilo escolhido no turno", async () => {
+    const m = roteiro([
+      { content: null, tool_calls: [call("1", "octa_design_escolher", { descricao: "escura e minimalista" })] },
+      { content: null, tool_calls: [call("2", "octa_pagina_montar", { secoes: SECOES, titulo: "Padaria Aurora", descricao: "Pães artesanais" })] },
+      { content: "montei" },
+    ]);
+    const r = await rodarAgenteOcta(landing(), m, { sessionId: "l2" });
+    expect(r.negados).toEqual([]);
+    expect(r.edicoes["index.html"]).toContain("<title>Padaria Aurora</title>");
+    expect(r.edicoes["styles.css"]).toContain(":root");
+    expect(toolMsgs(m)[1]).toMatch(/index\.html/);
+  });
+
+  it("sem DESIGN.md, octa_pagina_montar escolhe um estilo pelo pedido e grava o DESIGN.md antes", async () => {
+    const esperado = candidatosPorDescricao("uma landing escura e minimalista pra minha padaria", carregarIndice())[0];
+    const m = roteiro([{ content: null, tool_calls: [call("1", "octa_pagina_montar", { secoes: SECOES, titulo: "Padaria Aurora" })] }, { content: "ok" }]);
+    const r = await rodarAgenteOcta(landing(), m, { sessionId: "l3" });
+    expect(Object.keys(r.edicoes).sort()).toEqual(["DESIGN.md", "index.html", "styles.css"]);
+    expect(r.edicoes["DESIGN.md"].startsWith(MARCADOR_ESTILO(esperado.id))).toBe(true);
+  });
+
+  it("octa_pagina_montar com JSON inválido devolve o erro ao modelo (sem quebrar o turno)", async () => {
+    const m = roteiro([{ content: null, tool_calls: [call("1", "octa_pagina_montar", { secoes: "[{type:", titulo: "x" })] }, { content: "vou corrigir" }]);
+    const r = await rodarAgenteOcta(landing({ workspace: { "DESIGN.md": designDe("linear.app") } }), m, { sessionId: "l4" });
+    expect(r.resposta).toBe("vou corrigir");
+    expect(r.negados[0].tool).toBe("octa_pagina_montar");
+    expect(toolMsgs(m)[0]).toMatch(/JSON/);
+    expect(r.edicoes).toEqual({});
+  });
+
+  it("octa_pagina_montar com a marca do estilo no texto ('Linear') recusa nomeando a palavra", async () => {
+    const secoes = JSON.stringify([{ id: "h", type: "hero", props: { title: "Crescimento Linear de verdade", ctaText: "Ver" } }]);
+    const m = roteiro([{ content: null, tool_calls: [call("1", "octa_pagina_montar", { secoes, titulo: "Padaria" })] }, { content: "reescrevo" }]);
+    const r = await rodarAgenteOcta(landing({ workspace: { "DESIGN.md": designDe("linear.app") } }), m, { sessionId: "l5" });
+    expect(r.negados[0]).toEqual({ tool: "octa_pagina_montar", motivo: "marca_no_conteudo" });
+    expect(toolMsgs(m)[0]).toMatch(/a palavra \\"Linear\\"/);
+    expect(r.edicoes["index.html"]).toBeUndefined();
+  });
+
+  it("permissao auto: octa_publicar roda sem pedir e o modelo vê só as URLs", async () => {
+    const pub = vi.fn(async () => OK_PUB);
+    const ws = { "DESIGN.md": designDe("linear.app"), "index.html": "<!doctype html><html><head><title>Padaria</title></head><body><h1>Pão quente</h1></body></html>" };
+    const m = roteiro([{ content: null, tool_calls: [call("1", "octa_publicar", {})] }, { content: "no ar" }]);
+    const r = await rodarAgenteOcta(landing({ workspace: ws }), m, { sessionId: "l6", permissao: "auto", octaPublicar: pub });
+    expect(pub).toHaveBeenCalledTimes(1);
+    expect(r.pendente).toBeUndefined();
+    expect(toolMsgs(m)[0]).toContain("https://aluno.github.io/padaria/");
+  });
+
+  it("erro da publicação vira instrução curta pro modelo", async () => {
+    const pub = vi.fn(async (): Promise<ResultadoPublicar> => ({ ok: false, erro: "github_reconectar" }));
+    const m = roteiro([{ content: null, tool_calls: [call("1", "octa_publicar", {})] }, { content: "conecte" }]);
+    const r = await rodarAgenteOcta(landing({ workspace: { "index.html": "<body>oi</body>" } }), m, { sessionId: "l7", permissao: "auto", octaPublicar: pub });
+    expect(r.negados[0]).toEqual({ tool: "octa_publicar", motivo: "github_reconectar" });
+    expect(toolMsgs(m)[0]).toMatch(/conectar o GitHub/);
+  });
+
+  it("a marca do estilo no index.html faz octa_publicar recusar com marca_no_conteudo, sem publicar", async () => {
+    const pub = vi.fn(async () => OK_PUB);
+    const ws = { "DESIGN.md": designDe("linear.app"), "index.html": "<!doctype html><html><head><title>Padaria</title></head><body><p>feito no estilo Linear</p></body></html>" };
+    const m = roteiro([{ content: null, tool_calls: [call("1", "octa_publicar", {})] }, { content: "ok" }]);
+    const r = await rodarAgenteOcta(landing({ workspace: ws }), m, { sessionId: "l8", permissao: "auto", octaPublicar: pub });
+    expect(pub).not.toHaveBeenCalled();
+    expect(r.negados[0]).toEqual({ tool: "octa_publicar", motivo: "marca_no_conteudo" });
+    expect(toolMsgs(m)[0]).toMatch(/a palavra \\"Linear\\"/);
+  });
+
+  it("antes_de_publicar: octa_publicar pára o laço com pendente e não publica", async () => {
+    const pub = vi.fn(async () => OK_PUB);
+    const m = roteiro([{ content: null, tool_calls: [call("p1", "octa_publicar", { mensagem: "primeira" })] }, { content: "nunca" }]);
+    const r = await rodarAgenteOcta(landing({ workspace: { "index.html": "<body>oi</body>" } }), m, { sessionId: "l9", permissao: "antes_de_publicar", octaPublicar: pub });
+    expect(pub).not.toHaveBeenCalled();
+    expect(r.pendente).toEqual({ tool: "octa_publicar", args: { mensagem: "primeira" }, toolCallId: "p1" });
+    expect(m.vistos).toHaveLength(1);
+    expect(r.msgs[r.msgs.length - 1]).toMatchObject({ role: "assistant", tool_calls: [{ id: "p1" }] });
+  });
+
+  it("retomar com aprovado:true publica uma vez e o laço continua", async () => {
+    const pub = vi.fn(async () => OK_PUB);
+    const t = landing({ workspace: { "index.html": "<body>oi</body>" } });
+    const r1 = await rodarAgenteOcta(t, roteiro([{ content: null, tool_calls: [call("p1", "octa_publicar", {})] }]), { sessionId: "l10", permissao: "antes_de_publicar", octaPublicar: pub });
+    const m2 = roteiro([{ content: "Publicado em https://aluno.github.io/padaria/" }]);
+    const r2 = await rodarAgenteOcta(t, m2, { sessionId: "l10", permissao: "antes_de_publicar", octaPublicar: pub, retomar: { msgs: r1.msgs, aprovado: true } });
+    expect(pub).toHaveBeenCalledTimes(1);
+    expect(r2.pendente).toBeUndefined();
+    expect(r2.resposta).toMatch(/Publicado/);
+    expect(toolMsgs(m2)[0]).toContain("https://aluno.github.io/padaria/");
+  });
+
+  it("retomar com aprovado:false devolve ao modelo 'o aluno recusou'", async () => {
+    const pub = vi.fn(async () => OK_PUB);
+    const t = landing({ workspace: { "index.html": "<body>oi</body>" } });
+    const r1 = await rodarAgenteOcta(t, roteiro([{ content: null, tool_calls: [call("p1", "octa_publicar", {})] }]), { sessionId: "l11", permissao: "antes_de_publicar", octaPublicar: pub });
+    const m2 = roteiro([{ content: "Tudo bem, não publiquei." }]);
+    const r2 = await rodarAgenteOcta(t, m2, { sessionId: "l11", permissao: "antes_de_publicar", octaPublicar: pub, retomar: { msgs: r1.msgs, aprovado: false } });
+    expect(pub).not.toHaveBeenCalled();
+    expect(toolMsgs(m2)[0]).toMatch(/o aluno recusou/);
+    expect(r2.negados[0]).toEqual({ tool: "octa_publicar", motivo: "recusado_pelo_aluno" });
+  });
+
+  it("antes_de_escrever: a escrita pára pedindo aprovação; aprovada, grava", async () => {
+    const t = landing();
+    const r1 = await rodarAgenteOcta(t, roteiro([{ content: null, tool_calls: [call("e1", "octa_escrever", { path: "index.html", conteudo: "<p>oi</p>" })] }]), { sessionId: "l12", permissao: "antes_de_escrever" });
+    expect(r1.pendente?.tool).toBe("octa_escrever");
+    expect(r1.edicoes).toEqual({});
+    const r2 = await rodarAgenteOcta(t, roteiro([{ content: "gravei" }]), { sessionId: "l12", permissao: "antes_de_escrever", retomar: { msgs: r1.msgs, aprovado: true } });
+    expect(r2.edicoes).toEqual({ "index.html": "<p>oi</p>" });
+  });
+
+  it("fluxo landing aguenta 24 passos (e maxPassos sobrescreve)", async () => {
+    const loop = () => roteiro([{ content: null, tool_calls: [call("1", "octa_listar", {})] }]);
+    expect((await rodarAgenteOcta(landing(), loop(), { sessionId: "l13" })).passos).toBe(25);
+    expect((await rodarAgenteOcta(base(), loop(), { sessionId: "l14" })).passos).toBe(9);
+    expect((await rodarAgenteOcta(base({ maxPassos: 3 }), loop(), { sessionId: "l15" })).passos).toBe(4);
   });
 });

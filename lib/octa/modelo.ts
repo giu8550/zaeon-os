@@ -14,6 +14,11 @@
  * quente 19–61 s por passo (3–4 tok/s ponta a ponta); frio (carregar o coder) ~177 s no 1º passo.
  * Por isso: o 1º passo frio estoura os 120 s e cai no Google, e o Ollama termina de carregar sozinho (o próximo pega quente).
  * Reserva = falha, timeout, resposta vazia ou prompt grande demais. Caiu uma vez → o resto do turno fica no Google.
+ *
+ * Fluxo "landing" (montar e publicar a landing do aluno, até 24 passos): a ordem INVERTE. O primário (`local`) é o
+ * Google (vertex_ai/<GEMINI_MODEL>) e a reserva é a Contabo — o CPU não dá conta de 24 passos com DESIGN.md no prompt.
+ * Sem teto de prompt nem orçamento de tempo no primário (são proteções do CPU). Com OCTA_MODELO_LOCAL desligado a
+ * reserva NÃO aponta pra Contabo (o kill switch vale aqui também): fica o Google "forte".
  */
 import type { ChamarModelo, MsgModelo, RespostaModelo } from "@/lib/octa/agente";
 import { modeloReal } from "@/lib/octa/litellm";
@@ -30,8 +35,20 @@ export type EscolhaOcta = {
   pausaMs: number;
 };
 
-export function escolhaModeloOcta(env: Env = process.env): EscolhaOcta {
+const SEM_TETO = Number.MAX_SAFE_INTEGER;
+
+export function escolhaModeloOcta(env: Env = process.env, fluxo?: "landing"): EscolhaOcta {
   const ligado = env.OCTA_MODELO_LOCAL === "1";
+  if (fluxo === "landing") {
+    return {
+      local: modeloReal("padrao", env as NodeJS.ProcessEnv),
+      reserva: ligado ? env.OCTA_MODELO_LOCAL_NOME || "zaeon-local-coder" : modeloReal("forte", env as NodeJS.ProcessEnv),
+      timeoutMs: num(env.OCTA_LOCAL_TIMEOUT_MS, 120_000),
+      orcamentoMs: SEM_TETO,
+      maxPromptTok: SEM_TETO,
+      pausaMs: num(env.OCTA_LOCAL_PAUSA_MS, 120_000),
+    };
+  }
   return {
     local: ligado ? env.OCTA_MODELO_LOCAL_NOME || "zaeon-local-coder" : null,
     // flag desligada = o modelo de sempre do Octa (o "forte"); ligada = o Google rápido de reserva
@@ -52,9 +69,10 @@ export type ChamarGateway = (modelo: string, msgs: MsgModelo[], signal?: AbortSi
 
 export type Servido = { modelo: string; modeloId?: string | null; ms: number; motivo?: string };
 
-// Falha do local vale pro processo inteiro por `pausaMs`: Contabo fora não pode custar 120 s em todo turno.
-let pausadoAte = 0;
-export const _resetPausaOcta = () => { pausadoAte = 0; };
+// Falha do primário vale pro processo inteiro por `pausaMs`: Contabo fora não pode custar 120 s em todo turno.
+// Por modelo: o Google caindo no fluxo landing não pausa a Contabo dos outros turnos (e vice-versa).
+const pausadoAte = new Map<string, number>();
+export const _resetPausaOcta = () => { pausadoAte.clear(); };
 
 const vazia = (r: RespostaModelo) => !r.tool_calls?.length && !(r.content ?? "").trim();
 
@@ -76,7 +94,7 @@ export function criarChamadorOcta(
     const t0 = agora();
     if (escolha.local && !caiu) {
       const resta = escolha.orcamentoMs - gastoLocal;
-      if (t0 < pausadoAte) motivo = "local_em_pausa";
+      if (t0 < (pausadoAte.get(escolha.local) ?? 0)) motivo = "local_em_pausa";
       else if (resta <= 0) motivo = "orcamento_local";
       else if (tokensDe(msgs) > escolha.maxPromptTok) motivo = "prompt_grande";
       else {
@@ -90,7 +108,7 @@ export function criarChamadorOcta(
           if (/orçamento/.test(String(e?.message))) throw e;
           motivo = e?.name === "TimeoutError" || e?.name === "AbortError" ? "timeout" : `erro: ${String(e?.message ?? e).slice(0, 120)}`;
         }
-        if (motivo !== "resposta_vazia") pausadoAte = agora() + escolha.pausaMs;
+        if (motivo !== "resposta_vazia") pausadoAte.set(escolha.local, agora() + escolha.pausaMs);
       }
       caiu = true;
     }
