@@ -59,7 +59,7 @@ type Github = { conectado: boolean; login: string | null; configurado: boolean }
 type Publicacao =
   | { fase: "ocioso" } | { fase: "aviso" } | { fase: "publicando" }
   | { fase: "ok"; repoUrl: string; pagesUrl: string; status: "publicando" | "no_ar"; ignorados: string[] }
-  | { fase: "erro"; erro: string };
+  | { fase: "erro"; erro: string; palavra?: string };
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 const CHAVE_CHAT = "zaeon.octa.chat.v1";
@@ -187,7 +187,7 @@ export default function OctaIDE() {
   /** Mudança de CONTEÚDO feita pelo aluno: marca pra salvar no servidor. */
   const editar = (fn: (e: EstadoIDE) => EstadoIDE) => { sujo.current = true; setIde((e) => (e ? fn(e) : e)); };
 
-  const { turno, iniciar, acompanhar, aprovar, limpar } = useTurnoOcta({ onParou: (t) => aoPararTurno(t) });
+  const { turno, iniciar, acompanhar, aprovar, retomarPolling, limpar } = useTurnoOcta({ onParou: (t) => aoPararTurno(t) });
   const turnoVivo = !!turno && turno.status !== "pronto" && turno.status !== "erro";
 
   // ───────────── salvar no servidor (com atraso) ─────────────
@@ -383,7 +383,7 @@ export default function OctaIDE() {
       return;
     }
     const erro = typeof j?.erro === "string" ? j.erro : r?.status === 404 ? "projeto_inexistente" : r?.status === 429 ? "limite_publicacoes_rate" : "falha_github";
-    setPub({ fase: "erro", erro });
+    setPub({ fase: "erro", erro, ...(erro === "marca_no_conteudo" && typeof j?.palavra === "string" ? { palavra: j.palavra } : {}) });
     if (erro === "github_reconectar") void carregarGithub();
   };
   const publicar = async () => {
@@ -829,6 +829,12 @@ export default function OctaIDE() {
                     <CartaoAprovacao tool={turno.pendente.tool} path={turno.pendente.path} ocupado={decidindo || turno.status !== "aguardando_aprovacao"} onDecidir={(a) => void decidir(a)} />
                   )}
                   {turno.falhaRede && turnoVivo && <div className="text-[11.5px]" style={{ color: Z.aviso }}>Sem resposta do servidor… tentando de novo.</div>}
+                  {turno.semNoticia && turnoVivo && (
+                    <div className="text-[11.5px] flex items-center gap-2" role="status" style={{ color: Z.aviso }}>
+                      O Octa está há muito tempo sem dar notícia deste pedido.
+                      <button type="button" onClick={retomarPolling} className="h-6 px-2 rounded-md" style={{ border: `1px solid ${Z.borda}`, color: Z.texto }}>Verificar de novo</button>
+                    </div>
+                  )}
                 </div>
               )}
               {enviando && !projeto && <div className="flex items-center gap-2 text-[12px]" style={{ color: Z.fraco }}><Loader2 className="w-3.5 h-3.5 animate-spin" /> o Octa está trabalhando…</div>}
@@ -940,7 +946,7 @@ function PainelPublicacao({ pub, onFechar, onAceitar, onConectar }: {
       {pub.fase === "erro" && (
         <>
           <div className="pr-5 leading-relaxed" role="alert" style={{ color: Z.erro }}>
-            {pub.erro === "limite_publicacoes_rate" ? "Muitos pedidos seguidos. Espera um instante." : pub.erro === "falha_aviso" ? "Não deu pra registrar o aviso agora. Tente de novo." : textoErroPublicar(pub.erro)}
+            {pub.erro === "limite_publicacoes_rate" ? "Muitos pedidos seguidos. Espera um instante." : pub.erro === "falha_aviso" ? "Não deu pra registrar o aviso agora. Tente de novo." : textoErroPublicar(pub.erro, pub.palavra)}
           </div>
           {pub.erro === "github_reconectar" && (
             <button type="button" onClick={onConectar} className="flex items-center gap-1.5 h-7 px-3 rounded-md" style={{ border: `1px solid ${Z.borda}` }}><Github className="w-3.5 h-3.5" /> Conectar GitHub</button>

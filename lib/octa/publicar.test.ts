@@ -146,6 +146,56 @@ describe("publicarProjeto", () => {
     expect(projetos[0].repoFullName).toBe("aluno/confeitaria-2");
   });
 
+  it("repo do Octa apagado pelo aluno (GET 404): limpa o destino e cria de novo, contando como repo novo", async () => {
+    const { db, projetos, pubs } = dbFalso({ repoFullName: "aluno/confeitaria", repoCriadoPeloOcta: true, pagesUrl: "https://aluno.github.io/confeitaria/" });
+    const { octokit, chamadas } = octoFalso(); // não existe mais
+    const r = await publicarProjeto(deps(db, octokit), P);
+    expect(r).toMatchObject({ ok: true, repoUrl: "https://github.com/aluno/confeitaria" });
+    expect(chamadas.find((c) => c.rota === "POST /user/repos")!.params.name).toBe("confeitaria");
+    expect(projetos[0]).toMatchObject({ repoFullName: "aluno/confeitaria", repoCriadoPeloOcta: true });
+    expect(pubs[0]).toMatchObject({ ok: true, repoNovo: true });
+  });
+
+  it("repo do Octa apagado e já 3 repos novos hoje: limite_repos, destino limpo, nenhuma escrita", async () => {
+    const { db, projetos } = dbFalso({ repoFullName: "aluno/confeitaria", repoCriadoPeloOcta: true, pagesUrl: "https://aluno.github.io/confeitaria/" }, [hoje(true, true), hoje(true, true), hoje(true, true)]);
+    const { octokit, chamadas } = octoFalso();
+    expect(await publicarProjeto(deps(db, octokit), P)).toEqual({ ok: false, erro: "limite_repos" });
+    expect(escritas(chamadas)).toHaveLength(0);
+    expect(projetos[0]).toMatchObject({ repoFullName: null, repoCriadoPeloOcta: false, pagesUrl: null });
+  });
+
+  it("repo do Octa com outro erro no GET (500): falha_github, destino mantido", async () => {
+    const { db, projetos } = dbFalso({ repoFullName: "aluno/confeitaria", repoCriadoPeloOcta: true });
+    const { octokit, chamadas } = octoFalso({ falhar: (rota) => (rota === "GET /repos/{owner}/{repo}" ? Object.assign(new Error("boom"), { status: 500 }) : null) });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(await publicarProjeto(deps(db, octokit), P)).toEqual({ ok: false, erro: "falha_github" });
+    expect(chamadas.some((c) => c.rota === "POST /user/repos")).toBe(false);
+    expect(projetos[0].repoFullName).toBe("aluno/confeitaria");
+  });
+
+  it("anti-marca: .html publicado com o nome da marca do estilo → marca_no_conteudo com só a palavra, zero GitHub", async () => {
+    const design = "<!-- zaeon-estilo: linear.app -->\n# Design System Inspired by Linear\n";
+    const { db, pubs } = dbFalso({ arquivos: { "DESIGN.md": design, "index.html": "<html><body><h1>Feito no estilo Linear</h1></body></html>", "styles.css": "a{background:linear-gradient(red,blue)}" } });
+    const { octokit, chamadas } = octoFalso();
+    const fabrica = vi.fn(async () => octokit);
+    const r = await publicarProjeto({ db, octokitDoAluno: fabrica, agora: () => AGORA }, P);
+    expect(r).toEqual({ ok: false, erro: "marca_no_conteudo", palavra: "Linear" });
+    expect(fabrica).not.toHaveBeenCalled();
+    expect(chamadas).toHaveLength(0);
+    expect(pubs).toHaveLength(0);
+  });
+
+  it("anti-marca usa os aliases e varre todo .html (sub-pasta); CSS com linear-gradient e estilo sem marcador passam", async () => {
+    const verge = "<!-- zaeon-estilo: theverge -->\n# x\n";
+    const { db } = dbFalso({ arquivos: { "DESIGN.md": verge, "index.html": "<h1>oi</h1>", "blog/post.html": "<body><p>como no TheVerge</p></body>" } });
+    expect(await publicarProjeto(deps(db, octoFalso().octokit), P)).toEqual({ ok: false, erro: "marca_no_conteudo", palavra: "TheVerge" });
+
+    const ok = dbFalso({ arquivos: { "DESIGN.md": "<!-- zaeon-estilo: linear.app -->\n# x\n", "index.html": "<body><p>cresce linearmente</p></body>", "styles.css": "a{background:linear-gradient(red,blue)}" } });
+    expect(await publicarProjeto(deps(ok.db, octoFalso().octokit), P)).toMatchObject({ ok: true });
+    const semMarcador = dbFalso({ arquivos: { "DESIGN.md": "# meu estilo\n", "index.html": "<body>Linear</body>" } });
+    expect(await publicarProjeto(deps(semMarcador.db, octoFalso().octokit), P)).toMatchObject({ ok: true });
+  });
+
   it("republicar sem um arquivo: o segundo commit apaga o que saiu do projeto", async () => {
     const { db, projetos } = dbFalso({ arquivos: { "index.html": "<h1>oi</h1>", "a.css": "h1{}" } });
     const { octokit, chamadas, arvores } = octoFalso();

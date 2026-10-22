@@ -3,7 +3,7 @@
  * (lib/octa/publicar). Corpo opcional: `{ mensagem }` (texto do commit). Dono e email vêm da SESSÃO.
  *
  * 200 `{ ok:true, repoUrl, pagesUrl, status, ignorados }` · 404 projeto de outro dono/inexistente ·
- * 409/429/502 `{ ok:false, erro }` com o código fixo de publicarProjeto (a IDE traduz). Nunca devolve token
+ * 409/429/502 `{ ok:false, erro }` (+ `palavra` em marca_no_conteudo) com o código fixo de publicarProjeto (a IDE traduz). Nunca devolve token
  * nem mensagem crua do GitHub — publicarProjeto já fecha isso.
  */
 import { NextResponse } from "next/server";
@@ -27,6 +27,7 @@ const STATUS: Record<Exclude<ErroPublicar, "projeto_inexistente">, number> = {
   limite_publicacoes: 429,
   limite_repos: 429,
   falha_github: 502,
+  marca_no_conteudo: 409,
 };
 
 export async function POST(req: Request, { params }: Ctx) {
@@ -46,5 +47,7 @@ export async function POST(req: Request, { params }: Ctx) {
   );
   if (r.ok) return NextResponse.json(r);
   if (r.erro === "projeto_inexistente") return NextResponse.json({ error: "Projeto não encontrado" }, { status: 404 });
-  return NextResponse.json({ ok: false, erro: r.erro }, { status: STATUS[r.erro] ?? 502 });
+  // marca_no_conteudo leva só a palavra (a IDE diz ao aluno o que editar)
+  const extra = r.erro === "marca_no_conteudo" ? { palavra: r.palavra } : {};
+  return NextResponse.json({ ok: false, erro: r.erro, ...extra }, { status: STATUS[r.erro] ?? 502 });
 }

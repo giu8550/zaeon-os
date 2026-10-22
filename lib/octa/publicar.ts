@@ -8,6 +8,10 @@
  *   (inclusive o README.md do auto_init), senão arquivo apagado continuaria no site público.
  * - Só caminhos de site estático vão para o GitHub (caminhoPublicavel): nada de `.github/workflows`,
  *   dotfiles, `..` ou extensão fora da lista. Os pulados voltam em `ignorados` (só os caminhos).
+ * - Regra anti-marca: nenhum .html publicado menciona a marca de origem do estilo do projeto (marca + aliases,
+ *   pelo marcador zaeon-estilo do DESIGN.md) — vale pro botão Publicar da IDE e pra tool octa_publicar.
+ *   Devolve `marca_no_conteudo` + só a palavra; nada do conteúdo.
+ * - Repo do Octa apagado pelo aluno (GET 404): o destino é limpo e o caminho é o de repo novo (conta no limite).
  * - Limites por aluno por dia (LIMITES); publicação que falha não conta.
  * - O token do aluno só existe dentro do octokit que `octokitDoAluno` devolve. Nada daqui o lê;
  *   erro do GitHub vira um código fixo e o log leva só o status HTTP — a mensagem/objeto do erro
@@ -15,6 +19,8 @@
  */
 import { lerProjeto, contarPublicacoesHoje, gravarDestinoPublicado, registrarPublicacao, type ProjetosDb } from "./projetos";
 import { createRepo, commitChanges, habilitarPages, readRepoTree, repoExiste } from "@/lib/projects/github-service";
+import { estiloDoProjeto, palavrasDaMarca } from "./design/indice";
+import { marcaMencionada } from "./secoes/render";
 
 type AnyOctokit = any;
 
@@ -25,11 +31,13 @@ const MAX_TENTATIVAS_NOME = 20; // slug, slug-2 … slug-20
 
 export type ErroPublicar =
   | "github_reconectar" | "limite_publicacoes" | "limite_repos" | "aviso_publico_pendente" | "falha_github"
-  | "projeto_inexistente" | "sem_arquivos_publicaveis";
+  | "projeto_inexistente" | "sem_arquivos_publicaveis" | "marca_no_conteudo";
 
 export type ResultadoPublicar =
   | { ok: true; repoUrl: string; pagesUrl: string; status: "publicando" | "no_ar"; ignorados: string[] }
-  | { ok: false; erro: ErroPublicar };
+  | { ok: false; erro: Exclude<ErroPublicar, "marca_no_conteudo"> }
+  /** `palavra` = a forma do nome da marca que apareceu (só ela). */
+  | { ok: false; erro: "marca_no_conteudo"; palavra: string };
 
 export type DepsPublicar = {
   db: ProjetosDb;
@@ -101,8 +109,17 @@ export async function publicarProjeto(
   }
   if (!files.length) return { ok: false, erro: "sem_arquivos_publicaveis" };
 
+  const marcas = palavrasDaMarca(estiloDoProjeto(projeto.arquivos)?.estilo);
+  if (marcas.length) {
+    for (const f of files) {
+      if (!/\.html?$/i.test(f.path)) continue;
+      const palavra = marcaMencionada(f.content, marcas);
+      if (palavra) return { ok: false, erro: "marca_no_conteudo", palavra };
+    }
+  }
+
   // só o repositório que o próprio Octa criou para este projeto é reaproveitado
-  const repoDoOcta = projeto.repoCriadoPeloOcta && projeto.repoFullName ? projeto.repoFullName : null;
+  let repoDoOcta = projeto.repoCriadoPeloOcta && projeto.repoFullName ? projeto.repoFullName : null;
   const hoje = await contarPublicacoesHoje(db, p.userId, agora);
   if (hoje.publicacoes >= LIMITES.publicacoesDia) return { ok: false, erro: "limite_publicacoes" };
   if (!repoDoOcta && hoje.reposNovos >= LIMITES.reposNovosDia) return { ok: false, erro: "limite_repos" };
@@ -115,10 +132,22 @@ export async function publicarProjeto(
   try {
     let fullName: string;
     let branch: string;
+    let existente: { branch: string } | null = null;
     if (repoDoOcta) {
+      const [owner, repo] = repoDoOcta.split("/");
+      try {
+        existente = { branch: (await octokit.request("GET /repos/{owner}/{repo}", { owner, repo })).data?.default_branch || "main" };
+      } catch (e) {
+        if (statusHttp(e) !== 404) throw e;
+        // o aluno apagou o repo: esquece o destino e segue como projeto novo (o nome livre é procurado de novo)
+        await gravarDestinoPublicado(db, p.userId, projeto.id, { repoFullName: null, repoCriadoPeloOcta: false, pagesUrl: null });
+        repoDoOcta = null;
+        if (hoje.reposNovos >= LIMITES.reposNovosDia) return { ok: false, erro: "limite_repos" };
+      }
+    }
+    if (repoDoOcta && existente) {
       fullName = repoDoOcta;
-      const [owner, repo] = fullName.split("/");
-      branch = (await octokit.request("GET /repos/{owner}/{repo}", { owner, repo })).data?.default_branch || "main";
+      branch = existente.branch;
     } else {
       ({ fullName, branch } = await criarRepoLivre(octokit, projeto.slug));
       repoNovo = true;

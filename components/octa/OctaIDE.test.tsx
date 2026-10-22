@@ -127,6 +127,17 @@ describe("OctaIDE · modo projeto", () => {
     expect(screen.queryByText(AVISO_PUBLICO)).toBeNull();
   });
 
+  it("Publicar barrado pela regra anti-marca: diz em português qual palavra editar", async () => {
+    projeto.avisoPublicoAceito = true;
+    extra = (u) => (u === `/api/octa/projetos/${ID}/publicar` ? json({ ok: false, erro: "marca_no_conteudo", palavra: "Nintendo" }, 409) : undefined);
+    render(<OctaIDE />);
+    await screen.findByText("ana-dev");
+    fireEvent.click(screen.getByRole("button", { name: /Publicar/ }));
+    const alerta = await screen.findByRole("alert");
+    expect(alerta.textContent).toMatch(/“Nintendo”/);
+    expect(alerta.textContent).toMatch(/troque|edite/i);
+  });
+
   it("trocar a permissão grava no projeto (PATCH permissao)", async () => {
     render(<OctaIDE />);
     await screen.findByText("Confeitaria da Ana");

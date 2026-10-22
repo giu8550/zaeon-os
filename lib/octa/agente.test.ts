@@ -180,12 +180,13 @@ describe("octa · agente (fluxo landing)", () => {
     expect(toolMsgs(m)[0]).toMatch(/conectar o GitHub/);
   });
 
-  it("a marca do estilo no index.html faz octa_publicar recusar com marca_no_conteudo, sem publicar", async () => {
-    const pub = vi.fn(async () => OK_PUB);
+  it("publicarProjeto recusando por marca (marca_no_conteudo + palavra) vira recusa que nomeia a palavra pro modelo", async () => {
+    // a checagem mora em publicarProjeto (a mesma do botão Publicar); a tool só repassa a palavra
+    const pub = vi.fn(async (): Promise<ResultadoPublicar> => ({ ok: false, erro: "marca_no_conteudo", palavra: "Linear" }));
     const ws = { "DESIGN.md": designDe("linear.app"), "index.html": "<!doctype html><html><head><title>Padaria</title></head><body><p>feito no estilo Linear</p></body></html>" };
     const m = roteiro([{ content: null, tool_calls: [call("1", "octa_publicar", {})] }, { content: "ok" }]);
     const r = await rodarAgenteOcta(landing({ workspace: ws }), m, { sessionId: "l8", permissao: "auto", octaPublicar: pub });
-    expect(pub).not.toHaveBeenCalled();
+    expect(pub).toHaveBeenCalledTimes(1);
     expect(r.negados[0]).toEqual({ tool: "octa_publicar", motivo: "marca_no_conteudo" });
     expect(toolMsgs(m)[0]).toMatch(/a palavra \\"Linear\\"/);
   });

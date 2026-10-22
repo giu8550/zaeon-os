@@ -125,4 +125,12 @@ const ERROS_PUBLICAR: Record<string, string> = {
   projeto_inexistente: "Este projeto não existe mais no servidor.",
   sem_arquivos_publicaveis: "Ainda não há página para publicar: peça ao Octa para montar a landing (index.html).",
 };
-export const textoErroPublicar = (codigo: string) => ERROS_PUBLICAR[codigo] ?? "Não deu pra publicar agora. Tente de novo.";
+export const textoErroPublicar = (codigo: string, palavra?: string) => {
+  if (codigo === "marca_no_conteudo") {
+    const p = String(palavra ?? "").trim().slice(0, 60);
+    return p
+      ? `A página cita “${p}”, o nome da marca que inspirou o estilo. Edite o texto e troque “${p}” por outra palavra (ou peça ao Octa pra reescrever) e publique de novo.`
+      : "A página cita o nome da marca que inspirou o estilo. Edite o texto sem ele (ou peça ao Octa pra reescrever) e publique de novo.";
+  }
+  return ERROS_PUBLICAR[codigo] ?? "Não deu pra publicar agora. Tente de novo.";
+};

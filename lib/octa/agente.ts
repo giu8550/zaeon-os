@@ -23,7 +23,7 @@ import { custoDoRun, type Trace } from "@/lib/octa/trace";
 import { gerarPeca, verificarDeterminismo } from "@/lib/octa/genart";
 import { carregarIndice, candidatosPorDescricao, designMdComMarcador, estiloDoProjeto, palavrasDaMarca, type EstiloDesign } from "@/lib/octa/design/indice";
 import { extrairTokens } from "@/lib/octa/design/tokens";
-import { renderPagina, marcaMencionada, ErroMarca } from "@/lib/octa/secoes/render";
+import { renderPagina, ErroMarca } from "@/lib/octa/secoes/render";
 import { validarSecoes, TIPOS_SECAO } from "@/lib/octa/secoes/tipos";
 import { precisaAprovacao } from "@/lib/octa/permissao";
 import type { PermissaoOcta } from "@/lib/octa/projetos";
@@ -133,6 +133,7 @@ const INSTRUCAO_PUBLICAR: Record<ErroPublicar, string> = {
   falha_github: "O GitHub falhou agora; avise o aluno e sugira tentar de novo em alguns minutos.",
   projeto_inexistente: "Este projeto não está salvo no servidor; peça ao aluno para salvar o projeto antes de publicar.",
   sem_arquivos_publicaveis: "Não há arquivos de site para publicar (index.html, .css…); monte a página antes.",
+  marca_no_conteudo: "A página menciona o nome da marca de origem do estilo; reescreva o texto sem ele e tente de novo.",
 };
 
 const recusaMarca = (palavra: string, onde: string) =>
@@ -209,15 +210,12 @@ export const FERRAMENTAS_LANDING: ToolDef[] = [
       const publicar = (ctx as CtxOcta).octaPublicar;
       if (!publicar) return err("publicação indisponível neste turno", "sem_publicador");
       const w = ws(ctx);
-      const marcas = palavrasDaMarca(designDoWorkspace(w)?.estilo);
-      for (const [p, c] of Object.entries(w)) {
-        const palavra = /\.html?$/i.test(p) ? marcaMencionada(c, marcas) : null;
-        if (palavra) return recusaMarca(palavra, `em ${p}`);
-      }
       const mensagem = typeof a?.mensagem === "string" && a.mensagem.trim() ? a.mensagem.trim().slice(0, 200) : undefined;
       // DESIGN.md (marca de origem + marcador) nunca sai do Octa; caminhoPublicavel é a 2ª barreira
       const arquivos = Object.fromEntries(Object.entries(w).filter(([p]) => p.split("/").pop()?.toLowerCase() !== "design.md"));
       const r = await publicar({ arquivos, mensagem });
+      // a regra anti-marca mora em publicarProjeto (vale também pro botão Publicar da IDE)
+      if (!r.ok && r.erro === "marca_no_conteudo") return recusaMarca(r.palavra, "na página publicada");
       if (!r.ok) return err(INSTRUCAO_PUBLICAR[r.erro] ?? "a publicação falhou; avise o aluno.", r.erro);
       const quando = r.status === "publicando" ? "no ar em ~1 min" : "no ar";
       const pulados = r.ignorados.length ? ` Não publicados (não são arquivos de site): ${r.ignorados.slice(0, 20).join(", ")}.` : "";

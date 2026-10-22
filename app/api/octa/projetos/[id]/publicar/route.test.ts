@@ -63,4 +63,11 @@ describe("POST /api/octa/projetos/[id]/publicar", () => {
       expect(await r.json()).toEqual({ ok: false, erro });
     }
   });
+
+  it("marca_no_conteudo → 409 { ok:false, erro, palavra } (só a palavra, pra IDE dizer o que editar)", async () => {
+    m.publicar.mockResolvedValueOnce({ ok: false, erro: "marca_no_conteudo", palavra: "Nintendo" });
+    const r = await POST(post(), ctx);
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({ ok: false, erro: "marca_no_conteudo", palavra: "Nintendo" });
+  });
 });

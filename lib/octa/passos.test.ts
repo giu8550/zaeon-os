@@ -69,6 +69,10 @@ describe("textos fixos", () => {
     }
     expect(textoErroPublicar("limite_publicacoes")).toMatch(/10/);
     expect(textoErroPublicar("limite_repos")).toMatch(/3/);
+    // anti-marca: diz qual palavra editar
+    expect(textoErroPublicar("marca_no_conteudo", "Nintendo")).toMatch(/“Nintendo”/);
+    expect(textoErroPublicar("marca_no_conteudo", "Nintendo")).toMatch(/troque|edite/i);
+    expect(textoErroPublicar("marca_no_conteudo")).not.toBe(textoErroPublicar("???"));
     for (const c of ["falha_modelo", "budget", "projeto_inexistente", "tempo_esgotado"]) expect(textoErroTurno(c)).not.toBe(textoErroTurno("???"));
   });
 });
