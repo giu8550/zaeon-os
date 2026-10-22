@@ -279,6 +279,29 @@ describe.skipIf(!banco)("baseParaTurno — Postgres real", () => {
     expect(r).toEqual({ status: "sem_trecho", trechos: [] });
   });
 
+  it("logo depois do upload (trecho sem vetor, embed fora): pergunta em frase acha; sem relação não vira fonte", async () => {
+    const db = banco!.db;
+    await semear(db, permDono("u1", "hP"), [{
+      texto: "- Capitulo 2 - Membrana plasmatica e transporte entre os meios.\n\n" +
+        "A celula e a unidade basica da vida. Esta apostila apresenta a celula e suas organelas.",
+    }]);
+    const deps = {
+      prisma: prismaDuble({}),
+      busca: () => ({ db, embed: async () => { throw new Error("embed fora"); }, contar: (e: Parameters<BuscaDeps["contar"]>[0]) => contarBase(db, e) }),
+    };
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const r = await baseParaTurno({ userId: "u1", pergunta: "Segundo a minha apostila, do que trata o Capitulo 2?" }, deps);
+      expect(r.status).toBe("ok");
+      expect(r.trechos.map((t) => [t.titulo, t.porTexto, t.similaridade])).toEqual([["Pessoal hP", true, null]]);
+      for (const pergunta of ["quem descobriu a penicilina?", "Segundo a apostila, quem descobriu a penicilina?"]) {
+        expect(await baseParaTurno({ userId: "u1", pergunta }, deps)).toEqual({ status: "sem_trecho", trechos: [] });
+      }
+    } finally {
+      aviso.mockRestore();
+    }
+  });
+
   it("corte via deps.corte e via RAG_CORTE_SIMILARIDADE", async () => {
     const db = banco!.db;
     await semear(db, permTurma("tA", "hA"), [{ texto: "mitocôndria produz energia", vetor: onehot(0) }]);

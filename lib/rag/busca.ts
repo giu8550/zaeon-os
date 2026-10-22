@@ -1,8 +1,9 @@
 /**
  * lib/rag/busca.ts — busca híbrida (vetor + texto) na base RAG, com a PERMISSÃO dentro do filtro.
  *
- * Postgres + pgvector, uma query só: CTE `vet` (HNSW cosseno sobre `embedding`) e CTE `txt` (`tsv @@
- * websearch_to_tsquery('rag_pt', ...)`, ordenado por `ts_rank_cd`), fundidas por RRF (`sum(1/(60+rank))`).
+ * Postgres + pgvector, uma query só: CTE `vet` (HNSW cosseno sobre `embedding`) e CTE `txt` (OR dos lexemas
+ * `rag_pt` da pergunta, só trecho com a maioria dos de conteúdo, ordenado por `ts_rank_cd`), fundidas por RRF
+ * (`sum(1/(60+rank))`).
  * A permissão (`turma_ids && turmas OR dono_ids @> ARRAY[usuário]`) vai no WHERE DOS DOIS ramos (nunca depois); em
  * cima disso o resultado ainda passa por `podeVer` (cinto + suspensório). Valores sempre por parâmetro.
  *
@@ -20,6 +21,18 @@ const PRAZO_EMBED_PADRAO_MS = 3000;
 const CANDIDATOS_POR_K = 4;
 /** Constante do RRF. */
 const RRF_K = 60;
+/**
+ * Palavras de quem PERGUNTA sobre o material (mais stopwords que o `unaccent` solta: "são" vira "sao", que a lista do
+ * stemmer não tem). Não contam como conteúdo no ramo texto: "segundo a apostila, quem descobriu a penicilina?" não acha
+ * trecho só porque ele diz "apostila". Passam por `to_tsvector('rag_pt', ...)` no SQL (mesmo stemming dos trechos).
+ */
+export const PALAVRAS_DE_PERGUNTA = [
+  "apostila", "material", "materia", "texto", "livro", "documento", "arquivo", "pdf", "slide", "slides", "aula",
+  "professor", "professora", "pagina", "conteudo", "assunto", "tema", "resumo", "resuma", "resumir", "explique",
+  "explica", "explicar", "explicacao", "fala", "falar", "diz", "dizer", "diga", "trata", "tratar", "segundo",
+  "conforme", "sobre", "quais", "mostre", "cite", "defina", "significa", "significado", "favor", "onde",
+  "sao", "nao", "voce", "voces", "tambem", "entao", "ate", "ja", "la", "so",
+].join(" ");
 
 export type TrechoAchado = {
   trechoId: string;
@@ -80,11 +93,31 @@ export function montarSql(e: EscopoRag, pergunta: string, vetor: number[] | null
     uniao.push("SELECT id, rk, sim, false AS txt FROM vet");
   }
 
+  // Ramo texto: OR sobre os lexemas de conteúdo da pergunta (o AND do websearch_to_tsquery zerava pergunta em frase),
+  // mas só entra o trecho que tem a MAIORIA deles (`minimo`) — `porTexto` fura o corte cosseno no turno, então um
+  // "apostila" solto não vira fonte. Conteúdo = lexemas da pergunta menos os de PALAVRAS_DE_PERGUNTA; pergunta só com
+  // essas ⇒ exige todas (o AND de antes). Casados = length(tsv) − length(ts_delete(tsv, base)). Lexema vai entre
+  // aspas na tsquery (aspa e barra escapadas), sem passar de novo pelo dicionário.
+  const mp = p(PALAVRAS_DE_PERGUNTA);
+  ctes.push(`lex AS (
+      SELECT todos, ARRAY(SELECT unnest(todos) EXCEPT SELECT unnest(meta)) AS cont
+        FROM (SELECT tsvector_to_array(to_tsvector('rag_pt', ${q})) AS todos,
+                     tsvector_to_array(to_tsvector('rag_pt', ${mp})) AS meta) x
+    )`);
+  ctes.push(`tq AS (
+      SELECT b.base,
+             CASE WHEN cardinality(lex.cont) > 0 THEN cardinality(b.base) / 2 + 1 ELSE cardinality(b.base) END AS minimo,
+             NULLIF(array_to_string(ARRAY(
+               SELECT '''' || replace(replace(l, '\\', '\\\\'), '''', '''''') || '''' FROM unnest(b.base) l
+             ), ' | '), '')::tsquery AS q
+        FROM lex, LATERAL (SELECT CASE WHEN cardinality(lex.cont) > 0 THEN lex.cont ELSE lex.todos END AS base) b
+    )`);
   ctes.push(`txt AS (
       SELECT id, row_number() OVER (ORDER BY rnk DESC, id) AS rk
         FROM (SELECT id, ts_rank_cd(tsv, tq.q) AS rnk
-                FROM rag_trechos, (SELECT websearch_to_tsquery('rag_pt', ${q}) AS q) tq
+                FROM rag_trechos, tq
                WHERE tsv @@ tq.q AND ${perm}
+                 AND length(tsv) - length(ts_delete(tsv, tq.base)) >= tq.minimo
                ORDER BY rnk DESC, id
                LIMIT ${cand}::int) s
     )`);
