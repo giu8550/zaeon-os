@@ -447,6 +447,19 @@ export function solidosDoComplexo(): { x: number; z: number; r: number; topo: nu
     { x: PIRAMIDE.x, z: PIRAMIDE.z, r: PIRAMIDE.meia * 1.05, topo: -SALAO.desce + PIRAMIDE.alt * 0.75, base: -SALAO.desce },
     { x: TEMPLO_RASTA.x, z: TEMPLO_RASTA.z, r: CAPELA_RASTA.r + 1, topo: TEMPLO_RASTA.h + CAPELA_RASTA.altura + 12, base: TEMPLO_RASTA.h + CAPELA_RASTA.altura - 1 },   // (o teto: por baixo dele, a capela é aberta)
     { x: TORRE_RASTA.x, z: TORRE_RASTA.z, r: TORRE_RASTA.r + 0.5, topo: FESTAS.h + TORRE_RASTA.alt, base: FESTAS.h },
+    // (out/2026, o dono: "não queremos atravessar texturas" — o que faltava pra quem VOA, de moto ou de mochila)
+    // o salão de FESTAS: os pilares e a cobertura em anel (o meio fica aberto: a tela é luz)
+    ...PILARES_FESTAS.map((p) => ({ x: p.x, z: p.z, r: 0.75, topo: FESTAS.h + 14, base: FESTAS.h })),
+    ...Array.from({ length: 40 }, (_, i) => { const a = (i / 40) * Math.PI * 2; return { x: FESTAS.x + Math.cos(a) * (FESTAS.r - 3), z: FESTAS.z + Math.sin(a) * (FESTAS.r - 3), r: 1.9, topo: FESTAS.h + 16, base: FESTAS.h + 13 }; }),
+    // a CÚPULA dos casais: a parede de vidro (menos a porta) e o domo por cima
+    ...(() => { const abs = aberturasDe(plat("casais")), rr = CASAIS.r - 1, out: { x: number; z: number; r: number; topo: number; base: number }[] = [];
+      for (let a = 0; a < Math.PI * 2; a += 0.5 / rr) if (!abs.some((ab) => dentroDe(a, { ang: ab.ang, meia: ab.meia + 0.05 }))) out.push({ x: CASAIS.x + Math.cos(a) * rr, z: CASAIS.z + Math.sin(a) * rr, r: 0.6, topo: CASAIS.h + 7, base: CASAIS.h - 0.5 });
+      out.push({ x: CASAIS.x, z: CASAIS.z, r: rr, topo: CASAIS.h + rr + 0.5, base: CASAIS.h + 6 });
+      return out; })(),
+    // as CABINES do campus e as do deck/mirante da torre (mesa, monitor e painéis — quem passa voando baixo bate)
+    ...ESTACOES_TI.map((e) => ({ ...daCabineTI(e, 0, 0.2), r: 1.7, topo: -SALAO.desce + 2.4, base: -SALAO.desce })),
+    ...CABINES_TORRE.map((c) => ({ ...daCabineTI(c, 0, 0.2), r: 1.7, topo: c.y + 2.4, base: c.y })),
+    ...RACKS_TI.map((r) => ({ x: r.x, z: r.z, r: 1.2, topo: -SALAO.desce + 2.6, base: -SALAO.desce })),
     { x: RASTA.x, z: RASTA.z, r: ARVORE_RASTA.r, topo: ARVORE_RASTA.alt, base: 0 },
     { x: CYBER.x, z: CYBER.z, r: CUBO_CYBER.meia * 1.15, topo: CYBER.h + CUBO_CYBER.alt, base: CYBER.h },   // (o cubo, do tamanho do desenhado)
     { x: TORRE_TI.x, z: TORRE_TI.z, r: TORRE_TI.colR + 1, topo: CYBER.h, base: -SALAO.desce },
