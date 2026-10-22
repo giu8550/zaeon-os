@@ -42,6 +42,16 @@ export async function register() {
       const { ligarMemoriaOpcional } = await import("./instrumentation-node");
       await ligarMemoriaOpcional();
     }
+    // Dataset de 👍/👎 no Hugging Face (lib/hf/exportarFeedback): com HF_DATASETS_TOKEN + HF_DATASETS_ORG, sobe os votos
+    // novos a cada 6 h (1ª vez 10 min depois do boot). FEEDBACK_DATASET=0 desliga. Erro só vira log.
+    if (process.env.HF_DATASETS_TOKEN && process.env.HF_DATASETS_ORG && process.env.FEEDBACK_DATASET !== "0") {
+      const rodar = () => import("./lib/hf/exportarFeedback")
+        .then((m) => m.exportarFeedback())
+        .then((r) => { if (r.exportados || (r.erro && r.erro !== "desligado")) console.log("[hf-dataset] feedback:", JSON.stringify(r)); })
+        .catch((e) => console.warn("[hf-dataset] feedback falhou:", e?.message || String(e)));
+      setTimeout(rodar, 10 * 60_000);
+      setInterval(rodar, 6 * 60 * 60_000);
+    }
     if (process.env.SCHOLAR_WORKER === "1") {
       const { iniciarWorkers } = await import("./instrumentation-node");
       await iniciarWorkers();

@@ -79,6 +79,7 @@ import { typeStep, safeCut } from "@/lib/ui/typewriter";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
 import { esperarTurno } from "@/lib/chat/turnoRetomavel";
 import { pedirAura } from "@/lib/chat/auraClient";
+import { EVT_FEEDBACK } from "@/lib/chat/feedback";
 import { SeletorModelo, SeloModelo, useModeloEscolhido } from "@/components/chat/SeletorModelo";
 import { criarEstudo, gerarArtefato } from "@/lib/studio/studioClient";
 import type { SkillNodeState } from "@/lib/skilltree/types";
@@ -353,6 +354,24 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   }, []);
   const msgsRef = useRef<Msg[]>([]);
   msgsRef.current = messages;
+  // 👍/👎 → servidor (lib/chat/feedbackDataset): pergunta + resposta + quem respondeu, anonimizados lá; vira o
+  // dataset de qualidade no Hugging Face. Best-effort: o voto continua no aparelho como antes.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const { msgId, voto } = (e as CustomEvent<{ msgId: string; voto: "up" | "down" | null }>).detail ?? ({} as any);
+      const msgs = msgsRef.current;
+      const i = msgs.findIndex((m) => m.id === msgId);
+      if (i < 0 || msgs[i].role !== "assistant") return;
+      let pergunta = "";
+      for (let j = i - 1; j >= 0; j--) if (msgs[j].role === "user") { pergunta = msgs[j].text ?? ""; break; }
+      void fetch("/api/chat/feedback", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ msgId, voto, pergunta, resposta: textoParaHistorico(msgs[i]), modelo: msgs[i].modelo, sala: modoPesquisaRef.current ? "pesquisa" : "estudos" }),
+      }).catch(() => {});
+    };
+    window.addEventListener(EVT_FEEDBACK, on);
+    return () => window.removeEventListener(EVT_FEEDBACK, on);
+  }, []);
 
   // ── carga inicial ──────────────────────────────────────────────────────────
   useEffect(() => {
