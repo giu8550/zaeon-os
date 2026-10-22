@@ -3,8 +3,9 @@
  * PURO (cliente e servidor importam): o route só aceita ids daqui — nunca um nome de modelo solto do cliente.
  *
  * Google: o harness inteiro (plano → raciocínio → resposta estruturada, botões de harness, artefatos).
- * Zaeon (local, CPU na Contabo): um caminho ENXUTO — uma chamada, resposta em streaming, contexto curto
- * (lib/agent/turnoLocal). Mais lento (lê ~20–26 tok/s), mas é nosso e o dado não sai da nossa máquina.
+ * Zaeon (local, CPU na Contabo): FORA do seletor desde 2026-10-22 — o dono testou o Qwen3 30B no chat e achou
+ * lento e pesado demais pra resposta; ele foi pros artefatos em segundo plano (lib/llm/papeis "artefato").
+ * O caminho enxuto (lib/agent/turnoLocal) segue no runChatTurn: volta a valer se um modelo "zaeon" entrar aqui.
  * Testado em 2026-10-22: no `global` do projeto respondem 3.5-flash, 3.5-flash-lite e 2.5-pro (3.x-pro = 404).
  */
 export type ProvedorModelo = "google" | "zaeon";
@@ -27,7 +28,6 @@ export const MODELOS_CHAT: readonly ModeloChat[] = [
   { id: "gemini-3.5-flash", nome: "Gemini 3.5 Flash", simbolo: "✦", provedor: "google", descricao: "Padrão · equilibrado", vertex: "gemini-3.5-flash" },
   { id: "gemini-3.5-flash-lite", nome: "Gemini 3.5 Flash-Lite", simbolo: "✦", provedor: "google", descricao: "Mais rápido · respostas mais simples", vertex: "gemini-3.5-flash-lite" },
   { id: "gemini-2.5-pro", nome: "Gemini 2.5 Pro", simbolo: "✦", provedor: "google", descricao: "Raciocínio mais forte · um pouco mais lento", vertex: "gemini-2.5-pro" },
-  { id: "zaeon-qwen30", nome: "Qwen3 30B", simbolo: "⬢", provedor: "zaeon", descricao: "Local · servidor Zaeon · mais lento, dado não sai", grupo: "zaeon-local-qwen30" },
 ];
 
 export const MODELO_PADRAO = MODELOS_CHAT[0].id;

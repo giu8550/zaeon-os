@@ -77,13 +77,13 @@ model_list:
   # CPU = lento (6–9 tok/s; carregar modelo frio leva até ~100 s): timeout próprio de 300 s, e NÃO
   # entram em fallback de nada — quem chama escolhe pelo nome, pra trabalho em que esperar não dói.
   # model_info.id começa com "contabo": o ledger (lib/llm/pool alvoDe) grava alvo "contabo", custo 0.
-  - model_name: zaeon-local-geral          # gpt-oss-20b — tarefas gerais de bastidor (fica carregado 24h)
+  - model_name: zaeon-local-lfm2           # LFM2-8B-A1B — o modelo local de texto (papéis curto e artefato), 2026-10-22
     litellm_params:
-      model: litellm_proxy/gpt-oss-20b
+      model: litellm_proxy/lfm2-8b
       api_base: os.environ/CONTABO_LLM_URL
       api_key: os.environ/CONTABO_LLM_KEY
       timeout: 300
-    model_info: { id: contabo-geral }
+    model_info: { id: contabo-lfm2 }
   - model_name: zaeon-local-coder          # qwen3-coder 30B — código (Octa, entrega depois)
     litellm_params:
       model: litellm_proxy/qwen3-coder
@@ -91,27 +91,6 @@ model_list:
       api_key: os.environ/CONTABO_LLM_KEY
       timeout: 300
     model_info: { id: contabo-coder }
-  - model_name: zaeon-local-mini           # qwen3 4B — classificar/extrair coisa curta
-    litellm_params:
-      model: litellm_proxy/qwen3-4b
-      api_base: os.environ/CONTABO_LLM_URL
-      api_key: os.environ/CONTABO_LLM_KEY
-      timeout: 300
-    model_info: { id: contabo-mini }
-  - model_name: zaeon-local-qwen30         # qwen3 30B-A3B instruct — papel "curto" (gatekeeper/juiz), 2026-10-22
-    litellm_params:
-      model: litellm_proxy/qwen3-30b
-      api_base: os.environ/CONTABO_LLM_URL
-      api_key: os.environ/CONTABO_LLM_KEY
-      timeout: 300
-    model_info: { id: contabo-qwen30 }
-  - model_name: zaeon-local-guard          # llama-guard3 8B — moderação
-    litellm_params:
-      model: litellm_proxy/llama-guard
-      api_base: os.environ/CONTABO_LLM_URL
-      api_key: os.environ/CONTABO_LLM_KEY
-      timeout: 300
-    model_info: { id: contabo-guard }
   - model_name: zaeon-local-embed          # Qwen3-Embedding 0.6B (1024 dim) — busca do RAG
     litellm_params:
       model: litellm_proxy/qwen3-embed
