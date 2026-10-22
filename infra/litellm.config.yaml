@@ -8,9 +8,10 @@
 # `model_info.id` = nome do alvo: o LiteLLM devolve no header x-litellm-model-id → ledger.alvo (lib/llm/pool.ts alvoDe).
 # Sem GATEWAY_MASTER_KEY o LiteLLM não sobe — auth obrigatória por construção.
 model_list:
+  # zaeon-flash/zaeon-pro = o GEMINI_MODEL/GEMINI_MODEL_PRO de prod; lib/llm/envelope APELIDO_GATEWAY espelha esta tabela.
   - model_name: zaeon-flash
     litellm_params:
-      model: vertex_ai/gemini-2.5-flash
+      model: vertex_ai/gemini-3.5-flash
       vertex_project: os.environ/GOOGLE_PROJECT_ID
       vertex_location: os.environ/GEMINI_TEXT_LOCATION   # texto: "global" (ver docker-compose.beta.yml)
       vertex_credentials: os.environ/GOOGLE_CREDENTIALS
