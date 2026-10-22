@@ -7,6 +7,7 @@
  * preservando a entrega provada (lib/blueprint/compor). Escrita com o `rev` otimista, como o board de Meus Estudos.
  */
 import { papelDe, podeEscrever, type Papel } from "@/lib/cartolina/access";
+import { fasesAprovadas } from "./fases";
 import { COMPOR_SYSTEM, lerPlano, mesclarComposicao, promptComposicao } from "./compor";
 import { buscarRepos } from "./github";
 import { SURFACE_BLUEPRINT, blueprintOn, docVazio, sanitizarDoc, type Area, type DocBlueprint, type Fase } from "./tipos";
@@ -37,8 +38,6 @@ export type ResumoBlueprint = { id: string; titulo: string; area: Area; fase: Fa
 
 /** o documento de uma linha (o corrompido volta como um blueprint vazio com o título da linha — nunca lança) */
 export const docDaLinha = (l: Pick<Linha, "cards" | "titulo" | "createdAt">): DocBlueprint => sanitizarDoc(l.cards) ?? docVazio(l.titulo, l.createdAt.getTime());
-/** as fases aprovadas: as anteriores à atual (só avança aprovando) + a final, quando aguarda o mentor */
-export const fasesAprovadas = (d: Pick<DocBlueprint, "fase" | "aguardandoMentor">): number => d.fase - 1 + (d.aguardandoMentor ? 1 : 0);
 
 export function resumoDe(l: Linha): ResumoBlueprint {
   const d = docDaLinha(l);
