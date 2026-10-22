@@ -78,6 +78,7 @@ import { CAMERA_MOTO_PERTO } from "@/lib/cyber/camera";
 import { criarCarroHex, type CarroHandle } from "./CarroHex";
 import { definirNivel, NIVEIS_SEPARADOS, type IdNivel } from "@/lib/cyber/nivelAtivo";
 import { criarDetritos, type DetritosHandle } from "./DetritosBN";
+import { criarRaiosBN, type RaiosBNHandle } from "./RaiosBN";
 import { DETRITOS, baseDoTunel, empurraoDaBatida, inicioDaZona, naZona, novoAsteroide, passoAsteroide, puxaoDaZona, tamanhoDoCampo, vaiAcertar, type Asteroide } from "@/lib/cyber/detritos";
 import { CAPTURA, FIO as FIO_COSMICO, comecarTragada, fiosCosmicos, naAtracao, raioDeAtracao, naCaptura, progressoCaptura, passoTragada, pertoDoBuraco, posDaTragada, progressoTragada, saidaDaSala, type Tragada } from "@/lib/cyber/fiosCosmicos";
 import { nivelDoPonto, proximoNivel } from "@/lib/cyber/niveis";
@@ -2113,9 +2114,10 @@ export class CyberEngine {
     // o TREMOR: a câmera chacoalha (mais forte chegando)
     const a = 0.03 + 0.42 * k * k; this.cam.position.x += (Math.random() - 0.5) * a; this.cam.position.y += (Math.random() - 0.5) * a; this.cam.position.z += (Math.random() - 0.5) * a;
   }
-  // ───────────── a TRAVESSIA do buraco negro: as fachadas psicodélicas, os raios, os cacos e a tempestade ─────────────
-  private somTempestade: LoopSom | null = null; private proxRaioBN = 0; private estourouBN = false;
-  /** (components/cyber/TravessiaBN) cresce com a tragada; no horizonte os cacos estouram; depois do clarão, apaga */
+  // ───────────── a TRAVESSIA do buraco negro: os raios do horizonte e a tempestade ─────────────
+  private somTempestade: LoopSom | null = null; private proxRaioBN = 0; private estourouBN = false; private raiosBN: RaiosBNHandle | null = null;
+  /** cresce com a tragada: os RAIOS do horizonte (components/cyber/RaiosBN — cada vez mais seguidos), os trovões, a
+   *  tempestade; no horizonte, os estilhaços */
   private travessiaBN(dt: number, k: number) {
     const v = this.fio, s = this.som;
     if (v) {
@@ -2124,7 +2126,11 @@ export class CyberEngine {
       if (k < 0.05 && this.estourouBN) this.estourouBN = false;
       const ilhaY = this.cidade ? this.cidade.ilha.position.y : CIDADE.pisoY, b = v.f.bn, w = mundo(b);
       this.tmpBN.set(w.x, ilhaY + b.y, w.z); this.tmpEu.set(this.eu.pos.x, this.eu.alt + 1, this.eu.pos.z);
-      // os RAIOS: estalos e trovões cada vez mais seguidos
+      // os RAIOS do horizonte (o dono, out/2026: "mais raios no horizonte de eventos") — desde a captura, cada vez mais
+      if (!this.raiosBN) { this.raiosBN = criarRaiosBN({ low: this.o.low }); this.cena.scene.add(this.raiosBN.grupo); }
+      const kr = naCaptura(v) ? 0.25 * progressoCaptura(v) : 0.25 + 0.75 * k;
+      if (this.raiosBN.atualizar(dt, kr, this.tmpEu, this.tmpBN, b.r) && Math.random() < 0.5) s.tocar("raio", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 0.35 + 0.5 * kr });
+      // os estalos e trovões cada vez mais seguidos
       this.proxRaioBN -= dt;
       if (this.proxRaioBN <= 0) { this.proxRaioBN = 0.35 + Math.random() * 1.1 * (1 - 0.7 * k); s.tocar(Math.random() < 0.65 ? "raio" : "trovao", this.eu.av.group.position, { dist: DISTANCIA.eu, volume: 0.45 + 0.55 * k }); }
       if (k > 0.93 && !this.estourouBN) { this.estourouBN = true; s.tocar("estilhacos", this.eu.av.group.position, { dist: DISTANCIA.eu }); }
@@ -2132,6 +2138,7 @@ export class CyberEngine {
       s.volumeLoop(this.somTempestade, 0.35 + 0.65 * k, 3);
       return;
     }
+    this.raiosBN?.apagar();
     if (this.somTempestade) { s.volumeLoop(this.somTempestade, 0, 0.8); if (!this.clarao && !this.emergir) { s.soltarLoop(this.somTempestade); this.somTempestade = null; } }
   }
   private tmpBN = new THREE.Vector3(); private tmpEu = new THREE.Vector3();
@@ -2226,7 +2233,8 @@ export class CyberEngine {
     const dist = 15 - 6 * k, alto = 2.2 + 1.5 * (1 - k);
     const pos = { x: eu.x + dx * dist * 0.5 + sx * dist * 0.9, y: eu.y + alto + dy * dist * 0.3, z: eu.z + dz * dist * 0.5 + sz * dist * 0.9 };
     // (um pouco à frente de você, puxando pro buraco negro: você no quadro e ele atrás — 7× maior, ele não cabe mais)
-    let olhar = { x: eu.x - dx * 6 + (bn.x - eu.x) * 0.04, y: eu.y - dy * 6 + 0.3 + (bn.y - eu.y) * 0.04, z: eu.z - dz * 6 + (bn.z - eu.z) * 0.04 };
+    const puxa = Math.min(25, L * 0.012) / L;   // (no máximo 25 m rumo ao buraco negro: você não sai do quadro)
+    let olhar = { x: eu.x - dx * 6 + (bn.x - eu.x) * puxa, y: eu.y - dy * 6 + 0.3 + (bn.y - eu.y) * puxa, z: eu.z - dz * 6 + (bn.z - eu.z) * puxa };
     // a 1ª CUTSCENE (a captura, a entrada na zona de eventos): o plano ABERTO — bem atrás e de lado, alto, o buraco negro
     // gigante enchendo o quadro e você pequeno na frente dele; vai fechando no plano da espiral (a 2ª) no fim da captura
     if (naCaptura(v) || v.t < CAPTURA.dur + 3) {
@@ -2417,7 +2425,7 @@ export class CyberEngine {
     const D = this.distorcao, alvo = this.pertoDeBuracoNegro();
     D.k += (alvo - D.k) * 0.06;
     const cv = this.R.domElement;
-    if (D.k < 0.015 || this.o.low) { if (cv.style.filter) cv.style.filter = ""; return; }   // (no LEVE, sem filtro nenhum no canvas: o navegador recompõe a tela inteira a cada quadro)
+    if (D.k < 0.015 || (this.o.low && !this.fio)) { if (cv.style.filter) cv.style.filter = ""; return; }   // (no LEVE, só durante a tragada — é curta: o desfoque e as cores; sem a ondulação do SVG; fora dela, nenhum filtro no canvas: o navegador recompõe a tela inteira a cada quadro)
     if (!this.o.low && !D.svg) {
       const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg"); svg.setAttribute("width", "0"); svg.setAttribute("height", "0"); svg.style.position = "absolute";
       const fl = document.createElementNS(ns, "filter"); fl.id = "zaeon-bn-distorce"; fl.setAttribute("x", "-5%"); fl.setAttribute("y", "-5%"); fl.setAttribute("width", "110%"); fl.setAttribute("height", "110%");
@@ -2427,7 +2435,9 @@ export class CyberEngine {
     }
     const k = D.k, onda = Math.sin(t * 0.7);
     if (D.turb && D.desl) { D.turb.setAttribute("baseFrequency", `${(0.004 + 0.002 * Math.sin(t * 0.31)).toFixed(4)} ${(0.007 + 0.003 * Math.cos(t * 0.23)).toFixed(4)}`); D.desl.setAttribute("scale", (k * k * 46).toFixed(1)); }
-    cv.style.filter = `${D.svg ? "url(#zaeon-bn-distorce) " : ""}hue-rotate(${(k * 70 * onda).toFixed(1)}deg) saturate(${(1 + 1.3 * k).toFixed(2)}) contrast(${(1 + 0.18 * k).toFixed(2)})`;
+    // (no HORIZONTE DE EVENTOS — a tragada —, o DESFOQUE: a imagem derrete quanto mais perto do núcleo — o dono, out/2026)
+    const desfoque = this.fio ? (naCaptura(this.fio) ? 0.8 * progressoCaptura(this.fio) : 0.8 + 3.2 * progressoTragada(this.fio)) : 0;
+    cv.style.filter = `${D.svg ? "url(#zaeon-bn-distorce) " : ""}${desfoque > 0.05 ? `blur(${desfoque.toFixed(2)}px) ` : ""}hue-rotate(${(k * 70 * onda).toFixed(1)}deg) saturate(${(1 + 1.3 * k).toFixed(2)}) contrast(${(1 + 0.18 * k).toFixed(2)})`;
   }
   /** quanto um buraco negro está PERTO agora (0..1 — a distorção da tela e a tempestade) */
   private distorcaoAte = -Infinity; private static readonly DISTORCAO_NA_CHEGADA = 7;
@@ -4933,7 +4943,10 @@ export class CyberEngine {
     this.poolBases?.atualizar();
     // motos: de longe some a moto inteira (ninguém vê 2 m de moto a 1 km); a montada está sempre perto da câmera
     for (const m of this.vagaMotos) this.regiaoPerto(m.g, "moto");
-    for (const m of this.instMotos.values()) this.regiaoPerto(m.g, "moto");
+    // (a MINHA moto montada não entra no corte por nível: saindo do buraco negro, o arco passa por fora da área do nível
+    //  de destino e ela sumia — eu voando sem moto, o bug do dono, out/2026)
+    const minha = this.moto !== null ? this.instMotos.get("eu:r") : undefined;
+    for (const m of this.instMotos.values()) { if (m === minha) { if (this.regioes.has(m.g)) this.soltarRegiaoDe(m.g); continue; } this.regiaoPerto(m.g, "moto"); }
 
     this.atualizarCamera(dt);
     this.atmosferaTragada(dt);
