@@ -63,6 +63,7 @@ import { useCerebro } from "@/components/cerebro/useCerebro";
 import { AcoesPergunta, AcoesResposta, EdicaoPergunta } from "@/components/chat/MensagemAcoes";
 import { fonteChat } from "@/lib/ui/chatFontScale";
 import { AvisoSoltar, ChipAnexo, EVT_ANEXAR, pdfDaBiblioteca, useAnexoChat } from "@/components/chat/useAnexoChat";
+import { BarraBase } from "@/components/chat/MinhaBase";
 import DocumentDesktop from "@/app/research-lab/DocumentDesktop";
 import { useSavedCitations } from "@/lib/useSavedCitations";
 import type { LibraryFile } from "@/lib/useLibraryFiles";
@@ -240,10 +241,12 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const colunaRef = useRef<HTMLDivElement>(null);
   const sendRefA = useRef<(t: string) => void>(() => {});
   const focarComposer = () => requestAnimationFrame(() => colunaRef.current?.querySelector("textarea")?.focus({ preventScroll: true }));
-  const { anexo, anexoRef, tirar: tirarAnexo, anexarArquivos, anexarDaBiblioteca, soltar, arrastando } = useAnexoChat("estudos", {
+  const { anexo, anexoRef, tirar: tirarAnexo, anexarArquivos, anexarDaBiblioteca, soltar, arrastando, envios, versaoBase } = useAnexoChat("estudos", {
     focar: focarComposer,
     perguntar: (t) => sendRefA.current(t),
     aceitaBiblioteca: true,
+    // Minha base (RAG F3): a Aura confirma o lote guardado na conversa
+    aoGuardar: (texto) => setMessages((prev) => [...prev, { id: uid(), role: "assistant", kind: "text", text: texto, at: Date.now() }]),
   });
   // A BIBLIOTECA (o mesmo painel da Sala de Pesquisa): citações / pasta / ▶ conversar sobre um PDF
   const { citations: citacoesSalvas } = useSavedCitations();
@@ -1296,6 +1299,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
               onFiles={(f) => void anexarArquivos(f)}
               placeholder={anexo ? `Pergunte sobre ${anexo.nome}…` : ""}
             >
+              <BarraBase envios={envios} versao={versaoBase} />
               {anexo && <ChipAnexo anexo={anexo} onTirar={tirarAnexo} />}
               {/* ⟁ Aura ▾ — seletor: Aura base ou um mentor plugado */}
               <div className="flex items-center gap-2">

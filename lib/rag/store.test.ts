@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, it, expect } from "vitest";
 import {
-  acrescentarPermissao, apagarDocumento, buscarPorHash, contarBase, criarDocumento, gravarTrechos,
+  acrescentarPermissao, apagarDocumento, buscarPorHash, contarBase, contarEnviadosPessoais, criarDocumento, gravarTrechos,
   listarDocumentos, marcarErro, registrarVetores, removerPermissao, trechosSemVetor,
 } from "./store";
 import { bancoDeTeste } from "./pgTeste";
@@ -393,5 +393,20 @@ describe("store — listar e contar", () => {
     const ruim = await buscarPorHash(db, "h2");
     await marcarErro(db, ruim!.id, "x");
     expect(await contarBase(db, { userId: "u1", turmaIds: ["t1"] })).toEqual({ pessoais: 1, deTurma: 1 });
+  });
+
+  it.skipIf(!banco)("contarEnviadosPessoais: só os do dono, sem erro e sem os gerados pelo chat (teto próprio)", async () => {
+    const db = banco!.db;
+    await docComTrechos(db, "h1", { donoId: "u1" });
+    await docComTrechos(db, "h2", { donoId: "u1" });
+    await docComTrechos(db, "h3", { donoId: "u2" });
+    await docComTrechos(db, "h4", { turmaId: "t1" });
+    await criarDocumento(db, { ...base("h5", { donoId: "u1" }), origem: "gerado" });
+    expect(await contarEnviadosPessoais(db, "u1")).toBe(2);
+    await marcarErro(db, (await buscarPorHash(db, "h2"))!.id, "x");
+    expect(await contarEnviadosPessoais(db, "u1")).toBe(1);
+    await acrescentarPermissao(db, (await buscarPorHash(db, "h4"))!.id, { donoId: "u1" }); // da turma, e também dele
+    expect(await contarEnviadosPessoais(db, "u1")).toBe(2);
+    expect(await contarEnviadosPessoais(db, "u9")).toBe(0);
   });
 });
