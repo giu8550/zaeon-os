@@ -1,5 +1,10 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import ChatMarkdown from "@/components/study/ChatMarkdown";
+
+/** Tem fórmula ($…$, $$…$$, \(…\), \[…\]) ou gráfico? Aí o texto vai pelo ChatMarkdown (KaTeX) — este
+ *  formatador só sabe negrito/itálico. Dinheiro ("R$ 10") sozinho não conta: precisa de um par de $. */
+const TEM_MATEMATICA = /\$[^$\n]+\$|\\\(|\\\[|```grafico/;
 
 // Render leve de markdown — **negrito**, *itálico* e quebras de linha. Sem biblioteca.
 // `reveal` (opt-in): revela o texto AOS POUCOS, como se a IA estivesse gerando — dá fluidez.
@@ -14,6 +19,14 @@ export default function RichText({
   reveal?: boolean;
 }) {
   const { display, revealing } = useReveal(text || "", !!reveal);
+  if (TEM_MATEMATICA.test(text || "")) {
+    return (
+      <div className={className}>
+        <ChatMarkdown text={display} />
+        {revealing && <span className="animate-pulse opacity-60 ml-px">▍</span>}
+      </div>
+    );
+  }
   const lines = display.split("\n");
   return (
     <span className={className}>
