@@ -20,37 +20,16 @@ import { useTypewriter } from "@/lib/ui/useTypewriter";
 import { fonteChat } from "@/lib/ui/chatFontScale";
 import { ArrowUpRight, Quote } from "lucide-react";
 import type { StructuredAnswer, Source } from "@/lib/agent/contracts";
+import ChatMarkdown from "@/components/study/ChatMarkdown";
 
-// ── formatador inline mínimo (negrito **x** + linhas "- " viram bullets) ──
-function fmtInline(s: string): React.ReactNode[] {
-  const out: React.ReactNode[] = [];
-  const re = /\*\*(.+?)\*\*/g;
-  let last = 0, m: RegExpExecArray | null, k = 0;
-  while ((m = re.exec(s))) {
-    if (m.index > last) out.push(s.slice(last, m.index));
-    out.push(<strong key={k++} className="font-semibold text-slate-900 dark:text-white">{m[1]}</strong>);
-    last = m.index + m[0].length;
-  }
-  if (last < s.length) out.push(s.slice(last));
-  return out;
-}
-
+// O texto da resposta passa pelo MESMO formatador do chat (ChatMarkdown): negrito/itálico, títulos, bullets,
+// links e MATEMÁTICA ($…$, $$…$$ em KaTeX, ```grafico). Antes era um formatador próprio só com **negrito** —
+// a fórmula da atenção do Transformer aparecia crua ("$$\text{Attention}…$$"), no chat e no modo pesquisa.
 function Prose({ text, lead }: { text: string; lead?: boolean }) {
-  const lines = text.split(/\n+/).filter((l) => l.trim());
   return (
     // Tamanho obedece o A−/A+ do chat (--chat-font-scale; sem a var, fica 100%).
     <div className={lead ? "leading-[1.62]" : "leading-[1.72]"} style={{ fontSize: fonteChat(lead ? 19 : 16) }}>
-      {lines.map((l, i) => {
-        const bullet = /^[-*•]\s+/.test(l);
-        return bullet ? (
-          <div key={i} className="flex gap-2.5 my-1">
-            <span className="mt-[9px] w-1.5 h-1.5 rounded-full bg-cyan-400/80 shrink-0" />
-            <span>{fmtInline(l.replace(/^[-*•]\s+/, ""))}</span>
-          </div>
-        ) : (
-          <p key={i} className={i > 0 ? "mt-2.5" : ""}>{fmtInline(l)}</p>
-        );
-      })}
+      <ChatMarkdown text={text} />
     </div>
   );
 }

@@ -7,12 +7,15 @@ import { estadoDaIA, MOV, OFFLINE, pontoDaGaragem, roteiroAndar, roteiroMoto, vi
 import { CONVERSA, divaga, episodiosDoDia, limparFala, normalizarFala, promptEpisodio, tomDaResposta, validarFalas } from "./conversas";
 import { gerarFalasSemRepetir, gerarResposta, type DepsTexto } from "./texto";
 import { CONFIG_PADRAO, aplicarMigracoes, novoLote, sanitizarConfig, totalDaFrota } from "./config";
-import { salaDoPonto, spotsDe } from "./lugares";
+import { LIVRE_NA_CHEGADA, salaDoPonto, spotsDe } from "./lugares";
 import { nivelDoPonto } from "../niveis";
 import { NOS } from "../buracos";
-import { CIDADE, colisoresDaCidade, mundo, salaEm } from "../ceu";
+import { alturaNoComplexo, naPiramide } from "../temploCosmico";
+import { CIDADE, colisoresDaCidade, mundo, naSala, salaEm } from "../ceu";
+/** (estes testes são das regras de HORÁRIO da agenda — 9h, folga, festa à noite: com `semHorario` desligado) */
+const FLAGS_HORARIO = { ...FLAGS_PADRAO, semHorario: false };
 
-const frota = gerarFrota(), DIA = 20734, plano = planejarDia(frota, DIA, FLAGS_PADRAO);
+const frota = gerarFrota(), DIA = 20734, plano = planejarDia(frota, DIA, FLAGS_HORARIO);
 const dur = (b: Bloco) => b.fim - b.ini;
 
 describe("a frota (700 IAs)", () => {
@@ -42,8 +45,8 @@ describe("a frota (700 IAs)", () => {
     expect(fullNoDia(diaDe(Date.UTC(2026, 9, 12, 15)), ate)).toBe(true);
     expect(fullNoDia(diaDe(Date.UTC(2026, 9, 13, 4)), ate)).toBe(false);   // 13/10 01h em Fortaleza: acabou
     expect(fullNoDia(DIA, null)).toBe(false);
-    const turma = frota.slice(0, 200), full = planejarDia(turma, DIA, FLAGS_PADRAO, true), normal = planejarDia(turma, DIA, FLAGS_PADRAO, false);
-    const online = (p: typeof full, m: number) => [...p.agentes.values()].filter(({ agente, blocos }) => estadoDaIA(agente.id, blocos, m, FLAGS_PADRAO, true, false).visivel).length;
+    const turma = frota.slice(0, 200), full = planejarDia(turma, DIA, FLAGS_HORARIO, true), normal = planejarDia(turma, DIA, FLAGS_HORARIO, false);
+    const online = (p: typeof full, m: number) => [...p.agentes.values()].filter(({ agente, blocos }) => estadoDaIA(agente.id, blocos, m, FLAGS_HORARIO, true, false).visivel).length;
     expect(online(full, 3 * 60)).toBeGreaterThan(turma.length * 0.85); expect(online(normal, 3 * 60)).toBe(0);
     expect(online(full, 15 * 60)).toBeGreaterThan(turma.length * 0.85);
   });
@@ -98,14 +101,14 @@ describe("a agenda do dia", () => {
     expect(media("f")).toBeGreaterThan(media("m") + 15);
   });
   it("cada IA tem o seu ritmo e ele varia de um dia pro outro", () => {
-    const a = frota[0]!, d1 = agendaBase(a, DIA, FLAGS_PADRAO, "biblioteca"), d2 = agendaBase(a, DIA + 1, FLAGS_PADRAO, "biblioteca");
+    const a = frota[0]!, d1 = agendaBase(a, DIA, FLAGS_HORARIO, "biblioteca"), d2 = agendaBase(a, DIA + 1, FLAGS_HORARIO, "biblioteca");
     expect(d1).not.toEqual(d2);
     expect(new Set(todos.map((x) => x.blocos[0]?.ini ?? -1)).size).toBeGreaterThan(300);   // cada uma começa numa hora
   });
   it("as chaves desligam as atividades (sem moto → ninguém anda de moto; desligada → ninguém)", () => {
-    const sem = planejarDia(frota.slice(0, 80), DIA, { ...FLAGS_PADRAO, moto: false });
+    const sem = planejarDia(frota.slice(0, 80), DIA, { ...FLAGS_HORARIO, moto: false });
     for (const { blocos } of sem.agentes.values()) expect(blocos.some((b) => b.atividade === "moto")).toBe(false);
-    const off = planejarDia(frota.slice(0, 20), DIA, { ...FLAGS_PADRAO, ativa: false });
+    const off = planejarDia(frota.slice(0, 20), DIA, { ...FLAGS_HORARIO, ativa: false });
     for (const { blocos } of off.agentes.values()) expect(blocos).toHaveLength(0);
   });
   it("eventos em GRUPO: corridas de moto (dupla ou bando) e a festa no lounge (todos do grupo juntos)", () => {
@@ -134,7 +137,7 @@ describe("os lugares (ninguém senta no colo de ninguém)", () => {
 });
 
 describe("o corpo no instante", () => {
-  const est = (id: string, m: number) => { const p = plano.agentes.get(id)!; return estadoDaIA(id, p.blocos, m, FLAGS_PADRAO, true); };
+  const est = (id: string, m: number) => { const p = plano.agentes.get(id)!; return estadoDaIA(id, p.blocos, m, FLAGS_HORARIO, true); };
   it("de madrugada ninguém; à tarde a maioria; posições sempre finitas; estudando = tablet na mão e sentado", () => {
     let on = 0, tablet = 0;
     for (const a of frota) {
@@ -149,13 +152,13 @@ describe("o corpo no instante", () => {
   });
   it("a festa só acontece com SOM rolando", () => {
     const x = [...plano.agentes.values()].find((p) => p.blocos.some((b) => b.atividade === "festa"))!, b = x.blocos.find((b) => b.atividade === "festa")!, m = (b.ini + b.fim) / 2;
-    expect(estadoDaIA(x.agente.id, x.blocos, m, FLAGS_PADRAO, true).pose).toBe("danca");
-    expect(estadoDaIA(x.agente.id, x.blocos, m, FLAGS_PADRAO, false).visivel).toBe(false);
+    expect(estadoDaIA(x.agente.id, x.blocos, m, FLAGS_HORARIO, true).pose).toBe("danca");
+    expect(estadoDaIA(x.agente.id, x.blocos, m, FLAGS_HORARIO, false).visivel).toBe(false);
   });
   it("viagens: dentro da Zaeon de MOCHILA; pra fora de MOTO PEGA NA GARAGEM (nada de moto saindo de sala); contínuo", () => {
     const de = { x: mundo({ x: 30, z: 0 }).x, y: CIDADE.pisoY, z: mundo({ x: 30, z: 0 }).z }, sala = mundo(CIDADE.salas.biblioteca);
-    expect(viagem(de, { x: sala.x, y: CIDADE.pisoY + 88, z: sala.z }, FLAGS_PADRAO, "t").modo).toBe("mochila");
-    const univ = spotsDe("univ")[0]!, v = viagem(de, univ, FLAGS_PADRAO, "t2"), g = pontoDaGaragem("t2");
+    expect(viagem(de, { x: sala.x, y: CIDADE.pisoY + 88, z: sala.z }, FLAGS_HORARIO, "t").modo).toBe("mochila");
+    const univ = spotsDe("univ")[0]!, v = viagem(de, univ, FLAGS_HORARIO, "t2"), g = pontoDaGaragem("t2");
     expect(v.em(0.02).modo).toBe("mochila");   // sai de mochila…
     expect(v.em(0.98).modo).toBe("moto");      // …e chega de moto
     // a troca (mochila → moto) acontece NA garagem
@@ -163,7 +166,7 @@ describe("o corpo no instante", () => {
     expect(Math.hypot(troca!.x - g.x, troca!.z - g.z)).toBeLessThan(1);
     expect(salaDoPonto(g)).toBe("garagem");
     // e o caminho de volta: pousa a moto na garagem e segue de mochila
-    const volta = viagem(univ, de, FLAGS_PADRAO, "t3"); expect(volta.em(0.02).modo).toBe("moto"); expect(volta.em(0.98).modo).toBe("mochila");
+    const volta = viagem(univ, de, FLAGS_HORARIO, "t3"); expect(volta.em(0.02).modo).toBe("moto"); expect(volta.em(0.98).modo).toBe("mochila");
     let ant = v.em(0);
     for (let u = 0.01; u <= 1; u += 0.01) { const p = v.em(u); expect(Math.hypot(p.x - ant.x, p.y - ant.y, p.z - ant.z)).toBeLessThan(MOV.moto * v.dur * 0.02 + 60); ant = p; }   // (+ a descida da moto até a UNILAB, ~300 m em 5 s)
     expect(Math.hypot(v.em(1).x - univ.x, v.em(1).z - univ.z)).toBeLessThan(0.01);
@@ -171,7 +174,7 @@ describe("o corpo no instante", () => {
   it("uma Zaeon VIVA: de moto, a maior parte do tempo VOANDO; a pé, a maior parte PARADO num ponto de interesse (não vagando)", () => {
     const n = { moto: 0, motoMove: 0, andar: 0, andarMove: 0 };
     for (let m = 9 * 60; m < 22 * 60; m += 11) for (const { agente, blocos } of plano.agentes.values()) {
-      const e = estadoDaIA(agente.id, blocos, m, FLAGS_PADRAO, true, false); if (!e.visivel) continue;
+      const e = estadoDaIA(agente.id, blocos, m, FLAGS_HORARIO, true, false); if (!e.visivel) continue;
       if (e.atividade === "moto") { n.moto++; if (["moto", "mochila"].includes(e.pose)) n.motoMove++; }
       if (e.atividade === "andar") { n.andar++; if (["andando", "mochila"].includes(e.pose)) n.andarMove++; }
     }
@@ -208,9 +211,9 @@ describe("o corpo no instante", () => {
   it("o passeio de moto e a pé: contínuos (sem teleporte de um minuto pro outro)", () => {
     const amostra = [...plano.agentes.values()].filter((p) => p.blocos.some((b) => b.atividade === "moto" || b.atividade === "andar")).slice(0, 40);
     for (const { agente, blocos } of amostra) for (const b of blocos.filter((x) => x.atividade === "moto" || x.atividade === "andar")) {
-      let ant = estadoDaIA(agente.id, blocos, b.ini + 0.01, FLAGS_PADRAO, true, false);
+      let ant = estadoDaIA(agente.id, blocos, b.ini + 0.01, FLAGS_HORARIO, true, false);
       for (let m = b.ini + 0.01 + 1 / 60; m < b.fim - 0.02; m += 1 / 60) {   // a cada segundo
-        const e = estadoDaIA(agente.id, blocos, m, FLAGS_PADRAO, true, false);
+        const e = estadoDaIA(agente.id, blocos, m, FLAGS_HORARIO, true, false);
         if (e.visivel && ant.visivel) expect(Math.hypot(e.x - ant.x, e.y - ant.y, e.z - ant.z), `${agente.id} ${b.atividade} ${m.toFixed(2)}`).toBeLessThan(MOV.moto * 1.4 + 15);   // (a moto no ritmo mais rápido)
         ant = e;
       }
@@ -219,7 +222,7 @@ describe("o corpo no instante", () => {
   it("ninguém EMPILHADO: em qualquer minuto, IAs paradas/estudando visíveis não dividem o mesmo ponto (< 0,6 m)", () => {
     for (const m of [10 * 60, 14 * 60 + 17, 18 * 60 + 41]) {
       const pts: { x: number; z: number; y: number }[] = [];
-      for (const { agente, blocos } of plano.agentes.values()) { const e = estadoDaIA(agente.id, blocos, m, FLAGS_PADRAO, true, false); if (e.visivel && !["moto", "mochila", "andando"].includes(e.pose)) pts.push(e); }
+      for (const { agente, blocos } of plano.agentes.values()) { const e = estadoDaIA(agente.id, blocos, m, FLAGS_HORARIO, true, false); if (e.visivel && !["moto", "mochila", "andando"].includes(e.pose)) pts.push(e); }
       const grade = new Map<string, number>(); let colisoes = 0;
       for (const p of pts) { const k = `${Math.round(p.x / 0.6)},${Math.round(p.z / 0.6)},${Math.round(p.y)}`; const n = grade.get(k) ?? 0; if (n) colisoes++; grade.set(k, n + 1); }
       expect(colisoes / pts.length).toBeLessThan(0.03);
@@ -239,7 +242,7 @@ describe("o corpo no instante", () => {
 });
 
 describe("as conversas", () => {
-  const eps = episodiosDoDia(plano, FLAGS_PADRAO), porId = new Map(frota.map((a) => [a.id, a]));
+  const eps = episodiosDoDia(plano, FLAGS_HORARIO), porId = new Map(frota.map((a) => [a.id, a]));
   it("só entre amigos do MESMO grupo, de 2 a 8 falas, ninguém fala duas vezes seguidas", () => {
     expect(eps.length).toBeGreaterThan(500);
     for (const e of eps) {
@@ -258,7 +261,7 @@ describe("as conversas", () => {
   });
   it("cloak: as falas de quem está em cloak não têm texto; sem cloak (chave) todas têm", () => {
     for (const e of eps) for (const f of e.falas) expect(f.cloak).toBe(porId.get(f.agente)!.cloak);
-    const sem = episodiosDoDia(plano, { ...FLAGS_PADRAO, cloak: false }); for (const e of sem) for (const f of e.falas) expect(f.cloak).toBe(false);
+    const sem = episodiosDoDia(plano, { ...FLAGS_HORARIO, cloak: false }); for (const e of sem) for (const f of e.falas) expect(f.cloak).toBe(false);
   });
   it("o prompt traz os nomes, o lugar e uma direção por fala; o JSON da IA é validado e limpo", () => {
     const e = eps.find((x) => x.falas.length >= 3)!, p = promptEpisodio(e, (id) => porId.get(id));
@@ -270,7 +273,7 @@ describe("as conversas", () => {
 });
 
 describe("regra de ouro: NADA se repete", () => {
-  const ep = episodiosDoDia(plano, { ...FLAGS_PADRAO, cloak: false }).find((e) => e.falas.length === 4)!;
+  const ep = episodiosDoDia(plano, { ...FLAGS_HORARIO, cloak: false }).find((e) => e.falas.length === 4)!;
   const porId = new Map(frota.map((a) => [a.id, a]));
   function memoria(vistasIniciais: string[] = []) {
     const vistas = new Set(vistasIniciais.map(normalizarFala));
@@ -311,11 +314,53 @@ describe("o FLUXO entre os níveis: da cidadela pros lounges pelos buracos negro
   it("da cidadela pro lounge: anda na cidadela, some no túnel e só reaparece no lounge (nunca visível no nível errado)", () => {
     const loungeSpot = spotsDe("lounge").find((s) => nivelDoPonto(s, s.y) === "lounge")!, hub = { x: NOS.zaeon.chegada.x + 5, y: CIDADE.pisoY, z: NOS.zaeon.chegada.z };
     for (const [de, para] of [[hub, loungeSpot], [loungeSpot, hub]] as const) {
-      const v = viagem(de, para, FLAGS_PADRAO, "teste-fluxo", false), seq: string[] = [];
+      const v = viagem(de, para, FLAGS_HORARIO, "teste-fluxo", false), seq: string[] = [];
       for (let u = 0; u <= 1.0001; u += 0.002) { const p = v.em(u); const n = p.oculto ? "túnel" : nivelDoPonto(p, p.y); if (seq.at(-1) !== n) seq.push(n); }
       const nDe = nivelDoPonto(de, de.y), nPara = nivelDoPonto(para, para.y);
       expect(seq).toEqual([nDe, "túnel", nPara]);   // (sai do nível dele, some, aparece no outro — sem voar entre os dois)
       const fim = v.em(1); expect(Math.hypot(fim.x - para.x, fim.z - para.z)).toBeLessThan(0.5);
+    }
+  });
+});
+
+describe("SEM HORÁRIO: todo mundo passeando pela Zaeon e pelos lounges (o padrão — out/2026)", () => {
+  const planoP = planejarDia(frota, DIA, FLAGS_PADRAO);
+  it("o dia inteiro, sem folga: a maior parte PASSEANDO, e metade dos passeios nos lounges", () => {
+    let total = 0, andando = 0, online = 0;
+    for (const { blocos } of planoP.agentes.values()) {
+      if (blocos.length) online++;
+      for (const b of blocos) { total += b.fim - b.ini; if (b.atividade === "andar") andando += b.fim - b.ini; }
+    }
+    expect(online / planoP.agentes.size).toBeGreaterThan(0.95);
+    expect(andando / total).toBeGreaterThan(0.5);
+    // de madrugada também tem gente
+    let madrugada = 0; for (const { agente, blocos } of planoP.agentes.values()) if (estadoDaIA(agente.id, blocos, 3 * 60, FLAGS_PADRAO, false, false).visivel) madrugada++;
+    expect(madrugada).toBeGreaterThan(planoP.agentes.size * 0.3);
+  });
+  it("o passeio nos LOUNGES: só por piso (salão, pontes, escadas, campus, lounges), sem atravessar a pirâmide, e a pé contínuo", () => {
+    const L = CIDADE.salas.lounge, loc = (p: { x: number; z: number }) => naSala(L, p.x - CIDADE.centro.x, p.z - CIDADE.centro.z);
+    let nosLounges = 0;
+    for (const { agente, blocos } of [...planoP.agentes.values()].slice(0, 120)) blocos.forEach((b, i) => {
+      if (b.atividade !== "andar") return;
+      const rot = roteiroAndar(b, agente.id, i); if (!rot[0]!.id.startsWith("templo-")) return; nosLounges++;
+      for (const p of rot) {
+        const q = loc(p); expect(alturaNoComplexo(q) !== null || Math.hypot(q.x, q.z) < 70, `${p.id}`).toBe(true);
+        for (let k = 1; k < (p.via?.length ?? 0); k++) for (let u = 0; u <= 1; u += 0.05) {
+          const a0 = p.via![k - 1]!, a1 = p.via![k]!, w = { x: a0.x + (a1.x - a0.x) * u, z: a0.z + (a1.z - a0.z) * u }, ql = loc(w);
+          expect(alturaNoComplexo(ql) !== null || Math.hypot(ql.x, ql.z) < 70, `${p.id} via ${ql.x.toFixed(1)},${ql.z.toFixed(1)}`).toBe(true);
+          expect(naPiramide(ql, 0.5), `${p.id} na pirâmide`).toBe(false);
+        }
+      }
+    });
+    expect(nosLounges).toBeGreaterThan(20);
+  });
+});
+
+describe("a frota não fica parada onde as pessoas chegam", () => {
+  it("nenhum lugar de chão das salas a menos de LIVRE_NA_CHEGADA da chegada (o dono via uma IA 'por cima' dele ao chegar)", () => {
+    for (const s of ["biblioteca", "jardim", "lounge"] as const) {
+      const ch = NOS[s].chegada;
+      for (const p of spotsDe(s).filter((x) => x.tipo === "piso")) expect(Math.hypot(p.x - ch.x, p.z - ch.z), `${s} ${p.id}`).toBeGreaterThanOrEqual(LIVRE_NA_CHEGADA);
     }
   });
 });

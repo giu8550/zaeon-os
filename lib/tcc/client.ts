@@ -9,8 +9,10 @@ export type { RevisaoView, TccView };
 export type TccDoc = Omit<TccView, "updatedAt"> & { updatedAt: string };
 export type Revisao = Omit<RevisaoView, "createdAt"> & { createdAt: string };
 
-/** Flag do cliente (build): sem ela a UI do TCC nem aparece. */
-export const TCC_CROSS_ON = process.env.NEXT_PUBLIC_TCC_CROSS === "1";
+/** Flag do cliente (build): sem ela a UI do TCC nem aparece. O CHAT ÚNICO também liga (é o editor dos trabalhos). */
+export const TCC_CROSS_ON = process.env.NEXT_PUBLIC_TCC_CROSS === "1" || process.env.NEXT_PUBLIC_CHAT_UNICO === "1";
+
+export type TrabalhoResumo = { id: string; titulo: string; status: string; tipo: string };
 
 /** Evento que avisa as telas abertas que o TCC mudou (aceite, sugestão nova, edição). */
 export const EVT_TCC_MUDOU = "zaeon:tcc:mudou";
@@ -29,6 +31,9 @@ const post = (url: string, body: unknown) =>
 export const tccApi = {
   doEscopo: (scopeId: string) =>
     fetch(`/api/tcc?scopeId=${encodeURIComponent(scopeId)}`).then((r) => json<{ tcc: { id: string; titulo: string; status: string } | null }>(r)),
+  /** chat único: todos os trabalhos da conversa, na ordem em que nasceram */
+  daConversa: (scopeId: string) =>
+    fetch(`/api/tcc?scopeId=${encodeURIComponent(scopeId)}&todos=1`).then((r) => json<{ trabalhos: TrabalhoResumo[] }>(r)),
   criar: (topic: string, scopeId?: string | null) => post("/api/tcc", { topic, scopeId }).then((r) => json<{ workId: string; status: string }>(r)),
   ler: (id: string) => fetch(`/api/tcc/${id}`).then((r) => json<{ tcc: TccDoc; sugestoes: Revisao[] }>(r)),
   editar: (id: string, body: { secaoId?: string; op: string; corpo?: string; titulo?: string; aposId?: string; origem?: string }) =>

@@ -18,9 +18,10 @@
 import * as THREE from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { criarAvatarLuz, type AvatarLuzHandle, type Montado } from "./AvatarLuz";
+import { PALETAS_FEMININAS, paletaDaCor, paletaFeminina } from "./CorpoAstronauta";
 import { criarMoto, loteMoto, type MotoHandle } from "./Moto";
 import { matrizDoAvatar } from "./matrizes";
-import { criarMultidao, type MultidaoHandle } from "./MultidaoGPU";
+import { criarMultidao, criarMultidaoDeTraje, type MultidaoHandle } from "./MultidaoGPU";
 import { gerarFrota, type AgenteIA } from "@/lib/cyber/frota/frota";
 import { credenciaisDaFrota, hierarquiaDaCidadela, type MembroCidadela } from "@/lib/cyber/frota/hierarquia";
 import type { CredencialAcademica } from "@/lib/cyber/credenciais";
@@ -46,6 +47,14 @@ import type { ConfigSalva } from "@/lib/cyber/frota/config";
 import type { PedidoFrota, RespostaFrota } from "./frota.worker";
 import { desviar, empurrao, type P2 } from "@/lib/cyber/colisaoAtores";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+
+/** a cor das PLACAS do traje de uma IA (a mesma do corpo completo: eles, a cor dela clareada; elas, a paleta feminina) */
+const corTraje = new Map<string, THREE.Color>();
+function corDoTraje(hex: string, genero: string): THREE.Color {
+  const k = `${genero}|${hex}`; let c = corTraje.get(k);
+  if (!c) { const placa = genero === "f" ? (PALETAS_FEMININAS.find((p) => `fem:${p.nome}` === paletaFeminina(hex))?.placa ?? 0xffffff) : paletaDaCor(hex)[0]!.cor; c = new THREE.Color(placa); corTraje.set(k, c); }
+  return c;
+}
 
 export type FrotaHandle = {
   configurar(c: ConfigSalva, agoraServidor: number): void;
@@ -104,11 +113,22 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
   // completo aparece ANDANDO/SENTADO/DANÇANDO de verdade (o mesmo desenho do corpo completo) em 2 draw calls; além, a
   // silhueta. Assa as poses uma vez, depois que a cena montou (o assado roda o avatar por ~400 quadros)
   let multidao: MultidaoHandle | null = null;
+  /** a MULTIDÃO DE TRAJE (out/2026): uma por modelo — eles com o traje do dono, elas com o feminino; enquanto não chega
+   *  (ou se não montar), vale a de sempre */
+  const multTraje: Partial<Record<"m" | "f", MultidaoHandle>> = {}; let vivoFrota = true;
   const semMultidao = typeof location !== "undefined" && new URLSearchParams(location.search).has("semMultidao");   // A/B
   const tAssar = o.gltf && !o.low && !semMultidao ? setTimeout(() => {
     try {
       const t0 = performance.now(); multidao = criarMultidao({ gltf: o.gltf!, starTex: o.starTex, max: MAX_MULTIDAO }); o.cena.add(multidao.malha);
       if (process.env.NODE_ENV !== "production") console.info(`[frota] multidão na GPU pronta em ${Math.round(performance.now() - t0)} ms`);
+      // as de TRAJE: uma depois da outra (cada assado roda o avatar por ~400 quadros)
+      void (async () => {
+        for (const modelo of ["m", "f"] as const) {
+          if (!vivoFrota) return;
+          try { const mt = await criarMultidaoDeTraje({ gltf: o.gltf!, starTex: o.starTex, max: MAX_MULTIDAO, modelo }); if (!vivoFrota) { mt.dispose(); return; } mt.malha.visible = multidao?.malha.visible ?? true; o.cena.add(mt.malha); multTraje[modelo] = mt; }
+          catch (e) { console.warn(`[frota] multidão de traje (${modelo}) não montou — fica a de sempre:`, String((e as Error)?.stack ?? e)); }
+        }
+      })();
     }
     catch (e) { console.warn("[frota] multidão na GPU não montou — fica a silhueta:", String((e as Error)?.stack ?? e)); }
   }, 1500) : null;
@@ -208,7 +228,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
       recalcular(diaDe(agoraMs()));
     },
     atualizar(dt, t, ctx) {
-      silhuetas.visible = motosSil.visible = !!config && visivel; if (multidao) multidao.malha.visible = silhuetas.visible;
+      silhuetas.visible = motosSil.visible = !!config && visivel; if (multidao) multidao.malha.visible = silhuetas.visible; for (const mt of Object.values(multTraje)) mt.malha.visible = silhuetas.visible;
       if (!config || !visivel) { estacionadas.definir([]); for (const k of corpos) { k.av.group.visible = false; k.tag.style.display = "none"; k.balao.style.display = "none"; if (k.moto) k.moto.group.visible = false; } return; }
       const ms = agoraMs(), d = diaDe(ms), minuto = minutoDoDia(ms);
       if (d !== dia) recalcular(d);
@@ -253,13 +273,15 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
           let k = corpos.find((x) => !x.id);
           if (!k && corpos.length < MAX && !criou) { k = novoCorpo(); corpos.push(k); criou = true; }
           if (!k) break;
-          const a = porId.get(id)!; k.id = id; k.av.recolorir(a.cor); crachar(k, a); k.desvio = { x: 0, z: 0 }; k.motoK = 0;
+          const a = porId.get(id)!; k.id = id; k.av.recolorir(a.cor); crachar(k, a);
+          // o TRAJE (out/2026, o dono: os homens com VARIAÇÕES do traje dele em outras cores; as mulheres com o traje feminino)
+          k.av.traje(true, { paleta: a.genero === "f" ? paletaFeminina(a.cor) : (a.cor as `#${string}`), modelo: a.genero === "f" ? "f" : "m" }); k.desvio = { x: 0, z: 0 }; k.motoK = 0;
         }
       }
       // 1b) as SILHUETAS: todo mundo que aparece e NÃO tem corpo completo (quem se move é refeito a cada quadro)
       {
         const comCorpo = new Set(corpos.filter((k) => k.id && k.av.group.visible).map((k) => k.id!));
-        let ni = 0, nm = 0; multidao?.comecar();
+        let ni = 0, nm = 0; multidao?.comecar(); for (const mt of Object.values(multTraje)) mt.comecar();
         quadroSil = (quadroSil + 1) % 4;
         for (let iv = 0; iv < vistos.length; iv++) {
           const v = vistos[iv]!;
@@ -276,12 +298,15 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
           else if (e.pose === "moto") { dy = 0.85; sy = 0.75; }
           // perto: a multidão animada (a moto continua a silhueta dela, logo abaixo)
           const dC = Math.hypot(e.x - ctx.cam.x, y - ctx.cam.y, e.z - ctx.cam.z);
-          if (multidao && dC < DIST_MULTIDAO && multidao.adicionar(e.x, y, e.z, e.rumo, e.pose, cor, faseDe(v.id), dC > DIST_MULTIDAO_PERTO)) { /* na multidão */ }
+          const ag = porId.get(v.id), mtr = ag ? multTraje[ag.genero === "f" ? "f" : "m"] : undefined;
+          if (mtr && dC < DIST_MULTIDAO && mtr.adicionar(e.x, y, e.z, e.rumo, e.pose, corDoTraje(ag!.cor, ag!.genero), faseDe(v.id), dC > DIST_MULTIDAO_PERTO)) { /* na multidão de traje */ }
+          else if (multidao && dC < DIST_MULTIDAO && multidao.adicionar(e.x, y, e.z, e.rumo, e.pose, cor, faseDe(v.id), dC > DIST_MULTIDAO_PERTO)) { /* na multidão */ }
           else if (ni < MAX_SILHUETAS) { mS.compose(pS.set(e.x, y + dy, e.z), qS, eS.set(1, sy, 1)); silhuetas.setMatrixAt(ni, mS); silhuetas.setColorAt(ni, cor); ni++; }
           if (e.pose === "moto" && nm < motosSil.instanceMatrix.count) { qS.setFromAxisAngle(eixoY, e.rumo); mS.compose(pS.set(e.x, y + 0.75, e.z), qS, eS.set(1, 1, 1)); motosSil.setMatrixAt(nm, mS); motosSil.setColorAt(nm, cor); nm++; }
         }
         silhuetas.count = ni; motosSil.count = nm;
         if (multidao) { multidao.fechar(); multidao.atualizar(t); }
+        for (const mt of Object.values(multTraje)) { mt.fechar(); mt.atualizar(t); }
         silhuetas.instanceMatrix.needsUpdate = true; motosSil.instanceMatrix.needsUpdate = true;
         if (silhuetas.instanceColor) silhuetas.instanceColor.needsUpdate = true; if (motosSil.instanceColor) motosSil.instanceColor.needsUpdate = true;
       }
@@ -374,7 +399,7 @@ export function criarFrotaIA(o: { cena: THREE.Scene; overlay: HTMLElement; gltf:
       if (prazo) clearTimeout(prazo); worker?.terminate(); worker = null;
       for (const k of corpos) { k.av.dispose(); for (const m of k.motos ?? [k.moto]) m?.dispose(); k.tag.remove(); k.balao.remove(); } corpos.length = 0;
       for (const m of [silhuetas, motosSil]) { m.geometry.dispose(); m.removeFromParent(); m.dispose(); } matSil.dispose();
-      if (tAssar) clearTimeout(tAssar); multidao?.dispose(); multidao = null; estacionadas.dispose();
+      if (tAssar) clearTimeout(tAssar); multidao?.dispose(); multidao = null; vivoFrota = false; for (const mt of Object.values(multTraje)) mt.dispose(); estacionadas.dispose();
     },
   };
 }

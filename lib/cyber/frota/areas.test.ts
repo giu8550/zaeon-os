@@ -8,11 +8,13 @@ import { CIDADE, mundo } from "../ceu";
 import { PLATAFORMAS } from "../plataformas";
 import { PRACA } from "../praca";
 import { AMBIENTES_COM_VAGA, ESTACIONAMENTOS } from "../estacionamentosEstudo";
+/** (estes testes são das regras de HORÁRIO da agenda — 9h, folga, festa à noite: com `semHorario` desligado) */
+const FLAGS_HORARIO = { ...FLAGS_PADRAO, semHorario: false };
 
 const frota = gerarFrota(), DIA = 20734;
 const estudoPorLugar = (ar: AreasFrota) => {
   const c: Record<string, number> = {};
-  for (const { blocos } of planejarDia(frota, DIA, FLAGS_PADRAO, false, ar).agentes.values()) for (const b of blocos) if (b.atividade.startsWith("estudo") && b.spot) c[b.ambiente!] = (c[b.ambiente!] ?? 0) + (b.fim - b.ini);
+  for (const { blocos } of planejarDia(frota, DIA, FLAGS_HORARIO, false, ar).agentes.values()) for (const b of blocos) if (b.atividade.startsWith("estudo") && b.spot) c[b.ambiente!] = (c[b.ambiente!] ?? 0) + (b.fim - b.ini);
   return c;
 };
 
@@ -45,9 +47,9 @@ describe("modo admin: as áreas do mapa", () => {
   });
   it("sem lounge na proporção, ninguém estuda no lounge; vagas 0 = nenhuma moto parada; o chão do lounge respeita o limite", () => {
     expect(estudoPorLugar({ ...AREAS_PADRAO, proporcao: { ...AREAS_PADRAO.proporcao, estudoLounge: 0 } }).lounge ?? 0).toBe(0);
-    const p0 = planejarDia(frota, DIA, FLAGS_PADRAO, false, { ...AREAS_PADRAO, vagas: 0 });
+    const p0 = planejarDia(frota, DIA, FLAGS_HORARIO, false, { ...AREAS_PADRAO, vagas: 0 });
     expect([...p0.agentes.values()].some(({ blocos }) => blocos.some((b) => b.vaga))).toBe(false);
-    const p5 = planejarDia(frota, DIA, FLAGS_PADRAO, false, { ...AREAS_PADRAO, loungeChao: 5 });
+    const p5 = planejarDia(frota, DIA, FLAGS_HORARIO, false, { ...AREAS_PADRAO, loungeChao: 5 });
     const chao = new Set<string>(); for (const { blocos } of p5.agentes.values()) for (const b of blocos) if (b.ambiente === "lounge" && b.spot?.tipo === "piso") chao.add(b.spot.id);
     expect(chao.size).toBeLessThanOrEqual(5);
   });

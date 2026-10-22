@@ -11,10 +11,16 @@
 import { useMemo } from "react";
 import { parseAbntMarkers } from "@/lib/abntTemplate";
 import { normalizeBlocks, isFigure, isTableBlock, isQuotation } from "@/lib/abntBlocks";
+import { trechosComEnfase } from "@/lib/tcc/pagina";
 
 const CM = 100 / 21; // 1 cm em cqw
-const cqw = (cm: number) => `${(cm * CM).toFixed(3)}cqw`;
-const PT = 2.54 / 72; // 1 pt em cm
+export const cqw = (cm: number) => `${(cm * CM).toFixed(3)}cqw`;
+export const PT = 2.54 / 72; // 1 pt em cm
+
+/** **negrito** e *itálico* do editor (o motor faz o mesmo: lib/tcc/pagina `trechosComEnfase`). */
+export function Inline({ texto }: { texto: string }) {
+  return <>{trechosComEnfase(texto).map((t, i) => (t.negrito ? <strong key={i}>{t.t}</strong> : t.italico ? <em key={i}>{t.t}</em> : t.t))}</>;
+}
 const CHARS_PER_LINE = 75;
 const OWN = new Set(["própria", "propria", "autor", "autoral", "own", "elaboração própria", "elaboracao propria"]);
 
@@ -24,7 +30,8 @@ function fonte(raw: string | undefined, fem = false): string {
   return f;
 }
 
-function Bloco({ texto, n }: { texto: string; n: number }) {
+/** Um parágrafo/figura/tabela/citação como o motor ABNT o desenha (dentro de um container em `cqw`). */
+export function Bloco({ texto, n }: { texto: string; n: number }) {
   if (isFigure(texto)) {
     const m = /^!\[([\s\S]*?)\]\((\S+?)\)$/.exec(texto.trim())!;
     const [titulo, src] = m[1].split("|");
@@ -68,11 +75,11 @@ function Bloco({ texto, n }: { texto: string; n: number }) {
   if (longa) {
     return (
       <p style={{ fontSize: cqw(10 * PT), lineHeight: 1.15, textAlign: "justify", margin: `${cqw(12 * PT)} 0 ${cqw(12 * PT)} ${cqw(4)}` }}>
-        {texto.trim().replace(/^["“‘«]|["”’»]$/g, "")}
+        <Inline texto={texto.trim().replace(/^["“‘«]|["”’»]$/g, "")} />
       </p>
     );
   }
-  return <p style={{ textIndent: cqw(1.25), textAlign: "justify", margin: 0 }}>{texto}</p>;
+  return <p style={{ textIndent: cqw(1.25), textAlign: "justify", margin: 0 }}><Inline texto={texto} /></p>;
 }
 
 type Item = { texto: string; n: number };

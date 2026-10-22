@@ -32,6 +32,7 @@ services:
         NEXT_PUBLIC_AGENT_AVATARS: ${NEXT_PUBLIC_AGENT_AVATARS:-0}
         NEXT_PUBLIC_UNIFIED_RESEARCH_ROOM: ${NEXT_PUBLIC_UNIFIED_RESEARCH_ROOM:-0}
         NEXT_PUBLIC_MAP_HARNESS: ${NEXT_PUBLIC_MAP_HARNESS:-0}
+        NEXT_PUBLIC_CHAT_UNICO: ${NEXT_PUBLIC_CHAT_UNICO:-0}
         NEXT_PUBLIC_LOUNGE_3D: ${NEXT_PUBLIC_LOUNGE_3D:-0}
         NEXT_PUBLIC_MOBILE_UI: ${NEXT_PUBLIC_MOBILE_UI:-0}
         NEXT_PUBLIC_PROJETOS: ${NEXT_PUBLIC_PROJETOS:-0}
@@ -76,6 +77,8 @@ services:
       # Flags de SERVIDOR (runtime) do cérebro/AURA: vêm das Variables do repo (deploy.yml exporta) ou do
       # .env do VPS; default 0. Rollback = Variable "0" + redeploy (não precisa rebuild).
       MAP_HARNESS: ${MAP_HARNESS:-0}
+      # chat único: motor dos trabalhos (vários por conversa) — par do NEXT_PUBLIC_CHAT_UNICO
+      CHAT_UNICO: ${CHAT_UNICO:-0}
       ESTUDO_GATEKEEPER: ${ESTUDO_GATEKEEPER:-0}
       AURA_ECONOMY: ${AURA_ECONOMY:-0}
       CEREBRO_BG: "0"       # "1" SÓ com o worker de pé (profile worker): o job do cérebro vai pra fila "cerebro". 0 = gera inline no web.

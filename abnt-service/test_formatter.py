@@ -639,3 +639,30 @@ def test_capa_e_identica_entre_times_e_arial():
     t, a = _build(font_choice="Times New Roman"), _build(font_choice="Arial")
     sb = lambda d: [p.paragraph_format.space_before for p in d.paragraphs[:12]]
     assert sb(t) == sb(a)
+
+
+# ── Ênfase inline (barra estilo Word do editor do chat único) ─────────────
+
+def test_negrito_e_italico_viram_runs_sem_os_marcadores():
+    doc = _build(sections=[SectionData(
+        type="introducao", title="Introdução",
+        content="O termo *machine learning* tem **duas** leituras; p < 0,05* fica literal.",
+    )])
+    p = _find_para(doc, "machine learning")
+    assert p is not None
+    assert p.text == "O termo machine learning tem duas leituras; p < 0,05* fica literal."
+    italicos = [r.text for r in p.runs if r.italic]
+    negritos = [r.text for r in p.runs if r.bold]
+    assert italicos == ["machine learning"]
+    assert negritos == ["duas"]
+    assert all(r.font.size == Pt(R.FONT_SIZE_BODY_PT) for r in p.runs)
+    assert p.alignment == WD_ALIGN_PARAGRAPH.JUSTIFY
+
+
+def test_citacao_longa_mantem_italico_e_fonte_menor():
+    longa = LONG_QUOTE[:-1] + ' *grifo nosso*"'
+    doc = _build(sections=[SectionData(type="introducao", title="Introdução", content=longa)])
+    p = _find_para(doc, "grifo nosso")
+    assert p is not None and "*" not in p.text
+    assert [r.text for r in p.runs if r.italic] == ["grifo nosso"]
+    assert all(r.font.size == Pt(R.FONT_SIZE_QUOTE_PT) for r in p.runs)

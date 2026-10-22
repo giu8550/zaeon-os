@@ -183,12 +183,15 @@ import { onEnterSubmit } from "@/lib/ui/enterSubmit";
 import { escritorioCowork } from "@/lib/canal/flags";
 import { unifiedResearchRoom, resolveLabTab, isSubTab, projetosOn, type LabTab, type ResearchSubTab } from "@/lib/research/unifiedRoom";
 import { EVT_ANEXAR, pdfDaBiblioteca } from "@/components/chat/useAnexoChat";
+import { chatUnicoOn, pedidoDoLink, pedirAoChat } from "@/lib/chat/chatUnico";
 
 // Sala de Pesquisa UNIFICADA (Estudos + Pesquisa, sub-abas Chat · Estudos · Pesquisas).
 // NEXT_PUBLIC_* é embutida no build → constante de módulo. Off = layout atual intacto.
 const UNIFIED = unifiedResearchRoom();
 // Aba Projetos (Zaeon Code) escondida até o dono reativar (NEXT_PUBLIC_PROJETOS). Código preservado.
 const PROJETOS = projetosOn();
+// CHAT ÚNICO (lib/chat/chatUnico): a Sala de Pesquisa vira o MODO PESQUISA do chat da Aura. Off = layout de hoje.
+const CHAT_UNICO = chatUnicoOn();
 
 import NewsPanel from "@/components/research/NewsPanel";
 import ProfilePanel from "@/components/research/ProfilePanel";
@@ -753,7 +756,7 @@ export default function HomeworkPage({
       UNIFIED && r.tab === "pesquisa" && isSubTab(sub) ? { ...r, subTab: sub } : r;
     const t = resolveLabTab(params.get("tab"), UNIFIED);
     if (t) return withSub(t);                                        // deep-link explícito de aba ganha
-    if (params.get("session") || params.get("worktype")) return { tab: "pesquisa", subTab: UNIFIED ? "pesquisas" : "chat" }; // deep-links de pesquisa (folha)
+    if (params.get("session") || params.get("worktype") || (CHAT_UNICO && params.get("work"))) return CHAT_UNICO ? { tab: "sala-de-estudos" } : { tab: "pesquisa", subTab: UNIFIED ? "pesquisas" : "chat" }; // deep-links de pesquisa (folha; no chat único, o modo pesquisa)
     if (params.get("onboard")) return resolveLabTab("sala-de-estudos", UNIFIED)!; // tour começa nos Estudos
     // PERSISTÊNCIA: volta pra ÚLTIMA sala visitada.
     try {
@@ -788,6 +791,9 @@ export default function HomeworkPage({
   const setActiveTab = useCallback((t: LabTab | string) => {
     const r = resolveLabTab(t, UNIFIED);
     if (!r) return;
+    // Chat único: pedir a Sala de Pesquisa (sidebar antiga, tour, voz, deep-link) = abrir a CONVERSA da Aura com o
+    // modo pesquisa ligado.
+    if (CHAT_UNICO && (t === "pesquisa" || t === "pesquisas")) { irPraAbaEstudos("meus-estudos"); pedirAoChat({ modoPesquisa: true }); }
     setActiveTabRaw(r.tab);
     if (r.subTab) setSubTab(r.subTab);
   }, []);
@@ -1595,7 +1601,13 @@ export default function HomeworkPage({
 
   // Deep-link ?work=<id> (aba TCC da Sala de Estudos → "lapidar na Sala de Pesquisa"): abre
   // aquele trabalho na folha. O GET de research-works já filtra pelo dono (sem IDOR).
+  // Chat único: os links antigos da Sala de Pesquisa viram pedido ao chat (modo pesquisa + abrir o trabalho no editor).
   useEffect(() => {
+    if (CHAT_UNICO) {
+      const p = pedidoDoLink(new URLSearchParams(window.location.search));
+      if (p) { irPraAbaEstudos("meus-estudos"); pedirAoChat(p); }
+      return;
+    }
     const wid = new URLSearchParams(window.location.search).get("work");
     if (wid && /^[a-f0-9]{24}$/i.test(wid)) void handleOpenWork(wid);
   }, [handleOpenWork]);
@@ -1604,7 +1616,7 @@ export default function HomeworkPage({
   // carrega aquela pesquisa salva como DOCUMENTO (título + conteúdo) na folha de escrita.
   useEffect(() => {
     const sid = new URLSearchParams(window.location.search).get("session");
-    if (!sid) return;
+    if (!sid || CHAT_UNICO) return; // chat único: a folha não existe (o efeito do ?work= já pediu o modo pesquisa)
     showResearchDoc();
     fetch(`/api/ai/scholar/sessions?id=${sid}`)
       .then((r) => (r.ok ? r.json() : null))
@@ -2735,8 +2747,8 @@ export default function HomeworkPage({
               <Rotulo v={sidebarAberta}>Sala de Estudos</Rotulo>
             </button>
 
-            {/* Sala de Pesquisa */}
-            <button
+            {/* Sala de Pesquisa — no chat único ela é o MODO PESQUISA do chat da Aura (sem item próprio) */}
+            {!CHAT_UNICO && <button
               data-tour="pesquisa"
               onClick={() => setActiveTab("pesquisa")}
               title="Sala de Pesquisa"
@@ -2744,8 +2756,8 @@ export default function HomeworkPage({
             >
               <AcademicCapIcon className="w-5 h-5 shrink-0" />
               <Rotulo v={sidebarAberta}>Sala de Pesquisa</Rotulo>
-            </button>
-            {UNIFIED && (
+            </button>}
+            {UNIFIED && !CHAT_UNICO && (
               <Ramo aberto={sidebarAberta && activeTab === "pesquisa"}>
                 {activeTab === "pesquisa"
                   ? <div ref={setSlotConversas} className={RAMO_ATIVO} />

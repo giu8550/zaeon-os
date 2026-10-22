@@ -23,15 +23,16 @@
  *  - FESTA: dança na pista do lounge (só se estiver rolando som — senão já foi embora).
  * Fora dos blocos: offline (não aparece). Coordenadas do MUNDO; `zaeon` = está na ilha/salas (o engine soma a boia).
  */
-import { ALTURA_LOUNGE, CIDADE, colisoresDaCidade, daSala, mundo, type NomeSala } from "../ceu";
+import { ALTURA_LOUNGE, CIDADE, colisoresDaCidade, daSala, mundo, rumoNaSala, type NomeSala } from "../ceu";
 import { comprimento, pontoNaRota, rotaAPe } from "../caminhos";
 import { NOS } from "../buracos";
 import { fiosCosmicos, saidaDaSala } from "../fiosCosmicos";
 import { nivelDoPonto } from "../niveis";
 import { NIVEIS_SEPARADOS, type IdNivel } from "../nivelAtivo";
+import { PIRAMIDE, PLATS, PONTES, RASTA, SALAO, TORRE_TI, alturaNoComplexo } from "../temploCosmico";
 import { PLATAFORMAS, IDS_PLATAFORMAS } from "../plataformas";
 import { ESTACAO, MEIO_TELOES, MIRANTES_ESTACAO, noMirante } from "../terra";
-import { acasoDe, entre, inteiro, embaralhar } from "./aleatorio";
+import { acasoDe, entre, inteiro, embaralhar, type Acaso } from "./aleatorio";
 import type { FlagsFrota } from "./agenda";
 import type { BlocoPlano } from "./plano";
 import { spotsDe, type Spot } from "./lugares";
@@ -62,7 +63,8 @@ const naZaeon = (p: { x: number; z: number }) => Math.hypot(p.x - CIDADE.centro.
 const s3 = (x: number) => { const c = Math.max(0, Math.min(1, x)); return c * c * (3 - 2 * c); };
 
 /** os pontos de VISITA de moto pelo mapa (fora da Zaeon) */
-type Ponto = P3 & { id: string; estudo: boolean; /** (passeio a pé) pra onde olha parado aqui e quanto fica (s) */ olha?: number; fica?: number };
+type Ponto = P3 & { id: string; estudo: boolean; /** (passeio a pé) pra onde olha parado aqui e quanto fica (s) */ olha?: number; fica?: number;
+  /** (passeio nos LOUNGES) o caminho a pé desde o ponto anterior, com a altura do piso em cada vértice (sem o A* da central) */ via?: P3[] };
 const VISITAS: Ponto[] = [
   ...IDS_PLATAFORMAS.map((id) => { const P = PLATAFORMAS[id]; return { id, x: P.chegada.x, y: P.y, z: P.chegada.z, estudo: id !== "solana" }; }),
   // (a PRAÇA saiu: virou a ARENA PvP — lib/cyber/arena; IA não pousa no meio da luta)
@@ -193,6 +195,8 @@ function trechosDoCeu(rot: Parada[], de: P3, deChao: boolean, agente: string, i:
 export function roteiroAndar(b: BlocoPlano, a: string, iBloco: number): Ponto[] {
   return lembrar(`andar|${a}|${iBloco}|${b.ini}`, () => {
     const turma = b.turma ?? a, rt = acasoDe("interesse", turma, Math.floor(b.ini / 40));   // (a turma, nesse pedaço do dia)
+    // metade dos passeios é nos LOUNGES (o Templo Cósmico — chega-se pelo buraco negro: `travessia`)
+    if (NIVEIS_SEPARADOS && b.passeio && rt() < 0.5) return roteiroNoTemplo(turma, a, iBloco, b.ini, rt);
     const m = MIRANTES_ESTACAO[Math.floor(rt() * MIRANTES_ESTACAO.length)]!.id, tel = (n: string) => INTERESSES.find((q) => q.id === `telao-${n}-${m}`)!, salao = INTERESSES.at(-1)!;
     const seq = rt() < 0.4 ? [salao, tel("problemas"), tel("solucoes")] : rt() < 0.6 ? [tel("problemas"), tel("solucoes"), salao] : [tel("problemas"), tel("solucoes")];
     const ra = acasoDe("lugar-interesse", a, iBloco);
@@ -207,6 +211,55 @@ export function roteiroAndar(b: BlocoPlano, a: string, iBloco: number): Ponto[] 
       return { id: `${q.id}#${k}`, x: w.x, y: PISO, z: w.z, estudo: false, olha: Math.atan2(q.alvo.x - l.x, q.alvo.z - l.z), fica: entre(rt, 180, 480) };
     });
   });
+}
+// ── o PASSEIO nos LOUNGES (o Templo Cósmico — referencial do layout do lounge; mundo pelo `daSala`) ──────────────────
+/** a altura do piso (MUNDO) num ponto do layout do Templo: pura (sem o nível ativo — a frota pode rodar fora dele) */
+const yTemplo = (q: { x: number; z: number }) => PISO + ALTURA_LOUNGE + (alturaNoComplexo(q) ?? 0);
+const doLayout = (q: { x: number; z: number }): P3 => ({ ...mundo(daSala(CIDADE.salas.lounge, q.x, q.z)), y: yTemplo(q) });
+/** os LUGARES do passeio nos lounges: o caminho a pé desde o HUB (na frente da pirâmide, no salão) — retas que não
+ *  atravessam a pirâmide nem paredes, pelas pontes e escadas — e a área onde a turma fica, virada pro que vê */
+type LugarTemplo = { id: string; caminho: { x: number; z: number }[]; lugar(u: number, v: number): { x: number; z: number }; alvo: { x: number; z: number } };
+const HUB_TEMPLO = { x: SALAO.x, z: SALAO.z + 22 };
+const LUGARES_TEMPLO: readonly LugarTemplo[] = (() => {
+  const ponte = (id: string) => PONTES.find((p) => p.id === id)!, plat = (id: string) => PLATS.find((p) => p.id === id)!;
+  const doEstudo = (id: "estudoL" | "estudoR") => { const p = ponte(id); return [p.a, p.b]; };
+  const noAnel = (c: { x: number; z: number }, r0: number, r1: number, a0: number, a1: number) => (u: number, v: number) => { const a = a0 + (a1 - a0) * v, r = r0 + (r1 - r0) * u; return { x: c.x + Math.cos(a) * r, z: c.z + Math.sin(a) * r }; };
+  const ang = (de: { x: number; z: number }, para: { x: number; z: number }) => Math.atan2(para.z - de.z, para.x - de.x);
+  const eL = plat("estudoL"), eR = plat("estudoR"), lounge = ponte("lounge"), rasta = ponte("rasta");
+  return [
+    // o SALÃO: na frente e dos lados da pirâmide (o lado de trás é o caminho do campus), olhando pra ela
+    // (até 26 m do centro: a chegada de quem vem pelo buraco negro fica a 33 — ninguém parado em cima de quem chega)
+    { id: "salao", caminho: [], lugar: noAnel(SALAO, 16, 26, 0.25, Math.PI - 0.25), alvo: PIRAMIDE },
+    // o CAMPUS DE TI: contorna a pirâmide pelo lado e desce pelo corredor do meio, olhando pra torre
+    { id: "campus", caminho: [{ x: SALAO.x + 22, z: SALAO.z + 12 }, { x: SALAO.x + 22, z: SALAO.z - 30 }, { x: SALAO.x, z: SALAO.z - SALAO.r - 4 }],
+      lugar: (u, v) => ({ x: SALAO.x + (u - 0.5) * 7, z: SALAO.z - SALAO.r - 12 - v * 150 }), alvo: { x: TORRE_TI.x, z: TORRE_TI.z } },
+    // os LOUNGES ESTUDANTIS (o térreo): pela ponte do salão, por dentro, olhando pro caracol
+    { id: "estudoL", caminho: doEstudo("estudoL"), lugar: noAnel(eL, 9, 18, ang(eL, ponte("estudoL").b) - 0.9, ang(eL, ponte("estudoL").b) + 0.9), alvo: eL },
+    { id: "estudoR", caminho: doEstudo("estudoR"), lugar: noAnel(eR, 9, 18, ang(eR, ponte("estudoR").b) - 0.9, ang(eR, ponte("estudoR").b) + 0.9), alvo: eR },
+    // o LOUNGE CÓSMICO: pelo lounge estudantil e a escada subindo; fica no pátio, perto de onde a escada chega
+    { id: "lounge", caminho: [...doEstudo("estudoL"), lounge.a, lounge.b], lugar: noAnel({ x: 0, z: 0 }, 50, 60, ang({ x: 0, z: 0 }, lounge.b) - 0.35, ang({ x: 0, z: 0 }, lounge.b) + 0.35), alvo: { x: 0, z: 0 } },
+    // o LOUNGE RASTA: pelo outro lounge estudantil e a escada; fica no disco, olhando pra árvore
+    { id: "rasta", caminho: [...doEstudo("estudoR"), rasta.a, rasta.b], lugar: noAnel(RASTA, 22, 52, ang(RASTA, rasta.b) - 0.5, ang(RASTA, rasta.b) + 0.5), alvo: RASTA },
+  ];
+})();
+/** o caminho a pé de um lugar do Templo a outro: volta pelo caminho do de saída até o hub e vai pelo do destino */
+function caminhoNoTemplo(de: LugarTemplo, ponto: { x: number; z: number }, para: LugarTemplo, chegada: { x: number; z: number }): P3[] {
+  return [ponto, ...[...de.caminho].reverse(), HUB_TEMPLO, ...para.caminho, chegada].map(doLayout);
+}
+/** o PASSEIO da turma nos lounges: 2–3 lugares do Templo, cada um com o seu canto em volta do ponto de encontro */
+function roteiroNoTemplo(turma: string, a: string, iBloco: number, ini: number, rt: Acaso): Ponto[] {
+  const ra = acasoDe("lugar-templo", a, iBloco), n = 2 + Math.floor(rt() * 2), seq: LugarTemplo[] = [];
+  for (let k = 0; k < n; k++) { let l = LUGARES_TEMPLO[Math.floor(rt() * LUGARES_TEMPLO.length)]!; if (seq.at(-1) === l) l = LUGARES_TEMPLO[(LUGARES_TEMPLO.indexOf(l) + 1) % LUGARES_TEMPLO.length]!; seq.push(l); }
+  const out: Ponto[] = []; let ant: { l: LugarTemplo; q: { x: number; z: number } } | null = null;
+  seq.forEach((l, k) => {
+    const enc = l.lugar(rt(), rt()), d = entre(ra, 1.5, 4), g = ra() * Math.PI * 2, q = { x: enc.x + Math.cos(g) * d, z: enc.z + Math.sin(g) * d };
+    // (o canto de cada um tem que ser PISO do Templo: senão fica no ponto de encontro)
+    const ok = alturaNoComplexo(q) !== null || Math.hypot(q.x, q.z) < 66 ? q : enc, w = doLayout(ok);
+    out.push({ id: `templo-${l.id}#${k}`, ...w, estudo: false, olha: rumoNaSala(CIDADE.salas.lounge, Math.atan2(l.alvo.x - ok.x, l.alvo.z - ok.z)), fica: entre(rt, 150, 360), ...(ant ? { via: caminhoNoTemplo(ant.l, ant.q, l, ok) } : {}) });
+    ant = { l, q: ok };
+  });
+  void turma; void ini;
+  return out;
 }
 /** o CIRCUITO da corrida: um anel em volta da Zaeon por fora (raio 330 m, 40 m acima do piso), com uma ondulação */
 export function noCircuito(evento: string, s: number): P3 & { rumo: number } {
@@ -402,6 +455,17 @@ function movimento(agente: string, blocos: readonly BlocoPlano[], i: number, fla
   const todos: Trecho[] = [];
   for (let j = 1; j < rot.length; j++) {
     const de = rot[j - 1]!, p = rot[j]!, reta = Math.hypot(p.x - de.x, p.z - de.z), dur = (reta * 1.35) / MOV.pe, chave = `${agente}|${i}|a${j}`;
+    if (p.via) {   // (nos LOUNGES: o caminho já vem pronto, pelas pontes e escadas — a altura muda junto)
+      const via = p.via, acum = [0]; for (let k = 1; k < via.length; k++) acum.push(acum[k - 1]! + Math.hypot(via[k]!.x - via[k - 1]!.x, via[k]!.z - via[k - 1]!.z));
+      const L = acum.at(-1)!, durV = Math.max(1, L / MOV.pe);
+      const v: Viagem = { modo: "pe", dur: durV, em: (u) => {
+        const s = L * Math.max(0, Math.min(1, u)); let k = 1; while (k < via.length - 1 && acum[k]! < s) k++;
+        const a0 = via[k - 1]!, a1 = via[k]!, seg = Math.max(1e-6, acum[k]! - acum[k - 1]!), f = Math.max(0, Math.min(1, (s - acum[k - 1]!) / seg));
+        return { x: a0.x + (a1.x - a0.x) * f, y: a0.y + (a1.y - a0.y) * f, z: a0.z + (a1.z - a0.z) * f, rumo: Math.atan2(a1.x - a0.x, a1.z - a0.z), modo: "pe" };
+      } };
+      todos.push({ v, fica: p.fica ?? 30, ate: p, parada: () => ({ x: p.x, y: p.y, z: p.z, rumo: p.olha ?? 0 }) });
+      continue;
+    }
     const v: Viagem = { modo: "pe", dur, em: (u) => {
       let rota = rotasPe.get(chave);
       if (!rota && preciso) { const lr = rotaAPe(local(de), local(p)); rota = (lr ?? [local(de), local(p)]).map((q) => mundo(q)); rotasPe.set(chave, rota); if (rotasPe.size > 2000) rotasPe.delete(rotasPe.keys().next().value!); }

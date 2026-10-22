@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
-import { Space_Grotesk, JetBrains_Mono, Outfit, Inter_Tight, Sora } from "next/font/google";
+import localFont from "next/font/local";
 
 import { siteConfig } from "@/config";
 import { cn } from "@/lib/utils";
@@ -19,40 +19,43 @@ import { BannerVersaoMobile } from "@/components/mobile/BannerVersaoMobile";
 import "../src/i18n";
 import "./globals.css";
 
-const spaceGrotesk = Space_Grotesk({
-    subsets: ["latin"],
+// Fontes LOCAIS (app/_fonts, variáveis, subset latin — baixadas do Google Fonts, licença OFL). Antes eram
+// next/font/google, que baixa do fonts.googleapis.com DURANTE o build: uma resposta ruim do Google derrubou
+// o deploy do #516 ("An error occurred in next/font"). Os nomes das variáveis CSS não mudaram.
+const spaceGrotesk = localFont({
+    src: "./_fonts/space-grotesk-latin-var.woff2",
     variable: "--font-space",
-    weight: ["300", "400", "500", "600", "700"],
+    weight: "300 700",
     display: "swap",
 });
 
-const jetbrainsMono = JetBrains_Mono({
-    subsets: ["latin"],
+const jetbrainsMono = localFont({
+    src: "./_fonts/jetbrains-mono-latin-var.woff2",
     variable: "--font-code",
-    weight: ["100", "200", "300", "400", "500", "600", "700", "800"],
+    weight: "100 800",
     display: "swap",
 });
 
-const outfit = Outfit({
-    subsets: ["latin"],
+const outfit = localFont({
+    src: "./_fonts/outfit-latin-var.woff2",
     variable: "--font-outfit",
-    weight: ["300", "400", "500", "600", "700", "800", "900"],
+    weight: "100 900",
     display: "swap",
 });
 
 // Fonte "tech" fina — usada no co-working da Sala de Estudos (pill de agente, composer).
-const interTight = Inter_Tight({
-    subsets: ["latin"],
+const interTight = localFont({
+    src: "./_fonts/inter-tight-latin-var.woff2",
     variable: "--font-tech",
-    weight: ["300", "400", "500", "600", "700"],
+    weight: "100 900",
     display: "swap",
 });
 
 // Fonte de DISPLAY da landing (hero e títulos de seção): geométrica, moderna, "tecnológica".
-const sora = Sora({
-    subsets: ["latin"],
+const sora = localFont({
+    src: "./_fonts/sora-latin-var.woff2",
     variable: "--font-display",
-    weight: ["300", "400", "500", "600", "700", "800"],
+    weight: "100 800",
     display: "swap",
 });
 

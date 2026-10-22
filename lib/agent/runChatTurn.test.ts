@@ -4,7 +4,7 @@ const h = vi.hoisted(() => ({
   deps: null as any, onStepOpts: null as any, traj: vi.fn(), resolve: vi.fn(),
   markRunning: vi.fn(), saveDone: vi.fn(), saveError: vi.fn(),
   wake: vi.fn(), write: vi.fn(), bussola: vi.fn(), fixar: vi.fn(),
-  tccCtx: vi.fn(), tccTurno: vi.fn(), uso: vi.fn(), base: vi.fn(),
+  tccCtx: vi.fn(), tccTurno: vi.fn(), trabalhos: vi.fn(), uso: vi.fn(), base: vi.fn(),
 }));
 vi.mock("@/lib/agent/aura-harness", () => ({
   buildHarnessDeps: (ctx: any, opts: any) => { h.onStepOpts = opts; h.deps = { ctx }; return h.deps; },
@@ -14,7 +14,7 @@ vi.mock("@/lib/agent/trajectory", () => ({ runTrajectoryTraced: h.traj }));
 vi.mock("@/lib/agent/memory-provider", () => ({ wakeUpContext: h.wake, writeTurnMemory: h.write }));
 vi.mock("@/lib/agent/chat-turn-store", () => ({ markRunning: h.markRunning, saveDone: h.saveDone, saveError: h.saveError }));
 vi.mock("@/lib/map/memoria-turno", () => ({ bussolaParaTurno: h.bussola, fixarTurno: h.fixar }));
-vi.mock("@/lib/tcc/turno", () => ({ tccContextoParaTurno: h.tccCtx, tccDoTurno: h.tccTurno }));
+vi.mock("@/lib/tcc/turno", () => ({ tccContextoParaTurno: h.tccCtx, tccDoTurno: h.tccTurno, trabalhosParaTurno: h.trabalhos }));
 vi.mock("@/lib/rag/turno", () => ({ baseParaTurno: h.base }));
 vi.mock("@/lib/canal/usage", () => ({ registrarUso: h.uso }));
 vi.mock("@/src/lib/prisma", () => ({ prisma: {} }));
@@ -141,6 +141,16 @@ describe("runChatTurn", () => {
     const r: any = await runChatTurn(null, params(), () => {});
     expect(r.answer).toEqual({ nucleo: "n", work: undefined, tcc });
     expect(h.fixar.mock.calls.at(-1)![0].answer.work).toBeUndefined();
+  });
+  it("chat único: bússola de TODOS os trabalhos, roteador sabe deles, editor recebe o trabalho (sem sentinela)", async () => {
+    h.trabalhos.mockResolvedValue({ bloco: "TRABALHOS", total: 2, kind: "tcc" });
+    await runChatTurn(null, params({ surface: "pesquisa", agentContext: { cartolinaScopeId: "t1", chatUnico: true, trabalhoAbertoId: "w9" } }), () => {});
+    expect(h.trabalhos).toHaveBeenCalledWith("u1", "t1", "w9");
+    expect(h.tccCtx).not.toHaveBeenCalled();
+    expect(h.onStepOpts.systemContext).toContain("TRABALHOS");
+    expect(h.deps.ctx).toMatchObject({ activeTab: "pesquisa", trabalhos: { total: 2, kind: "tcc" } });
+    expect(h.resolve.mock.calls[0][4]).toEqual({ trabalhoNoEditor: true });
+    expect(h.tccTurno.mock.calls[0][0]).toMatchObject({ multi: true, abertoId: "w9", surface: "pesquisa" });
   });
   it("uso: registra o agente (mentor ou aura) pro dono; anônimo não registra", async () => {
     await runChatTurn(null, params(), () => {});
