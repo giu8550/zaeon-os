@@ -443,9 +443,36 @@ def _add_paragraph(doc: Document, text: str, font: str, counters: dict = None):
         p.paragraph_format.first_line_indent = Cm(R.PARAGRAPH_INDENT_CM)
         p.paragraph_format.line_spacing_rule = WD_LINE_SPACING.MULTIPLE
         p.paragraph_format.line_spacing = R.LINE_SPACING_BODY
-        run = p.add_run(text)
+        _add_runs(p, text, font, R.FONT_SIZE_BODY_PT)
+
+
+# Ênfase inline do editor (barra estilo Word do chat único): **negrito** e *itálico*. O marcador só vale
+# colado no texto (`*x*`, nunca `* x *`), pra um asterisco solto ("p < 0,05*") continuar literal.
+_EMPHASIS_RE = re.compile(r"\*\*(\S(?:.*?\S)?)\*\*|\*(\S(?:.*?\S)?)\*")
+
+
+def _emphasis_spans(text: str):
+    """[(trecho, negrito, itálico)] — o texto sem os marcadores, na ordem."""
+    out, pos = [], 0
+    for m in _EMPHASIS_RE.finditer(text):
+        if m.start() > pos:
+            out.append((text[pos:m.start()], False, False))
+        out.append((m.group(1), True, False) if m.group(1) is not None else (m.group(2), False, True))
+        pos = m.end()
+    if pos < len(text):
+        out.append((text[pos:], False, False))
+    return out or [(text, False, False)]
+
+
+def _add_runs(p, text: str, font: str, size_pt: float):
+    for trecho, negrito, italico in _emphasis_spans(text):
+        run = p.add_run(trecho)
         run.font.name = font
-        run.font.size = Pt(R.FONT_SIZE_BODY_PT)
+        run.font.size = Pt(size_pt)
+        if negrito:
+            run.bold = True
+        if italico:
+            run.italic = True
 
 
 def _add_long_quote(doc: Document, text: str, font: str):
@@ -456,9 +483,7 @@ def _add_long_quote(doc: Document, text: str, font: str):
     p.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
     p.paragraph_format.space_before = Pt(R.SPACE_BEFORE_TITLE_PT)
     p.paragraph_format.space_after  = Pt(R.SPACE_AFTER_TITLE_PT)
-    run = p.add_run(_strip_quotes(text))  # citação longa não leva aspas (NBR 10520)
-    run.font.name = font
-    run.font.size = Pt(R.FONT_SIZE_QUOTE_PT)
+    _add_runs(p, _strip_quotes(text), font, R.FONT_SIZE_QUOTE_PT)  # citação longa não leva aspas (NBR 10520)
 
 
 _QUOTE_CHARS_OPEN  = ('"', '“', '‘', '«')
