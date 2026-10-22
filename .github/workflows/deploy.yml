@@ -208,6 +208,25 @@ jobs:
             $DC up -d --build $NODEPS $SERVICES
             # web é runtime-only p/ a credencial → recria pra recarregar .env.secrets
             $DC up -d --force-recreate --no-deps web
+            # LiteLLM (gateway): não está na lista do deploy e só lê infra/litellm.config.yaml AO SUBIR — trocar
+            # um grupo de modelo (ex.: zaeon-local-lfm2, 2026-10-22) não valia até alguém reiniciar à mão. Recria
+            # quando o config OU a definição dele no compose (limite de memória, envs) mudam; senão não encosta
+            # (recriar derruba o gateway por alguns segundos). A impressão digital fica em .litellm-deploy.sha.
+            if docker ps --format '{{.Names}}' | grep -qx zaeon_litellm; then
+              LITELLM_SHA="$( { cat infra/litellm.config.yaml; $DC config litellm 2>/dev/null; } | sha256sum | cut -d' ' -f1 )"
+              if [ "$(cat .litellm-deploy.sha 2>/dev/null)" != "$LITELLM_SHA" ]; then
+                echo "→ LiteLLM: config/compose mudou — recriando o gateway…"
+                if $DC up -d --force-recreate --no-deps litellm; then
+                  echo "$LITELLM_SHA" > .litellm-deploy.sha
+                  for i in $(seq 1 30); do [ "$(docker inspect -f '{{.State.Health.Status}}' zaeon_litellm 2>/dev/null)" = healthy ] && break; sleep 3; done
+                  echo "  ✓ LiteLLM: $(docker inspect -f '{{.State.Health.Status}}' zaeon_litellm 2>/dev/null)"
+                else
+                  echo "::warning::não deu pra recriar o LiteLLM — segue com o config antigo"
+                fi
+              else
+                echo "→ LiteLLM: config igual, não mexe"
+              fi
+            fi
             # o volume dos arquivos gravados pelo app (/app/.studio) nasceu como root, mas o app roda como `zaeon`:
             # acerta o dono a cada deploy (idempotente) — sem isso, salvar música/podcast/imagem dava 500 (EACCES)
             $DC exec -T -u root web sh -c 'mkdir -p /app/.studio && chown -R zaeon:zaeon /app/.studio' \
