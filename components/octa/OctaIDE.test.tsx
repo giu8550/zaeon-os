@@ -3,9 +3,17 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, fireEvent, cleanup, waitFor, within } from "@testing-library/react";
 
-vi.mock("next/dynamic", () => ({ default: () => (p: { value?: string }) => <textarea aria-label="editor" readOnly value={p.value ?? ""} /> }));
+// saída do runner e erros do app React que cada teste injeta
+const sim = vi.hoisted(() => ({ output: [] as { type: string; text: string; ts: number }[], errosReact: [] as string[] }));
+vi.mock("next/dynamic", async () => {
+  const React = await import("react");
+  return { default: () => (p: { value?: string; onErros?: (e: string[]) => void }) => {
+    React.useEffect(() => { p.onErros?.(sim.errosReact); }, [p.onErros]);
+    return <textarea aria-label="editor" readOnly value={p.value ?? ""} />;
+  } };
+});
 vi.mock("@/app/agentic-modules/codelab/useCodeRunner", () => ({
-  useCodeRunner: () => ({ run: vi.fn(), output: [], isRunning: false, isPyodideReady: true, clearOutput: vi.fn(), iframeRef: { current: null } }),
+  useCodeRunner: () => ({ run: vi.fn(), output: sim.output, isRunning: false, isPyodideReady: true, clearOutput: vi.fn(), iframeRef: { current: null } }),
 }));
 
 import OctaIDE, { AVISO_PUBLICO } from "./OctaIDE";
@@ -39,7 +47,7 @@ beforeEach(() => {
   });
   vi.stubGlobal("fetch", fetchMock);
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { sim.output = []; sim.errosReact = []; cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("OctaIDE · modo projeto", () => {
   it("abre o projeto do servidor e mostra a conta GitHub conectada", async () => {
@@ -340,5 +348,44 @@ describe("OctaIDE · modo projeto", () => {
     await waitFor(() => expect(chamadas((u, i) => u === `/api/octa/projetos/${ID}` && i?.method === "PATCH" && String(i.body).includes("arquivos"))).toHaveLength(1), { timeout: 3000 });
     const [, init] = chamadas((u, i) => i?.method === "PATCH" && String(i.body).includes("arquivos"))[0];
     expect(JSON.parse(String(init!.body))).toEqual({ arquivos: { "index.html": "<h1>oi</h1>" } });
+  });
+});
+
+describe("OctaIDE · Corrigir com o Octa", () => {
+  const abrirComPy = async () => {
+    projeto.arquivos = { "main.py": "print(x)" };
+    render(<OctaIDE />);
+    await screen.findByText("Confeitaria da Ana");
+    await screen.findAllByText("main.py"); // já aberto como ativo
+  };
+
+  it("sem erro o botão não aparece", async () => {
+    sim.output = [{ type: "stdout", text: "ola", ts: 1 }];
+    await abrirComPy();
+    expect(screen.queryByRole("button", { name: /Corrigir com o Octa/ })).toBeNull();
+  });
+
+  it("erro do Python: o clique manda o pedido montado em POST /api/octa/turnos", async () => {
+    sim.output = [{ type: "stderr", text: "NameError: name 'x' is not defined", ts: 1 }];
+    await abrirComPy();
+    fireEvent.click(await screen.findByRole("button", { name: /Corrigir com o Octa/ }));
+    await waitFor(() => expect(chamadas((u, i) => u === "/api/octa/turnos" && i?.method === "POST")).toHaveLength(1));
+    const corpo = JSON.parse(String(chamadas((u, i) => u === "/api/octa/turnos" && i?.method === "POST")[0][1]!.body));
+    expect(corpo.projetoId).toBe(ID);
+    expect(corpo.pedido).toContain("Rodei o código Python (main.py) e deu este erro");
+    expect(corpo.pedido).toContain("NameError: name 'x' is not defined");
+  });
+
+  it("erros do app React: botão na barra de erros, e o clique manda o pedido", async () => {
+    sim.errosReact = ["Erro de compilação: Unexpected token (src/App.jsx:3)"];
+    projeto.arquivos = { "index.html": '<div id="root"></div>', "src/App.jsx": "export default () => <h1>oi</h1>" };
+    render(<OctaIDE />);
+    await screen.findByText("Confeitaria da Ana");
+    fireEvent.click(screen.getByRole("tab", { name: /Prévia/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Corrigir com o Octa/ }));
+    await waitFor(() => expect(chamadas((u, i) => u === "/api/octa/turnos" && i?.method === "POST")).toHaveLength(1));
+    const corpo = JSON.parse(String(chamadas((u, i) => u === "/api/octa/turnos" && i?.method === "POST")[0][1]!.body));
+    expect(corpo.pedido).toContain("o app React");
+    expect(corpo.pedido).toContain("Unexpected token (src/App.jsx:3)");
   });
 });

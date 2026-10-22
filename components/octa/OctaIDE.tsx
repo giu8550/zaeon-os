@@ -28,6 +28,7 @@ import {
 import { textoErroPublicar, type EventoTurno } from "@/lib/octa/passos";
 import type { PermissaoOcta } from "@/lib/octa/projetos";
 import PreviaSvg from "./PreviaSvg";
+import CorrigirComOcta from "./CorrigirComOcta";
 import GaleriaDesign from "./GaleriaDesign";
 import { PassosTurno, CartaoAprovacao } from "./PassosTurno";
 import { useTurnoOcta, type EstadoTurno, type StatusTurno } from "./useTurnoOcta";
@@ -743,6 +744,7 @@ export default function OctaIDE() {
                   <div role="status" aria-label="Erros do app" className="shrink-0 max-h-28 overflow-y-auto px-3 py-1.5 font-mono text-[11.5px] leading-relaxed"
                     style={{ background: Z.painel, borderTop: `1px solid ${Z.borda}`, color: Z.erro }}>
                     {errosReact.map((e, i) => <div key={i} className="truncate" title={e}>{e}</div>)}
+                    {projeto && <div className="mt-1"><CorrigirComOcta origem="react" saida={errosReact.join("\n")} desabilitado={travado || enviando} onCorrigir={(p) => void enviarTurno(p)} /></div>}
                   </div>
                 )}
               </div>
@@ -821,6 +823,7 @@ export default function OctaIDE() {
                       <div key={i} style={{ color: o.type === "stderr" ? Z.erro : o.type === "info" ? Z.apagado : Z.texto }} className="whitespace-pre-wrap">{o.text}</div>
                     ))}
                     {!output.length && <div style={{ color: Z.apagado }}>Clique em Rodar pra executar o arquivo aberto.</div>}
+                    {projeto && <div className="mt-1"><CorrigirComOcta origem={ativo?.endsWith(".py") ? "python" : "pagina"} arquivo={ativo ?? undefined} saida={output.filter((o: RunOutput) => o.type === "stderr").map((o: RunOutput) => o.text).join("\n")} desabilitado={travado || enviando} onCorrigir={(p) => void enviarTurno(p)} /></div>}
                   </div>
                 </div>
               </>
