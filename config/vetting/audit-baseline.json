@@ -16,6 +16,7 @@
     "axios|https://github.com/advisories/GHSA-pf86-5x62-jrwf",
     "axios|https://github.com/advisories/GHSA-pmwg-cvhr-8vh7",
     "axios|https://github.com/advisories/GHSA-q8qp-cvcw-x6jj",
+    "basic-ftp|https://github.com/advisories/GHSA-c475-qrg2-pj4r",
     "brace-expansion|https://github.com/advisories/GHSA-3jxr-9vmj-r5cp",
     "brace-expansion|https://github.com/advisories/GHSA-6j4f-fj2g-mc7p",
     "brace-expansion|https://github.com/advisories/GHSA-mh99-v99m-4gvg",
@@ -27,6 +28,8 @@
     "engine.io|https://github.com/advisories/GHSA-2gc4-cqfq-p2gv",
     "engine.io|https://github.com/advisories/GHSA-gr94-w7qr-f4j3",
     "engine.io|https://github.com/advisories/GHSA-r635-g3xr-vw7x",
+    "extract-zip|https://github.com/advisories/GHSA-7pqw-9j4j-h8q3",
+    "extract-zip|https://github.com/advisories/GHSA-jmr9-qjv8-65gv",
     "form-data|https://github.com/advisories/GHSA-hmw2-7cc7-3qxx",
     "http-cache-semantics|https://github.com/advisories/GHSA-ch52-4w7c-c8xp",
     "minimatch|https://github.com/advisories/GHSA-23c5-xmqv-rm74",
@@ -72,5 +75,8 @@
     "tar|https://github.com/advisories/GHSA-r292-9mhp-454m",
     "tar|https://github.com/advisories/GHSA-r6q2-hw4h-h46w",
     "ws|https://github.com/advisories/GHSA-96hv-2xvq-fx4p"
-  ]
+  ],
+  "_revisoes": {
+    "basic-ftp + extract-zip (via puppeteer-core@24.43.1 → @puppeteer/browsers@2.13.2)": "Revisado 2026-10-22 (ruling P4). lib/octa/captura.ts sempre passa executablePath (Chromium do sistema): nunca baixa navegador (extract-zip só roda no download), nunca usa FTP nem proxy PAC (basic-ftp só via proxy-agent/pac). Sem override (basic-ftp corrigido só em major). Remover quando o puppeteer-core trouxer versões corrigidas."
+  }
 }

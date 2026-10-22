@@ -4,10 +4,14 @@
     "@prisma/client": "6.19.2",
     "@prisma/engines": "6.19.2",
     "canvas": "2.11.2",
+    "es5-ext": "0.10.64",
     "esbuild": "0.28.2",
     "fsevents": "2.3.3",
     "msgpackr-extract": "3.0.4",
     "prisma": "6.19.2",
     "sharp": "0.34.5"
+  },
+  "_revisoes": {
+    "es5-ext@0.10.64": "Revisado 2026-10-22 (via @codesandbox/sandpack-react → react-devtools-inline → es6-symbol → d). postinstall = node -e \"try{require('./_postinstall')}catch(e){}\" || exit 0; _postinstall.js só imprime uma mensagem (process._rawDebug) se o fuso for russo, senão no-op. Sem rede, sem escrita em disco, sem child_process."
   }
 }
