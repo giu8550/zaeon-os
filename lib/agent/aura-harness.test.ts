@@ -165,6 +165,11 @@ describe("aura-harness · helpers puros", () => {
 });
 
 describe("aura-harness · resolveHarnessOutput (protocolo do cliente)", () => {
+  it("chat único: criar_trabalho na pesquisa fica ESTRUTURADO (o trabalho vai pro editor), sem o sentinela research", () => {
+    const st = { intent: "criar_trabalho", kind: "artigo" } as any;
+    expect(resolveHarnessOutput(st, { nucleo: "ok" }, "pesquisa", "artigo sobre x").mode).toBe("research");
+    expect(resolveHarnessOutput(st, { nucleo: "ok" }, "pesquisa", "artigo sobre x", { trabalhoNoEditor: true }).mode).toBe("structured");
+  });
   const base = { intent: "explicar_conceito", kind: undefined, artifacts: [] } as any;
 
   it("sem artefato → structured carregando o answer inteiro (render rico no cliente)", () => {

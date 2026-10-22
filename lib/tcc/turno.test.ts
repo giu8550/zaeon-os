@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const m = vi.hoisted(() => ({
-  findTcc: vi.fn(), criar: vi.fn(), aplicar: vi.fn(), marcar: vi.fn(),
+  findTcc: vi.fn(), listar: vi.fn(), criar: vi.fn(), aplicar: vi.fn(), marcar: vi.fn(),
   findBoard: vi.fn(), createBoard: vi.fn(), patchBoard: vi.fn(),
   gen: vi.fn(),
 }));
 vi.mock("@/lib/tcc/store", async (orig) => ({
   ...(await orig<any>()),
-  findTccDoEscopo: m.findTcc, criarTcc: m.criar, aplicarNoTcc: m.aplicar, marcarStatus: m.marcar,
+  findTccDoEscopo: m.findTcc, listarTrabalhosDoEscopo: m.listar, criarTcc: m.criar, aplicarNoTcc: m.aplicar, marcarStatus: m.marcar,
 }));
 vi.mock("@/lib/cartolina/store", async (orig) => ({
   ...(await orig<any>()),
@@ -17,6 +17,7 @@ vi.mock("@/lib/scholar/gemini", () => ({ geminiJson: m.gen }));
 vi.mock("@/lib/agent/transcript", () => ({ resolveUserId: async () => null })); // route-auth não arrasta next-auth/db
 vi.mock("@/src/lib/ratelimit", () => ({ guard: async () => ({ ok: true }) }));
 
+import { contextoDosTrabalhos, pedeNovoTrabalho, trabalhosParaTurno } from "@/lib/tcc/turno";
 import { cardIdDoTcc, contextoDoTcc, ehPedidoDeTcc, fixarCardTcc, tccContextoParaTurno, tccDoTurno, temaDoPedido } from "@/lib/tcc/turno";
 import { corposDoEsboco, gerarTccEmBackground, opsDoEsboco } from "@/lib/tcc/gerar";
 import { aplicarOps } from "@/lib/tcc/secoes";
@@ -33,6 +34,7 @@ beforeEach(() => {
   process.env.CARTOLINA_MEMORIA = "1";
   Object.values(m).forEach((f) => f.mockReset());
   m.findTcc.mockResolvedValue(null);
+  m.listar.mockResolvedValue([]);
   m.criar.mockImplementation(async (i: any) => tcc({ id: "novo", titulo: i.titulo, secoes: i.secoes.map((s: any, k: number) => ({ id: `s${k}`, titulo: s.titulo, corpo: s.corpo ?? "" })) }));
   m.findBoard.mockResolvedValue(null);
   m.marcar.mockResolvedValue(undefined);
@@ -202,5 +204,83 @@ describe("geração em background (POST /api/tcc e 'crie um TCC' sem texto)", ()
     await gerarTccEmBackground("w1", "u1", "foto");
     expect(m.gen).toHaveBeenCalled();
     expect(m.marcar).toHaveBeenCalledWith("w1", "u1", "pronto");
+  });
+});
+
+describe("chat único — VÁRIOS trabalhos na mesma conversa", () => {
+  const base = { userId: "u1", scopeId: "aba1", surface: "pesquisa", intent: "criar_trabalho" as const, kind: "artigo" as const, multi: true };
+  const artigo = (x: any = {}) => tcc({ id: "a1", titulo: "fotossíntese", workType: "Artigo", ...x });
+  beforeEach(() => {
+    delete process.env.TCC_CROSS;
+    process.env.CHAT_UNICO = "1"; // o chat único liga o motor sozinho
+  });
+
+  it("pedeNovoTrabalho: sem aberto = novo; 'outro sobre Y' = novo; seção/revisão = edição; tema novo = novo", () => {
+    const aberto = { titulo: "fotossíntese" };
+    expect(pedeNovoTrabalho("escreva um artigo sobre fotossíntese", null)).toBe(true);
+    expect(pedeNovoTrabalho("agora outro sobre a mitose", aberto)).toBe(true);
+    expect(pedeNovoTrabalho("escreva mais um artigo sobre ética na IA", aberto)).toBe(true);
+    expect(pedeNovoTrabalho("now another one on black holes", aberto)).toBe(true);
+    expect(pedeNovoTrabalho("escreva a metodologia do artigo", aberto)).toBe(false);
+    expect(pedeNovoTrabalho("reescreva a introdução do artigo sobre fotossíntese", aberto)).toBe(false);
+    expect(pedeNovoTrabalho("escreva um artigo sobre fotossíntese", aberto)).toBe(false); // mesmo tema = o mesmo trabalho
+    expect(pedeNovoTrabalho("escreva um artigo sobre buracos negros", aberto)).toBe(true);
+  });
+
+  it("dois pedidos na mesma conversa = DOIS trabalhos (o 1º não é sobrescrito)", async () => {
+    m.criar.mockImplementation(async (i: any) => artigo({ id: i.titulo === "fotossíntese" ? "a1" : "a2", titulo: i.titulo, workType: i.workType, secoes: i.secoes.map((s: any, k: number) => ({ id: `s${k}`, titulo: s.titulo, corpo: s.corpo ?? "" })) }));
+    const sec = { work: { kind: "artigo", sections: [{ title: "INTRODUÇÃO", body: "texto" }] } };
+    const r1 = await tccDoTurno({ ...base, prompt: "escreva um artigo sobre fotossíntese", answer: ans(sec) as any });
+    expect(r1).toMatchObject({ workId: "a1", criado: true, tipo: "Artigo" });
+    m.listar.mockResolvedValue([artigo()]);
+    const r2 = await tccDoTurno({ ...base, kind: "tcc", prompt: "agora outro sobre a mitose", answer: ans(sec) as any });
+    expect(r2).toMatchObject({ workId: "a2", titulo: "a mitose", criado: true, tipo: "TCC" });
+    expect(m.criar).toHaveBeenCalledTimes(2);
+    expect(m.criar.mock.calls[1][0]).toMatchObject({ workType: "TCC", scopeId: "aba1" });
+    expect(m.aplicar).not.toHaveBeenCalled();
+  });
+
+  it("sem seções do modelo: esqueleto do TIPO (artigo tem resumo) + geração em background", async () => {
+    const gerar = vi.fn();
+    const r = await tccDoTurno({ ...base, gerar, prompt: "escreva um artigo sobre fotossíntese", answer: ans() as any });
+    expect(m.criar.mock.calls[0][0].secoes[0].titulo).toBe("RESUMO");
+    expect(gerar).toHaveBeenCalledWith("novo", "u1", "fotossíntese");
+    expect(r).toMatchObject({ gerando: true, tipo: "Artigo" });
+  });
+
+  it("edição vai pro trabalho ABERTO no editor (não pro mais recente)", async () => {
+    m.listar.mockResolvedValue([artigo({ id: "a2", titulo: "mitose" }), artigo({ id: "a1" })]);
+    m.aplicar.mockImplementation(async (id: string, _u: string, fn: any) => {
+      const r = aplicarOps(tcc().secoes, fn(tcc()));
+      return { ok: true, tcc: artigo({ id }), efeitos: r.ok ? r.efeitos : [] };
+    });
+    const r = await tccDoTurno({ ...base, intent: "explicar_conceito", abertoId: "a1", prompt: "melhore a metodologia", answer: ans({ work: { kind: "artigo", sections: [{ title: "METODOLOGIA", body: "nova" }] } }) as any });
+    expect(m.aplicar.mock.calls[0][0]).toBe("a1");
+    expect(r).toMatchObject({ workId: "a1", criado: false, alteradas: 1, tipo: "Artigo" });
+  });
+
+  it("vale no modo pesquisa (surface pesquisa) — o legado não escrevia lá", async () => {
+    const r = await tccDoTurno({ ...base, prompt: "escreva um artigo sobre x", answer: ans({ work: { kind: "artigo", sections: [{ title: "A", body: "b" }] } }) as any });
+    expect(r?.criado).toBe(true);
+  });
+
+  it("aula não é trabalho; flag off / sem conversa = null; erro de banco = null", async () => {
+    expect(await tccDoTurno({ ...base, kind: "aula", prompt: "aula sobre x", answer: ans() as any })).toBeNull();
+    expect(await tccDoTurno({ ...base, scopeId: undefined, prompt: "artigo sobre x", answer: ans() as any })).toBeNull();
+    m.listar.mockRejectedValue(new Error("db"));
+    expect(await tccDoTurno({ ...base, prompt: "artigo sobre x", answer: ans() as any })).toBeNull();
+    delete process.env.CHAT_UNICO;
+    expect(await tccDoTurno({ ...base, prompt: "artigo sobre x", answer: ans() as any })).toBeNull();
+  });
+
+  it("bússola lista todos os trabalhos e marca o aberto; trabalhosParaTurno devolve total e tipo", async () => {
+    const lista = [artigo({ id: "a2", titulo: "mitose", workType: "TCC" }), artigo({ id: "a1" })];
+    const c = contextoDosTrabalhos(lista as any, "a1");
+    expect(c).toContain('1) "mitose" (TCC');
+    expect(c).toMatch(/2\) "fotossíntese" \(Artigo.*ABERTO NO EDITOR/);
+    expect(c).toContain("documento NOVO");
+    m.listar.mockResolvedValue(lista);
+    expect(await trabalhosParaTurno("u1", "aba1", "zzz")).toMatchObject({ total: 2, kind: "tcc" }); // aberto desconhecido = o mais recente
+    expect(await trabalhosParaTurno(null, "aba1")).toEqual({ bloco: "", total: 0 });
   });
 });

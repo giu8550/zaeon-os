@@ -428,6 +428,8 @@ export function resolveHarnessOutput(
   answer: StructuredAnswer,
   surface: string | null | undefined,
   objective: string,
+  /** chat único: o trabalho vai pro EDITOR da conversa (lib/tcc/turno), nunca pro sentinela da Sala de Pesquisa */
+  opts: { trabalhoNoEditor?: boolean } = {},
 ): HarnessOutput {
   const arts = answer.artifacts ?? state.artifacts ?? [];
   const studioArt = arts.find((a) => a.studioKind && !a.studioKind.startsWith("research:"));
@@ -438,7 +440,7 @@ export function resolveHarnessOutput(
   const lead = !bruto || pareceRecusa(bruto) ? "Já te mostro aqui." : bruto;
 
   // Sala de Pesquisa: pedido de TRABALHO → sentinela research (o cliente gera no documento).
-  if (state.intent === "criar_trabalho" && surface === "pesquisa") {
+  if (state.intent === "criar_trabalho" && surface === "pesquisa" && !opts.trabalhoNoEditor) {
     return { mode: "research", kind: state.kind ?? "artigo", topic: objective, text: lead };
   }
   // O ARTEFATO NÃO É MAIS A RESPOSTA.

@@ -3,14 +3,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const m = vi.hoisted(() => ({
   userId: "u1" as string | null,
   rl: { ok: true } as any,
-  findTcc: vi.fn(), criar: vi.fn(), getTcc: vi.fn(), sugestoes: vi.fn(), aplicar: vi.fn(), sugerir: vi.fn(),
+  findTcc: vi.fn(), listar: vi.fn(), criar: vi.fn(), getTcc: vi.fn(), sugestoes: vi.fn(), aplicar: vi.fn(), sugerir: vi.fn(),
   decidir: vi.fn(), historico: vi.fn(), desfazer: vi.fn(), gerar: vi.fn(), card: vi.fn(), lapidar: vi.fn(),
 }));
 vi.mock("@/src/lib/ratelimit", () => ({ guard: async () => m.rl }));
 vi.mock("@/lib/agent/transcript", () => ({ resolveUserId: async () => m.userId }));
 vi.mock("@/lib/tcc/store", async (orig) => ({
   ...(await orig<any>()),
-  findTccDoEscopo: m.findTcc, criarTcc: m.criar, getTccForUser: m.getTcc, listarSugestoes: m.sugestoes,
+  findTccDoEscopo: m.findTcc, listarTrabalhosDoEscopo: m.listar, criarTcc: m.criar, getTccForUser: m.getTcc, listarSugestoes: m.sugestoes,
   aplicarNoTcc: m.aplicar, sugerirNoTcc: m.sugerir, decidirSugestao: m.decidir, historicoDoTcc: m.historico,
   desfazerRevisao: m.desfazer,
 }));
@@ -102,6 +102,20 @@ describe("GET/POST /api/tcc", () => {
     await POST(req("/api/tcc", { topic: "x", scopeId: "a b<" }, "POST"));
     expect(m.criar.mock.calls[0][0].scopeId).toBeNull();
     expect(m.card).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/tcc?todos=1 (chat único)", () => {
+  it("lista os trabalhos da conversa do DONO, do mais antigo pro mais novo", async () => {
+    m.listar.mockResolvedValue([tcc({ id: "w2", titulo: "B", workType: "Artigo" }), tcc({ id: "w1", titulo: "A", workType: null })]);
+    const d = await (await GET(req("/api/tcc?scopeId=aba1&todos=1"))).json();
+    expect(m.listar).toHaveBeenCalledWith("u1", "aba1");
+    expect(d.trabalhos).toEqual([{ id: "w1", titulo: "A", status: "pronto", tipo: "TCC" }, { id: "w2", titulo: "B", status: "pronto", tipo: "Artigo" }]);
+  });
+  it("sem conversa = lista vazia; CHAT_UNICO sozinho liga a rota", async () => {
+    delete process.env.TCC_CROSS; process.env.CHAT_UNICO = "1";
+    expect(await (await GET(req("/api/tcc?todos=1"))).json()).toEqual({ trabalhos: [] });
+    delete process.env.CHAT_UNICO;
   });
 });
 

@@ -1,12 +1,13 @@
 /**
  * GET  /api/tcc?scopeId=           → { tcc: { id, titulo, status } | null }  (o TCC da conversa)
+ * GET  /api/tcc?scopeId=&todos=1   → { trabalhos: [{ id, titulo, status, tipo }] }  (chat único: vários por conversa)
  * POST /api/tcc { topic, scopeId } → { workId }  (cria do tópico e escreve em BACKGROUND; poll no GET /:id)
  * TCC cross-sala (Estudos cria/edita · Pesquisa lapida). Docs: docs/HANDOFF_TCC_CROSS_SALA.md. Atrás de TCC_CROSS=1.
  */
 import { NextResponse } from "next/server";
 import { sanitizeScopeId } from "@/lib/cartolina/route-auth";
 import { entrarTcc } from "@/lib/tcc/route-auth";
-import { criarTcc, findTccDoEscopo } from "@/lib/tcc/store";
+import { criarTcc, findTccDoEscopo, listarTrabalhosDoEscopo } from "@/lib/tcc/store";
 import { ESQUELETO_TCC } from "@/lib/tcc/secoes";
 import { gerarTccEmBackground } from "@/lib/tcc/gerar";
 import { fixarCardTcc } from "@/lib/tcc/turno";
@@ -16,7 +17,14 @@ export const runtime = "nodejs";
 export async function GET(req: Request) {
   const a = await entrarTcc(req, "tcc-get");
   if ("response" in a) return a.response;
-  const scopeId = sanitizeScopeId(new URL(req.url).searchParams.get("scopeId"));
+  const q = new URL(req.url).searchParams;
+  const scopeId = sanitizeScopeId(q.get("scopeId"));
+  if (q.get("todos") === "1") {
+    if (!scopeId) return NextResponse.json({ trabalhos: [] });
+    const lista = await listarTrabalhosDoEscopo(a.userId, scopeId);
+    // a pasta mais antiga primeiro (é a ordem em que nasceram na conversa)
+    return NextResponse.json({ trabalhos: lista.reverse().map((t) => ({ id: t.id, titulo: t.titulo, status: t.status, tipo: t.workType || "TCC" })) });
+  }
   if (!scopeId) return NextResponse.json({ tcc: null });
   const t = await findTccDoEscopo(a.userId, scopeId);
   return NextResponse.json({ tcc: t ? { id: t.id, titulo: t.titulo, status: t.status } : null });
