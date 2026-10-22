@@ -14,6 +14,7 @@ import { SINTESE_CARRO, type NomeSomCarro } from "./somCarro";
 import { sintetizarBatida, sintetizarRaio, sintetizarTrovao } from "./coracao";
 import { sintetizarAmbiente } from "./ambiente";
 import { sintetizarPuxaFio, sintetizarZumbidoFio } from "./somFio";
+import { sintetizarEstilhacos, sintetizarTempestade } from "./somTempestade";
 import { sintetizarMaquinaNoAr } from "./somDroid";
 import { sintetizarTablet } from "./somTablet";
 import { sintetizarAcerto, sintetizarAlerta, sintetizarDash, sintetizarDecola, sintetizarGolpe, sintetizarImpactoHeroi } from "./somMovimento";
@@ -25,7 +26,7 @@ export type NomeSom =
   | "ship-takeoff" | "ship-landing" | "ship-touchdown" | "step-1" | "step-2" | "step-3" | "jump" | "land"
   | "near-ping" | "neuron-chime" | "rise" | "cyber-enter" | "study-confirm" | "chat-pop" | "join" | "leave"
   | "jetpack" | "jato-sopro" | "baque" | "droid-agua" | "droid-alien" | "droid-louvor"
-  | NomeSomMoto | NomeSomCorrida | NomeSomAsas | NomeSomRifle | NomeSomCarro | "coracao" | "raio" | "trovao" | "ambiente-biblioteca" | "ambiente-jardim" | "fio-zumbido" | "fio-puxa" | "dash" | "alerta" | "decola" | "impacto-heroi" | "golpe" | "acerto" | "droid-maquina" | "tablet-abre" | "tablet-fecha";
+  | NomeSomMoto | NomeSomCorrida | NomeSomAsas | NomeSomRifle | NomeSomCarro | "coracao" | "raio" | "trovao" | "ambiente-biblioteca" | "ambiente-jardim" | "fio-zumbido" | "fio-puxa" | "dash" | "alerta" | "decola" | "impacto-heroi" | "golpe" | "acerto" | "droid-maquina" | "tablet-abre" | "tablet-fecha" | "tempestade-cosmica" | "estilhacos";
 
 /** afinação 432 Hz: a faixa do leito (danamusic) é gravada em A=440 (medido: +0,1 cent) — tocada a 432/440 vira A=432 */
 export const TAXA_432 = 432 / 440;
@@ -104,6 +105,9 @@ export const SONS: Record<NomeSom, { modo: "pos" | "2d"; loop: boolean; volume: 
   raio: { modo: "pos", loop: false, volume: 0.8, sintetico: true },
   // o TROVÃO DE VERDADE das tempestades (lounge, templo, nave): estalo seco + sub-grave + rumble longo (lib/cyber/coracao)
   trovao: { modo: "pos", loop: false, volume: 1, sintetico: true },
+  // a TRAVESSIA do buraco negro (lib/cyber/somTempestade): o vento cósmico rodando e os cacos estourando no horizonte
+  "tempestade-cosmica": { modo: "pos", loop: true, volume: 0.8, sintetico: true },
+  estilhacos: { modo: "pos", loop: false, volume: 0.9, sintetico: true },
   // a MÚSICA AMBIENTE dos espaços de convivência (lib/cyber/ambiente, sintetizada): sai das caixas de som de cada sala
   "ambiente-biblioteca": { modo: "pos", loop: true, volume: 0.36, sintetico: true },
   // os FIOS DE ENERGIA (lib/cyber/somFio, sintetizados): o zumbido do cabo nos postes e o assobio de quem é puxado
@@ -184,7 +188,7 @@ export function sintetizarBaque(sr: number): Float32Array {
 }
 export const SINTESE: Partial<Record<NomeSom, (sr: number) => Float32Array>> = { "jato-sopro": sintetizarJetpack, baque: sintetizarBaque, ...SINTESE_MOTO, ...SINTESE_CORRIDA, ...SINTESE_ASAS, ...SINTESE_RIFLE, ...SINTESE_CARRO, coracao: sintetizarBatida, raio: sintetizarRaio, trovao: sintetizarTrovao,
   "ambiente-biblioteca": (sr) => sintetizarAmbiente("biblioteca", sr), "ambiente-jardim": (sr) => sintetizarAmbiente("jardim", sr),
-  "fio-zumbido": sintetizarZumbidoFio, "fio-puxa": sintetizarPuxaFio, dash: sintetizarDash, alerta: sintetizarAlerta, decola: sintetizarDecola, "impacto-heroi": sintetizarImpactoHeroi, golpe: sintetizarGolpe, acerto: sintetizarAcerto, "droid-maquina": sintetizarMaquinaNoAr, "tablet-abre": (sr: number) => sintetizarTablet(sr, true), "tablet-fecha": (sr: number) => sintetizarTablet(sr, false) };
+  "fio-zumbido": sintetizarZumbidoFio, "fio-puxa": sintetizarPuxaFio, dash: sintetizarDash, alerta: sintetizarAlerta, decola: sintetizarDecola, "impacto-heroi": sintetizarImpactoHeroi, golpe: sintetizarGolpe, acerto: sintetizarAcerto, "droid-maquina": sintetizarMaquinaNoAr, "tablet-abre": (sr: number) => sintetizarTablet(sr, true), "tablet-fecha": (sr: number) => sintetizarTablet(sr, false), "tempestade-cosmica": sintetizarTempestade, estilhacos: sintetizarEstilhacos };
 
 /** distância: cai com a distância e some longe (cull). A nave de quem PILOTA quase não paneia (rolloff baixo).
  *  Atenção: no modelo "inverse" do Web Audio o `max` NÃO corta (o som só vai ficando fraco, mas se ouve de longe);
