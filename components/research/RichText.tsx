@@ -1,12 +1,11 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import ChatMarkdown from "@/components/study/ChatMarkdown";
-
-/** Tem fórmula ($…$, $$…$$, \(…\), \[…\]) ou gráfico? Aí o texto vai pelo ChatMarkdown (KaTeX) — este
- *  formatador só sabe negrito/itálico. Dinheiro ("R$ 10") sozinho não conta: precisa de um par de $. */
-const TEM_MATEMATICA = /\$[^$\n]+\$|\\\(|\\\[|```grafico/;
+import { temMatematica } from "@/lib/chat/matematica";
 
 // Render leve de markdown — **negrito**, *itálico* e quebras de linha. Sem biblioteca.
+// Texto com fórmula ($…$, $$…$$, \(…\), \[…\]) ou ```grafico vai pro ChatMarkdown (KaTeX, o mesmo do chat da
+// Aura — PR #405): o chat de PDF e os resumos da Sala de Pesquisa mostravam o LaTeX cru.
 // `reveal` (opt-in): revela o texto AOS POUCOS, como se a IA estivesse gerando — dá fluidez.
 //   Regra do app: toda saída de IA usa reveal (ver docs/RESEARCH_ROOM_RULES.md §8).
 export default function RichText({
@@ -19,7 +18,9 @@ export default function RichText({
   reveal?: boolean;
 }) {
   const { display, revealing } = useReveal(text || "", !!reveal);
-  if (TEM_MATEMATICA.test(text || "")) {
+  // Decide pelo texto INTEIRO (não pelo pedaço revelado), pra não trocar de render no meio da revelação.
+  // O ChatMarkdown é seguro em streaming: $$ ainda sem fecho fica como texto até fechar.
+  if (temMatematica(text || "")) {
     return (
       <div className={className}>
         <ChatMarkdown text={display} />

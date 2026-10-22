@@ -119,7 +119,7 @@ export type AvatarLuzHandle = {
    *  esticadas e abertas, mãos atrás da cabeça). Sentado, os PÉS ficam no chão na frente do móvel (IK — as canelas não
    *  atravessam a frente do sofá). `tablet` (0..1) = o TABLET se materializando nas mãos (partículas → tablet aceso): com
    *  ele, os braços seguram o tablet e a cabeça olha pra tela — em pé, sentado ou deitado. */
-  animar(o: { andando: boolean; correndo?: boolean; sentado?: number; meditando?: number; pilotando?: number; jato?: number; ar?: { vy: number; movendo: boolean; /** velocidade no plano (m/s) — o voo turbo deita o corpo */ vel?: number } | null; /** as poses de AÇÃO (lib/cyber/posesCombate): pesos 0..1 do sprint, do dash e do alerta (`alertaT` = s desde o dash — o fôlego); `heroi` = s desde o HERO LANDING (ou null); `decola` = a decolagem com impulso (s desde o comando e o agachamento) */ acao?: { sprint: number; dash: number; alerta: number; alertaT?: number; heroi?: number | null; decola?: { t: number; espera: number } | null; /** a ESPADA na mão: o golpe do combo agora (fase 0..1 e a janela que corta) e o peso da guarda */ espada?: { golpe: { n: 1 | 2 | 3; u: number; ativo: [number, number] } | null; guarda: number } | null } | null; montado?: Montado | null; dj?: number; danca?: number; surf?: number; puxado?: number; descanso?: { sentar: number; deitar: number; assentoY: number; relaxa?: number; /** onde os pés pousam à frente (m) — o trono: perto, o joelho dobra */ pes?: number; /** "trono": a pose À VONTADE (encostado, braços nos braços do trono, pernas que se ajeitam, a cabeça olhando em volta) */ estilo?: "trono" } | null; tablet?: number; dt: number; t: number }): void;
+  animar(o: { andando: boolean; correndo?: boolean; sentado?: number; meditando?: number; pilotando?: number; jato?: number; ar?: { vy: number; movendo: boolean; /** velocidade no plano (m/s) — o voo turbo deita o corpo */ vel?: number } | null; /** as poses de AÇÃO (lib/cyber/posesCombate): pesos 0..1 do sprint, do dash e do alerta (`alertaT` = s desde o dash — o fôlego); `heroi` = s desde o HERO LANDING (ou null); `decola` = a decolagem com impulso (s desde o comando e o agachamento) */ acao?: { sprint: number; dash: number; alerta: number; alertaT?: number; heroi?: number | null; decola?: { t: number; espera: number } | null; /** a ESPADA na mão: o golpe do combo agora (fase 0..1 e a janela que corta) e o peso da guarda */ espada?: { golpe: { n: 1 | 2 | 3; u: number; ativo: [number, number] } | null; guarda: number } | null } | null; montado?: Montado | null; dj?: number; danca?: number; surf?: number; /** a PRANCHA CÓSMICA do sprint (o hoverboard): o `surf`, mas DE FRENTE pra onde vai (pés lado a lado, o corpo inclinado, os braços abertos pra trás) e sem a manobra */ prancha?: boolean; puxado?: number; descanso?: { sentar: number; deitar: number; assentoY: number; relaxa?: number; /** onde os pés pousam à frente (m) — o trono: perto, o joelho dobra */ pes?: number; /** "trono": a pose À VONTADE (encostado, braços nos braços do trono, pernas que se ajeitam, a cabeça olhando em volta) */ estilo?: "trono" } | null; tablet?: number; dt: number; t: number }): void;
   /** quantas PISADAS (pé encostando no chão na animação de andar/correr) desde a última chamada — o som do passo
    *  sai no compasso do pé; `null` = avatar sem pés (sem o modelo): o engine usa a cadência fixa */
   passosNovos(): number | null;
@@ -489,7 +489,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   esferaRapida(grupo);   // (senão o 1º desenho deforma todos os vértices na CPU: jogador que entra = travada)   // os ~50 ossos do esqueleto sem nada pendurado: fora da lista de desenho (matrizes)
   return {
     group: grupo, meshes, mochila,
-    animar({ andando, correndo, sentado = 0, meditando = 0, pilotando = 0, jato = 0, ar = null, acao = null, montado = null, dj = 0, danca = 0, surf = 0, puxado: wP = 0, descanso = null, tablet: wTab = 0, dt, t }) {
+    animar({ andando, correndo, sentado = 0, meditando = 0, pilotando = 0, jato = 0, ar = null, acao = null, montado = null, dj = 0, danca = 0, surf = 0, prancha: deFrente = false, puxado: wP = 0, descanso = null, tablet: wTab = 0, dt, t }) {
       const k = Math.min(1, dt * 8), corre = !!correndo && andando;
       wWalk += ((andando && !corre ? 1 : 0) - wWalk) * k; wRun += ((corre ? 1 : 0) - wRun) * k;
       // o CLIPE de ação por cima (a mistura entra rápido e sai suave); acabou e não segura → sai
@@ -938,18 +938,33 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
         // ── SURFANDO na escada de energia: de lado na prancha, joelhos dobrados, braços se equilibrando; um 360 no meio ──
         tSurf += dt;
         grupo.updateWorldMatrix(true, false); grupo.getWorldQuaternion(qG);
-        const mov = parado ? 0 : 1, ciclo = tSurf % 6.5, giro = mov * Math.PI * 2 * suave((ciclo - 2.6) / 1.2), festa = mov * janela(ciclo, 2.5, 4.1);
+        const mov = parado ? 0 : 1, ciclo = tSurf % 6.5, giro = deFrente ? 0 : mov * Math.PI * 2 * suave((ciclo - 2.6) / 1.2), festa = deFrente ? 0 : mov * janela(ciclo, 2.5, 4.1);
         const bob = mov * (0.05 * Math.sin(t * 3.1) + 0.03 * Math.sin(t * 5.3));
         // o eixo da viagem (girado pela manobra) e a frente do corpo (de lado pra ela)
         const viaja = vViaja.set(0, 0, -1).applyQuaternion(qG).applyAxisAngle(cima, giro), frenteC = vFrenteC.copy(viaja).applyAxisAngle(cima, Math.PI / 2);   // (vA/vB são do `apontar`)
         prancha.visible = true; prancha.scale.setScalar(Math.min(1, surf * 1.5)); prancha.position.set(0, 0.28 + bob, 0); prancha.rotation.y = giro;
-        corpo.rotation.y = surf * (Math.PI / 2 + giro); corpo.position.y += surf * (0.28 - 0.2 + bob);
+        prancha.rotation.x = deFrente ? -0.06 * mov : 0;   // (o hoverboard: o bico um tiquinho pra cima)
+        corpo.rotation.y = deFrente ? 0 : surf * (Math.PI / 2 + giro); corpo.position.y += surf * (0.28 - 0.2 + bob);
         corpo.updateWorldMatrix(true, true);
         grupo.getWorldPosition(pGr);
         pernas.forEach((o) => {   // o pé de trás é o esquerdo (de lado, a esquerda do corpo fica pra trás da viagem)
+          if (deFrente) {   // (DE FRENTE: os pés lado a lado no meio da prancha, os joelhos dobrados pra frente)
+            alvoM.copy(pGr).addScaledVector(cima, 0.33 + bob).addScaledVector(frenteC, 0.19 * o.lado);
+            polo.copy(viaja).multiplyScalar(1).addScaledVector(frenteC, 0.1 * o.lado); ik(o.coxa, o.canela, o.pe, alvoM, polo, surf);
+            return;
+          }
           alvoM.copy(pGr).addScaledVector(cima, 0.33 + bob).addScaledVector(viaja, (o.lado > 0 ? -0.4 : 0.4));
           polo.copy(frenteC).addScaledVector(viaja, 0.2 * -o.lado); ik(o.coxa, o.canela, o.pe, alvoM, polo, surf);
         });
+        if (deFrente) {   // o HOVERBOARD: o tronco inclinado pra frente, a cabeça olhando o caminho, os braços abertos pra trás
+          if (lombar && pescoco) { dirAlvo.copy(cima).addScaledVector(viaja, 0.32 * mov + 0.04 * Math.sin(t * 2.2)).normalize(); apontar(lombar, pescoco, dirAlvo, surf); }
+          if (pescoco && cabeca) { dirAlvo.copy(cima).addScaledVector(viaja, 0.25).normalize(); apontar(pescoco, cabeca, dirAlvo, surf); }
+          for (const o of ossos) {
+            const onda = mov * 0.08 * Math.sin(t * 2.4 + (o.lado > 0 ? 0 : 1.6));
+            dirAlvo.copy(cima).multiplyScalar(-0.55 + onda).addScaledVector(frenteC, 0.55 * o.lado).addScaledVector(viaja, -0.45).normalize(); apontar(o.braco, o.ante, dirAlvo, surf);
+            dirAlvo.copy(cima).multiplyScalar(-0.35).addScaledVector(frenteC, 0.4 * o.lado).addScaledVector(viaja, -0.6).normalize(); apontar(o.ante, o.mao, dirAlvo, surf);
+          }
+        } else {
         if (lombar && pescoco) { dirAlvo.copy(cima).addScaledVector(frenteC, 0.18).addScaledVector(viaja, 0.06 * Math.sin(t * 2.2) * mov).normalize(); apontar(lombar, pescoco, dirAlvo, surf); }
         if (pescoco && cabeca) { dirAlvo.copy(cima).addScaledVector(viaja, 0.45).addScaledVector(frenteC, 0.1).normalize(); apontar(pescoco, cabeca, dirAlvo, surf); }
         for (const o of ossos) {
@@ -959,6 +974,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
           dirAlvo.copy(viaja).multiplyScalar(0.8 * praFrente).addScaledVector(cima, 0.3 + onda).normalize(); apontar(o.ante, o.mao, dirAlvo, surf * (1 - festa));
           // a manobra: braços pro alto ("uhul!")
           dirAlvo.copy(cima).addScaledVector(viaja, 0.3 * praFrente).normalize(); apontar(o.braco, o.ante, dirAlvo, surf * festa); apontar(o.ante, o.mao, dirAlvo, surf * festa);
+        }
         }
         // o rastro: faíscas saindo de trás da prancha
         faiscas.visible = true;

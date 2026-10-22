@@ -197,9 +197,13 @@ export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THRE
   // o CONTORNO DE TINTA: pra cada malha com skin, a mesma geometria inflada (só as faces de trás) na MESMA skin. A
   // espessura é no espaço da geometria (o modelo está em cm, escalado): medida pela altura da malha no mundo
   const matTinta = (() => {
-    let geoAlt = 0, mundoAlt = 0;
-    cena.traverse((o) => { const m = o as THREE.SkinnedMesh; if (!m.isSkinnedMesh) return; m.geometry.computeBoundingBox(); geoAlt = Math.max(geoAlt, m.geometry.boundingBox!.max.y - m.geometry.boundingBox!.min.y); });
-    mundoAlt = new THREE.Box3().setFromObject(cena).getSize(new THREE.Vector3()).y;
+    // (a caixa de cada CONJUNTO de vértices uma vez só — o masculino tem ~500 malhas sobre os mesmos vértices — e a do
+    //  mundo a partir delas; o Box3.setFromObject da cena recalculava todas)
+    let geoAlt = 0; const caixas = new Map<ArrayLike<number>, THREE.Box3>(), mundo = new THREE.Box3(), b = new THREE.Box3();
+    cena.traverse((o) => { const m = o as THREE.SkinnedMesh; if (!m.isSkinnedMesh) return; const arr = m.geometry.attributes.position!.array;
+      let c = caixas.get(arr); if (!c) { m.geometry.computeBoundingBox(); c = m.geometry.boundingBox!.clone(); caixas.set(arr, c); mundo.union(b.copy(c).applyMatrix4(m.matrixWorld)); } else m.geometry.boundingBox = c.clone();
+      geoAlt = Math.max(geoAlt, c.max.y - c.min.y); });
+    const mundoAlt = mundo.isEmpty() ? 0 : mundo.getSize(new THREE.Vector3()).y;
     return tintaFixa(DESENHO.tinta * (geoAlt > 0 && mundoAlt > 0 ? geoAlt / mundoAlt : 1));
   })();
   const comContorno: THREE.SkinnedMesh[] = [];
@@ -314,9 +318,12 @@ function vestirManoplas(ossos: Map<string, THREE.Object3D>, rim: THREE.Color, ma
  *  escala do osso no mundo): o comprimento (m, pros dedos), as COSTAS (+z máx. no meio da mão), a PALMA (−z mín.) e o
  *  raio do pulso */
 function medirMao(mao: THREE.Object3D, malhas: THREE.SkinnedMesh[], q: THREE.Quaternion, ws: number) {
-  const qi = q.clone().invert(), v = new THREE.Vector3(), pts: THREE.Vector3[] = [];
+  const qi = q.clone().invert(), v = new THREE.Vector3(), pts: THREE.Vector3[] = [], vistos = new Set<ArrayLike<number>>();
   for (const m of malhas) {
     const i = m.skeleton.bones.indexOf(mao as THREE.Bone); if (i < 0) continue;
+    // (os mesmos vértices uma vez só: o traje masculino tem ~500 malhas — uma por material — sobre os MESMOS ~14 mil
+    //  vértices; medir todas era ~15 milhões de leituras e travava a tela por segundos a cada traje vestido)
+    const arr = m.geometry.attributes.position?.array; if (!arr || vistos.has(arr)) continue; vistos.add(arr);
     const pos = m.geometry.attributes.position, si = m.geometry.attributes.skinIndex, sw = m.geometry.attributes.skinWeight;
     if (!pos || !si || !sw) continue;
     const inv = m.skeleton.boneInverses[i]!;
@@ -343,10 +350,11 @@ function medirMao(mao: THREE.Object3D, malhas: THREE.SkinnedMesh[], q: THREE.Qua
 function medirCostas(osso: THREE.Object3D | null, cena: THREE.Object3D, corpo: THREE.Object3D, corpoInv: THREE.Matrix4): THREE.Object3D | null {
   if (!osso) return null;
   cena.updateMatrixWorld(true);
-  const v = new THREE.Vector3(), pts: THREE.Vector3[] = [];
+  const v = new THREE.Vector3(), pts: THREE.Vector3[] = [], vistos = new Set<ArrayLike<number>>();
   cena.traverse((o) => {
     const m = o as THREE.SkinnedMesh; if (!m.isSkinnedMesh) return;
     const i = m.skeleton.bones.indexOf(osso as THREE.Bone); if (i < 0) return;
+    const arr = m.geometry.attributes.position?.array; if (!arr || vistos.has(arr)) return; vistos.add(arr);   // (os mesmos vértices uma vez só)
     const pos = m.geometry.attributes.position, si = m.geometry.attributes.skinIndex, sw = m.geometry.attributes.skinWeight;
     if (!pos || !si || !sw) return;
     const inv = m.skeleton.boneInverses[i]!;

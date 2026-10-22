@@ -25,6 +25,8 @@ export type Bloco = {
   evento?: string;
   /** passeio a pé (`andar`): a TURMA no dia (grupo|dia) — os amigos sorteiam os mesmos pontos de interesse e ficam juntos */
   turma?: string;
+  /** do DIA DE PASSEIO (`semHorario`): metade dos passeios é nos LOUNGES (lib/cyber/frota/corpo `roteiroAndar`) */
+  passeio?: boolean;
 };
 /** os ambientes de estudo (as universidades flutuantes e as salas de convivência da Zaeon). A ORDEM importa: quem acha
  *  o seu lotado vai pro primeiro com lugar (lib/cyber/frota/plano) — as universidades vêm antes */
@@ -42,8 +44,11 @@ export type AmbienteEstudo = (typeof AMBIENTES_ESTUDO)[number] | "lounge" | "cid
 export type FlagsFrota = {
   ativa: boolean; estudoPlataforma: boolean; estudoLounge: boolean; moto: boolean; andar: boolean; festa: boolean;
   corridas: boolean; conversas: boolean; cloak: boolean; mochila: boolean; responderUsuarios: boolean;
+  /** SEM HORÁRIO (out/2026, o dono: "desligue as flags temporais e deixe todos os NPCs passeando pela Zaeon e pelos
+   *  lounges"): ninguém tem hora de entrar nem de sair nem folga — o DIA DE PASSEIO (`diaDePasseio`) */
+  semHorario: boolean;
 };
-export const FLAGS_PADRAO: FlagsFrota = { ativa: true, estudoPlataforma: true, estudoLounge: true, moto: true, andar: true, festa: true, corridas: true, conversas: true, cloak: true, mochila: true, responderUsuarios: true };
+export const FLAGS_PADRAO: FlagsFrota = { ativa: true, estudoPlataforma: true, estudoLounge: true, moto: true, andar: true, festa: true, corridas: true, conversas: true, cloak: true, mochila: true, responderUsuarios: true, semHorario: true };
 
 /** a proporção do dia (o pedido do dono; out/2026: menos lounge e menos pedestre na Zaeon — eram 40/20/30/10; depois,
  *  com o Templo Cósmico — os lounges estudantis, o campus de TI, o rasta —, a rotina leva a gente da cidadela PROS
@@ -103,6 +108,7 @@ function atividadeDoIntervalo(r: Acaso, a: AgenteIA, flags: FlagsFrota, ar: Area
  *  sem folga e sem hora de começar (todo mundo online o tempo todo) */
 export function agendaBase(a: AgenteIA, dia: number, flags: FlagsFrota, preferido: AmbienteEstudo | null, full = false, ar: AreasFrota = AREAS_PADRAO): Bloco[] {
   if (!flags.ativa) return [];
+  if (flags.semHorario && flags.andar) return diaDePasseio(a, dia, flags, preferido, ar);
   const r = acasoDe("agenda", a.id, dia);
   if (r() < REGRAS.folga && !full) return [];   // folga
   const hum = a.ritmo.humor;
@@ -129,6 +135,23 @@ export function agendaBase(a: AgenteIA, dia: number, flags: FlagsFrota, preferid
     if (!lugar && !at) break;
   }
   return out.filter((b) => b.fim > b.ini && b.ini < 24 * 60).map((b) => ({ ...b, fim: Math.min(b.fim, 24 * 60 - 1) }));
+}
+
+/** o DIA DE PASSEIO (out/2026, o dono: "desligue as flags temporais e deixe todos os NPCs passeando pela Zaeon e pelos
+ *  lounges"): sem hora de começar nem de acabar, sem folga — da meia-noite à meia-noite, blocos de 30–60 min: a maior
+ *  parte PASSEANDO a pé (a turma junto — na Zaeon ou nos lounges do Templo Cósmico: lib/cyber/frota/corpo
+ *  `roteiroAndar`), às vezes SENTADO lendo nos lounges, e um pouco estudando nas salas da Zaeon */
+export const DIA_DE_PASSEIO = { bloco: [30, 60] as const, andar: 0.65, lounge: 0.22 } as const;
+function diaDePasseio(a: AgenteIA, dia: number, flags: FlagsFrota, preferido: AmbienteEstudo | null, ar: AreasFrota): Bloco[] {
+  const r = acasoDe("passeio", a.id, dia), out: Bloco[] = [];
+  for (let t = entre(r, 0, 12), guarda = 0; t < 24 * 60 - 1 && guarda++ < 100;) {
+    const dur = Math.round(entre(r, DIA_DE_PASSEIO.bloco[0], DIA_DE_PASSEIO.bloco[1])), x = r();
+    if (x < DIA_DE_PASSEIO.andar) out.push({ ini: t, fim: t + dur, atividade: "andar", turma: `${a.grupo}|${dia}`, passeio: true });
+    else if (x < DIA_DE_PASSEIO.andar + DIA_DE_PASSEIO.lounge && flags.estudoLounge) out.push({ ini: t, fim: t + dur, atividade: "estudo-lounge", ambiente: "lounge" });
+    else { const l = lugarDeEstudo(r, flags, preferido, ar); out.push(l ? { ini: t, fim: t + dur, atividade: l.atividade, ambiente: l.ambiente } : { ini: t, fim: t + dur, atividade: "andar", turma: `${a.grupo}|${dia}`, passeio: true }); }
+    t += dur;
+  }
+  return out.map((b) => ({ ...b, fim: Math.min(b.fim, 24 * 60 - 1) })).filter((b) => b.fim > b.ini);
 }
 
 /** a agenda do GRUPO no dia: as de cada um + o lugar de estudo preferido do grupo + a FESTA (todos juntos, à noite) +
