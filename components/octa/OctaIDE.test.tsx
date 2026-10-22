@@ -147,4 +147,75 @@ describe("OctaIDE · modo projeto", () => {
     const post = chamadas((u, i) => u === "/api/octa/projetos" && i?.method === "POST")[0];
     expect(JSON.parse(String(post[1]!.body))).toEqual({ nome: "Confeitaria da Ana" });
   });
+
+  it("desfazer nunca leva a foto de um projeto pra outro (A roda → B roda → volta pra A e A termina)", async () => {
+    const IB = "0123456789abcdef01234568";
+    const A = { ...projeto, nome: "Projeto A", arquivos: { "index.html": "<h1>A</h1>" } };
+    const B = { ...projeto, id: IB, nome: "Projeto B", arquivos: { "index.html": "<h1>B</h1>" } };
+    let turnos = 0;
+    const pronto = { A: false, B: false };
+    const fimDe = (k: "A" | "B") => json(pronto[k]
+      ? { status: "pronto", eventos: [{ seq: 1, tipo: "tool", dados: { tool: "octa_escrever", path: "index.html" } }, { seq: 2, tipo: "arquivo", dados: { path: "index.html", acao: "gravado" } }, { seq: 3, tipo: "fim", dados: {} }], pendente: null, resposta: `fim ${k}` }
+      : { status: "rodando", eventos: [], pendente: null, resposta: null });
+    extra = (u, i) => {
+      const metodo = i?.method ?? "GET";
+      if (u === "/api/octa/projetos" && metodo === "GET") return json({ projetos: [A, B] });
+      if (u === `/api/octa/projetos/${ID}` && metodo === "GET") return json({ projeto: A });
+      if (u === `/api/octa/projetos/${IB}` && metodo === "GET") return json({ projeto: B });
+      if (metodo === "PATCH") return json({ projeto: A });
+      if (u === "/api/octa/turnos" && metodo === "POST") return json({ turnoId: ++turnos === 1 ? "tA" : "tB" }, 202);
+      if (u.startsWith("/api/octa/turnos/tA/eventos")) return fimDe("A");
+      if (u.startsWith("/api/octa/turnos/tB/eventos")) return fimDe("B");
+      return undefined;
+    };
+    const pedir = async (texto: string) => {
+      const caixa = await screen.findByPlaceholderText(/Peça ao Octa/);
+      fireEvent.change(caixa, { target: { value: texto } });
+      fireEvent.keyDown(caixa, { key: "Enter" });
+      await waitFor(() => expect(screen.getByText(texto)).toBeTruthy());
+    };
+    const trocarPara = async (nome: string) => {
+      fireEvent.click(screen.getByRole("button", { expanded: false, name: /Projeto [AB]/ }));
+      fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: new RegExp(nome) }));
+      await waitFor(() => expect(screen.getByRole("button", { name: new RegExp(nome), expanded: false })).toBeTruthy());
+    };
+
+    render(<OctaIDE />);
+    await screen.findByText("Projeto A");
+    await pedir("mexe no A");                // foto = arquivos de A, turno tA rodando
+    await trocarPara("Projeto B");
+    await pedir("mexe no B");                // foto = arquivos de B, turno tB rodando
+    await trocarPara("Projeto A");           // A retoma tA (guardado) …
+    pronto.A = true;                         // … e tA termina
+    expect(await screen.findByText("fim A", {}, { timeout: 3000 })).toBeTruthy();
+    // turno retomado: nenhuma foto de A sobrou, e a de B não pode virar o desfazer de A
+    expect(screen.queryByRole("button", { name: /desfazer/ })).toBeNull();
+    const patchesComB = chamadas((u, i) => i?.method === "PATCH" && String(i.body).includes("<h1>B</h1>") && u.endsWith(ID));
+    expect(patchesComB).toHaveLength(0);
+  });
+
+  it("no MESMO projeto, desfazer volta os arquivos de antes do turno (PATCH no próprio projeto)", async () => {
+    eventos = [
+      { seq: 1, tipo: "tool", dados: { tool: "octa_escrever", path: "index.html" } },
+      { seq: 2, tipo: "arquivo", dados: { path: "index.html", acao: "gravado" } },
+      { seq: 3, tipo: "fim", dados: {} },
+    ];
+    let lido = 0;
+    extra = (u, i) => {
+      if (u === `/api/octa/projetos/${ID}` && (i?.method ?? "GET") === "GET") {
+        lido++;
+        return json({ projeto: { ...projeto, arquivos: { "index.html": lido > 1 ? "<h1>novo</h1>" : "<h1>oi</h1>" } } });
+      }
+      return undefined;
+    };
+    render(<OctaIDE />);
+    await screen.findByText("Confeitaria da Ana");
+    const caixa = screen.getByPlaceholderText(/Peça ao Octa/);
+    fireEvent.change(caixa, { target: { value: "muda" } });
+    fireEvent.keyDown(caixa, { key: "Enter" });
+    fireEvent.click(await screen.findByRole("button", { name: /desfazer/ }));
+    await waitFor(() => expect(chamadas((u, i) => u === `/api/octa/projetos/${ID}` && i?.method === "PATCH" && String(i.body).includes("arquivos"))).toHaveLength(1), { timeout: 3000 });
+    const [, init] = chamadas((u, i) => i?.method === "PATCH" && String(i.body).includes("arquivos"))[0];
+    expect(JSON.parse(String(init!.body))).toEqual({ arquivos: { "index.html": "<h1>oi</h1>" } });
+  });
 });

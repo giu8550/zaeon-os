@@ -181,7 +181,8 @@ export default function OctaIDE() {
   const sujo = useRef(false);
   const timerSalvar = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emVoo = useRef<Promise<void>>(Promise.resolve());
-  const antesDoTurno = useRef<EstadoIDE | null>(null);
+  /** Os arquivos de antes do turno (pro "desfazer"): só valem pro MESMO projeto e o MESMO turno que os tirou. */
+  const antesDoTurno = useRef<{ projetoId: string; turnoId: string | null; estado: EstadoIDE } | null>(null);
   const setProjeto = (p: ProjetoMeta | null) => { projetoRef.current = p; setProjetoRaw(p); };
   /** Mudança de CONTEÚDO feita pelo aluno: marca pra salvar no servidor. */
   const editar = (fn: (e: EstadoIDE) => EstadoIDE) => { sujo.current = true; setIde((e) => (e ? fn(e) : e)); };
@@ -249,6 +250,7 @@ export default function OctaIDE() {
 
   const sairDoAtual = async () => {
     limpar();
+    antesDoTurno.current = null; // a foto é deste projeto: não pode virar o "desfazer" de outro
     await salvarAgora();
     setPub({ fase: "ocioso" });
     setAvisoAgente(null);
@@ -418,8 +420,10 @@ export default function OctaIDE() {
     if (t.status === "aguardando_aprovacao") { void recarregarProjeto(p.id); return; } // o que já gravou fica salvo
     const gravados = [...new Set(t.eventos.filter((e) => e.tipo === "arquivo" && e.dados.acao !== "apagado").map((e) => String(e.dados.path)))];
     const apagados = [...new Set(t.eventos.filter((e) => e.tipo === "arquivo" && e.dados.acao === "apagado").map((e) => String(e.dados.path)))];
-    const antes = antesDoTurno.current;
+    const foto = antesDoTurno.current;
     antesDoTurno.current = null;
+    // turno retomado (reabriu o projeto) ou foto de outro projeto/turno: sem desfazer
+    const antes = foto && foto.projetoId === p.id && foto.turnoId === t.turnoId ? foto.estado : null;
     const perdeu = t.status === "erro" && t.falhaRede && !t.eventos.some((e) => e.tipo === "erro");
     setMsgs((v) => [...v, {
       id: uid(), role: "assistant",
@@ -442,11 +446,14 @@ export default function OctaIDE() {
     setInput(""); setAvisoAgente(null); setEnviando(true);
     try {
       await salvarAgora();
-      antesDoTurno.current = ideRef.current;
+      const foto = ideRef.current;
+      antesDoTurno.current = null;
       setMsgs((v) => [...v, { id: uid(), role: "user", content: pedido }]);
       const r = await iniciar(p.id, pedido);
       if (!r.ok) { setMsgs((v) => [...v, { id: uid(), role: "assistant", content: erroAoIniciar(r.status, r.erro), erro: true }]); return; }
       gravarLS(chaveTurno(p.id), r.turnoId);
+      // um turno que já estava rodando não começou destes arquivos: sem foto, sem desfazer
+      if (!r.jaAtivo && foto && projetoRef.current?.id === p.id) antesDoTurno.current = { projetoId: p.id, turnoId: r.turnoId, estado: foto };
       if (r.jaAtivo) setAvisoAgente("Já havia um pedido rodando neste projeto: acompanhando ele.");
     } finally { setEnviando(false); }
   };
