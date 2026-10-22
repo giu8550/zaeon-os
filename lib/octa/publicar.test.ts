@@ -343,6 +343,12 @@ describe("publicarProjeto", () => {
     expect(await publicarProjeto(deps(db, octokit), P)).toEqual({ ok: false, erro: "github_reconectar" });
   });
 
+  it("403 ao criar o repo (App sem Administration): github_sem_permissao", async () => {
+    const { db } = dbFalso();
+    const { octokit } = octoFalso({ falhar: (rota) => rota === "POST /user/repos" ? Object.assign(new Error("Resource not accessible by integration"), { status: 403 }) : undefined });
+    expect(await publicarProjeto(deps(db, octokit), P)).toEqual({ ok: false, erro: "github_sem_permissao" });
+  });
+
   it("projeto inexistente ou de outro dono: projeto_inexistente, sem GitHub", async () => {
     const { db } = dbFalso();
     const fabrica = vi.fn(async () => octoFalso().octokit);
