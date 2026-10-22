@@ -387,6 +387,34 @@ describe("lib/queue/octa · turno em job", () => {
     expect(db.octaProjeto.rows[0].arquivos["a.html"]).toBeUndefined();
   });
 
+  it("uma tool que muda vários arquivos custa UMA gravação intermediária (mais a final)", async () => {
+    modelo = roteiro([
+      { content: null, tool_calls: [call("1", "octa_pagina_montar", { secoes: PAGINA, titulo: "Bolos da Ana" })] },
+      { content: "ok" },
+    ]);
+    const id = await novoTurno();
+    const update = vi.spyOn(db.octaProjeto, "update");
+    await processarTurno(deps, id);
+    expect(eventos(id).filter((e) => e.tipo === "arquivo").length).toBeGreaterThanOrEqual(2);
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+
+  it("gravação intermediária que falha (Mongo) não derruba o turno e a final grava", async () => {
+    modelo = roteiro([
+      { content: null, tool_calls: [call("1", "octa_escrever", { path: "a.html", conteudo: "<p>a</p>" })] },
+      { content: "ok" },
+    ]);
+    const id = await novoTurno();
+    const original = db.octaProjeto.update;
+    let n = 0;
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(db.octaProjeto, "update").mockImplementation(async (a: any) => { if (n++ === 0) throw Object.assign(new Error("mongo caiu SEGREDO"), { code: "X1" }); return original.call(db.octaProjeto, a); });
+    await processarTurno(deps, id);
+    expect(turno(id)!.status).toBe("pronto");
+    expect(db.octaProjeto.rows[0].arquivos["a.html"]).toBe("<p>a</p>");
+    expect(JSON.stringify((console.warn as any).mock.calls)).not.toContain("SEGREDO");
+  });
+
   it("execução que perde o turno no meio (outra reivindicou) para de gravar eventos e não publica", async () => {
     const id = await novoTurno("publica");
     modelo = roteiro([

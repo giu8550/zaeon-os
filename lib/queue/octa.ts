@@ -18,7 +18,7 @@
  *   por esse runId; job repetido/stalled não roda de novo (e o worker usa maxStalledCount: 0 — stalled = falha → reaper).
  *   `@@unique([turnoId, seq])` impede dois eventos com o mesmo seq; colisão = essa execução para.
  */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { rodarAgenteOcta, ferramentasGateway, type ChamarModelo, type MsgModelo, type PendenteOcta, type TipoEventoOcta, type Workspace } from "@/lib/octa/agente";
 import { lerProjeto, salvarArquivos, type Arquivos, type ProjetosDb } from "@/lib/octa/projetos";
 import { publicarProjeto, type ResultadoPublicar } from "@/lib/octa/publicar";
@@ -245,12 +245,22 @@ export async function processarTurno(deps: DepsTurno, turnoId: string): Promise<
     }
   };
 
-  /** Grava no projeto o que o turno tem AGORA (a prévia da IDE relê daqui). Cercado pelo runId; DESIGN.md do projeto fica. */
+  /** Grava no projeto o que o turno tem AGORA (a prévia da IDE relê daqui). Cercado pelo runId; DESIGN.md do projeto fica.
+   *  Best-effort: o salvamento final continua valendo, então falha de banco aqui não derruba o turno (só perder a posse). */
+  const designsBase = Object.fromEntries(Object.entries(base).filter(([k]) => ehDesign(k)));
+  let ultimoSalvo = "";
+  const assinatura = (ws: Workspace) => createHash("sha1").update(JSON.stringify(Object.entries(ws).sort(([x], [y]) => (x < y ? -1 : 1)))).digest("hex");
   const salvarIntermediario = async (ws: Workspace) => {
-    await aindaMinha();
-    const atual = await lerProjeto(db, t.userId, t.projetoId);
-    const designs = Object.fromEntries(Object.entries(atual?.arquivos ?? {}).filter(([k]) => ehDesign(k)));
-    await salvarArquivos(db, t.userId, t.projetoId, { ...designs, ...ws });
+    const ass = assinatura(ws);
+    if (ass === ultimoSalvo) return; // N arquivos de uma tool só custam uma gravação
+    try {
+      await aindaMinha();
+      await salvarArquivos(db, t.userId, t.projetoId, { ...designsBase, ...ws });
+      ultimoSalvo = ass;
+    } catch (e) {
+      if (e instanceof TurnoInterrompido) throw e;
+      console.warn("[octa-turno] gravação intermediária falhou", { turnoId: t.id, codigo: (e as any)?.code }); // sem a mensagem
+    }
   };
 
   try {

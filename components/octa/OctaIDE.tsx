@@ -252,11 +252,14 @@ export default function OctaIDE() {
   const timerAoVivo = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ultimoArquivoVisto = useRef(0);
   const trocouPraPrevia = useRef<string | null>(null);
+  const geracaoAoVivo = useRef(0); // sobe quando o turno acaba ou o projeto sai: leitura em voo vira lixo
   const relerAoVivo = useCallback(async (id: string) => {
+    const g = geracaoAoVivo.current;
+    const vale = () => g === geracaoAoVivo.current && projetoRef.current?.id === id && !sujo.current; // edição do aluno em andamento não é atropelada
     const r = await fetch(`/api/octa/projetos/${id}`).catch(() => null);
-    if (!r?.ok || projetoRef.current?.id !== id || sujo.current) return; // edição do aluno em andamento não é atropelada
+    if (!r?.ok || !vale()) return;
     const j = await r.json().catch(() => null);
-    if (!j?.projeto || projetoRef.current?.id !== id || sujo.current) return;
+    if (!j?.projeto || !vale()) return;
     // só os arquivos: a foto do "desfazer" (antesDoTurno) fica intacta e nada vai de volta pro servidor
     setIde((prev) => estadoDoProjeto(j.projeto.arquivos ?? {}, prev ?? undefined));
   }, []);
@@ -277,6 +280,7 @@ export default function OctaIDE() {
 
   const sairDoAtual = async () => {
     limpar();
+    geracaoAoVivo.current++;
     if (timerAoVivo.current) { clearTimeout(timerAoVivo.current); timerAoVivo.current = null; }
     antesDoTurno.current = null; // a foto é deste projeto: não pode virar o "desfazer" de outro
     await salvarAgora();
@@ -444,6 +448,7 @@ export default function OctaIDE() {
   // ───────────── turnos (modo projeto) ─────────────
   function aoPararTurno(t: EstadoTurno) {
     const p = projetoRef.current;
+    geracaoAoVivo.current++;
     if (timerAoVivo.current) { clearTimeout(timerAoVivo.current); timerAoVivo.current = null; } // o recarregamento final cobre
     if (!p) return;
     if (t.status === "aguardando_aprovacao") { void recarregarProjeto(p.id); return; } // o que já gravou fica salvo

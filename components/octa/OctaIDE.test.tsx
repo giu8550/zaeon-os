@@ -232,6 +232,64 @@ describe("OctaIDE · modo projeto", () => {
     status = "pronto";
   });
 
+  it("desfazer depois de uma releitura ao vivo aplicada volta pro estado de ANTES do turno (não o intermediário)", async () => {
+    let poll = 0;
+    let projetoNoServidor: Record<string, string> = { "index.html": "<h1>oi</h1>" };
+    extra = (u, i) => {
+      if (u === `/api/octa/projetos/${ID}` && (i?.method ?? "GET") === "GET") return json({ projeto: { ...projeto, arquivos: projetoNoServidor } });
+      if (u.startsWith("/api/octa/turnos/t1/eventos")) {
+        poll++;
+        const arq = { seq: 1, tipo: "arquivo", dados: { path: "index.html", acao: "gravado" } };
+        if (poll === 1) { projetoNoServidor = { "index.html": "<h1>intermediario</h1>" }; return json({ status: "rodando", eventos: [arq], pendente: null, resposta: null }); }
+        if (poll < 4) return json({ status: "rodando", eventos: [], pendente: null, resposta: null });
+        projetoNoServidor = { "index.html": "<h1>final</h1>" };
+        return json({ status: "pronto", eventos: [{ seq: 2, tipo: "fim", dados: {} }], pendente: null, resposta: "ok" });
+      }
+      return undefined;
+    };
+    render(<OctaIDE />);
+    await screen.findByText("Confeitaria da Ana");
+    const caixa = screen.getByPlaceholderText(/Peça ao Octa/);
+    fireEvent.change(caixa, { target: { value: "muda" } });
+    fireEvent.keyDown(caixa, { key: "Enter" });
+    await waitFor(() => expect(document.querySelector("iframe")?.getAttribute("srcdoc") ?? "").toContain("intermediario"), { timeout: 4000 });
+    fireEvent.click(await screen.findByRole("button", { name: /desfazer/ }, { timeout: 6000 }));
+    await waitFor(() => expect(chamadas((u, i) => i?.method === "PATCH" && String(i.body).includes("arquivos"))).toHaveLength(1), { timeout: 3000 });
+    const [, init] = chamadas((u, i) => i?.method === "PATCH" && String(i.body).includes("arquivos"))[0];
+    expect(JSON.parse(String(init!.body))).toEqual({ arquivos: { "index.html": "<h1>oi</h1>" } });
+  }, 15000);
+
+  it("releitura ao vivo que só resolve depois do fim do turno não sobrescreve o estado final", async () => {
+    let soltar: ((r: Response) => void) | null = null;
+    let lidos = 0;
+    let poll = 0;
+    extra = (u, i) => {
+      if (u === `/api/octa/projetos/${ID}` && (i?.method ?? "GET") === "GET") {
+        lidos++;
+        if (lidos === 2) return new Promise<Response>((res) => { soltar = res; }) as any; // a releitura ao vivo fica em voo
+        return json({ projeto: { ...projeto, arquivos: { "index.html": lidos > 2 ? "<h1>final</h1>" : "<h1>oi</h1>" } } });
+      }
+      if (u.startsWith("/api/octa/turnos/t1/eventos")) {
+        poll++;
+        if (poll === 1) return json({ status: "rodando", eventos: [{ seq: 1, tipo: "arquivo", dados: { path: "index.html", acao: "gravado" } }], pendente: null, resposta: null });
+        if (poll < 3) return json({ status: "rodando", eventos: [], pendente: null, resposta: null });
+        return json({ status: "pronto", eventos: [{ seq: 2, tipo: "fim", dados: {} }], pendente: null, resposta: "ok" });
+      }
+      return undefined;
+    };
+    render(<OctaIDE />);
+    await screen.findByText("Confeitaria da Ana");
+    const caixa = screen.getByPlaceholderText(/Peça ao Octa/);
+    fireEvent.change(caixa, { target: { value: "muda" } });
+    fireEvent.keyDown(caixa, { key: "Enter" });
+    await waitFor(() => expect(soltar).not.toBeNull(), { timeout: 4000 });
+    await waitFor(() => expect(document.querySelector("iframe")?.getAttribute("srcdoc") ?? "").toContain("final"), { timeout: 6000 });
+    soltar!(json({ projeto: { ...projeto, arquivos: { "index.html": "<h1>velho-em-voo</h1>" } } }));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(document.querySelector("iframe")?.getAttribute("srcdoc") ?? "").toContain("final");
+    expect(document.querySelector("iframe")?.getAttribute("srcdoc") ?? "").not.toContain("velho-em-voo");
+  }, 15000);
+
   it("no MESMO projeto, desfazer volta os arquivos de antes do turno (PATCH no próprio projeto)", async () => {
     eventos = [
       { seq: 1, tipo: "tool", dados: { tool: "octa_escrever", path: "index.html" } },
