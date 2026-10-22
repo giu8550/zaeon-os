@@ -57,6 +57,31 @@ describe("renderPagina", () => {
     expect(out).toContain('href="#contato"');
   });
 
+  it("recusa esquemas disfarçados (tab, quebra de linha, controle C0, maiúsculas, data:)", () => {
+    const ruins = ["java\tscript:alert(1)", "java\nscript:alert(3)", "\u0001javascript:alert(2)", "JAVASCRIPT:alert(4)", "data:text/html,<b>x</b>", " \u0000 javascript:alert(5)"];
+    for (const ruim of ruins) {
+      const out = renderPagina({
+        ...base,
+        secoes: [
+          sec("hero_video", { title: "t", ctaText: "go", ctaLink: ruim, videoUrl: ruim, backgroundImage: ruim }),
+          sec("hero_lead", { title: "t", ctaText: "go", formAction: ruim, ctaLink: ruim }),
+          sec("location", { title: "t", address: "x", mapUrl: ruim }),
+        ],
+      })["index.html"];
+      expect(out.toLowerCase()).not.toMatch(/script:/);
+      expect(out).not.toMatch(/java\s*script/i);
+      expect(out).not.toContain("data:");
+      expect(out).not.toContain("<iframe");
+    }
+  });
+
+  it("mantém links legítimos", () => {
+    const out = renderPagina({ ...base, secoes: [sec("hero", { title: "t", ctaText: "go", ctaLink: "https://wa.me/5585999990000" }), sec("cta", { title: "t", ctaText: "x", ctaLink: "tel:+5585999990000" }), sec("location", { title: "t", address: "x", mapUrl: "https://www.google.com/maps/embed?pb=1" })] })["index.html"];
+    expect(out).toContain('href="https://wa.me/5585999990000"');
+    expect(out).toContain('href="tel:+5585999990000"');
+    expect(out).toContain("<iframe");
+  });
+
   it("não usa classes Tailwind nem estilo inline vindo do usuário", () => {
     const todo = renderPagina({
       ...base,

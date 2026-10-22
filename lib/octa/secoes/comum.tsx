@@ -7,21 +7,32 @@
  */
 import type { ReactNode } from "react";
 
-/** Aceita http(s), mailto, tel, âncora (#x) e caminho relativo; todo o resto (javascript:, data:…) vira o fallback. */
-export function urlSegura(v: unknown, fallback = ""): string {
-  if (typeof v !== "string") return fallback;
-  const s = v.trim();
-  if (!s) return fallback;
-  if (/^(https?:|mailto:|tel:)/i.test(s) || s.startsWith("#") || s.startsWith("/")) return s;
-  if (/^[a-z][a-z0-9+.-]*:/i.test(s)) return fallback; // outro esquema
-  return s; // relativo: "assets/foto.png"
+/**
+ * Navegadores ignoram tab/quebra de linha em qualquer ponto e controles C0 no começo antes de ler o
+ * esquema ("java\tscript:", "\u0001javascript:"). Normaliza do mesmo jeito e só então valida via URL.
+ * Aceita http(s), mailto, tel, âncora (#x) e caminho relativo; todo o resto vira o fallback.
+ */
+function limpar(v: unknown): string {
+  if (typeof v !== "string") return "";
+  return v.replace(/[\t\n\r]/g, "").replace(/^[\u0000-\u0020\u007f]+|[\u0000-\u0020\u007f]+$/g, "");
 }
 
-/** Só http(s) e relativo — usado em src de <img>/<iframe>. */
-export function urlMidia(v: unknown): string {
-  const s = urlSegura(v);
-  return /^(mailto:|tel:)/i.test(s) || s.startsWith("#") ? "" : s;
+function urlComEsquemas(v: unknown, permitidos: string[], aceitaAncora: boolean, fallback: string): string {
+  const s = limpar(v);
+  if (!s) return fallback;
+  if (s.startsWith("#")) return aceitaAncora ? s : fallback;
+  try {
+    const u = new URL(s, "https://x.invalid/");
+    return permitidos.includes(u.protocol) ? s : fallback;
+  } catch {
+    return fallback;
+  }
 }
+
+export const urlSegura = (v: unknown, fallback = ""): string => urlComEsquemas(v, ["http:", "https:", "mailto:", "tel:"], true, fallback);
+
+/** Só http(s) e relativo — usado em src de <img>/<iframe>. */
+export const urlMidia = (v: unknown): string => urlComEsquemas(v, ["http:", "https:"], false, "");
 
 export const txt = (v: unknown): string => (typeof v === "string" ? v.trim() : "");
 export const lista = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v.filter((x) => x && typeof x === "object") as T[]) : []);

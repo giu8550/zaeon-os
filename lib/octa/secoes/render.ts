@@ -6,6 +6,7 @@
  * Só roda no servidor (lê secoes.css de process.cwd(): o Dockerfile copia a raiz, como em design/indice.ts).
  */
 import { createElement } from "react";
+// react-dom/server: não importar este módulo de páginas/layouts RSC nem de "use server" actions (route handlers podem).
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
