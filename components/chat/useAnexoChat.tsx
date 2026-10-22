@@ -10,8 +10,9 @@
  *
  * MINHA BASE (RAG F3): todo PDF que o aluno logado anexa (📎 com vários, soltar vários, soltar uma PASTA) também sobe
  * pra base pessoal dele — a bandeja acima do composer mostra cada um. 1 PDF: segue o chip de hoje (a IA lê inteiro)
- * e a base guarda em silêncio. Vários: sem chip — as próximas perguntas já vêm da base, e a Aura confirma o lote
- * (`aoGuardar`). Sem sessão (401): comportamento antigo (a IA lê o primeiro).
+ * e a base guarda em silêncio. Vários: um chip 📚 POR ARQUIVO (`lote`, lib/chat/loteAnexos) que fica enquanto estiver
+ * na conversa — as perguntas levam os nomes e o conteúdo vem da base; a Aura confirma o lote (`aoGuardar`).
+ * Sem sessão (401): comportamento antigo (a IA lê o primeiro).
  */
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { useLibraryFiles, type LibraryFile } from "@/lib/useLibraryFiles";
@@ -19,6 +20,7 @@ import { blobParaDataUrl } from "@/lib/pdfStore";
 import { arquivosDasEntradas, entradasDoDrop } from "@/lib/chat/arquivosSoltos";
 import { enviarLote, type EstadoEnvio } from "@/lib/chat/enviarBase";
 import { motivoDoErro, resumoDoEnvio, type ErroEnvio } from "@/lib/rag/minhaBase";
+import type { ItemLote } from "@/lib/chat/loteAnexos";
 
 export type AnexoChat = { id: string; nome: string; dataUrl: string };
 /** Um PDF subindo pra "Minha base" (a bandeja acima do composer). */
@@ -62,14 +64,19 @@ export function useAnexoChat(
 
   const fixar = (a: AnexoChat | null) => { anexoRef.current = a; setAnexo(a); };
 
+  // Vários PDFs: os chips 📚 da conversa (só nome — o conteúdo vem da base).
+  const [lote, setLote] = useState<ItemLote[]>([]);
+  const loteRef = useRef<ItemLote[]>([]);
+  const fixarLote = (l: ItemLote[]) => { loteRef.current = l; setLote(l); };
+
   // Minha base: a bandeja de envios e uma versão que sobe a cada lote terminado (a lista "Minha base" se recarrega).
   const [envios, setEnvios] = useState<EnvioBase[]>([]);
   const [versaoBase, setVersaoBase] = useState(0);
-  const loteRef = useRef(0);
+  const numLoteRef = useRef(0);
 
   /** Sobe os PDFs pra base pessoal. `silencioso`: só a bandeja (a Aura só fala se falhar). "nao_logado" = sem sessão. */
   const guardarNaBase = useCallback(async (pdfs: File[], silencioso: boolean): Promise<"ok" | "nao_logado"> => {
-    const lote = ++loteRef.current;
+    const lote = ++numLoteRef.current;
     const chaves = pdfs.map((_, i) => `${lote}-${i}`);
     setEnvios((v) => [...v, ...pdfs.map((f, i) => ({ chave: chaves[i], nome: f.name.replace(/\.pdf$/i, ""), estado: "na_fila" as const }))]);
     const rs = await enviarLote(pdfs, {
@@ -89,7 +96,8 @@ export function useAnexoChat(
     const pdfs = files.filter(ehPdf);
     if (pdfs.length) {
       const ids = pdfs.map((f, i) => {
-        const id = `pdf-${Date.now()}-${i}`;
+        // sufixo aleatório: dois lotes no mesmo ms davam o mesmo id (tirar um chip tirava o outro; a biblioteca sobrescrevia)
+        const id = `pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${i}`;
         void saveFile({ id, title: f.name.replace(/\.pdf$/i, ""), source: "upload", savedAt: Date.now() }, f);   // também na biblioteca
         return id;
       });
@@ -98,14 +106,17 @@ export function useAnexoChat(
         const dataUrl = await blobParaDataUrl(pdfs[0]);
         if (dataUrl) fixar({ id: ids[0], nome: pdfs[0].name.replace(/\.pdf$/i, ""), dataUrl });
       };
-      if (pdfs.length === 1) {
+      if (pdfs.length === 1 && !loteRef.current.length) {
         await lerPrimeiro();
         void guardarNaBase(pdfs, true);
       } else {
-        // vários: a conversa segue pela base (sem chip — um chip antigo faria o turno ler só ele); sem sessão,
-        // cai no comportamento antigo
+        // vários (ou mais um sobre um lote): a conversa segue pela base, com um chip por arquivo. O chip de leitura
+        // inteira sai (faria o turno ler só ele) e entra no lote. Sem sessão, cai no comportamento antigo.
+        const antes = anexoRef.current && !anexoRef.current.id.startsWith("img-") ? [{ id: anexoRef.current.id, nome: anexoRef.current.nome }] : [];
+        const novos = pdfs.map((f, i) => ({ id: ids[i], nome: f.name.replace(/\.pdf$/i, "") }));
         fixar(null);
-        void guardarNaBase(pdfs, false).then((r) => (r === "nao_logado" ? lerPrimeiro() : undefined));
+        fixarLote([...antes, ...loteRef.current, ...novos].filter((a, i, l) => l.findIndex((b) => b.nome === a.nome) === i));
+        void guardarNaBase(pdfs, false).then((r) => (r === "nao_logado" ? (fixarLote([]), lerPrimeiro()) : undefined));
       }
       oRef.current.focar();
       return;
@@ -152,7 +163,12 @@ export function useAnexoChat(
     },
   };
 
-  return { anexo, anexoRef, tirar: () => { fixar(null); oRef.current.focar(); }, anexarArquivos, anexarDaBiblioteca, soltar, arrastando, envios, versaoBase };
+  return {
+    anexo, anexoRef, tirar: () => { fixar(null); oRef.current.focar(); }, anexarArquivos, anexarDaBiblioteca, soltar, arrastando, envios, versaoBase,
+    lote, loteRef,
+    /** tira um arquivo do foco da conversa (segue na base); sem id = limpa o lote (conversa nova) */
+    tirarDoLote: (id?: string) => fixarLote(id ? loteRef.current.filter((a) => a.id !== id) : []),
+  };
 }
 
 /** o chip 📎 acima do texto do composer */
@@ -164,6 +180,22 @@ export function ChipAnexo({ anexo, onTirar }: { anexo: AnexoChat; onTirar: () =>
         <span className="truncate max-w-[16rem]">{anexo.nome}</span>
         <button type="button" onClick={onTirar} aria-label="Parar de ler este arquivo" className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-cyan-500/20">×</button>
       </span>
+    </div>
+  );
+}
+
+/** os chips 📚 dos vários arquivos da conversa (cada um sai no ×; segue na base) */
+export function ChipsLote({ lote, onTirar }: { lote: ItemLote[]; onTirar: (id: string) => void }) {
+  if (!lote.length) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 px-1 pb-2" aria-label="Arquivos nesta conversa">
+      {lote.map((a) => (
+        <span key={a.id} className="inline-flex items-center gap-1.5 max-w-full min-h-[32px] pl-3 pr-1 rounded-full text-[12px] font-semibold bg-cyan-500/12 border border-cyan-400/40 text-cyan-800 dark:text-cyan-100" title="Na conversa — a IA responde pelos trechos deste arquivo na sua base">
+          <span aria-hidden>📚</span>
+          <span className="truncate max-w-[12rem]">{a.nome}</span>
+          <button type="button" onClick={() => onTirar(a.id)} aria-label={`Tirar ${a.nome} da conversa`} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-cyan-500/20">×</button>
+        </span>
+      ))}
     </div>
   );
 }

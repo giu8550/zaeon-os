@@ -62,7 +62,8 @@ import CerebroPanel from "@/components/cerebro/CerebroPanel";
 import { useCerebro } from "@/components/cerebro/useCerebro";
 import { AcoesPergunta, AcoesResposta, EdicaoPergunta } from "@/components/chat/MensagemAcoes";
 import { fonteChat } from "@/lib/ui/chatFontScale";
-import { AvisoSoltar, ChipAnexo, EVT_ANEXAR, pdfDaBiblioteca, useAnexoChat } from "@/components/chat/useAnexoChat";
+import { AvisoSoltar, ChipAnexo, ChipsLote, EVT_ANEXAR, pdfDaBiblioteca, useAnexoChat } from "@/components/chat/useAnexoChat";
+import { contextoDoLote } from "@/lib/chat/loteAnexos";
 import { BarraBase } from "@/components/chat/MinhaBase";
 import DocumentDesktop from "@/app/research-lab/DocumentDesktop";
 import { useSavedCitations } from "@/lib/useSavedCitations";
@@ -295,7 +296,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const colunaRef = useRef<HTMLDivElement>(null);
   const sendRefA = useRef<(t: string) => void>(() => {});
   const focarComposer = () => requestAnimationFrame(() => colunaRef.current?.querySelector("textarea")?.focus({ preventScroll: true }));
-  const { anexo, anexoRef, tirar: tirarAnexo, anexarArquivos, anexarDaBiblioteca, soltar, arrastando, envios, versaoBase } = useAnexoChat("estudos", {
+  const { anexo, anexoRef, tirar: tirarAnexo, anexarArquivos, anexarDaBiblioteca, soltar, arrastando, envios, versaoBase, lote, loteRef, tirarDoLote } = useAnexoChat("estudos", {
     focar: focarComposer,
     perguntar: (t) => sendRefA.current(t),
     aceitaBiblioteca: true,
@@ -881,7 +882,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       : `O usuário está no co-working da Sala de Estudos. Converse com naturalidade, mantendo o fio do assunto entre as mensagens.`)
       + " Nunca ofereça recursos, ferramentas ou botões da plataforma, e nunca comente o que você 'pode gerar' — fale do tema."
       + flexClause
-      + contextoDaSub();
+      + contextoDaSub()
+      + contextoDoLote(loteRef.current);
 
     try {
       let target = "";       // parte VISÍVEL alvo (sem a sentinela)
@@ -1401,10 +1403,11 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
               idle={messages.length === 0 && !sending}
               active={active && !openStudyId}
               onFiles={(f) => void anexarArquivos(f)}
-              placeholder={anexo ? `Pergunte sobre ${anexo.nome}…` : ""}
+              placeholder={anexo ? `Pergunte sobre ${anexo.nome}…` : lote.length ? `Pergunte sobre os ${lote.length} arquivos…` : ""}
             >
               <BarraBase envios={envios} versao={versaoBase} />
               {anexo && <ChipAnexo anexo={anexo} onTirar={tirarAnexo} />}
+              <ChipsLote lote={lote} onTirar={tirarDoLote} />
               {/* ⟁ Aura ▾ — seletor: Aura base ou um mentor plugado */}
               <div className="flex items-center gap-2">
                 <MentorPill value={activeMentor} onChange={(slug) => setActiveMentor(slug)} />
