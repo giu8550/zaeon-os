@@ -1,0 +1,31 @@
+name: Octa evals (diário)
+
+# Rotina anti-alucinação do Octa Code (Pack Octa §5): POST /api/octa/evals/run às 04h de Brasília (07h UTC),
+# fora de pico. A rota só existe com NEXT_PUBLIC_OCTA_CODE=1 no build e exige Bearer = OCTA_CRON_SECRET,
+# o mesmo secret que o deploy.yml grava no .env.secrets da VPS. Resultado: OctaEvalRun no banco + /octa/saude.
+on:
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: octa-evals
+  cancel-in-progress: false
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Rodar a suite
+        env:
+          OCTA_CRON_SECRET: ${{ secrets.OCTA_CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL || 'https://zaeon.com.br' }}
+        run: |
+          if [ -z "$OCTA_CRON_SECRET" ]; then echo "::warning::OCTA_CRON_SECRET ausente — nada a fazer."; exit 0; fi
+          code=$(curl -sS -o resp.json -w '%{http_code}' --max-time 300 -X POST \
+            -H "Authorization: Bearer $OCTA_CRON_SECRET" "${APP_URL%/}/api/octa/evals/run")
+          cat resp.json; echo
+          echo "HTTP $code"
+          [ "$code" = "200" ] || { echo "::error::evals do Octa responderam $code"; exit 1; }
+          if grep -q '"status":"vermelho"' resp.json; then echo "::warning::agente degradado (vermelho) — ver /octa/saude"; fi
