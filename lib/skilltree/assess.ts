@@ -36,7 +36,7 @@ export function sanitizeAssessment(raw: unknown): Assessment {
   return { score: Number.isFinite(score) ? Math.min(1, Math.max(0, score)) : 0, note: typeof (raw as any)?.note === "string" ? (raw as any).note.slice(0, 200) : undefined };
 }
 
-/** Papel "curto" (gpt-oss-20b na Contabo, raciocínio baixo; Google Flash se ela falhar/estiver ocupada/LOCAL_CURTO=0) — juiz silencioso, ninguém espera. */
+/** Papel "curto" (qwen3 4B instruct na Contabo; Google Flash se ela falhar/estiver ocupada/LOCAL_CURTO=0) — juiz silencioso, ninguém espera. */
 const defaultGenJson: GenJson = async (system, user, opts) => {
   const { gerarPapelJson } = await import("@/lib/llm/papeis");
   const { valor } = await gerarPapelJson<any>("curto", { system, user, temperature: opts?.temperature, timeoutMs: opts?.timeoutMs, ctx: { agentKey: "aura", surface: "estudos", phase: "assess" } });

@@ -98,7 +98,7 @@ export async function marcarConversa(db: GatekeeperDb, userId: string, scopeId: 
   await db.conversation.update({ where: { id: conv.id }, data: { estudavel: true, tituloSugerido: sinal.tituloSugerido } });
 }
 
-/** Papel "curto" (gpt-oss-20b na Contabo, raciocínio baixo; Google se ela falhar/estiver ocupada/LOCAL_CURTO=0) — ninguém espera o gatekeeper. */
+/** Papel "curto" (qwen3 4B instruct na Contabo; Google se ela falhar/estiver ocupada/LOCAL_CURTO=0) — ninguém espera o gatekeeper. */
 async function genJsonMini(userId: string): Promise<GenJson> {
   const { gerarPapelJson } = await import("@/lib/llm/papeis");
   return async <T,>(system: string, user: string, opts?: { temperature?: number; timeoutMs?: number }) =>
