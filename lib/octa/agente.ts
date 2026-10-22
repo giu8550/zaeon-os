@@ -394,7 +394,7 @@ const REGRA_PLACEHOLDERS =
  */
 const REGRA_APPS = [
   "APP REACT: se o aluno pedir um app React (ou um app interativo), monte um projeto Vite com octa_escrever: index.html (com <div id=\"root\"></div> e <script type=\"module\" src=\"/src/main.jsx\"></script>), " +
-    "package.json com react, react-dom e vite (react e react-dom em dependencies; vite e @vitejs/plugin-react em devDependencies), vite.config.js (com @vitejs/plugin-react), src/main.jsx (createRoot no #root), src/App.jsx e o CSS (src/index.css). " +
+    "package.json com react, react-dom e vite (react e react-dom em dependencies; vite em devDependencies), src/main.jsx (createRoot no #root, importa ./App.jsx e ./index.css), src/App.jsx e o CSS (src/index.css). Não crie vite.config.js. " +
     "Sem backend, sem servidor, sem banco: tudo roda no navegador do aluno. Não use octa_pagina_montar nem octa_ver_pagina num app React (a captura não roda JavaScript); o aluno vê o app na aba Prévia. " +
     "App React ainda não publica no GitHub Pages: se o aluno pedir, diga que a publicação de apps React chega na próxima fase.",
   "PYTHON: se o aluno pedir um programa em Python, escreva arquivos .py (por exemplo main.py) com octa_escrever, sem index.html; o aluno abre o arquivo e clica em Rodar (o Python roda no navegador dele).",

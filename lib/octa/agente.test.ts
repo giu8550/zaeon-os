@@ -481,7 +481,8 @@ describe("octa · agente (octa_ver_pagina)", () => {
     const m = roteiro([{ content: "ok" }]);
     await rodarAgenteOcta(landing(), m, { sessionId: "react1", capturar: capturaOk() });
     const sis = String(m.vistos[0][0].content);
-    for (const arq of ["index.html", "package.json", "src/main.jsx", "src/App.jsx", "vite.config.js"]) expect(sis).toContain(arq);
+    for (const arq of ["index.html", "package.json", "src/main.jsx", "src/App.jsx", "src/index.css"]) expect(sis).toContain(arq);
+    expect(sis).toContain("Não crie vite.config.js"); // o template vite-react (Nodebox) nunca é usado
     expect(sis).toMatch(/react, react-dom e vite/i);
     expect(sis).toMatch(/sem backend/i);
     expect(sis).toMatch(/arquivos \.py/);

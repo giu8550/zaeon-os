@@ -18,7 +18,7 @@ vi.mock("@codesandbox/sandpack-react", () => ({
   useSandpackConsole: () => ({ logs: sp.logs, reset: () => {} }),
 }));
 
-import PreviaReact from "./PreviaReact";
+import PreviaReact, { arquivosSandpack, htmlParaBundler } from "./PreviaReact";
 
 afterEach(() => { cleanup(); sp.props = null; sp.previewProps = null; sp.error = null; sp.logs = []; });
 
@@ -32,20 +32,35 @@ const VITE = {
 };
 
 describe("PreviaReact", () => {
-  it("monta o Sandpack vite-react com os arquivos do projeto, cada um com / na frente", () => {
+  it("sempre no template react (nunca vite-react/Nodebox): arquivos com / na frente, entrada = src/main.jsx", () => {
     render(<PreviaReact arquivos={VITE} onErros={() => {}} />);
-    expect(sp.props.template).toBe("vite-react");
-    expect(Object.keys(sp.props.files).sort()).toEqual(["/index.html", "/package.json", "/src/App.jsx", "/src/index.css", "/src/main.jsx", "/vite.config.js"]);
+    expect(sp.props.template).toBe("react");
+    expect(sp.props.customSetup).toEqual({ entry: "/src/main.jsx" });
+    // vite.config sai; index.html e package.json viram o formato do bundler
+    expect(Object.keys(sp.props.files).sort()).toEqual(["/package.json", "/public/index.html", "/src/App.jsx", "/src/index.css", "/src/main.jsx"]);
     expect(sp.props.files["/src/App.jsx"]).toBe(VITE["src/App.jsx"]);
     // o botão "abrir no CodeSandbox" mandaria os arquivos do aluno pra fora: desligado
     expect(sp.previewProps.showOpenInCodeSandbox).toBe(false);
   });
 
-  it("sem vite.config: template react, com a entrada do projeto", () => {
-    const { "vite.config.js": _fora, ...semVite } = VITE;
-    render(<PreviaReact arquivos={semVite} onErros={() => {}} />);
-    expect(sp.props.template).toBe("react");
-    expect(sp.props.customSetup).toEqual({ entry: "/src/main.jsx" });
+  it("index.html do Vite vira /public/index.html sem o <script type=module> e com o #root", () => {
+    render(<PreviaReact arquivos={VITE} onErros={() => {}} />);
+    const html = sp.props.files["/public/index.html"];
+    expect(html).toContain('<div id="root"></div>');
+    expect(html).not.toMatch(/<script/i);
+    // sem #root no HTML do aluno: entra um antes do </body>
+    expect(htmlParaBundler("<html><body><h1>x</h1></body></html>")).toBe('<html><body><h1>x</h1><div id="root"></div></body></html>');
+    // sem index.html: um HTML padrão com #root
+    const { "index.html": _fora, ...semHtml } = VITE;
+    expect(arquivosSandpack(semHtml)["/public/index.html"]).toContain('<div id="root"></div>');
+  });
+
+  it("package.json refeito: main = entrada, dependencies do aluno + react-scripts, sem scripts/devDependencies do Vite", () => {
+    const pkg = JSON.parse(arquivosSandpack({ ...VITE, "package.json": JSON.stringify({ type: "module", scripts: { dev: "vite" }, dependencies: { react: "^18.2.0", "react-dom": "^18.2.0", "lucide-react": "^0.400.0" }, devDependencies: { vite: "^5" } }) })["/package.json"]);
+    expect(pkg).toEqual({ main: "/src/main.jsx", dependencies: { react: "^18.2.0", "react-dom": "^18.2.0", "lucide-react": "^0.400.0", "react-scripts": "^5.0.0" } });
+    // só src/App.jsx (sem package.json nem main.jsx): react/react-dom padrão
+    const so = JSON.parse(arquivosSandpack({ "src/App.jsx": "x" })["/package.json"]);
+    expect(so.dependencies).toMatchObject({ react: "^18.3.1", "react-dom": "^18.3.1" });
   });
 
   it("DESIGN.md não vai pro iframe do bundler", () => {
@@ -77,6 +92,21 @@ describe("PreviaReact", () => {
     expect(ultimos).toHaveLength(20);
     expect(ultimos[0]).toBe("erro 10");
     expect(ultimos[19]).toBe("erro 29");
+  });
+
+  it("re-render com os mesmos arquivos não troca customSetup/options (senão o Sandpack recompila e apaga o erro)", () => {
+    const { rerender } = render(<PreviaReact arquivos={VITE} onErros={() => {}} />);
+    const antes = sp.props;
+    rerender(<PreviaReact arquivos={{ ...VITE }} onErros={() => {}} />);
+    expect(sp.props.customSetup).toBe(antes.customSetup);
+    expect(sp.props.options).toBe(antes.options);
+  });
+
+  it("erro cujo texto já começa pelo caminho não repete o caminho", () => {
+    const onErros = vi.fn();
+    sp.error = { message: "/src/App.jsx: boom (1:37)", path: "/src/App.jsx", line: 1 };
+    render(<PreviaReact arquivos={VITE} onErros={onErros} />);
+    expect(onErros).toHaveBeenLastCalledWith(["/src/App.jsx: boom (1:37)"]);
   });
 
   it("não chama onErros de novo se os erros não mudaram", () => {
