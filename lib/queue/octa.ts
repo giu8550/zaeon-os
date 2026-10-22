@@ -13,7 +13,11 @@
  * - Eventos (OctaEvento, seq crescente por turno) nunca levam segredo: vêm do onEvento do laço (nome de tool,
  *   caminho, código, resumo já redigido) ou são códigos fixos daqui. Mensagem crua de erro (gateway, octokit) não entra.
  * - Um turno ativo por projeto. `rodando` sem sinal de vida há PRESO_MS vira `erro` (tempo_esgotado) e não trava.
+ * - Uma execução por vez: processarTurno reivindica o turno (`runId`, troca atômica) e toda escrita dele é cercada
+ *   por esse runId; job repetido/stalled não roda de novo (e o worker usa maxStalledCount: 0 — stalled = falha → reaper).
+ *   `@@unique([turnoId, seq])` impede dois eventos com o mesmo seq; colisão = essa execução para.
  */
+import { randomUUID } from "node:crypto";
 import { rodarAgenteOcta, ferramentasGateway, type ChamarModelo, type MsgModelo, type PendenteOcta, type TipoEventoOcta, type Workspace } from "@/lib/octa/agente";
 import { lerProjeto, salvarArquivos, type Arquivos, type ProjetosDb } from "@/lib/octa/projetos";
 import { publicarProjeto, type ResultadoPublicar } from "@/lib/octa/publicar";
@@ -34,7 +38,7 @@ export type StatusTurno = "rodando" | "aguardando_aprovacao" | "pronto" | "erro"
 export type CodigoErroTurno = "falha_modelo" | "budget" | "projeto_inexistente" | "tempo_esgotado";
 
 export type TurnoRow = {
-  id: string; userId: string; email: string; projetoId: string; pedido: string; status: StatusTurno;
+  id: string; userId: string; email: string; projetoId: string; pedido: string; status: StatusTurno; runId: string | null;
   estado: { msgs: MsgModelo[]; aprovado?: boolean } | null; pendente: PendenteOcta | null; resposta: string | null;
   createdAt: Date; updatedAt: Date;
 };
@@ -111,10 +115,14 @@ async function proximoSeq(db: TurnosDb, turnoId: string): Promise<number> {
   return (ult?.seq ?? 0) + 1;
 }
 
-async function erroNoTurno(db: TurnosDb, turnoId: string, codigo: CodigoErroTurno, agora: Date, de: StatusTurno = "rodando"): Promise<boolean> {
-  const r = await db.octaTurno.updateMany({ where: { id: turnoId, status: de }, data: { status: "erro", estado: null, pendente: null } });
+/** Violação de unique do Prisma (P2002): outro escritor já gravou esse seq. */
+const ehDuplicado = (e: unknown) => (e as any)?.code === "P2002";
+
+async function erroNoTurno(db: TurnosDb, turnoId: string, codigo: CodigoErroTurno, agora: Date, runId?: string): Promise<boolean> {
+  const r = await db.octaTurno.updateMany({ where: { id: turnoId, status: "rodando", ...(runId ? { runId } : {}) }, data: { status: "erro", estado: null, pendente: null, runId: null } });
   if (!r.count) return false;
-  await db.octaEvento.create({ data: { turnoId, seq: await proximoSeq(db, turnoId), tipo: "erro", dados: { codigo }, em: agora } });
+  try { await db.octaEvento.create({ data: { turnoId, seq: await proximoSeq(db, turnoId), tipo: "erro", dados: { codigo }, em: agora } }); }
+  catch (e) { if (!ehDuplicado(e)) throw e; } // corrida com um evento da execução que está morrendo: o status já diz erro
   return true;
 }
 
@@ -149,7 +157,7 @@ export async function iniciarTurno(deps: DepsTurno, p: { userId: string; email: 
   const ativo = await deps.db.octaTurno.findFirst({ where: { projetoId: projeto.id, status: { in: ATIVOS } } });
   if (ativo) throw new ErroTurno("turno_ativo", ativo.id);
   const t = await deps.db.octaTurno.create({
-    data: { userId: p.userId, email: p.email, projetoId: projeto.id, pedido: p.pedido, status: "rodando", estado: null, pendente: null, resposta: null },
+    data: { userId: p.userId, email: p.email, projetoId: projeto.id, pedido: p.pedido, status: "rodando", runId: null, estado: null, pendente: null, resposta: null },
   });
   await disparar(deps, t.id);
   return { turnoId: t.id };
@@ -166,7 +174,8 @@ export async function aprovarTurno(deps: DepsTurno, p: { userId: string; turnoId
   // troca atômica: dois "aprovar" ao mesmo tempo → só um passa (o outro vê count 0)
   const r = await deps.db.octaTurno.updateMany({
     where: { id: t.id, userId: p.userId, status: "aguardando_aprovacao" },
-    data: { status: "rodando", estado: { msgs: t.estado.msgs, aprovado: p.aprovado } },
+    // updatedAt explícito: quem esperou >PRESO_MS pra aprovar não pode ser colhido pelo reaper logo em seguida
+    data: { status: "rodando", runId: null, updatedAt: deps.agora?.() ?? new Date(), estado: { msgs: t.estado.msgs, aprovado: p.aprovado } },
   });
   if (!r.count) throw new ErroTurno("nao_aguardando");
   await disparar(deps, t.id);
@@ -183,29 +192,39 @@ function primeiraSemResposta(msgs: MsgModelo[]): string | undefined {
 // ───────────────────────────── processar (worker e inline) ─────────────────────────────
 class TurnoInterrompido extends Error {}
 
+
 const ehDesign = (p: string) => p.split("/").pop()?.toLowerCase() === "design.md";
 
 export async function processarTurno(deps: DepsTurno, turnoId: string): Promise<void> {
   const { db } = deps;
   const agora = () => deps.agora?.() ?? new Date();
   const t: TurnoRow | null = await db.octaTurno.findUnique({ where: { id: turnoId } });
-  if (!t || t.status !== "rodando") return; // idempotente: job repetido não roda de novo
+  if (!t || t.status !== "rodando" || t.runId) return; // idempotente: job repetido/stalled não roda de novo
+  // reivindica: só uma execução passa daqui (a outra vê count 0)
+  const runId = randomUUID();
+  const claim = await db.octaTurno.updateMany({ where: { id: t.id, status: "rodando", runId: null }, data: { runId, updatedAt: agora() } });
+  if (!claim.count) return;
 
+  /** Sinal de vida cercado pelo runId: o reaper (status) ou outra execução (runId) → esta para. */
+  const aindaMinha = async () => {
+    const r = await db.octaTurno.updateMany({ where: { id: t.id, status: "rodando", runId }, data: { updatedAt: agora() } });
+    if (!r.count) throw new TurnoInterrompido();
+  };
   let seq = await proximoSeq(db, t.id);
   const emitir = async (tipo: TipoEventoOcta, dados: Record<string, unknown>) => {
-    // sinal de vida + garante que ninguém (reaper) tirou o turno de `rodando` no meio
-    const vivo = await db.octaTurno.updateMany({ where: { id: t.id, status: "rodando" }, data: { updatedAt: agora() } });
-    if (!vivo.count) throw new TurnoInterrompido();
-    await db.octaEvento.create({ data: { turnoId: t.id, seq: seq++, tipo, dados, em: agora() } });
+    await aindaMinha();
+    try { await db.octaEvento.create({ data: { turnoId: t.id, seq: seq++, tipo, dados, em: agora() } }); }
+    catch (e) { if (ehDuplicado(e)) throw new TurnoInterrompido(); throw e; }
   };
 
   const projeto = await lerProjeto(db, t.userId, t.projetoId);
-  if (!projeto) { await erroNoTurno(db, t.id, "projeto_inexistente", agora()); return; }
+  if (!projeto) { await erroNoTurno(db, t.id, "projeto_inexistente", agora(), runId); return; }
   const base: Arquivos = { ...(projeto.arquivos ?? {}) };
 
   // publicar lê do banco: grava o que o turno tem agora (DESIGN.md do projeto fica — ele só não vai pro GitHub)
   const octaPublicar = async (p: { arquivos: Workspace; mensagem?: string }): Promise<ResultadoPublicar> => {
     try {
+      await aindaMinha();
       const atual = await lerProjeto(db, t.userId, t.projetoId);
       const designs = Object.fromEntries(Object.entries(atual?.arquivos ?? {}).filter(([k]) => ehDesign(k)));
       await salvarArquivos(db, t.userId, t.projetoId, { ...designs, ...p.arquivos });
@@ -229,23 +248,24 @@ export async function processarTurno(deps: DepsTurno, turnoId: string): Promise<
     );
     const arquivos: Arquivos = { ...base, ...r.edicoes };
     for (const p of r.apagados) delete arquivos[p];
+    await aindaMinha();
     if (Object.keys(r.edicoes).length || r.apagados.length) await salvarArquivos(db, t.userId, t.projetoId, arquivos);
 
     if (r.pendente) {
       const ok = await db.octaTurno.updateMany({
-        where: { id: t.id, status: "rodando" },
-        data: { status: "aguardando_aprovacao", estado: { msgs: r.msgs }, pendente: r.pendente, resposta: r.resposta },
+        where: { id: t.id, status: "rodando", runId },
+        data: { status: "aguardando_aprovacao", runId: null, estado: { msgs: r.msgs }, pendente: r.pendente, resposta: r.resposta },
       });
       if (!ok.count) throw new TurnoInterrompido();
       return; // o evento "aprovacao" já saiu do laço
     }
     await emitir("fim", { resposta: r.resposta.slice(0, 4000) });
-    await db.octaTurno.updateMany({ where: { id: t.id, status: "rodando" }, data: { status: "pronto", estado: null, pendente: null, resposta: r.resposta } });
+    await db.octaTurno.updateMany({ where: { id: t.id, status: "rodando", runId }, data: { status: "pronto", runId: null, estado: null, pendente: null, resposta: r.resposta } });
   } catch (e) {
     if (e instanceof TurnoInterrompido) return;
     const codigo: CodigoErroTurno = /orçamento/.test(String((e as Error)?.message)) ? "budget" : "falha_modelo";
     console.warn("[octa-turno] turno falhou", { turnoId: t.id, codigo }); // sem a mensagem: pode ter segredo do gateway
-    await erroNoTurno(db, t.id, codigo, agora()).catch(() => undefined);
+    await erroNoTurno(db, t.id, codigo, agora(), runId).catch(() => undefined);
   }
 }
 
@@ -312,7 +332,12 @@ export async function iniciarWorkerOcta(env: Env = process.env): Promise<boolean
   const deps = await depsReais(env);
   await reapTurnosPresos(deps.db).catch(() => console.warn("[octa-worker] reaper falhou"));
   const concurrency = Math.max(1, Number(env.OCTA_WORKER_CONCURRENCY || 2) || 2);
-  const worker = new Worker(OCTA_QUEUE, async (job) => { await processarTurno(deps, String(job.data?.turnoId ?? "")); }, { connection: getRedisConnection()! as any, concurrency });
+  const worker = new Worker(OCTA_QUEUE, async (job) => { await processarTurno(deps, String(job.data?.turnoId ?? "")); }, {
+    connection: getRedisConnection()! as any, concurrency,
+    // BullMQ 5 devolve job stalled pra fila 1× por padrão: um turno nunca roda de novo sozinho (republicaria).
+    // Stalled = falha; o turno fica `rodando` sem sinal de vida e o reaper o marca erro (tempo_esgotado).
+    maxStalledCount: 0,
+  });
   worker.on("failed", (job: any) => console.error("[octa-worker] job falhou:", job?.id));
   console.log(`[octa-worker] ouvindo "${OCTA_QUEUE}" (concurrency=${concurrency})`);
   return true;

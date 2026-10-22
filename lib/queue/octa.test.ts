@@ -19,22 +19,25 @@ const ordena = (rows: any[], orderBy: any) => {
   const [k, dir] = Object.entries(orderBy)[0] as [string, string];
   return [...rows].sort((a, b) => (a[k] < b[k] ? -1 : a[k] > b[k] ? 1 : 0) * (dir === "desc" ? -1 : 1));
 };
-function tabela(agora: () => Date) {
+/** `unico`: campos que juntos não podem repetir (como @@unique do Prisma → erro P2002). */
+function tabela(agora: () => Date, unico?: string[]) {
   const rows: any[] = [];
   const carimbo = (data: any) => ({ updatedAt: agora(), ...data });
   return {
     rows,
-    async create({ data }: any) { const r = { id: novoId(), createdAt: agora(), em: agora(), ...carimbo(data) }; rows.push(r); return { ...r }; },
+    async create({ data }: any) {
+      if (unico && rows.some((x) => unico.every((k) => x[k] === data[k]))) throw Object.assign(new Error("Unique constraint failed"), { code: "P2002" });
+      const r = { id: novoId(), createdAt: agora(), em: agora(), ...carimbo(data) }; rows.push(r); return { ...r }; },
     async findUnique({ where }: any) { const r = rows.find((x) => x.id === where.id); return r ? { ...r } : null; },
     async findFirst({ where, orderBy }: any) { const r = ordena(rows.filter((x) => casa(x, where)), orderBy)[0]; return r ? { ...r } : null; },
     async findMany({ where, orderBy, take }: any) { return ordena(rows.filter((x) => casa(x, where)), orderBy).slice(0, take ?? Infinity).map((x) => ({ ...x })); },
     async update({ where, data }: any) { const r = rows.find((x) => x.id === where.id); Object.assign(r, carimbo(data)); return { ...r }; },
-    async updateMany({ where, data }: any) { const alvo = rows.filter((x) => casa(x, where)); alvo.forEach((r) => Object.assign(r, carimbo(data))); return { count: alvo.length }; },
+    async updateMany({ where, data }: any) { const alvo = rows.filter((x) => casa(x, where)); alvo.forEach((r) => Object.assign(r, data)); /* sem @updatedAt implícito: quem precisa manda explícito */ return { count: alvo.length }; },
     async delete({ where }: any) { const i = rows.findIndex((x) => x.id === where.id); return rows.splice(i, 1)[0]; },
   };
 }
 function bancoFalso(agora: () => Date) {
-  return { octaProjeto: tabela(agora), octaPublicacao: tabela(agora), octaTurno: tabela(agora), octaEvento: tabela(agora) };
+  return { octaProjeto: tabela(agora), octaPublicacao: tabela(agora), octaTurno: tabela(agora), octaEvento: tabela(agora, ["turnoId", "seq"]) };
 }
 
 // ───────────── dublês ─────────────
@@ -96,7 +99,7 @@ describe("lib/queue/octa · turno em job", () => {
   const eventos = (turnoId: string) => db.octaEvento.rows.filter((e) => e.turnoId === turnoId);
   const turno = (id: string) => db.octaTurno.rows.find((t) => t.id === id);
   const novoTurno = async (pedido = "faz a landing") => {
-    const t = await db.octaTurno.create({ data: { userId: "u1", email: "a@b.c", projetoId, pedido, status: "rodando" } });
+    const t = await db.octaTurno.create({ data: { userId: "u1", email: "a@b.c", projetoId, pedido, status: "rodando", runId: null } });
     return t.id as string;
   };
 
@@ -265,5 +268,76 @@ describe("lib/queue/octa · turno em job", () => {
     await processarTurno({ ...deps, chamador }, id);
     expect(chamador).not.toHaveBeenCalled();
     expect(eventos(id)).toHaveLength(0);
+  });
+
+  it("processarTurno duas vezes ao mesmo tempo (job stalled devolvido): tools e publicação rodam uma vez só", async () => {
+    let chamadas = 0;
+    const passos: RespostaModelo[] = [{ content: null, tool_calls: [call("p1", "octa_publicar", {})] }, { content: "No ar!" }];
+    deps.chamador = async () => { let i = 0; return async () => { chamadas++; return passos[Math.min(i++, passos.length - 1)]; }; };
+    const id = await novoTurno("publica");
+    await Promise.all([processarTurno(deps, id), processarTurno(deps, id)]);
+    expect(gh.commits).toHaveLength(1);
+    expect(chamadas).toBe(2);
+    expect(turno(id)).toMatchObject({ status: "pronto", runId: null });
+    const evs = eventos(id);
+    expect(evs.map((e) => e.seq)).toEqual(evs.map((_, i) => i + 1));
+    await processarTurno(deps, id); // re-entrega depois de pronto: nada
+    expect(gh.commits).toHaveLength(1);
+  });
+
+  it("turno já reivindicado por outra execução (viva ou morta): a 2ª não roda nem grava evento", async () => {
+    const id = await novoTurno();
+    turno(id)!.runId = "outra-execucao";
+    const chamador = vi.fn(async () => modelo);
+    await processarTurno({ ...deps, chamador }, id);
+    expect(chamador).not.toHaveBeenCalled();
+    expect(eventos(id)).toHaveLength(0);
+    expect(turno(id)!.status).toBe("rodando"); // fica pro reaper
+  });
+
+  it("execução que perde o turno no meio (outra reivindicou) para de gravar eventos e não publica", async () => {
+    const id = await novoTurno("publica");
+    modelo = roteiro([
+      { content: null, tool_calls: [call("1", "octa_escrever", { path: "a.html", conteudo: "a" })] },
+      { content: null, tool_calls: [call("2", "octa_publicar", {})] },
+      { content: "fim" },
+    ]);
+    const original = db.octaEvento.create;
+    db.octaEvento.create = async (a: any) => {
+      const r = await original(a);
+      if (a.data.tipo === "arquivo") turno(id)!.runId = "roubado"; // lock perdido no meio
+      return r;
+    };
+    await processarTurno(deps, id);
+    const evs = eventos(id);
+    expect(evs.at(-1)!.tipo).toBe("arquivo");
+    expect(gh.commits).toHaveLength(0);
+    expect(turno(id)!.status).toBe("rodando");
+  });
+
+  it("seq duplicado (P2002 do @@unique) aborta a execução em vez de gravar em silêncio", async () => {
+    const id = await novoTurno();
+    await db.octaEvento.create({ data: { turnoId: id, seq: 1, tipo: "pensando", dados: {} } });
+    const findFirst = db.octaEvento.findFirst;
+    db.octaEvento.findFirst = async () => null; // execução com visão velha: acha que o próximo seq é 1
+    modelo = roteiro([{ content: null, tool_calls: [call("1", "octa_escrever", { path: "a.html", conteudo: "a" })] }, { content: "fim" }]);
+    await processarTurno(deps, id);
+    db.octaEvento.findFirst = findFirst;
+    expect(eventos(id)).toHaveLength(1);
+    expect(db.octaProjeto.rows[0].arquivos["a.html"]).toBeUndefined();
+  });
+
+  it("aprovar depois de esperar >10 min: o turno volta a rodar com updatedAt novo e o reaper não o colhe", async () => {
+    db.octaProjeto.rows[0].permissao = "antes_de_publicar";
+    modelo = roteiro([{ content: null, tool_calls: [call("p1", "octa_publicar", {})] }]);
+    const id = await novoTurno("publica");
+    await processarTurno(deps, id);
+    agora = new Date(agora.getTime() + 11 * 60_000);
+    const enfileirados: string[] = [];
+    await aprovarTurno({ ...deps, fila: { add: async (x) => { enfileirados.push(x); } } }, { userId: "u1", turnoId: id, aprovado: true });
+    expect(enfileirados).toEqual([id]);
+    expect(turno(id)).toMatchObject({ status: "rodando", runId: null });
+    expect(await reapTurnosPresos(db as unknown as TurnosDb, agora)).toBe(0);
+    expect(turno(id)!.status).toBe("rodando");
   });
 });

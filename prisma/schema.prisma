@@ -1493,6 +1493,7 @@ model OctaTurno {
   projetoId String
   pedido    String
   status    String   // rodando | aguardando_aprovacao | pronto | erro
+  runId     String?  // a execução que reivindicou o turno (processarTurno); null = livre pra ser reivindicado
   estado    Json?    // { msgs } para retomar; na retomada ganha { aprovado }
   pendente  Json?    // { tool, args, toolCallId }
   resposta  String?
@@ -1511,6 +1512,6 @@ model OctaEvento {
   tipo    String   // pensando | tool | arquivo | resultado | aprovacao | fim | erro
   dados   Json
   em      DateTime @default(now())
-  @@index([turnoId, seq])
+  @@unique([turnoId, seq])
   @@map("octa_eventos")
 }
