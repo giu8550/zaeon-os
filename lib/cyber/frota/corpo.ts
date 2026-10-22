@@ -228,7 +228,8 @@ const LUGARES_TEMPLO: readonly LugarTemplo[] = (() => {
   const eL = plat("estudoL"), eR = plat("estudoR"), lounge = ponte("lounge"), rasta = ponte("rasta");
   return [
     // o SALÃO: na frente e dos lados da pirâmide (o lado de trás é o caminho do campus), olhando pra ela
-    { id: "salao", caminho: [], lugar: noAnel(SALAO, 16, 34, 0.25, Math.PI - 0.25), alvo: PIRAMIDE },
+    // (até 26 m do centro: a chegada de quem vem pelo buraco negro fica a 33 — ninguém parado em cima de quem chega)
+    { id: "salao", caminho: [], lugar: noAnel(SALAO, 16, 26, 0.25, Math.PI - 0.25), alvo: PIRAMIDE },
     // o CAMPUS DE TI: contorna a pirâmide pelo lado e desce pelo corredor do meio, olhando pra torre
     { id: "campus", caminho: [{ x: SALAO.x + 22, z: SALAO.z + 12 }, { x: SALAO.x + 22, z: SALAO.z - 30 }, { x: SALAO.x, z: SALAO.z - SALAO.r - 4 }],
       lugar: (u, v) => ({ x: SALAO.x + (u - 0.5) * 7, z: SALAO.z - SALAO.r - 12 - v * 150 }), alvo: { x: TORRE_TI.x, z: TORRE_TI.z } },
