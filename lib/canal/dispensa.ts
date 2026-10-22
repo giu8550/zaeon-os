@@ -18,7 +18,11 @@
  *      agente (o nome ou o @ dela) — senão é tchau pra outra pessoa e a agente fica;
  *   5. PRA QUEM: se o pedaço de despedida tem o nome de uma agente ("a zenita pode sair, aura continua comigo"),
  *      só ela sai. Sem nome no pedaço: sai a agente da vez (se for uma só), ou todas se o verbo for plural
- *      ("podem ir"); com várias agentes e nada que diga qual, ninguém sai (melhor ficar do que sumir errado).
+ *      ("podem ir", #551: "vocês duas", "todas"); com várias agentes e nada que diga qual, sai a agente da vez —
+ *      e sem agente da vez, ninguém sai (melhor ficar do que sumir errado).
+ *   6. #551: "@aura e @teo podem ir" — o " e " ENTRE NOMES não corta a frase (antes a Aura ficava sozinha no
+ *      primeiro pedaço e continuava respondendo). Só não junta quando o segundo nome é mandado ficar
+ *      ("teo sai e aura continua").
  */
 
 import { separarMencoesColadas } from "./mention";
@@ -36,12 +40,18 @@ export type Candidata = { key: string; nomes: string[] };
 
 // ── as peças da frase (texto já sem acento, nomes trocados por §) ──
 // #466: "por favor", "pfv" também abrem e fecham ("por favor pode sair", "pode ir embora por favor")
-const ABRE = String.raw`(?:(?:a|o|voce|vc|tu|ok|okay|blz|beleza|valeu|vlw|obrigad\w*|brigad\w*|entao|bom|certo|agora|ja|ei|oi|por favor|pfv|pf|§)\s+)*`;
+// #551: "vocês duas", "as duas", "todas" também abrem ("vocês duas podem ir")
+const ABRE = String.raw`(?:(?:a|o|as|os|voce|vc|tu|voces|vcs|duas|dois|tres|todas|todos|ok|okay|blz|beleza|valeu|vlw|obrigad\w*|brigad\w*|entao|bom|certo|agora|ja|ei|oi|por favor|pfv|pf|§)\s+)*`;
 // #466: "aqui", "por agora", "por favor" também fecham ("não precisamos mais de você aqui", "pode sair por agora")
 // #468: "também" ("@aura pode sair também"), "daqui", "da conversa" também fecham
-const FECHA = String.raw`(?:\s+(?:embora|agora|ja|entao|valeu|vlw|obrigad\w*|brigad\w*|tchau\w*|bj\w*|beij\w*|flw|falou|ok|blz|beleza|ta|de vez|por hoje|por enquanto|por agora|aqui|por favor|pfv|pf|tambem|voce tambem|vc tambem|daqui|da conversa|da sala|do chat|§))*`;
+// #551: "todas", "as duas", "por aqui" também fecham ("podem sair todas", "pode encerrar por aqui")
+const FECHA = String.raw`(?:\s+(?:embora|agora|ja|entao|valeu|vlw|obrigad\w*|brigad\w*|tchau\w*|bj\w*|beij\w*|flw|falou|ok|blz|beleza|ta|de vez|por hoje|por enquanto|por agora|por aqui|aqui|por favor|pfv|pf|tambem|voce tambem|vc tambem|voces tambem|daqui|da conversa|da sala|do chat|todas|todos|as duas|os dois|as tres|os tres|voces|vcs|§))*`;
 const FORTES = [
-  String.raw`(?:ja\s+)?(?:pode|podem|podes)\s+(?:ir|sair|parar|descansar)(?:\s+embora)?`,
+  // #551: "pode ir descansar", "pode se retirar", "pode encerrar"
+  String.raw`(?:ja\s+)?(?:pode|podem|podes)\s+(?:ir|sair|parar|descansar|ir\s+descansar|se\s+retirar|encerrar|finalizar)(?:\s+embora)?`,
+  // #551: "chega (por hoje)", "vamos encerrar", "encerramos"
+  String.raw`chega`,
+  String.raw`(?:(?:podemos|vamos)\s+)?(?:encerrar|encerra|encerramos)`,
   // #468: o verbo direto — "sai @aura", "saia agora", "sai da conversa", "vaza"
   String.raw`(?:sai|saia|saiam|vaza|vazem)`,
   String.raw`(?:(?:pode|podem)\s+)?(?:ir|vai|vao)\s+embora`,
@@ -59,7 +69,17 @@ const PEDACO_FORTE = new RegExp(String.raw`^${ABRE}${NUCLEO(FORTES)}${FECHA}(?:\
 const PEDACO_FRACO = new RegExp(String.raw`^${ABRE}${NUCLEO(FRACAS)}${FECHA}(?:\s+${NUCLEO(FRACAS)}${FECHA})*$`);
 // #466: pedaço que manda uma agente FICAR ("aura continua comigo", "fica aura", "a aura pode continuar")
 const FICA = new RegExp(String.raw`(?:§\s+(?:(?:pode|vai)\s+)?(?:continua|continue|continuar|fica|fique|ficar|permanece|permaneca|segue|siga|seguir)\b|\b(?:continua|continue|fica|fique|permanece|permaneca|segue|siga)\s+(?:so\s+|apenas\s+)?(?:a\s+|o\s+|aqui\s+)?§)`);
-const PLURAL = /\b(?:podem|vao|voces|vcs|parem|estao|tao|dispensad[ao]s)\b/;
+const PLURAL = /\b(?:podem|vao|voces|vcs|parem|estao|tao|dispensad[ao]s|todas|todos|duas|dois|tres)\b/;
+// #551: o segundo nome mandado ficar ("teo sai e aura continua") — aí o " e " continua cortando a frase
+const VERBO_FICA = String.raw`(?:(?:pode|vai)\s+)?(?:continua|continue|continuar|fica|fique|ficar|permanece|permaneca|segue|siga|seguir)\b`;
+
+/** #551: "@aura e @teo" → "@aura @teo" (o " e " entre dois nomes de agente não corta a frase). */
+function juntarNomes(texto: string, candidatas: readonly Candidata[]): string {
+  const nomes = [...new Set(candidatas.flatMap((c) => [c.key, ...c.nomes]).map(semAcento).filter(Boolean))].map(esc);
+  if (!nomes.length) return texto;
+  const nome = String.raw`@?(?:${nomes.join("|")})(?![\w])`;
+  return texto.replace(new RegExp(String.raw`(${nome})\s+e\s+(?=${nome}(?!\s+${VERBO_FICA}))`, "g"), "$1 ");
+}
 
 type Pedaco = { texto: string; pergunta: boolean };
 
@@ -93,10 +113,13 @@ function marcarNomes(pedaco: string, candidatas: readonly Candidata[]): { s: str
 /**
  * #443: QUEM foi dispensada nesta mensagem, entre as agentes que iam responder (`candidatas`).
  * `humanos` = quantas pessoas no canal (o "tchau" sozinho só vale na conversa só com a agente).
+ * #551: `daVez` = quem ia responder. Com mais agentes entre as candidatas (as que estão na conversa), "pode ir"
+ * sem nome tira a da vez; "vocês duas podem ir" tira todas.
  */
-export function quemFoiDispensada(texto: string, candidatas: readonly Candidata[], humanos: number): string[] {
+export function quemFoiDispensada(texto: string, candidatas: readonly Candidata[], humanos: number, daVez: readonly string[] = []): string[] {
   texto = separarMencoesColadas(texto); // #468: "@aura@teo pode sair" = "@aura @teo pode sair"
   if (!candidatas.length || !normalizar(texto)) return [];
+  texto = juntarNomes(semAcento(texto), candidatas);
   const todas = semAcento(texto);
   const citada = (k: string) => {
     const c = candidatas.find((x) => x.key === k)!;
@@ -117,8 +140,10 @@ export function quemFoiDispensada(texto: string, candidatas: readonly Candidata[
     const arrobas = [...new Set(quem.filter((q) => q.arroba).map((q) => q.key))];
     let alvo = escritos.length ? escritos : arrobas.length ? arrobas : [];
     if (!alvo.length) {
+      const daVezAqui = daVez.filter((k) => candidatas.some((c) => c.key === k));
       if (candidatas.length === 1) alvo = [candidatas[0]!.key];
       else if (PLURAL.test(s)) alvo = candidatas.map((c) => c.key);
+      else if (daVezAqui.length === 1) alvo = daVezAqui;
     }
     // "tchau" (fraca) com outras pessoas na conversa: só vale se a mensagem falar com a agente
     if (fraco && humanos > 1) alvo = alvo.filter((k) => quem.some((q) => q.key === k) || citada(k));
