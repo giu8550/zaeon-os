@@ -10,9 +10,10 @@
  */
 
 /** Provedor UPSTREAM que serviu a chamada. */
-export type Alvo = "vertex" | "gemini-free" | "cloudflare" | "groq" | "glm" | "contabo";
-/** Provedores GRÁTIS DE TERCEIROS (com teto diário). A Contabo é nossa: grátis, sem teto de terceiro → fora. */
-export type AlvoPool = Exclude<Alvo, "vertex" | "contabo">;
+export type Alvo = "vertex" | "gemini-free" | "cloudflare" | "groq" | "glm" | "contabo" | "huggingface";
+/** Provedores GRÁTIS DE TERCEIROS (com teto diário). A Contabo é nossa: grátis, sem teto de terceiro → fora.
+ *  "huggingface" = a reserva PAGA do chat (lib/llm/reservaHf), também fora do pool. */
+export type AlvoPool = Exclude<Alvo, "vertex" | "contabo" | "huggingface">;
 
 /** Grupo do LiteLLM. Os fallbacks (`-cf`, `-groq`, `-glm`) moram no config, não aqui. */
 export const MODELO_POOL = "zaeon-pool-lite";
@@ -37,7 +38,7 @@ export const TETOS_DIA: Record<AlvoPool, { unidade: string; teto: number; renova
 };
 
 const GRUPO_ALVO: Record<string, AlvoPool> = { "zaeon-pool-lite": "gemini-free", "zaeon-pool-cf": "cloudflare", "zaeon-pool-groq": "groq", "zaeon-pool-glm": "glm" };
-const ALVOS: readonly Alvo[] = ["vertex", "gemini-free", "cloudflare", "groq", "glm", "contabo"];
+const ALVOS: readonly Alvo[] = ["vertex", "gemini-free", "cloudflare", "groq", "glm", "contabo", "huggingface"];
 
 /**
  * De onde veio a resposta. O header `x-litellm-model-id` é o `model_info.id` do deployment no

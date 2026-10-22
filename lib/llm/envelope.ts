@@ -15,6 +15,7 @@ import { usageDoVertex, usageDoOpenAI, classificarErroLlm, chaveDoAgente, gatewa
 import { registrarTokens, type LedgerCtx } from "@/lib/llm/ledger";
 import { GEMINI_MODEL_FLASH } from "@/lib/ai/model";
 import { alvoDe, ehModeloLocal, ehModeloPool, poolConfigurado, type Alvo } from "@/lib/llm/pool";
+import { HF_ROUTER_URL, erroPedeReserva, modeloSemProvedor, modelosReservaHf, reservaHfLigada, timeoutReservaHf } from "@/lib/llm/reservaHf";
 
 export type Rota = "vertex" | "gateway";
 export type { LedgerCtx, Alvo };
@@ -41,7 +42,7 @@ export type GerarRes = {
   texto: string;
   usage: Usage;
   modelo: string;
-  provedor: "vertex" | "litellm";
+  provedor: "vertex" | "litellm" | "huggingface";
   rota: Rota;
   finishReason?: string;
   ms: number;
@@ -54,9 +55,9 @@ export type GerarRes = {
 /** Erro de LLM já classificado (relançado pelo envelope). `classe` decide quem trata (fila × agente × admin). */
 export class ErroLlm extends Error {
   readonly classe: ClasseErroLlm;
-  readonly provedor: "vertex" | "litellm";
+  readonly provedor: "vertex" | "litellm" | "huggingface";
   readonly causa: unknown;
-  constructor(classe: ClasseErroLlm, provedor: "vertex" | "litellm", causa: unknown) {
+  constructor(classe: ClasseErroLlm, provedor: "vertex" | "litellm" | "huggingface", causa: unknown) {
     super(`llm:${classe}: ${String((causa as any)?.message ?? causa).slice(0, 300)}`);
     this.name = "ErroLlm"; this.classe = classe; this.provedor = provedor; this.causa = causa;
   }
@@ -184,7 +185,7 @@ export async function gerar(req: GerarReq, deps: Deps = {}): Promise<GerarRes> {
   }
 
   const jsonValido = (texto: string) => (req.json ? textoJsonValido(texto) : undefined);
-  const gravar = (provedor: "vertex" | "litellm", r: Rota, usage: Usage, ok: boolean, erro: ClasseErroLlm | null, m: string, alvo: Alvo, jv?: boolean) =>
+  const gravar = (provedor: "vertex" | "litellm" | "huggingface", r: Rota, usage: Usage, ok: boolean, erro: ClasseErroLlm | null, m: string, alvo: Alvo, jv?: boolean) =>
     void registrar({ ...req.ctx, model: m, provedor, rota: r, usage, ms: agora() - ini, ok, erro, alvo, jsonValido: jv ?? null }).catch(() => undefined);
 
   // Pool grátis (Fatia 7) NUNCA cai no Vertex (§5.10): sem gateway/key, ou gateway com erro, relança.
@@ -221,15 +222,39 @@ export async function gerar(req: GerarReq, deps: Deps = {}): Promise<GerarRes> {
     }
   }
 
+  // Reserva do chat pelo Hugging Face (lib/llm/reservaHf): o MESMO pedido no gpt-oss-120b (Cerebras → Groq)
+  // quando o Vertex falha ou volta vazio. Pool e modelos da Contabo nunca chegam aqui (relançaram acima).
+  const reservaHf = async (): Promise<GerarRes | null> => {
+    if (!reservaHfLigada(env)) return null;
+    for (const m of modelosReservaHf(env)) {
+      try {
+        const r = await viaGateway({ ...req, timeoutMs: timeoutReservaHf(env), extra: { ...(req.extra ?? {}), reasoning_effort: "low" } },
+          m, HF_ROUTER_URL, env.HF_TOKEN!.trim(), deps.fetchImpl ?? fetch);
+        const nome = modeloSemProvedor(r.modelo || m), jv = jsonValido(r.texto);
+        if (!r.texto.trim()) { gravar("huggingface", rota, r.usage, false, "outro", nome, "huggingface"); continue; }
+        gravar("huggingface", rota, r.usage, true, null, nome, "huggingface", jv);
+        console.warn(`[llm] Vertex falhou — reserva Hugging Face serviu (${m}, ${req.ctx.agentKey})`);
+        const { modelId: _id, ...resto } = r;
+        return { ...resto, modelo: nome, provedor: "huggingface", rota, ms: agora() - ini, alvo: "huggingface", ...(jv === undefined ? {} : { jsonValido: jv }) };
+      } catch (e2) {
+        gravar("huggingface", rota, USAGE_VAZIO, false, (e2 as any)?.naoJson ? "resposta_nao_json" : classificarErroLlm(e2), modeloSemProvedor(m), "huggingface");
+      }
+    }
+    return null;
+  };
+
   try {
     const r = await (deps.vertex ?? vertexReal)(req, modelo);
     const jv = jsonValido(r.texto);
     gravar("vertex", rota, r.usage, true, null, r.modelo, "vertex", jv);
+    // Vertex respondeu VAZIO (safety/MAX_TOKENS sem texto): a reserva tenta antes de devolver o nada.
+    if (!r.texto.trim()) { const hf = await reservaHf(); if (hf) return hf; }
     const { modelId: _id, ...resto } = r;
     return { ...resto, provedor: "vertex", rota, ms: agora() - ini, alvo: "vertex", ...(jv === undefined ? {} : { jsonValido: jv }) };
   } catch (e) {
     const classe = classificarErroLlm(e);
     gravar("vertex", rota, USAGE_VAZIO, false, classe, modelo, "vertex");
+    if (erroPedeReserva(classe)) { const hf = await reservaHf(); if (hf) return hf; }
     throw new ErroLlm(classe, "vertex", e);
   }
 }

@@ -32,7 +32,7 @@ export type LedgerCtx = {
 
 export type LinhaLedger = LedgerCtx & {
   model: string;
-  provedor: "vertex" | "litellm";
+  provedor: "vertex" | "litellm" | "huggingface";
   rota: "vertex" | "gateway";
   usage: Usage;
   ms: number;

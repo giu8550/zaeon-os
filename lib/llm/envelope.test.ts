@@ -240,3 +240,66 @@ describe("gerar — modelos da Contabo (zaeon-local-*)", () => {
     expect(init.headers.Authorization).toBe("Bearer sk-local"); expect(JSON.parse(init.body).reasoning_effort).toBe("none");
   });
 });
+
+describe("gerar — reserva Hugging Face (Vertex falhou)", () => {
+  const HF = { HF_TOKEN: "hf_teste" };
+  const okHf = (content: string, model = "openai/gpt-oss-120b") => resposta(200, { model, choices: [{ message: { content }, finish_reason: "stop" }], usage: { prompt_tokens: 40, completion_tokens: 10, total_tokens: 50 } });
+  const vertex429: Deps["vertex"] = async () => { throw Object.assign(new Error("429 Resource exhausted"), { status: 429 }); };
+  const tick = () => new Promise((x) => setTimeout(x, 0));
+
+  it("Vertex 429 → gpt-oss-120b na Cerebras pelo router do HF; ledger: vertex ok:false + huggingface ok:true", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const f = vi.fn(async () => okHf('{"via":"hf"}'));
+    const d = deps({ vertex: vertex429, fetchImpl: f as any, env: HF });
+    const r = await gerar({ system: "s", user: "oi", json: true, ctx }, d);
+    expect(r).toMatchObject({ provedor: "huggingface", alvo: "huggingface", modelo: "openai/gpt-oss-120b", texto: '{"via":"hf"}', jsonValido: true });
+    const [url, init] = f.mock.calls[0] as any;
+    expect(url).toBe("https://router.huggingface.co/v1/chat/completions");
+    expect(init.headers.Authorization).toBe("Bearer hf_teste");
+    const body = JSON.parse(init.body);
+    expect(body.model).toBe("openai/gpt-oss-120b:cerebras"); expect(body.response_format).toEqual({ type: "json_object" }); expect(body.reasoning_effort).toBe("low");
+    await tick();
+    expect(d.linhas.map((l) => [l.alvo, l.ok, l.erro])).toEqual([["vertex", false, "rate_limit"], ["huggingface", true, null]]);
+    warn.mockRestore();
+  });
+  it("Cerebras falha → Groq", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const f = vi.fn().mockResolvedValueOnce(resposta(503, { error: { message: "down" } })).mockResolvedValueOnce(okHf("oi da groq"));
+    const d = deps({ vertex: vertex429, fetchImpl: f as any, env: HF });
+    const r = await gerar({ user: "oi", ctx }, d);
+    expect(r.texto).toBe("oi da groq");
+    expect(JSON.parse((f.mock.calls[1] as any)[1].body).model).toBe("openai/gpt-oss-120b:groq");
+  });
+  it("Vertex timeout e Vertex vazio também acionam a reserva", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const timeout: Deps["vertex"] = async () => { throw new Error("Gemini timeout após 30000ms"); };
+    expect((await gerar({ user: "oi", ctx }, deps({ vertex: timeout, fetchImpl: vi.fn(async () => okHf("ok")) as any, env: HF }))).alvo).toBe("huggingface");
+    const vazio: Deps["vertex"] = async (_r, modelo) => ({ texto: "", usage: USAGE_VAZIO, finishReason: "SAFETY", modelo });
+    expect((await gerar({ user: "oi", ctx }, deps({ vertex: vazio, fetchImpl: vi.fn(async () => okHf("ok")) as any, env: HF }))).alvo).toBe("huggingface");
+  });
+  it("sem HF_TOKEN ou HF_RESERVA=0 → erro do Vertex como antes, zero fetch", async () => {
+    const f = vi.fn();
+    await expect(gerar({ user: "oi", ctx }, deps({ vertex: vertex429, fetchImpl: f as any, env: {} }))).rejects.toBeInstanceOf(ErroLlm);
+    await expect(gerar({ user: "oi", ctx }, deps({ vertex: vertex429, fetchImpl: f as any, env: { ...HF, HF_RESERVA: "0" } }))).rejects.toBeInstanceOf(ErroLlm);
+    expect(f).not.toHaveBeenCalled();
+  });
+  it("reserva também fora → relança o erro ORIGINAL do Vertex (classe rate_limit)", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const f = vi.fn(async () => resposta(500, { error: { message: "x" } }));
+    const e = await gerar({ user: "oi", ctx }, deps({ vertex: vertex429, fetchImpl: f as any, env: HF })).catch((x) => x);
+    expect(e).toBeInstanceOf(ErroLlm); expect(e.classe).toBe("rate_limit"); expect(e.provedor).toBe("vertex");
+    expect(f).toHaveBeenCalledTimes(2);
+  });
+  it("teto de orçamento NÃO aciona a reserva (indisponibilidade declarada)", async () => {
+    const f = vi.fn();
+    const teto: Deps["vertex"] = async () => { throw new Error("budget exceeded"); };
+    await expect(gerar({ user: "oi", ctx }, deps({ vertex: teto, fetchImpl: f as any, env: HF }))).rejects.toBeInstanceOf(ErroLlm);
+    expect(f).not.toHaveBeenCalled();
+  });
+  it("pool grátis e modelos da Contabo nunca caem na reserva", async () => {
+    const f = vi.fn(async () => resposta(503, { error: { message: "x" } }));
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    await expect(gerar({ user: "oi", model: "zaeon-local-mini", rota: "gateway", ctx }, deps({ fetchImpl: f as any, env: { ...HF, GATEWAY_URL: "http://g", GATEWAY_KEY_DEFAULT: "k" } }))).rejects.toBeInstanceOf(ErroLlm);
+    expect(f.mock.calls.every((c: any) => !String(c[0]).includes("huggingface"))).toBe(true);
+  });
+});

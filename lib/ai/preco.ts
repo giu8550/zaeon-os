@@ -19,6 +19,9 @@ export const USD_POR_MILHAO: Record<string, Preco> = {
   "gemini-3.5-flash":      { prompt: 0.30, completion: 2.50, cached: 0.03 },
   "gemini-3.1-pro":        { prompt: 1.25, completion: 10.00, cached: 0.125 },
   "gemini-3.5-flash-lite": { prompt: 0.10, completion: 0.40, cached: 0.01 }, // provisório = 2.5-flash-lite (reserva Google do pool)
+  // Reserva do chat pelo Hugging Face (lib/llm/reservaHf): gpt-oss-120b na Cerebras/Groq, preço do provedor
+  // sem acréscimo do HF. Cerebras ~0,25/0,69, Groq ~0,15/0,75 — fica o maior de cada (conferido 2026-10).
+  "gpt-oss-120b":          { prompt: 0.25, completion: 0.75, cached: 0 },
   // Pool grátis (Fatia 7) — free tier: custo 0 dentro do teto (TETOS_DIA em lib/llm/pool.ts).
   // O MESMO "gemini-2.5-flash-lite" no Vertex custa: por isso o ledger zera pelo ALVO (custoDoAlvoUsd), não pelo nome.
   "zaeon-pool-lite":                { prompt: 0, completion: 0, cached: 0 }, // free tier — custo 0 dentro do teto (TETOS_DIA em lib/llm/pool.ts)
@@ -47,7 +50,9 @@ export function custoEstimadoUsd(model: string, u: Pick<Usage, "promptTokens" | 
   return Math.round(usd * 1e8) / 1e8;
 }
 
-/** Custo pelo ALVO que serviu: alvo do pool grátis = 0 (free tier); vertex/null = tabela por modelo. */
+/** Alvos que não cobram por token: o pool grátis (free tier) e a Contabo (nossa). */
+const ALVOS_GRATIS = new Set(["gemini-free", "cloudflare", "groq", "glm", "contabo"]);
+/** Custo pelo ALVO que serviu: pool grátis/Contabo = 0; vertex, huggingface (pago) ou null = tabela por modelo. */
 export function custoDoAlvoUsd(model: string, u: Pick<Usage, "promptTokens" | "completionTokens" | "cachedTokens">, alvo?: string | null): number {
-  return alvo && alvo !== "vertex" ? 0 : custoEstimadoUsd(model, u);
+  return alvo && ALVOS_GRATIS.has(alvo) ? 0 : custoEstimadoUsd(model, u);
 }
