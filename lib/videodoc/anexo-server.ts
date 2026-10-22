@@ -7,7 +7,8 @@ import { MAX_BYTES } from "@/lib/rag/ingerir";
 import { LIMITE_PESSOAL } from "@/lib/rag/minhaBase";
 import type { StructuredAnswer } from "@/lib/agent/contracts";
 import { sanitizarDocumento } from "@/lib/blueprint/tipos";
-import { MOTIVO_CHAT, videoDoChat, type VideoNoChat } from "./chat-server";
+import { videoDoChat, type VideoNoChat } from "./chat-server";
+import { MOTIVO_CHAT } from "./pedido";
 
 /** os bytes do anexo, se for PDF (data URL "data:application/pdf;base64,…" ou base64 cru — o fluxo legado é PDF) */
 export function bytesDoPdf(fileData: string): Uint8Array | null {

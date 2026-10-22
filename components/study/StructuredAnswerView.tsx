@@ -23,6 +23,7 @@ import type { StructuredAnswer, Source } from "@/lib/agent/contracts";
 import ChatMarkdown from "@/components/study/ChatMarkdown";
 import CardVideoChat from "@/components/videodoc/CardVideoChat";
 import { videoDocUiOn } from "@/lib/videodoc/documentos";
+import { MOTIVO_CHAT } from "@/lib/videodoc/pedido";
 
 // O texto da resposta passa pelo MESMO formatador do chat (ChatMarkdown): negrito/itálico, títulos, bullets,
 // links e MATEMÁTICA ($…$, $$…$$ em KaTeX, ```grafico). Antes era um formatador próprio só com **negrito** —
@@ -147,6 +148,9 @@ export default function StructuredAnswerView({
 
           {/* o VÍDEO do documento pedido no chat (lib/videodoc): o ▶ abre a Zaeon holograma explicando */}
           {rest && answer.videoDoc?.videoId && videoDocUiOn() ? <CardVideoChat videoId={answer.videoDoc.videoId} titulo={answer.videoDoc.titulo} /> : null}
+          {rest && answer.videoDoc && !answer.videoDoc.videoId && answer.videoDoc.motivo && videoDocUiOn() ? (
+            <div className="mt-3 rounded-xl border border-amber-300/30 bg-amber-300/[0.07] px-3 py-2 text-[12.5px] text-amber-100/90">🎬 {MOTIVO_CHAT[answer.videoDoc.motivo] ?? "Não consegui preparar o vídeo agora."}</div>
+          ) : null}
 
           {/* mini-ações da mensagem (ordem: conteúdo → ações → botões do harness → Fontes) */}
           {rest && acoes}

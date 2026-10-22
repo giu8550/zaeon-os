@@ -7,15 +7,10 @@
 import { SURFACE_BLUEPRINT, type Documento } from "@/lib/blueprint/tipos";
 import { documentosDaResposta, juntarDocumentos } from "./documentos";
 import { escolherDocumento } from "./pedido";
+export { MOTIVO_CHAT } from "./pedido";
 import { garantirVideo } from "./server";
 
 export type VideoNoChat = { videoId?: string; titulo: string; motivo?: string };
-export const MOTIVO_CHAT: Record<string, string> = {
-  nenhum_documento: "Ainda não tenho um documento desta conversa pra transformar em vídeo — me mande o PDF ou peça uma busca de artigos antes.",
-  limite_do_dia: "Você chegou ao limite de vídeos novos de hoje — amanhã eu faço este.",
-  base_cheia: "Sua base já está no limite de documentos; apague algum na Minha base pra eu guardar este PDF.",
-  pdf_falhou: "Não consegui ler esse PDF pra fazer o vídeo.",
-};
 
 export async function videoDoChat(i: { userId: string; scopeId: string | null; prompt: string; answer?: Parameters<typeof documentosDaResposta>[0]; anexo?: Documento | null }): Promise<VideoNoChat> {
   const [{ prisma }, bp] = await Promise.all([import("@/src/lib/prisma"), import("@/lib/blueprint/server")]);

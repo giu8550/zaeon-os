@@ -288,8 +288,9 @@ export async function POST(req: Request) {
         // Zaeon prepara o vídeo; a resposta vai no protocolo @@STRUCTURED@@ com o card ▶ (flag VIDEO_DOC).
         if (stream === true && agentKey === "aura" && fileData && typeof fileData === "string" && ledgerUserId) {
             const vd = await import("@/lib/videodoc/server");
-            if (vd.videoDocOn() && (await import("@/lib/videodoc/pedido")).pedidoDeVideo(String(prompt || ""))) {
-                const anexo = await import("@/lib/videodoc/anexo-server");
+            const anexo = await import("@/lib/videodoc/anexo-server");
+            // só PDF de verdade (imagem anexada segue o caminho normal) e só pedido explícito de vídeo
+            if (vd.videoDocOn() && anexo.bytesDoPdf(fileData) && (await import("@/lib/videodoc/pedido")).pedidoDeVideo(String(prompt || ""))) {
                 const scope = agentContext && typeof agentContext === "object" && typeof (agentContext as any).cartolinaScopeId === "string" ? (agentContext as any).cartolinaScopeId as string : null;
                 const v = await anexo.videoDoAnexo({ userId: ledgerUserId, fileData, prompt: String(prompt || ""), scopeId: scope }).catch(() => ({ titulo: "", motivo: "pdf_falhou" }));
                 const { STRUCTURED_SENTINEL } = await import("@/lib/agent/chat-turn-wire");
