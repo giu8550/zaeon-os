@@ -295,3 +295,50 @@ describe("POST /api/canal/[id]/mensagem · #466 chamar pelo nome, sem @", () => 
     expect(state.criadas[0].mencoes).toEqual([]);
   });
 });
+
+describe("POST /api/canal/[id]/mensagem · #551 despedidas olham quem está na conversa", () => {
+  const sistema = () => state.criadas.filter((m) => m.autorTipo === "sistema").map((m) => [m.autorId, m.texto]);
+  beforeEach(() => {
+    state.criadas = []; state.disparos = []; state.publicados = []; state.atualizacoes = [];
+    // conversa de uma pessoa só (a dona A); a agente da vez é a Aura
+    state.canal = { ...canal("privado"), membros: [], agentes: ["aura", "medicina"] }; state.user = user(A);
+    state.historico = [{ autorTipo: "humano", autorId: A }, { autorTipo: "agente", autorId: "aura" }];
+  });
+
+  it("'vocês duas podem ir' tira as duas da conversa (antes ninguém saía)", async () => {
+    const j = await (await POST(req("vocês duas podem ir"), { params: { id: CANAL } })).json();
+    expect(j.dispensadas).toEqual(["aura", "medicina"]);
+    expect(state.disparos).toEqual([]);
+    expect(j.agentesNoCanal).toEqual([]);
+  });
+
+  it("'@aura e @osler podem ir embora' tira as duas (antes a Aura ficava e respondia)", async () => {
+    const j = await (await POST(req("@aura e @osler podem ir embora"), { params: { id: CANAL } })).json();
+    expect(j.dispensadas).toEqual(["aura", "medicina"]);
+    expect(state.disparos).toEqual([]);
+  });
+
+  it("'pode ir' sem nome, com as duas na barra → sai só a da vez", async () => {
+    const j = await (await POST(req("pode ir"), { params: { id: CANAL } })).json();
+    expect(j.dispensadas).toEqual(["aura"]);
+    expect(j.agentesNoCanal).toEqual(["medicina"]);
+  });
+
+  it("'tchau osler' com o Osler fora da conversa: ignorado — sem 'Osler saiu', sem resposta, sem entrar na barra", async () => {
+    state.canal = { ...state.canal, agentes: ["aura"] };
+    const j = await (await POST(req("tchau osler"), { params: { id: CANAL } })).json();
+    expect(j.dispensadas).toBeUndefined();
+    expect(sistema()).toEqual([]);
+    expect(state.disparos).toEqual([]);
+    expect(j.agentesNoCanal).toEqual(["aura"]);
+  });
+
+  it("'pode ir aura e osler' com o Osler fora: só a Aura sai, e o Osler NÃO é chamado", async () => {
+    state.canal = { ...state.canal, agentes: ["aura"] };
+    const j = await (await POST(req("pode ir aura e osler"), { params: { id: CANAL } })).json();
+    expect(j.dispensadas).toEqual(["aura"]);
+    expect(sistema()).toEqual([["aura", "Aura saiu da conversa"]]);
+    expect(state.disparos).toEqual([]);
+    expect(j.agentesNoCanal).toEqual([]);
+  });
+});

@@ -152,6 +152,34 @@ export function quemFoiDispensada(texto: string, candidatas: readonly Candidata[
   return candidatas.map((c) => c.key).filter((k) => saem.has(k) && !ficam.has(k));
 }
 
+/**
+ * #551: o que a mensagem faz com as agentes, olhando QUEM ESTÁ na conversa (não só quem ia responder):
+ *   - `naConversa` = as agentes da barra (canal.agentes) que não saíram — "vocês duas podem ir" tira todas elas;
+ *   - despedida pra quem NEM ESTAVA ("tchau teo" com só a Aura) é ignorada: sem "Téo saiu", e o nome escrito
+ *     na despedida não chama ninguém ("pode ir aura e zenita" não traz a Zenita);
+ *   - `respondem` = quem ia responder e não foi dispensada; `chamados` = quem entra na barra.
+ */
+export function saidasDaMensagem(texto: string, e: {
+  alvos: readonly string[];
+  naConversa: readonly string[];
+  agentes: readonly { agentKey: string; nome: string }[];
+  humanos: number;
+}): { dispensadas: string[]; ignoradas: string[]; respondem: string[]; chamados: string[] } {
+  const candidatas = [...new Set([...e.alvos, ...e.naConversa])].map((k) => {
+    const nome = e.agentes.find((a) => a.agentKey === k)?.nome ?? "";
+    return { key: k, nomes: [nome, nome.split(/\s+/)[0] ?? ""] };
+  });
+  const saem = quemFoiDispensada(texto, candidatas, e.humanos, e.alvos);
+  const dispensadas = saem.filter((k) => e.naConversa.includes(k));
+  const ignoradas = saem.filter((k) => !dispensadas.includes(k));
+  return {
+    dispensadas,
+    ignoradas,
+    respondem: e.alvos.filter((k) => !saem.includes(k)),
+    chamados: e.alvos.filter((k) => !ignoradas.includes(k)),
+  };
+}
+
 export type ContextoDispensa = {
   /** nomes/aliases da agente da vez (ex.: ["zenita"]). */
   nomesDaAgente: string[];

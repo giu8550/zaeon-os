@@ -20,7 +20,7 @@ import { humanosNoCanal } from "@/lib/canal/convite";
 import { EV_MENSAGEM, publicarPusher, type MensagemWire } from "@/lib/canal/realtime";
 import { dispararTurnos, depsReais } from "@/lib/canal/queue";
 import { pedidoDeChore } from "@/lib/chore/triagem";
-import { quemFoiDispensada, textoDespedida, textoSaiu, textoVoltou, agentesDepois } from "@/lib/canal/dispensa";
+import { saidasDaMensagem, textoDespedida, textoSaiu, textoVoltou, agentesDepois } from "@/lib/canal/dispensa";
 import { atualizarAgentes, type DbAtomico } from "@/lib/canal/atomico";
 import { choresLigadas, criarDoPedido } from "@/lib/chore/criar";
 
@@ -52,7 +52,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     where: { canalId: canal.id }, orderBy: { createdAt: "desc" }, take: 100, select: { autorTipo: true, autorId: true, texto: true },
   });
   const historico = [...recentes].reverse();
-  const { alvos } = resolverAlvos({
+  const { alvos, implicito } = resolverAlvos({
     mencoes: chamadas,
     historico,
     remetenteId: u.id,
@@ -64,19 +64,19 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   // #438: a mensagem dispensa a agente da vez? (decide antes de gravar, pra barra já sair certa)
   const humanos = humanosNoCanal(canal);
   // #443: só sai a agente PRA QUEM foi a despedida ("a zenita pode sair, aura continua comigo" → só a Zenita)
-  const dispensadas = quemFoiDispensada(
-    texto,
-    alvos.map((k) => { const nome = agentes.find((a) => a.agentKey === k)?.nome ?? ""; return { key: k, nomes: [nome, nome.split(/\s+/)[0] ?? ""] }; }),
-    humanos,
-  );
+  // #551: entre TODAS da conversa ("vocês duas podem ir"); despedida de quem nem estava é ignorada
+  const disponiveis = agentes.map((a) => a.agentKey);
+  const naConversa = [...new Set([...(canal.agentes ?? []), ...(implicito ? alvos : [])])]
+    .filter((k) => disponiveis.includes(k) && !estaForaDaConversa(historico, k));
+  const { dispensadas, respondem, chamados } = saidasDaMensagem(texto, { alvos, naConversa, agentes, humanos });
   // #440: chamada com @ depois de ter saído → entra a linha "Zenita voltou para a conversa"
-  const voltando = chamadas.filter((k) => alvos.includes(k) && !dispensadas.includes(k) && estaForaDaConversa(historico, k));
+  const voltando = chamadas.filter((k) => respondem.includes(k) && estaForaDaConversa(historico, k));
 
   const row = await prisma.canalMensagem.create({ data: { canalId: canal.id, autorTipo: "humano", autorId: u.id, texto, mencoes } });
   // agente convocado passa a "estar" no canal (aparece na barra pra todo mundo); #440: a dispensada SAI da barra
   // #443: grava SEM apagar o que outra mensagem gravou ao mesmo tempo (lib/canal/atomico)
-  const agentesNoCanal = (await atualizarAgentes(prisma as unknown as DbAtomico, canal.id, alvos, dispensadas).catch(() => null))
-    ?? agentesDepois(canal.agentes, alvos, dispensadas);
+  const agentesNoCanal = (await atualizarAgentes(prisma as unknown as DbAtomico, canal.id, chamados, dispensadas).catch(() => null))
+    ?? agentesDepois(canal.agentes, chamados, dispensadas);
   await prisma.canal.updateMany({ where: { id: canal.id }, data: { updatedAt: new Date() } }).catch(() => undefined);
 
   const wire: MensagemWire = {
@@ -125,7 +125,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       createdAt: saiu.createdAt.toISOString(), autorNome: nome, autorAvatar: null,
     } satisfies MensagemWire);
   }
-  const respondem = alvos.filter((k) => !dispensadas.includes(k));
 
   const vias = await dispararTurnos(
     respondem.map((agentKey) => ({ canalId: canal.id, agentKey, userId: u.id, mensagemId: row.id })),
