@@ -68,12 +68,14 @@ export function useBlueprint(inicialId?: string | null) {
     if (r?.blueprint && idAtual.current === a.id) setAtual(r.blueprint);
   }, [atual, recompondo]);
 
-  /** a PROVA de um crítico: o servidor confere; a última da fase dispara a avaliação da Zaeon. Devolve o motivo da recusa */
-  const enviarProva = useCallback(async (criticoId: string, url: string): Promise<{ ok: boolean; motivo?: string; avaliacao?: Avaliacao | null }> => {
+  /** a PROVA de um crítico: o servidor confere; a última da fase dispara a avaliação da Zaeon. Devolve o motivo da recusa.
+   *  Sem crítico (null) = "pedir a avaliação de novo" (a anterior falhou) */
+  const enviarProva = useCallback(async (criticoId: string | null, url: string): Promise<{ ok: boolean; motivo?: string; avaliacao?: Avaliacao | null }> => {
     const a = atual; if (!a) return { ok: false };
-    ocupado.current++;
-    const r = await json<{ ok: boolean; motivo?: string; blueprint: BlueprintCliente | null; avaliacao: Avaliacao | null }>(`/api/blueprint/${a.id}/prova`, { method: "POST", body: JSON.stringify({ criticoId, url }) });
-    ocupado.current--;
+    voo(a.id, 1);
+    const corpo = criticoId ? { criticoId, url } : { reavaliar: true };
+    const r = await json<{ ok: boolean; motivo?: string; blueprint: BlueprintCliente | null; avaliacao: Avaliacao | null }>(`/api/blueprint/${a.id}/prova`, { method: "POST", body: JSON.stringify(corpo) });
+    voo(a.id, -1);
     if (!r) return { ok: false, motivo: "não deu pra enviar agora — tente de novo" };
     if (r.blueprint && idAtual.current === a.id) setAtual(r.blueprint);
     if (r.ok) void recarregar();

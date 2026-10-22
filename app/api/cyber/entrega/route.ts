@@ -22,7 +22,7 @@ import { avaliarEstudo, idDeEncaixeValido, type EventoRelicario, type TipoEncaix
 import { SURFACE_ESTUDOS, lerCards } from "@/lib/estudos/board";
 import { itensDosBoards } from "@/lib/estudos/itens";
 import { CARD_BLUEPRINT, itemDoBlueprint } from "@/lib/blueprint/itens";
-import { SURFACE_BLUEPRINT, docVazio, sanitizarDoc } from "@/lib/blueprint/tipos";
+import { SURFACE_BLUEPRINT, blueprintOn, docVazio, sanitizarDoc } from "@/lib/blueprint/tipos";
 
 export async function POST(req: Request) {
   const rl = await guard(req, "lounge3d-acesso"); if (!rl.ok) return rl.response;
@@ -42,6 +42,7 @@ export async function POST(req: Request) {
     const [boardId, cardId] = id.split(":") as [string, string];
     let it: ReturnType<typeof itensDosBoards>[number] | undefined;
     if (cardId === CARD_BLUEPRINT) {
+      if (!blueprintOn()) return NextResponse.json({ error: "Not found" }, { status: 404 });
       // um BLUEPRINT PRÁTICO (lib/blueprint): só o do próprio dono
       const b = await prisma.cartolina.findFirst({ where: { id: boardId, surface: SURFACE_BLUEPRINT, ownerId: me.id }, select: { id: true, titulo: true, cards: true } });
       it = b ? itemDoBlueprint(b.id, sanitizarDoc(b.cards) ?? docVazio(b.titulo, 0)) : undefined;

@@ -1,19 +1,85 @@
 /**
  * O link RESPONDE? (servidor) — a checagem dos selos do blueprint (app/api/estudos/board/[id]/selos) e das provas do
- * blueprint prático (lib/blueprint/provas-server). Só URL pública (sem rede interna — lib/scholar/ssrf), sem seguir
- * redirecionamento (um 3xx conta como vivo), 6 s. 401/403 = existe, mas é privado (conta como vivo).
+ * blueprint prático (lib/blueprint/provas-server). Sem seguir redirecionamento (um 3xx conta como vivo), 6 s; 401/403 =
+ * existe, mas é privado (conta como vivo).
+ *
+ * Anti-SSRF de verdade (a URL vem da pessoa e a resposta diz se "respondeu" — sem isso vira um scanner da rede
+ * interna): além do filtro da string (lib/scholar/ssrf), o NOME é resolvido no DNS e QUALQUER endereço interno derruba
+ * o pedido (loopback, privada, link-local, CGNAT 100.64/10 — a Tailscale —, ULA…); host sem ponto (nome de serviço do
+ * Docker) também. A checagem mora no `lookup` do próprio http.request: o socket conecta no IP que foi conferido, então
+ * trocar o DNS no meio (rebinding) não passa.
  */
+import { lookup as dnsLookup, type LookupAddress } from "node:dns";
+import http from "node:http";
+import https from "node:https";
+import { isIP } from "node:net";
 import { isSafePublicHttpUrl } from "@/lib/scholar/ssrf";
+
+const TIMEOUT_MS = 6000;
+
+/** o IP é da internet pública? (v4 e v6, inclusive o v4 mapeado em v6) */
+export function ipPublico(ip: string): boolean {
+  const v = isIP(ip);
+  if (v === 4) {
+    const [a, b] = ip.split(".").map(Number) as [number, number];
+    if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
+    if (a === 100 && b >= 64 && b <= 127) return false;     // CGNAT (Tailscale)
+    if (a === 169 && b === 254) return false;               // link-local / metadados de nuvem
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 192 && (b === 168 || b === 0)) return false;
+    if (a === 198 && (b === 18 || b === 19)) return false;
+    return true;
+  }
+  if (v === 6) {
+    const s = ip.toLowerCase().replace(/^\[|\]$/g, "");
+    const mapeado = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(s);
+    if (mapeado) return ipPublico(mapeado[1]!);
+    if (s === "::" || s === "::1") return false;
+    if (/^f[cd]/.test(s) || /^fe[89ab]/.test(s) || s.startsWith("ff")) return false;   // ULA, link-local, multicast
+    return true;
+  }
+  return false;
+}
+
+/** o host aceita conexão de fora? (sem ponto = nome interno; IP literal tem que ser público) */
+export function hostAceitavel(host: string): boolean {
+  const h = host.replace(/^\[|\]$/g, "");
+  if (isIP(h)) return ipPublico(h);
+  return h.includes(".") && !h.endsWith(".internal") && !h.endsWith(".local") && !h.endsWith(".localhost");
+}
+
+type CbLookup = (err: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void;
+/** o lookup do http.request que só devolve endereços PÚBLICOS (senão, erro) */
+export function lookupSeguro(host: string, opts: { all?: boolean } | number | undefined, cb: CbLookup): void {
+  dnsLookup(host, { all: true }, (err, addrs) => {
+    if (err) return cb(err, "");
+    if (!addrs.length || addrs.some((a) => !ipPublico(a.address))) return cb(Object.assign(new Error("endereço interno"), { code: "EINTERNO" }), "");
+    if (typeof opts === "object" && opts?.all) return cb(null, addrs);
+    cb(null, addrs[0]!.address, addrs[0]!.family);
+  });
+}
+
+function status(url: URL, method: "HEAD" | "GET"): Promise<number | null> {
+  return new Promise((resolve) => {
+    const mod = url.protocol === "https:" ? https : http;
+    const req = mod.request(url, {
+      method, lookup: lookupSeguro as never, timeout: TIMEOUT_MS,
+      headers: { "User-Agent": "ZaeonLinkCheck/1.0", ...(method === "GET" ? { Range: "bytes=0-1023" } : {}) },
+    }, (res) => { resolve(res.statusCode ?? null); res.destroy(); });
+    req.on("timeout", () => req.destroy());
+    req.on("error", () => resolve(null));
+    req.end();
+  });
+}
 
 export async function vivo(url: string): Promise<boolean> {
   if (!isSafePublicHttpUrl(url)) return false;
+  let u: URL; try { u = new URL(url); } catch { return false; }
+  if (!hostAceitavel(u.hostname)) return false;
   for (const method of ["HEAD", "GET"] as const) {
-    try {
-      const r = await fetch(url, { method, redirect: "manual", signal: AbortSignal.timeout(6000), headers: { "User-Agent": "ZaeonLinkCheck/1.0", ...(method === "GET" ? { Range: "bytes=0-1023" } : {}) } });
-      if (r.status < 400) return true;
-      if (r.status === 401 || r.status === 403) return true;   // (existe, mas é PRIVADO — o repositório fechado conta)
-      if (method === "GET") return false;
-    } catch { if (method === "GET") return false; }
+    const s = await status(u, method);
+    if (s !== null && (s < 400 || s === 401 || s === 403)) return true;   // (401/403: existe, mas é PRIVADO — o repositório fechado conta)
+    if (method === "GET") return false;
   }
   return false;
 }
