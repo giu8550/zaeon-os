@@ -1446,7 +1446,8 @@ export class CyberEngine {
     // (o FUNDADOR: pelo corpo dele ou pelo `eu` que o servidor mandou — a lista de pessoas da sala às vezes ainda não
     //  tem a gente, e o traje pintava na cor de jogador: o amarelo)
     const fund = !!proprio || (a === this.eu ? !!this.o.eu.fundador || this.ehFundador(a.id) : this.ehFundador(a.id));
-    a.av.traje(true, { paleta: fund ? "preta" : ps ? paletaDoPersonagem(ps) : this.paletaDe(a), modelo: ps?.genero });
+    // (o MEU com o traje detalhado; o dos outros, o LEVE — menos triângulos, sem as manoplas)
+    a.av.traje(true, { paleta: fund ? "preta" : ps ? paletaDoPersonagem(ps) : this.paletaDe(a), modelo: ps?.genero, leve: a !== this.eu });
   }
   /** a cor da armadura de astronauta de alguém: a cor do jogador (a do fundador é a preta) */
   private paletaDe(a: Ator): Paleta {

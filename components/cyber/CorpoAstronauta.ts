@@ -18,20 +18,39 @@ import { tintaFixa, toon } from "./AvatarAnime";
 import type { VRM, VRMHumanBoneName } from "@pixiv/three-vrm";
 import { MIXAMO_PRO_VRM } from "@/lib/cyber/vrmMapa";
 import { PALETAS_FEMININAS } from "@/lib/cyber/personagem";
+import { criarCabeca, type CabecaAnime } from "./CabecaAnime";
+import type { Rosto } from "@/lib/cyber/rosto";
 
-/** os MODELOS (public/avatars/traje — CREDITS.md): o masculino (riggado no Mixamo) e a feminina (a "Eve", riggada por
- *  scripts/avatar/rigar-eve.mjs). `olhos`: onde ficam os olhos do rosto VRM dentro do capacete, a partir do osso da
- *  cabeça (m, no corpo: pra cima e pra frente), e quanto o VRM encolhe pra cabeça de anime caber nele */
+/** os MODELOS (public/avatars/traje — CREDITS.md): o TRAJE ÚNICO (scripts/avatar/traje-unico.mjs — o astronauta
+ *  masculino riggado no Mixamo em 3 malhas, com a versão LEVE) e a FEMININA, que é ele com o corpo ajeitado (o mesmo
+ *  esqueleto). `olhos`: onde ficam os olhos do rosto VRM dentro do capacete, a partir do osso da cabeça (m, no corpo:
+ *  pra cima e pra frente), e quanto o VRM encolhe pra cabeça de anime caber nele */
 export const ASTRONAUTAS = {
-  m: { url: "/avatars/traje/astronauta-m.glb", olhos: { cima: 0.085, frente: 0.05, escala: 0.86 } },
-  f: { url: "/avatars/traje/astronauta-f.glb", olhos: { cima: 0.11, frente: 0.06, escala: 0.86 } },
+  m: { url: "/avatars/traje/traje-m.glb", olhos: { cima: 0.085, frente: 0.05, escala: 0.86 } },
+  f: { url: "/avatars/traje/traje-f.glb", olhos: { cima: 0.083, frente: 0.048, escala: 0.82 } },
 } as const;
+/** as ZONAS do traje único (o atributo `_zona` de cada vértice): as placas, a malha por baixo, os tubos — a cor de
+ *  cada uma é um uniform (pintar = trocar 3 cores, nenhuma malha nova). A "branca" é a do arquivo */
+const BRANCA = [0xd0cece, 0x14162a, 0x2a2a2a];
+/** a cabeça de anime (sem capacete): o centro dela acima do osso da cabeça e um pouco à frente (m) */
+const CABECA = { cima: 0.115, frente: 0.015 } as const;
 export type ModeloAstronauta = keyof typeof ASTRONAUTAS;
 /** a VISEIRA (o material "visera" do modelo): escura, mas transparente o bastante pro rosto aparecer */
 export const VISEIRA = { cor: 0x3a2a14, opacidade: 0.38 } as const;
 /** o DESENHO: a espessura do contorno de tinta (m) e o quanto a cor clareia (o toon multiplica a cor pelas faixas: sem
  *  isso o branco vira cinza-chumbo na sombra — a mesma conta do avatar desenhado) */
 export const DESENHO = { tinta: 0.011, clareia: 1.35 } as const;
+/** o material do traje único: o desenho (toon) com a cor vinda da ZONA do vértice (o uniform `zonas`, de quem veste) */
+function toonZonas(rim: THREE.Color, zonas: { value: THREE.Color[] }): THREE.MeshToonMaterial {
+  const m = toon(0xffffff, { rim, rimForca: 0.5, brilho: 0.18 }), base = m.onBeforeCompile; m.name = "traje";
+  m.onBeforeCompile = (sh, r) => {
+    base.call(m, sh, r); sh.uniforms.uZonas = zonas;
+    sh.vertexShader = "attribute float _zona;\nuniform vec3 uZonas[3];\nvarying vec3 vZona;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\nvZona = uZonas[int(_zona + 0.5)];");
+    sh.fragmentShader = "varying vec3 vZona;\n" + sh.fragmentShader.replace("vec4 diffuseColor = vec4( diffuse, opacity );", "vec4 diffuseColor = vec4( diffuse * vZona, opacity );");
+  };
+  m.customProgramCacheKey = () => "trajeZonas";
+  return m;
+}
 
 /** as PALETAS da armadura: por pedaço do nome do material (os do modelo — scripts/avatar/astronauta-m.cores.json); a
  *  "branca" é a do arquivo. A PRETA é a do fundador (placas de preto brilhante, a malha grafite por baixo); os outros
@@ -92,6 +111,8 @@ export type CorpoAstronautaHandle = {
   temMochila: boolean;
   /** pinta a armadura com uma paleta */
   pintar(p: Paleta): void;
+  /** SEM CAPACETE, com a cabeça de anime desse rosto; `null` = de capacete */
+  rosto(r: Rosto | null): void;
   /** copia a pose do esqueleto do avatar (chamar depois de toda a animação/IK do quadro, antes do rosto VRM) */
   atualizar(): void;
   visivel(on: boolean): void;
@@ -108,13 +129,19 @@ export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THRE
   /** copiar as ROTAÇÕES do corpo VRM (que tem a marcha e a pose femininas por cima do esqueleto) em vez das do Soldier;
    *  o deslocamento do quadril continua vindo do Soldier. Chamar `atualizar` DEPOIS do VRM no quadro */
   fonteVrm?: VRM;
+  /** a versão LEVE (os outros personagens: menos triângulos) */ leve?: boolean;
 } = {}): CorpoAstronautaHandle {
   const cena = skClone(gltf.scene);
+  // o traje único traz as duas versões: fica só a pedida
+  const fora: THREE.Object3D[] = []; cena.traverse((o) => { if (/^(corpo|casco)(_leve)?$/.test(o.name) && o.name.endsWith("_leve") !== !!op.leve) fora.push(o); });
+  for (const o of fora) o.removeFromParent();
+  const zonas = { value: BRANCA.map((c) => new THREE.Color(c).multiplyScalar(DESENHO.clareia)) };
   // os materiais são de cada avatar: viram DESENHO (toon) na cor de cada peça; a VISEIRA, vidro chapado transparente
   const rim = new THREE.Color(op.rim ?? "#9fb7ff");
   const meu = (mt: THREE.Material): THREE.Material => {
     const orig = mt as THREE.MeshStandardMaterial;
     if (orig.name === "visera") { const v = new THREE.MeshBasicMaterial({ name: "visera", color: VISEIRA.cor, transparent: true, opacity: VISEIRA.opacidade, depthWrite: false }); return v; }
+    if (orig.name === "traje") return toonZonas(rim, zonas);
     const c = toon(orig.color.clone().multiplyScalar(DESENHO.clareia), { rim, rimForca: 0.5, brilho: orig.metalness > 0.2 ? 0.45 : 0.25 }); c.name = orig.name;
     return c;
   };
@@ -189,7 +216,7 @@ export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THRE
     pares.push({ nome, s, a, sBindInv: noCorpo(s, new THREE.Quaternion()).invert(), aBind: noCorpo(a, new THREE.Quaternion()) });
   }
   const costas = medirCostas(alvo.get("Spine2") ?? alvo.get("Spine1") ?? null, cena, corpo, corpoInv);
-  let temMochila = false; cena.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) for (const x of Array.isArray(m.material) ? m.material : [m.material]) if (/mochila/i.test(x.name)) temMochila = true; });
+  let temMochila = false; cena.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) for (const x of Array.isArray(m.material) ? m.material : [m.material]) if (/mochila|traje/i.test(x.name)) temMochila = true; });   // (o traje único tem a mochila do masculino)
   const hipSBind = hipS.clone(), hipABind = hipA.clone();
   for (const [o, p, q] of [...salvos, ...salvosVrm]) { o.position.copy(p); o.quaternion.copy(q); }
   modelo.updateMatrixWorld(true); atualizarRigN();
@@ -208,14 +235,18 @@ export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THRE
   })();
   const comContorno: THREE.SkinnedMesh[] = [];
   cena.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh) comContorno.push(m); });
+  /** o capacete e a viseira (e os contornos deles): somem sem capacete */
+  const doCapacete: THREE.Object3D[] = [];
   for (const m of comContorno) {
     const t = new THREE.SkinnedMesh(m.geometry, matTinta); t.bind(m.skeleton, m.bindMatrix);
     t.position.copy(m.position); t.quaternion.copy(m.quaternion); t.scale.copy(m.scale); t.frustumCulled = false; m.parent!.add(t);
+    if (/^(casco|visera)/.test(m.name)) doCapacete.push(m, t);
   }
 
   // as MANOPLAS: o punho blindado e a placa nas costas de cada mão (os dedos do modelo ficam), presos no osso da mão,
   // no desenho (toon + contorno de tinta)
-  const luvas = vestirManoplas(alvo, rim, comContorno);
+  // (no LEVE, sem manopla: são ~12 peças com contorno — ~24 chamadas de desenho por personagem; os poderes saem da mão)
+  const luvas = op.leve ? { mats: [], repulsores: {} as Partial<Record<"direita" | "esquerda", THREE.Object3D>>, dispose() {} } : vestirManoplas(alvo, rim, comContorno);
   for (const x of luvas.mats) { mats.push(x); originais.set(x, x.color.clone()); }
 
   // a ÂNCORA dos olhos: filha da cabeça do astronauta, acima e à frente (medida no corpo, na pose de bind)
@@ -227,10 +258,27 @@ export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THRE
     cab.add(ancoraRosto); cab.updateWorldMatrix(true, false); ancoraRosto.position.copy(cab.worldToLocal(alvoW));
   }
 
+  // a ÂNCORA da cabeça de anime (sem capacete): no centro do capacete, de frente pra frente do corpo, em metros
+  const ancoraCabeca = new THREE.Object3D();
+  if (cab) {
+    const pCab = new THREE.Vector3(); cab.getWorldPosition(pCab);
+    const frente = new THREE.Vector3(0, 0, -1).transformDirection(corpo.matrixWorld), cimaW = new THREE.Vector3(0, 1, 0).transformDirection(corpo.matrixWorld);
+    cab.add(ancoraCabeca); cab.updateWorldMatrix(true, false);
+    ancoraCabeca.position.copy(cab.worldToLocal(pCab.addScaledVector(cimaW, CABECA.cima).addScaledVector(frente, CABECA.frente)));
+    // (a cabeça olha pro +z; o corpo do avatar, pro −z)
+    const qQuer = corpo.getWorldQuaternion(new THREE.Quaternion()).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+    ancoraCabeca.quaternion.copy(cab.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(qQuer));
+    const ws = cab.getWorldScale(new THREE.Vector3()), cs = corpo.getWorldScale(new THREE.Vector3());
+    ancoraCabeca.scale.set(cs.x / ws.x, cs.y / ws.y, cs.z / ws.z);
+  }
+  let cabeca: CabecaAnime | null = null, rostoAtual: Rosto | null = null;
+
   const qD = new THREE.Quaternion(), qPai = new THREE.Quaternion(), qAg = new THREE.Quaternion(), pAg = new THREE.Vector3();
   return {
     cena, ancoraRosto, costas, temMochila,
     pintar(p) {
+      const t = tons(p);
+      zonas.value.forEach((c, i) => c.setHex(t ? t[i]!.cor : BRANCA[i]!).multiplyScalar(DESENHO.clareia));
       for (const x of mats) {
         if (x.name === "visera") continue;
         const o = originais.get(x)!, t = tons(p)?.find((e) => e.pedacos.some((k) => x.name.includes(k)));
@@ -255,9 +303,15 @@ export function vestirAstronauta(gltf: GLTF, modelo: THREE.Object3D, corpo: THRE
       }
     },
     visivel(on) { cena.visible = on; },
+    rosto(r) {
+      if (r === rostoAtual || (r && rostoAtual && r.corte === rostoAtual.corte && r.pele === rostoAtual.pele && r.cabelo === rostoAtual.cabelo && r.olhos === rostoAtual.olhos)) return;
+      rostoAtual = r; cabeca?.dispose(); cabeca = null;
+      for (const o of doCapacete) o.visible = !r;
+      if (r) { cabeca = criarCabeca(r); ancoraCabeca.add(cabeca.grupo); }
+    },
     repulsor(lado, out) { const r = luvas.repulsores[lado]; return r ? r.getWorldPosition(out) : null; },
     dispose() {
-      cena.removeFromParent();
+      cena.removeFromParent(); cabeca?.dispose();
       for (const x of mats) x.dispose(); matTinta.dispose(); luvas.dispose();
     },
   };
