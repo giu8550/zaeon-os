@@ -462,6 +462,10 @@ export function solidosDoComplexo(): { x: number; z: number; r: number; topo: nu
     ...RACKS_TI.map((r) => ({ x: r.x, z: r.z, r: 1.2, topo: -SALAO.desce + 2.6, base: -SALAO.desce })),
     { x: RASTA.x, z: RASTA.z, r: ARVORE_RASTA.r, topo: ARVORE_RASTA.alt, base: 0 },
     { x: CYBER.x, z: CYBER.z, r: CUBO_CYBER.meia * 1.15, topo: CYBER.h + CUBO_CYBER.alt, base: CYBER.h },   // (o cubo, do tamanho do desenhado)
+    // a PIRÂMIDE INVERTIDA flutuando (o dono: "não parece ter colisão"): a metade de cima, larga, e a ponta com o olho
+    // (com a folga do sobe-e-desce dela, ±1,2 m)
+    { x: CYBER.x, z: CYBER.z, r: PIRAMIDE_INV.r * 0.85, topo: CYBER.h + PIRAMIDE_INV.y + PIRAMIDE_INV.alt / 2 + 1.4, base: CYBER.h + PIRAMIDE_INV.y - 1.2 },
+    { x: CYBER.x, z: CYBER.z, r: PIRAMIDE_INV.r * 0.4, topo: CYBER.h + PIRAMIDE_INV.y, base: CYBER.h + PIRAMIDE_INV.y - PIRAMIDE_INV.alt / 2 - 3.2 },
     { x: TORRE_TI.x, z: TORRE_TI.z, r: TORRE_TI.colR + 1, topo: CYBER.h, base: -SALAO.desce },
     { x: ALTO_TI.x, z: ALTO_TI.z, r: ALTO_TI.rOut, topo: ALTO_TI.h, base: ALTO_TI.h - 0.8 },   // a laje do MIRANTE
     // os LOUNGES ESTUDANTIS: as lajes dos andares de cima, a cúpula e a PAREDE (sólida também pra quem voa — embaixo das
