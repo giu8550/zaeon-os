@@ -54,6 +54,10 @@ describe("captura — sempre (sem navegador)", () => {
     } finally { delete process.env.SEGREDO_DE_TESTE; }
   });
 
+  it("um processo de renderer só (cabe no limite de memória do container)", () => {
+    expect(opcoesDeLancamento("/x/chromium").args).toContain("--renderer-process-limit=1");
+  });
+
   it("matar o navegador mata o grupo de processos inteiro (pid negativo), com fallback no líder", () => {
     const matar = vi.fn();
     const proc = { pid: 4242, kill: vi.fn() };
@@ -180,10 +184,12 @@ describe.skipIf(!CHROMIUM)("captura — com Chromium", () => {
     expect(diag.quadros?.some((u) => u.startsWith("file:"))).toBe(false); // …mas não abriu o arquivo
   }, 30_000);
 
-  it("página pesada estourando o teto de 15 s → tempo_esgotado, e a próxima captura funciona", async () => {
+  it("página pesada estourando o teto de 15 s → tempo_esgotado (ou falha_render), e a próxima captura funciona", async () => {
     const pesado = "<div style='filter:blur(30px) drop-shadow(0 0 40px red);box-shadow:0 0 80px #000'>".repeat(4000) + "x" + "</div>".repeat(4000);
     const r = await capturarPagina({ "index.html": pagina(pesado + "<p>z</p>".repeat(60000)) });
-    expect(r).toEqual({ ok: false, erro: "tempo_esgotado" });
+    expect(r.ok).toBe(false);
+    // sob pressão de memória o renderer pode morrer antes do teto → falha_render; os dois são aceitáveis
+    if (!r.ok) expect(["tempo_esgotado", "falha_render"]).toContain(r.erro);
     const depois = await capturarPagina({ "index.html": pagina("<h1>de novo</h1>") });
     expect(depois.ok).toBe(true);
   }, 60_000);

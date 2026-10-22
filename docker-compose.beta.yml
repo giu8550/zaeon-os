@@ -110,7 +110,7 @@ services:
       start_period: 60s
     deploy:
       resources:
-        limits: { memory: 1536m }
+        limits: { memory: 2g }   # Chromium headless sob demanda (captura do Octa)
 
   # ── SearXNG: busca web self-hosted (metabuscador, sem key, sem custo por query) ──
   # Rede interna (expose, sem porta pública). Config em ./searxng/settings.yml (JSON habilitado).
@@ -160,7 +160,7 @@ services:
     restart: unless-stopped
     deploy:
       resources:
-        limits: { memory: 1024m }
+        limits: { memory: 1536m }   # turno do Octa na fila também captura (Chromium)
 
   # ── Voz neural (Kokoro, CPU-only). Gated por perfil (admin → aba "Voz"). ──
   voice-engine:

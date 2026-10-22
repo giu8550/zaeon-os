@@ -29,6 +29,11 @@
  *
  * `puppeteer-core` (Apache-2.0) é carregado por import dinâmico ESCONDIDO do webpack (mesmo truque de
  * secoes/render.ts e lib/queue): nunca entra no grafo do Next. Nenhum token/segredo passa por aqui.
+ *
+ * AUDIT (config/vetting/audit-baseline.json): puppeteer-core → @puppeteer/browsers traz basic-ftp e
+ * extract-zip com advisories high. Caminhos que NÃO executamos: sempre passamos `executablePath`
+ * (Chromium do sistema), nunca baixamos navegador (extract-zip), nunca usamos FTP nem proxy PAC (basic-ftp).
+ * Se algum dia este arquivo passar a baixar navegador ou usar proxy, essa justificativa cai.
  */
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -168,6 +173,7 @@ function argsChromium(): string[] {
     "--disable-domain-reliability", "--disable-client-side-phishing-detection", "--metrics-recording-only",
     "--disable-features=Translate,MediaRouter,OptimizationHints,AutofillServerCommunication,InterestFeedContentSuggestions",
     "--mute-audio", "--hide-scrollbars", "--font-render-hinting=none",
+    "--renderer-process-limit=1", // um renderer só: cabe no limite de memória do web/worker (compose)
     // 2ª camada: fora da allowlist nenhum host resolve (o host do projeto nem chega no DNS: é interceptado).
     `--host-resolver-rules=MAP * ~NOTFOUND, ${HOSTS_LIBERADOS.map((h) => `EXCLUDE ${h}`).join(", ")}`,
   ];

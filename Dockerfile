@@ -96,7 +96,7 @@ ENV NODE_ENV=production \
 # OCTA_CHROMIUM_SEM_SANDBOX=1 liga --no-sandbox, aceitável SÓ com as camadas do captura.ts juntas
 # (JS desligado, rede em allowlist + DNS travado, sem navegação/file:, contexto novo por captura, teto de tempo).
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates ffmpeg \
-       chromium fonts-liberation fonts-noto-core \
+       chromium fonts-liberation fonts-noto-core fonts-noto-color-emoji \
     && rm -rf /var/lib/apt/lists/*
 ENV OCTA_CHROMIUM_PATH=/usr/bin/chromium \
     OCTA_CHROMIUM_SEM_SANDBOX=1
