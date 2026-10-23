@@ -12,18 +12,19 @@ import { useState } from "react";
 import { NOME_FASE } from "@/lib/blueprint/tipos";
 import { precisaAvaliar } from "@/lib/blueprint/fases";
 import { useBlueprint } from "./useBlueprint";
+import { MAO, PAPEL, SKINS, corNaSkin, useSkinEscolhida, type Skin } from "./skin";
 import dynamic from "next/dynamic";
 
 const PlayerVideoDoc = dynamic(() => import("@/components/videodoc/PlayerVideoDoc"), { ssr: false });
 
 const AZUL = "#0b2c4d";
 
-function BarrinhaFases({ b }: { b: Pick<ResumoBlueprint, "fase" | "aguardandoMentor"> }) {
+function BarrinhaFases({ b, skin }: { b: Pick<ResumoBlueprint, "fase" | "aguardandoMentor">; skin: Skin }) {
   return (
     <div className="mt-1.5 flex gap-[3px]">
       {[1, 2, 3, 4].map((f) => {
         const ok = f < b.fase || (f === 4 && b.aguardandoMentor), at = f === b.fase && !b.aguardandoMentor;
-        return <i key={f} className="h-[3px] flex-1 rounded-sm" style={{ background: ok ? (f === 4 ? "#ffd36b" : COR.provado) : at ? COR.critico : "rgba(150,205,255,.14)" }} />;
+        return <i key={f} className="h-[3px] flex-1 rounded-sm" style={{ background: corNaSkin(skin, ok ? (f === 4 ? "#ffd36b" : COR.provado) : at ? COR.critico : "rgba(150,205,255,.14)") }} />;
       })}
     </div>
   );
@@ -56,6 +57,7 @@ function ProvaForm({ criticoId, tipo, enviar }: { criticoId: string; tipo: strin
 
 export default function SalaBlueprint({ inicialId }: { inicialId?: string | null }) {
   const B = useBlueprint(inicialId);
+  const [skin, setSkin] = useSkinEscolhida(), papel = skin === "cartolina";
   const { lista, atual } = B;
   const [aviso, setAviso] = useState<string | null>(null), [avaliando, setAvaliando] = useState(false), [videoAberto, setVideoAberto] = useState<string | null>(null);
   const enviar = async (criticoId: string | null, url: string) => {
@@ -67,24 +69,31 @@ export default function SalaBlueprint({ inicialId }: { inicialId?: string | null
     return r;
   };
   return (
-    <div className="flex h-full w-full flex-col" style={{ background: AZUL }}>
-      <div className="flex flex-none items-stretch gap-2 overflow-x-auto border-b px-3 py-2" style={{ background: "rgba(5,22,42,.9)", borderColor: "rgba(127,224,255,.3)" }}>
+    <div className={`flex h-full w-full flex-col ${papel ? "skin-cartolina" : ""}`} style={{ background: papel ? PAPEL.fundo : AZUL }}>
+      <div className="flex flex-none items-stretch gap-2 overflow-x-auto border-b px-3 py-2" style={papel ? { background: "#e6dcc2", borderColor: "rgba(107,90,62,.35)", color: PAPEL.tinta, fontFamily: MAO } : { background: "rgba(5,22,42,.9)", borderColor: "rgba(127,224,255,.3)" }}>
+        {/* a SKIN da sala: o papel azul técnico ou a cartolina rabiscada (fica lembrada neste navegador) */}
+        <div className="flex flex-none self-center overflow-hidden rounded-full border font-mono text-[11px]" style={{ borderColor: papel ? "rgba(107,90,62,.45)" : "rgba(127,224,255,.35)" }} role="group" aria-label="Skin da sala">
+          {SKINS.map((k) => (
+            <button key={k.id} type="button" onClick={() => setSkin(k.id)} aria-pressed={skin === k.id} className="px-3 py-1 transition"
+              style={skin === k.id ? (papel ? { background: PAPEL.tinta, color: "#efe7d3" } : { background: "rgba(127,224,255,.2)", color: "#fff" }) : { color: papel ? PAPEL.tintaSuave : "rgba(186,230,253,.75)" }}>{k.nome}</button>
+          ))}
+        </div>
         <span className="self-center whitespace-nowrap pr-1 font-mono text-[11px] tracking-[0.2em] text-sky-300">BLUEPRINTS</span>
         {lista === null && <span className="self-center font-mono text-[11px] text-sky-200/50">carregando…</span>}
         {lista?.map((b) => (
           <button key={b.id} type="button" onClick={() => void B.abrir(b.id)} className="min-w-[190px] flex-none rounded-[3px] border px-2.5 py-1.5 text-left font-mono transition hover:bg-white/5"
-            style={{ borderColor: atual?.id === b.id ? COR.estudo : "rgba(127,224,255,.25)", background: atual?.id === b.id ? "rgba(127,224,255,.08)" : undefined }}>
+            style={{ borderColor: corNaSkin(skin, atual?.id === b.id ? COR.estudo : "rgba(127,224,255,.25)"), background: atual?.id === b.id ? (papel ? "rgba(255,255,255,.45)" : "rgba(127,224,255,.08)") : undefined }}>
             <b className="block max-w-[240px] truncate text-[12px] text-sky-50">{b.titulo}</b>
             <small className="text-[10px] text-sky-200/70">
-              {b.area} · {b.aguardandoMentor ? <span style={{ color: "#ffd36b" }}>aguardando mentor</span> : <>fase {b.fase}{b.criticosAbertos ? <> · <span style={{ color: COR.critico }}>{b.criticosAbertos} crítico{b.criticosAbertos > 1 ? "s" : ""}</span></> : null}</>}
+              {b.area} · {b.aguardandoMentor ? <span style={{ color: corNaSkin(skin, "#ffd36b") }}>aguardando mentor</span> : <>fase {b.fase}{b.criticosAbertos ? <> · <span style={{ color: corNaSkin(skin, COR.critico) }}>{b.criticosAbertos} crítico{b.criticosAbertos > 1 ? "s" : ""}</span></> : null}</>}
             </small>
-            <BarrinhaFases b={b} />
+            <BarrinhaFases b={b} skin={skin} />
           </button>
         ))}
       </div>
       <div className="relative min-h-0 flex-1">
         {atual ? (
-          <PranchaBlueprint id={atual.id} doc={atual.doc} onFixar={B.fixar}
+          <PranchaBlueprint id={atual.id} doc={atual.doc} onFixar={B.fixar} skin={skin}
             acoes={{ podeEditar: podeEscrever(atual.papel), avaliando, abrirVideo: setVideoAberto,
               avaliar: podeEscrever(atual.papel) && precisaAvaliar(atual.doc) ? () => { setAvaliando(true); void enviar(null, "").finally(() => setAvaliando(false)); } : undefined, recompor: atual.papel === "dono" ? B.recompor : undefined, recompondo: B.recompondo, reorganizar: B.reorganizar, temFixos: Object.keys(atual.doc.fixos).length > 0,
               extra: podeEscrever(atual.papel) ? (id) => { const c = id.startsWith("critico:") ? atual.doc.criticos.find((k) => `critico:${k.id}` === id) : undefined; return c ? <ProvaForm criticoId={c.id} tipo={c.tipoProva} enviar={enviar} /> : undefined; } : undefined }}

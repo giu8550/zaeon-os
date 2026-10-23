@@ -33,9 +33,9 @@ describe("layoutBlueprint — simetria, nunca caos", () => {
       expect(Math.abs((topo + fundo) / 2 - meio)).toBeLessThanOrEqual(1);
     }
   });
-  it("dois críticos espelhados em torno do eixo", () => {
+  it("críticos da fase empilhados no eixo, um embaixo do outro", () => {
     const { caixas } = layoutBlueprint(cheio(), alt); const a = doId(caixas, "critico:r1"), b = doId(caixas, "critico:r2");
-    expect(a.x + a.w / 2).toBeCloseTo(-(b.x + b.w / 2)); expect(a.y).toBe(b.y);
+    expect(a.x + a.w / 2).toBeCloseTo(0); expect(b.y).toBeGreaterThan(a.y + a.h);
   });
   it("crítico ligado ao passo que trava", () => {
     const { fios } = layoutBlueprint(cheio(), alt);
@@ -43,9 +43,9 @@ describe("layoutBlueprint — simetria, nunca caos", () => {
     expect(fios).toContainEqual({ de: "estudo", para: "passo:p0", tipo: "percurso" });
     expect(fios).toContainEqual({ de: "estudo", para: "repos", tipo: "pratica" });
   });
-  it("blueprint recém-nascido (sem passos) não quebra; a demo aparece mesmo vazia", () => {
+  it("blueprint recém-nascido (sem passos) não quebra; o YouTube aparece desde o começo", () => {
     const ids = modulosDo(docVazio("X", 0)).map((m) => m.id);
-    expect(ids).toEqual(["estudo", "demo"]);
+    expect(ids).toEqual(["estudo", "youtube"]);
     expect(() => layoutBlueprint(docVazio("X", 0), alt)).not.toThrow();
   });
   it("o que a pessoa arrastou fica onde ela soltou", () => {
@@ -59,13 +59,21 @@ describe("layoutBlueprint — simetria, nunca caos", () => {
   });
 });
 
-describe("cards de vídeo", () => {
-  it("documento-base (ou com vídeo) vira card de vídeo no topo da prática; desligado, some", () => {
-    const d = cheio({ documentos: [{ id: "da", titulo: "Zether", tipo: "artigo", base: true }, { id: "db", titulo: "x", tipo: "artigo", base: false }] });
-    const dir = modulosDo(d).filter((m) => m.lado === "dir").map((m) => m.id);
-    expect(dir[0]).toBe("video:da"); expect(dir).not.toContain("video:db");
-    expect(modulosDo(d, { videos: false }).some((m) => m.id.startsWith("video:"))).toBe(false);
-    const { caixas } = layoutBlueprint(d, alt);
-    for (let i = 0; i < caixas.length; i++) for (let j = i + 1; j < caixas.length; j++) expect(sobrepoe(caixas[i]!, caixas[j]!)).toBe(false);
+describe("foco da fase — não panorâmico", () => {
+  it("passos das próximas fases ficam recolhidos num card só; a demo só aparece na fase 3", () => {
+    const d = cheio({ fase: 1, passos: [1, 1, 2, 3, 4].map((f, i) => ({ id: `p${i}`, titulo: `p${i}`, fase: f as 1 | 2 | 3 | 4, fontes: [] })), criticos: [] });
+    const ids = modulosDo(d).map((m) => m.id);
+    expect(ids.filter((x) => x.startsWith("passo:"))).toEqual(["passo:p0", "passo:p1"]); expect(ids).toContain("futuro");
+    expect(ids).not.toContain("demo"); expect(modulosDo({ ...d, fase: 3 }).map((m) => m.id)).toContain("demo");
+  });
+  it("a figura é a protagonista: larga, no topo do eixo, sem encostar nos lados", () => {
+    const { caixas } = layoutBlueprint(cheio(), alt); const f = doId(caixas, "figura");
+    expect(f.y).toBe(Math.min(...caixas.filter((c) => c.lado === "centro").map((c) => c.y)));
+    for (const c of caixas.filter((k) => k.lado !== "centro")) expect(sobrepoe(f, c)).toBe(false);
+  });
+  it("o enquadramento inicial é o eixo central", async () => {
+    const { caixaDoFoco } = await import("./layout");
+    const { caixas } = layoutBlueprint(cheio(), alt); const f = caixaDoFoco(caixas)!;
+    expect(f.x1 - f.x0).toBeLessThan(1000);
   });
 });

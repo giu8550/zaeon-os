@@ -24,7 +24,7 @@ export const AREAS: readonly Area[] = ["tecnologia", "ciencia", "saude", "engenh
 export type FonteBp = { titulo: string; url?: string; ano?: number };
 export type Passo = { id: string; titulo: string; corpo?: string; fase: Fase; fontes: FonteBp[] };
 /** uma peça da FIGURA (a máquina cujo funcionamento É o tema — padrão do anatomy) */
-export type Peca = { id: string; nome: string; sub?: string; fase: Fase };
+export type Peca = { id: string; nome: string; sub?: string; fase: Fase; /** a FORMA real da peça na máquina (lib/blueprint/maquina) */ forma?: string };
 export type TipoProva = "repo" | "link" | "demo";
 export const TIPOS_PROVA: readonly TipoProva[] = ["repo", "link", "demo"];
 /** a prova conferida pelo SERVIDOR (o cliente nunca grava isto) */
@@ -54,7 +54,11 @@ export type DocBlueprint = {
   /** a fase ATUAL (as anteriores estão aprovadas) */
   fase: Fase; aguardandoMentor: boolean;
   passos: Passo[]; pecas: Peca[]; ligacoes: [string, string][]; criticos: Critico[];
+  /** a máquina do tema (padrão anatomy): o OBJETO em uma frase (o que é e o que se move) e o ARRANJO das peças */
+  objeto?: string; arranjo?: string;
   repos: Repo[]; termosRepo: string[]; participantes: Participante[]; proximos: string[];
+  /** buscas no YouTube pra estudar o tema e a fase atual (o card "estude no YouTube" — a Zaeon sugere, a pessoa abre) */
+  buscasYoutube: string[];
   avaliacoes: Avaliacao[]; notas: Nota[];
   /** os documentos do estudo (coletados das respostas da Aura) — os `base` viram vídeo com a Zaeon holograma */
   documentos: Documento[];
@@ -82,7 +86,7 @@ export function docVazio(titulo: string, agora: number): DocBlueprint {
   void agora;
   return {
     v: 1, titulo: titulo.trim().slice(0, MAX_TITULO) || "Estudo", resumo: "", area: "outra", fase: 1, aguardandoMentor: false,
-    passos: [], pecas: [], ligacoes: [], criticos: [], repos: [], termosRepo: [], participantes: [], proximos: [],
+    passos: [], pecas: [], ligacoes: [], criticos: [], repos: [], termosRepo: [], participantes: [], proximos: [], buscasYoutube: [],
     avaliacoes: [], notas: [], documentos: [], fixos: {}, compostoEm: 0, turnos: 0,
   };
 }
@@ -102,6 +106,7 @@ export function sanitizarPasso(v: unknown): Passo | null {
 export function sanitizarPeca(v: unknown): Peca | null {
   const o = obj(v); const nome = str(o?.nome, 60); if (!o || !idOk(o.id) || !nome) return null;
   const p: Peca = { id: o.id, nome, fase: faseDe(o.fase) }; const sub = str(o.sub, 120); if (sub) p.sub = sub;
+  const forma = str(o.forma, 20); if (forma && /^[a-z]+$/.test(forma)) p.forma = forma;
   return p;
 }
 function sanitizarEntrega(v: unknown): Entrega | undefined {
@@ -181,6 +186,7 @@ export function sanitizarDoc(raw: unknown): DocBlueprint | null {
     passos, pecas, ligacoes, criticos,
     repos: arr(o.repos).map(sanitizarRepo).filter((r): r is Repo => !!r).slice(0, MAX_REPOS),
     termosRepo: sanitizarTextos(o.termosRepo, 4, 60),
+    buscasYoutube: sanitizarTextos(o.buscasYoutube, 4, 90),
     participantes: unicos(arr(o.participantes).map(sanitizarParticipante).filter((p): p is Participante => !!p)).slice(0, MAX_PARTICIPANTES),
     proximos: sanitizarTextos(o.proximos, MAX_PROXIMOS, 240),
     avaliacoes: arr(o.avaliacoes).map(sanitizarAvaliacao).filter((a): a is Avaliacao => !!a).slice(-MAX_AVALIACOES),
@@ -188,6 +194,8 @@ export function sanitizarDoc(raw: unknown): DocBlueprint | null {
     documentos: unicos(arr(o.documentos).map(sanitizarDocumento).filter((x): x is Documento => !!x)).slice(0, MAX_DOCUMENTOS),
     fixos, compostoEm: Math.round(num(o.compostoEm, 0, 9e15) ?? 0), turnos: Math.round(num(o.turnos, 0, 1e9) ?? 0),
   };
+  const objeto = str(o.objeto, 240), arranjo = str(o.arranjo, 12);
+  if (objeto) d.objeto = objeto; if (arranjo && /^[a-z]+$/.test(arranjo)) d.arranjo = arranjo;
   const produto = obj(o.produto), demo = obj(o.demo);
   const pt = str(produto?.titulo, MAX_TITULO); if (pt) d.produto = { titulo: pt, ...(str(produto?.corpo, MAX_CORPO) ? { corpo: str(produto?.corpo, MAX_CORPO) } : {}) };
   const dt = str(demo?.titulo, MAX_TITULO);
