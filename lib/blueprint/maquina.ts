@@ -107,7 +107,8 @@ export type Maquina = {
   V: Point3;
   /** por peça: o vetor do mundo que ela percorre ao sair (vista explodida) */
   movimentos: Point3[];
-  legenda: { n: number; codigo: string; nome: string; sub?: string; estado: EstadoPeca; forma: Forma }[];
+  /** por peça, o que a ficha mostra quando ela é escolhida: nome, pra que serve, estado, fase e o crítico que trava */
+  legenda: { n: number; codigo: string; nome: string; sub?: string; estado: EstadoPeca; forma: Forma; fase: number; critico?: { titulo: string; prova: string; aberto: boolean } }[];
 };
 
 /** a máquina inteira, pronta pra `dangerouslySetInnerHTML` (o kit escapa todo texto; só números são gravados no desenho) */
@@ -202,7 +203,11 @@ export function montarMaquina(doc: Pick<DocBlueprint, "pecas" | "ligacoes" | "cr
   return {
     svg: fundo.join("") + corpo, largura: L, altura: A, P, arranjo, V,
     movimentos: est.map(() => sai),
-    legenda: est.map((e) => ({ n: e.i + 1, codigo: `C-${String(e.i + 1).padStart(2, "0")}`, nome: e.peca.nome, sub: e.peca.sub, estado: e.estado, forma: e.forma })),
+    legenda: est.map((e) => {
+      const cs = doc.criticos.filter((c) => c.pecaId === e.peca.id), c = cs.find((x) => x.status === "aberto") ?? cs[cs.length - 1];
+      return { n: e.i + 1, codigo: `C-${String(e.i + 1).padStart(2, "0")}`, nome: e.peca.nome, sub: e.peca.sub, estado: e.estado, forma: e.forma, fase: e.peca.fase,
+        ...(c ? { critico: { titulo: c.titulo, prova: c.prova, aberto: c.status === "aberto" } } : {}) };
+    }),
   };
 }
 
