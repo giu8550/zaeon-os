@@ -8,7 +8,7 @@
  */
 import * as THREE from "three";
 import { criarTeloesMercado } from "./TeloesMercado";
-import { RACKS_TI, ALTO_TI, PIRAMIDE_INV, CABINES_TORRE, CABINE_TI, CAMPUS, CYBER, DIFUSOR_TI, ESTACOES_TI, NUCLEO_CYBER, PILARES_ALTO, POCOS_TC, PONTES, SALAO, TEMPESTADE_TI, TORRE_TI, capsulaEm, difusorDe, portaDoPoco } from "@/lib/cyber/temploCosmico";
+import { RACKS_TI, ALTO_TI, PIRAMIDE_INV, CABINES_TORRE, CABINE_TI, CAMPUS, CYBER, ESTACOES_TI, NUCLEO_CYBER, PILARES_ALTO, POCOS_TC, PONTES, SALAO, TEMPESTADE_TI, TORRE_TI, capsulaEm, portaDoPoco } from "@/lib/cyber/temploCosmico";
 
 export type MeioHandle = { group: THREE.Group; alvos: THREE.Object3D[]; /** os RAIOS que caíram desde a última leitura (onde, no MUNDO) — o engine toca o trovão */ raios(): { x: number; y: number; z: number }[]; /** a cápsula em que eu estou (a vista de DENTRO: sem o teto, o vidro quase sumido), ou null */ capsulaDentro(id: string | null): void; /** os ESTILHAÇOS girando em volta do cubo agora (MUNDO: centro e raio) — o engine empurra quem encosta */ estilhacos(): { x: number; y: number; z: number; r: number }[]; atualizar(dt: number, t: number): void; dispose(): void };
 
@@ -93,29 +93,52 @@ export function criarMeio(o: { low: boolean }): MeioHandle {
   // ── os TELÕES DO MERCADO na ponte inicial (components/cyber/TeloesMercado): a moldura acompanha a cor da sala ──
   const teloes = criarTeloesMercado({ low: o.low }); group.add(teloes.group); alvos.push(...teloes.alvos);
   anim.push((dt, t) => teloes.atualizar(dt, t, fluxo.uCor.value));
-  // ── as ESTAÇÕES DE TRABALHO: as CABINES no molde das da cidadela (components/cyber/CabinesEstudo), nas cores da sala —
-  //    o vidro escuro, os frisos vermelhos acesos, o monitor com o código rolando e o losango vermelho em cima ──
-  const N = ESTACOES_TI.length, C = CABINE_TI;
+  // ── os TERMINAIS DE TRADING (out/2026, o dono: "apenas terminais integrados aos monitores, onde poderemos fazer trade
+  //    real"): as CABINES no molde das da cidadela, agora com TRÊS monitores em arco e o computador embaixo da mesa — no
+  //    campus, os gráficos de velas correndo (a mesa de operações de cada telão); lá em cima na torre, o código ──
+  const NC = ESTACOES_TI.length, C = CABINE_TI;
   const escuro = new THREE.MeshStandardMaterial({ color: 0x0a0608, emissive: 0x16050a, emissiveIntensity: 0.6, roughness: 0.35, metalness: 0.7 });
   const mesaMat = new THREE.MeshStandardMaterial({ color: 0x1a1216, emissive: 0x1a060c, emissiveIntensity: 0.5, roughness: 0.45, metalness: 0.5 });
   const acesoV = corSala(new THREE.MeshBasicMaterial({ color: VERMELHO, toneMapped: false }));
   const vidroV = new THREE.MeshStandardMaterial({ color: 0xff8090, emissive: 0xff2a3a, emissiveIntensity: 0.06, transparent: true, opacity: 0.14, depthWrite: false, roughness: 0.1, metalness: 0.2, side: THREE.DoubleSide });
-  const telaMat = new THREE.ShaderMaterial({ uniforms: { uT: { value: 0 } }, side: THREE.DoubleSide,
+  const telaMat = new THREE.ShaderMaterial({ uniforms: { uT: { value: 0 }, uNC: { value: NC }, uLado: { value: 0 } }, side: THREE.DoubleSide,
     vertexShader: "varying vec2 vUv; varying float vI; void main(){ vUv = uv; vI = float(gl_InstanceID); gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }",
-    fragmentShader: `uniform float uT; varying vec2 vUv; varying float vI; float h(vec2 p){ return fract(sin(dot(p, vec2(12.9, 78.2))) * 43758.5); }
-      void main(){ float linha = floor(vUv.y * 14.0), comp = h(vec2(linha, vI)) * 0.8 + 0.1, rola = fract(uT * 0.3 + h(vec2(vI, 1.0)));
+    fragmentShader: `uniform float uT, uNC, uLado; varying vec2 vUv; varying float vI; float h(vec2 p){ return fract(sin(dot(p, vec2(12.9, 78.2))) * 43758.5); }
+      float preco(float k, float s){ return 0.5 + 0.22 * sin(k * 0.31 + s * 6.0) + 0.13 * sin(k * 0.87 + s * 11.0) + 0.06 * sin(k * 2.3 + s); }
+      void main(){
+        vec3 fundo = mix(vec3(0.03, 0.02, 0.05), vec3(0.07, 0.03, 0.1), vUv.y);
+        if (vI < uNC) {   // o GRÁFICO DE VELAS (cada monitor de cada terminal o seu ativo), andando
+          float s = h(vec2(vI, uLado)), n = 28.0, k = floor(vUv.x * n) + floor(uT * 0.7), fx = fract(vUv.x * n);
+          float a = preco(k, s), b = preco(k + 1.0, s), lo = min(a, b), hi = max(a, b), y = 0.12 + vUv.y * 0.9;
+          float corpo = step(0.18, fx) * step(fx, 0.82) * step(lo, y - 0.12) * step(y - 0.12, hi + 0.004);
+          float pavio = step(0.46, fx) * step(fx, 0.54) * step(lo - 0.04, y - 0.12) * step(y - 0.12, hi + 0.04);
+          float vol = step(vUv.y, 0.1 * h(vec2(k, s))) * step(0.2, fx) * step(fx, 0.8);
+          vec3 c = b >= a ? vec3(0.1, 0.95, 0.55) : vec3(1.0, 0.24, 0.33);
+          float grade = step(0.985, fract(vUv.y * 6.0)) * 0.12;
+          gl_FragColor = vec4(fundo + c * max(corpo, pavio) + c * vol * 0.45 + grade, 1.0); return;
+        }
+        float linha = floor(vUv.y * 14.0), comp = h(vec2(linha, vI)) * 0.8 + 0.1, rola = fract(uT * 0.3 + h(vec2(vI, 1.0)));
         float cod = step(vUv.x, comp) * step(0.25, fract(vUv.y * 14.0)) * step(fract(linha / 14.0 + rola), 0.9);
-        vec3 fundo = mix(vec3(0.06, 0.01, 0.02), vec3(0.14, 0.02, 0.05), vUv.y), cor = mod(vI, 4.0) < 1.0 ? vec3(1.0, 0.85, 0.88) : vec3(1.0, 0.22, 0.3);
+        vec3 cor = mod(vI, 4.0) < 1.0 ? vec3(1.0, 0.85, 0.88) : vec3(1.0, 0.22, 0.3);
         gl_FragColor = vec4(fundo + cor * cod * 0.85, 1.0); }` });
+  const telaLado = telaMat.clone(); telaLado.uniforms.uLado!.value = 1; const telaLado2 = telaMat.clone(); telaLado2.uniforms.uLado!.value = 2;
   type Peca = { geo: THREE.BufferGeometry; mat: THREE.Material; pos: [number, number, number]; rotY?: number };
+  const monitorDeLado = (sx: -1 | 1): Peca[] => [   // um MONITOR de lado, virado pra quem senta
+    { geo: new THREE.BoxGeometry(0.98, 0.62, 0.05), mat: escuro, pos: [sx * 1.08, 1.28, C.monitorZ - 0.22], rotY: sx * 0.55 },
+    { geo: new THREE.PlaneGeometry(0.9, 0.54), mat: sx < 0 ? telaLado : telaLado2, pos: [sx * 1.06, 1.28, C.monitorZ - 0.25], rotY: Math.PI + sx * 0.55 },
+  ];
   const pecas: Peca[] = [
     { geo: new THREE.BoxGeometry(C.larg, 0.1, C.prof), mat: escuro, pos: [0, 0.05, 0.1] },                                   // o piso da cabine
     { geo: new THREE.BoxGeometry(C.larg + 0.04, 0.03, 0.06), mat: acesoV, pos: [0, 0.11, 0.1 + C.prof / 2] },                // os frisos
     { geo: new THREE.BoxGeometry(C.larg + 0.04, 0.03, 0.06), mat: acesoV, pos: [0, 0.11, 0.1 - C.prof / 2] },
     { geo: new THREE.BoxGeometry(2.2, 0.07, 0.85), mat: mesaMat, pos: [0, 0.78, C.mesaZ] },                                  // a mesa
     { geo: new THREE.BoxGeometry(2.2, 0.7, 0.05), mat: escuro, pos: [0, 0.4, C.mesaZ + 0.4] },
-    { geo: new THREE.BoxGeometry(1.3, 0.76, 0.05), mat: escuro, pos: [0, 1.28, C.monitorZ] },                                 // o monitor
+    { geo: new THREE.BoxGeometry(0.24, 0.52, 0.5), mat: escuro, pos: [0.82, 0.37, C.mesaZ] },                                // o COMPUTADOR embaixo da mesa
+    { geo: new THREE.BoxGeometry(0.02, 0.4, 0.02), mat: acesoV, pos: [0.69, 0.4, C.mesaZ - 0.26] },                          // (a fita de luz dele)
+    { geo: new THREE.BoxGeometry(1.3, 0.76, 0.05), mat: escuro, pos: [0, 1.28, C.monitorZ] },                                 // o monitor do meio
     { geo: new THREE.PlaneGeometry(1.2, 0.66), mat: telaMat, pos: [0, 1.28, C.monitorZ - 0.03], rotY: Math.PI },             // a TELA, virada pra quem senta
+    ...monitorDeLado(-1), ...monitorDeLado(1),
+    { geo: new THREE.BoxGeometry(0.5, 0.03, 0.18), mat: escuro, pos: [0, 0.83, C.mesaZ - 0.22] },                            // o teclado
     { geo: new THREE.BoxGeometry(0.52, 0.07, 0.5), mat: mesaMat, pos: [0, 0.5, C.assentoZ] },                                // a cadeira
     { geo: new THREE.BoxGeometry(0.5, 0.62, 0.06), mat: mesaMat, pos: [0, 0.86, C.assentoZ - 0.27] },
     { geo: new THREE.CylinderGeometry(0.04, 0.05, 0.46, 6), mat: escuro, pos: [0, 0.25, C.assentoZ] },
@@ -125,8 +148,9 @@ export function criarMeio(o: { low: boolean }): MeioHandle {
     { geo: new THREE.BoxGeometry(0.07, 0.04, 2.3), mat: acesoV, pos: [C.painelX, 1.36, 0.1] },
     { geo: new THREE.OctahedronGeometry(0.2, 0), mat: acesoV, pos: [0, 2.35, C.mesaZ] },                                     // o losango
   ];
-  // (as do campus, viradas pra torre, e as LÁ EM CIMA: o deck do topo e o mirante — lib/cyber/temploCosmico `CABINES_TORRE`)
-  const todas = [...ESTACOES_TI.map((e) => ({ x: e.x, z: e.z, y: y0, rot: Math.PI })), ...CABINES_TORRE];
+  // (as do campus — a mesa de operações de cada telão, viradas pra ele — e as LÁ EM CIMA: o deck do topo e o mirante —
+  //  lib/cyber/temploCosmico `CABINES_TORRE`)
+  const todas = [...ESTACOES_TI.map((e) => ({ x: e.x, z: e.z, y: y0, rot: e.rot })), ...CABINES_TORRE];
   { const mC = new THREE.Matrix4(), mP = new THREE.Matrix4(), eixo = new THREE.Vector3(0, 1, 0);
     for (const p of pecas) {
       if (o.low && p.mat === vidroV) continue;
@@ -136,20 +160,8 @@ export function criarMeio(o: { low: boolean }): MeioHandle {
     }
     if (!mats.includes(vidroV)) mats.push(vidroV);
   }
-  // ── os DIFUSORES (um do lado de cada cabine): a haste, as bobinas e a ESFERA na ponta, que acende quando o raio chega ──
-  const D = DIFUSOR_TI, difs = ESTACOES_TI.map((e) => difusorDe(e));
-  const haste = instanciar(new THREE.CylinderGeometry(0.05, 0.09, D.alt, 6), escuro, N), baseD = instanciar(new THREE.CylinderGeometry(D.r, D.r + 0.1, 0.18, 12), escuro, N);
-  const bobinas = instanciar(new THREE.TorusGeometry(0.2, 0.035, 5, 16), acesoV, N * 3);
-  const esferaMat = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }), esferas = instanciar(new THREE.SphereGeometry(0.24, 14, 10), esferaMat, N);
-  const corBase = new THREE.Color(0x6a0a16), corRaio = new THREE.Color(0xfff0f4), corT = new THREE.Color(), brilho = new Float32Array(N);
-  difs.forEach((d, i) => {
-    haste.setMatrixAt(i, m4.makeTranslation(d.x, y0 + D.alt / 2, d.z)); baseD.setMatrixAt(i, m4.makeTranslation(d.x, y0 + 0.09, d.z));
-    for (let k = 0; k < 3; k++) { q.setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)); bobinas.setMatrixAt(i * 3 + k, m4.compose(v.set(d.x, y0 + D.alt - 0.75 + k * 0.22, d.z), q, um)); }
-    esferas.setMatrixAt(i, m4.makeTranslation(d.x, y0 + D.alt, d.z)); esferas.setColorAt(i, corBase);
-  });
-  fechar(haste, baseD, bobinas, esferas); esferas.userData.semLote = true;
-  // ── a TEMPESTADE (no lugar dos telões de código): a nuvem por cima das fileiras, escura, com os clarões dentro ──
-  const zs = ESTACOES_TI.map((e) => e.z), zMax = Math.max(...zs) + 8, zMin = Math.min(...zs) - 8, yN = y0 + TEMPESTADE_TI.alt;
+  // ── a TEMPESTADE: a nuvem por cima das mesas de operações, escura, com os clarões dentro (e o trovão) ──
+  const zs = ESTACOES_TI.map((e) => e.z), zMax = Math.max(...zs) + 14, zMin = Math.min(...zs) - 14, yN = y0 + TEMPESTADE_TI.alt;
   const nuvemMat = new THREE.ShaderMaterial({ uniforms: { uT: { value: 0 }, uFl: { value: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] } }, transparent: true, depthWrite: false, side: THREE.DoubleSide,
     vertexShader: "varying vec2 vP; void main(){ vP = (modelMatrix * vec4(position, 1.0)).xz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
     fragmentShader: `uniform float uT; uniform vec3 uFl[4]; varying vec2 vP;
@@ -160,52 +172,21 @@ export function criarMeio(o: { low: boolean }): MeioHandle {
         float fl = 0.0; for (int i = 0; i < 4; i++) fl += uFl[i].z * exp(-length(vP - uFl[i].xy) * 0.07);
         vec3 cor = mix(vec3(0.05, 0.01, 0.03), vec3(0.22, 0.03, 0.08), d) + vec3(1.0, 0.45, 0.55) * fl * (0.4 + dens);
         gl_FragColor = vec4(cor, dens * 0.92 + min(fl, 1.0) * 0.3); }` });
-  mats.push(nuvemMat);
-  // (o plano no layout; o shader usa o xz do MUNDO só pra textura — o clarão vem no mesmo referencial: guardamos o ponto do layout e convertemos)
+  mats.push(nuvemMat, telaLado, telaLado2);
   const nuvem = malha(new THREE.PlaneGeometry(CAMPUS.meia * 2 + 16, zMax - zMin, 1, 1), nuvemMat); nuvem.rotation.x = Math.PI / 2; nuvem.position.set(campus.a.x, yN, (zMax + zMin) / 2); nuvem.userData.semLote = true;
   const nuvem2 = malha(new THREE.PlaneGeometry(CAMPUS.meia * 2 + 6, zMax - zMin - 10, 1, 1), nuvemMat); nuvem2.rotation.x = Math.PI / 2; nuvem2.position.set(campus.a.x, yN + 3, (zMax + zMin) / 2); nuvem2.userData.semLote = true;
-  // ── os RAIOS: um punhado de malhas reaproveitadas — o caminho quebrado da nuvem até a esfera de um difusor (o núcleo
-  //    branco e o brilho vermelho, em cruz pra ser visto de todo lado), piscando por um instante ──
-  const SEG = 14, POOL = o.low ? 3 : 6, raioNucleo = aditivo(0xfff0f4, 1), raioBrilho = aditivo(VERMELHO, 0.55);
-  type Raio = { mesh: THREE.Mesh[]; pos: Float32Array[]; vida: number; i: number };
-  const pool: Raio[] = [];
-  for (let k = 0; k < POOL; k++) {
-    const ms: THREE.Mesh[] = [], ps: Float32Array[] = [];
-    for (const [mat, larg] of [[raioNucleo, 0.12], [raioBrilho, 0.7]] as const) for (let c = 0; c < 2; c++) {
-      const pos = new Float32Array((SEG + 1) * 2 * 3), gq = new THREE.BufferGeometry(), idx: number[] = [];
-      for (let s = 0; s < SEG; s++) { const b = s * 2; idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2); }
-      gq.setAttribute("position", new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage)); gq.setIndex(idx);
-      const me = malha(gq, mat); me.visible = false; me.frustumCulled = false; me.userData.semLote = true; me.userData.larg = larg; me.userData.cruz = c; ms.push(me); ps.push(pos);
-    }
-    pool.push({ mesh: ms, pos: ps, vida: 0, i: -1 });
-  }
-  const pts = Array.from({ length: SEG + 1 }, () => new THREE.Vector3());
-  const disparar = (r: Raio, i: number) => {
-    const d = difs[i]!, fim = new THREE.Vector3(d.x, y0 + D.alt + 0.2, d.z), ini = new THREE.Vector3(d.x + (Math.random() - 0.5) * 14, yN, d.z + (Math.random() - 0.5) * 14);
-    for (let s = 0; s <= SEG; s++) { const t = s / SEG, j = s === 0 || s === SEG ? 0 : 1.6 * Math.sin(Math.PI * t); pts[s]!.lerpVectors(ini, fim, t).add(v.set((Math.random() - 0.5) * j, 0, (Math.random() - 0.5) * j)); }
-    r.mesh.forEach((me, k) => {
-      const larg = me.userData.larg as number, cruz = me.userData.cruz as number, p = r.pos[k]!;
-      for (let s = 0; s <= SEG; s++) { const a = pts[s]!, w = larg * (1 - 0.5 * (s / SEG)), ox = cruz ? w : 0, oz = cruz ? 0 : w; p.set([a.x - ox, a.y, a.z - oz, a.x + ox, a.y, a.z + oz], s * 6); }
-      (me.geometry.attributes.position as THREE.BufferAttribute).needsUpdate = true; me.geometry.computeBoundingSphere(); me.visible = true;
-    });
-    r.vida = 0.24; r.i = i; brilho[i] = 1;
-    // (a nuvem e o trovão, no MUNDO: o grupo vai dentro do lounge, girado e espelhado)
-    const fl = nuvemMat.uniforms.uFl!.value as THREE.Vector3[], dw = group.localToWorld(new THREE.Vector3(ini.x, yN, ini.z));
-    const k = fl.reduce((m, x, j) => (x.z < fl[m]!.z ? j : m), 0); fl[k]!.set(dw.x, dw.z, 1.4);
-    if (raios.length < 8) { const fw = group.localToWorld(fim.clone()); raios.push({ x: fw.x, y: fw.y, z: fw.z }); }
-  };
   const raios: { x: number; y: number; z: number }[] = [];
   let proximo = 0.5;
   anim.push((dt, t) => {
-    telaMat.uniforms.uT!.value = t; nuvemMat.uniforms.uT!.value = t;
+    for (const m of [telaMat, telaLado, telaLado2]) m.uniforms.uT!.value = t; nuvemMat.uniforms.uT!.value = t;
     proximo -= dt;
-    if (proximo <= 0) { const r = pool.find((x) => x.vida <= 0); if (r) disparar(r, Math.floor(Math.random() * N)); proximo = TEMPESTADE_TI.cadaRaio * (0.3 + Math.random() * 1.4); }
-    for (const r of pool) if (r.vida > 0) { r.vida -= dt; const vis = r.vida > 0, op = 0.45 + Math.random() * 0.55; r.mesh.forEach((me) => { me.visible = vis && op > 0.5; }); }
-    raioBrilho.opacity = 0.4 + Math.random() * 0.3;
+    if (proximo <= 0) {   // um CLARÃO dentro da nuvem (e o trovão de lá)
+      proximo = TEMPESTADE_TI.cadaRaio * 4 * (0.3 + Math.random() * 1.4);
+      const fl = nuvemMat.uniforms.uFl!.value as THREE.Vector3[], w = group.localToWorld(new THREE.Vector3(campus.a.x + (Math.random() - 0.5) * CAMPUS.meia * 1.6, yN, zMin + Math.random() * (zMax - zMin)));
+      const k = fl.reduce((m, x, j) => (x.z < fl[m]!.z ? j : m), 0); fl[k]!.set(w.x, w.z, 1.4);
+      if (raios.length < 8) raios.push({ x: w.x, y: w.y, z: w.z });
+    }
     for (const x of nuvemMat.uniforms.uFl!.value as THREE.Vector3[]) x.z = Math.max(0, x.z - dt * 3.5);
-    let mudou = false;
-    for (let i = 0; i < N; i++) if (brilho[i]! > 0) { brilho[i] = Math.max(0, brilho[i]! - dt * 1.3); esferas.setColorAt(i, corT.copy(corBase).lerp(corRaio, brilho[i]!)); mudou = true; }
-    if (mudou && esferas.instanceColor) esferas.instanceColor.needsUpdate = true;
   });
   // ── os RACKS DE SERVIDOR nas laterais (as luzinhas piscando) ──
   { const zs = RACKS_TI.filter((r) => r.x < SALAO.x).map((r) => r.z);   // (os mesmos da colisão)
