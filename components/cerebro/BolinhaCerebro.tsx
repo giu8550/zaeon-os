@@ -16,6 +16,7 @@ export default function BolinhaCerebro({ estado, completude = 0, onClick, aberto
     <button
       type="button"
       data-bolinha-cerebro
+      data-tour="gerar-percurso"
       onClick={onClick}
       aria-pressed={!!aberto}
       title={ROTULO[estado]}

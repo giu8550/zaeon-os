@@ -606,7 +606,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
 
   return (
     <div className="w-full h-full min-h-0 flex flex-col p-2 sm:p-4" style={zoom.style}>
-      <div className={`relative flex-1 min-h-0 flex flex-col rounded-[28px] overflow-hidden ${VIDRO_PAINEL}`}>
+      <div data-tour="escritorio-canal" className={`relative flex-1 min-h-0 flex flex-col rounded-[28px] overflow-hidden ${VIDRO_PAINEL}`}>
         {/* agenda semanal do canal: bandeja por cima da conversa (#396) */}
         <AgendaBandeja canalId={ativoId} aberta={agendaAberta} onFechar={() => setAgendaAberta(false)} versao={agendaVersao} />
         {/* barra: agenda · canal · presença · cartolina · config */}
@@ -676,7 +676,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
             {menu === "convidar" && <ConvidarForm onEnviar={enviarConvite} variante="linha" onFechar={() => setMenu(null)} paraConversa={conversaDoConvite?.titulo ?? null} />}
           </div>
 
-          <div className="ml-auto shrink-0 flex items-center gap-1.5">
+          <div data-tour="escritorio-pessoas" className="ml-auto shrink-0 flex items-center gap-1.5">
             {/* pessoas do canal (dono, membros e você), com espaço entre as fotos (#423). Os agentes ficam embaixo. */}
             <PessoasTopo visiveis={topo.visiveis} extras={topo.extras} onlineIds={topo.onlineIds} total={topo.total}
               aberta={pessoaAberta} onAlternar={(id) => setMenu(pessoaAberta === id ? null : `pessoa:${id}`)}
@@ -743,7 +743,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
             </div>
           )}
           {/* agentes convocáveis: presentes no canal + os meus contratados (toque = @) — #443: componente próprio */}
-          <BarraAgentes agentes={agentes} naConversa={canal.agentes} digitando={digitando} estado={estadoAgente} onChamar={prefixarAgente} />
+          <div data-tour="escritorio-agentes"><BarraAgentes agentes={agentes} naConversa={canal.agentes} digitando={digitando} estado={estadoAgente} onChamar={prefixarAgente} /></div>
           {anexos.length > 0 && (
             <div className="flex flex-wrap gap-1.5 pb-2" aria-label="Arquivos anexados">
               {anexos.map((a) => (
@@ -757,7 +757,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
               ))}
             </div>
           )}
-          <div className="flex items-end gap-2">
+          <div data-tour="escritorio-composer" className="flex items-end gap-2">
             <input ref={arquivoRef} type="file" accept="application/pdf,.pdf" multiple className="hidden"
               onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ""; if (f.length) void anexar(f); }} />
             <button type="button" onClick={() => arquivoRef.current?.click()} aria-label="Anexar arquivo (PDF)" title="Anexar PDF — o agente lê e responde sobre ele"
