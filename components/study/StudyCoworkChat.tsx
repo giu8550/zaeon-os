@@ -44,6 +44,7 @@ import ConversasSidebar from "@/components/chat/ConversasSidebar";
 import PastasEmpilhadas, { CORPO_DA_PASTA, type Pasta } from "@/components/chat/PastasEmpilhadas";
 import SugestoesConversa from "@/components/chat/SugestoesConversa";
 import { EVT_TEMA, temaDoTexto, temaNoTutorial } from "@/lib/onboarding/tutorialLab";
+import { EVT_PERGUNTA_CHAT } from "@/lib/onboarding/tourSala";
 import { useConversasSlot } from "@/components/chat/ConversasSlot";
 import { consumirPedido, EVT_ESTUDOS_CHAT, EVT_PEDIDO_CONVERSA, type PedidoConversa } from "@/lib/chat/conversasNav";
 
@@ -235,7 +236,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   useEffect(() => { setCerebroAberto(false); }, [abaAtiva]);
   useEffect(() => {
     if (!cerebroAberto) return;
-    const fora = (e: MouseEvent) => { if (!(e.target as Element | null)?.closest?.("[data-bolinha-cerebro]")) setCerebroAberto(false); };
+    const fora = (e: MouseEvent) => { if (!(e.target as Element | null)?.closest?.("[data-bolinha-cerebro], [data-tour-cartao]")) setCerebroAberto(false); };
     document.addEventListener("mousedown", fora);
     return () => document.removeEventListener("mousedown", fora);
   }, [cerebroAberto]);
@@ -877,6 +878,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     if (!prompt || sending) return;
     // o TUTORIAL do tablet (lib/onboarding/tutorialLab): o tema escolhido não vai pro chat — vira a pesquisa na tela roxa
     if (temaNoTutorial()) { const tema = temaDoTexto(prompt); if (!tema) return; setInput(""); window.dispatchEvent(new CustomEvent(EVT_TEMA, { detail: { tema } })); return; }
+    // o tour do laboratório (lib/onboarding/tourSala) anda quando a pessoa pede o 1º estudo
+    window.dispatchEvent(new CustomEvent(EVT_PERGUNTA_CHAT, { detail: { prompt } }));
     setQuickThinking(isQuickPrompt(prompt));
 
     // O histórico levava só `m.text`, que numa resposta estruturada é o NÚCLEO — uma

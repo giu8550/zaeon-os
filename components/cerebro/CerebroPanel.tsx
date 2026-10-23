@@ -19,6 +19,7 @@ import { regioesDoMapa, type RegiaoVisual } from "./CerebroCanvas";
 import { recencia } from "@/lib/map/memoria";
 import { REQ_POR_MODO, requisitoDoNo, resumoDoNo } from "@/lib/map/resumoNo";
 import type { CerebroState } from "./useCerebro";
+import { EVT_PERCURSO_ABERTO } from "@/lib/onboarding/tourSala";
 
 const CerebroCanvas = dynamic(() => import("./CerebroCanvas"), { ssr: false, loading: () => <div className="h-full w-full bg-[#060a1a]" /> });
 
@@ -59,12 +60,15 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
   // Esc fecha (o clique fora e a bolinha são tratados por quem monta o painel — o mapa é modal, sem "x").
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") { if (fichaId) setFichaId(null); else onFechar(); } }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [fichaId, onFechar]);
   const gerar = onGerar ?? (() => void st.gerar());
+  // o tour do laboratório (lib/onboarding/tourSala) anda quando o mapa do percurso abre PRONTO
+  const temMapa = !!mapa;
+  useEffect(() => { if (temMapa) window.dispatchEvent(new CustomEvent(EVT_PERCURSO_ABERTO)); }, [temMapa]);
   const [anteriores, setAnteriores] = useState(false);
 
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }}
-      className="absolute inset-0 z-50 flex flex-col bg-[#060a1a] text-[#dbe8ff]" role="dialog" aria-modal="true" aria-label="Mapa de conhecimento"
+      className="absolute inset-0 z-50 flex flex-col bg-[#060a1a] text-[#dbe8ff]" role="dialog" aria-modal="true" aria-label="Mapa de conhecimento" data-tour="percurso-view"
       onMouseDown={(e) => e.stopPropagation()}
     >
       {/* SEM barra, título nem "x" no topo: o botão CIRCULAR que gera/retraça e "mapas anteriores" flutuam por cima

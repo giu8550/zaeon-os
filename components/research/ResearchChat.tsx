@@ -176,7 +176,8 @@ export default function ResearchChat({
   // Clicar FORA do chat fecha o cérebro (o painel para a propagação do próprio mousedown).
   useEffect(() => {
     if (!cerebroAberto) return;
-    const h = (e: MouseEvent) => { const root = rootRef.current; if (root && !root.contains(e.target as Node)) setCerebroAberto(false); };
+    // (o cartão do tour do laboratório, por cima do mapa, também não conta como "fora")
+    const h = (e: MouseEvent) => { const root = rootRef.current; if (root && !root.contains(e.target as Node) && !(e.target as Element | null)?.closest?.("[data-tour-cartao]")) setCerebroAberto(false); };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, [cerebroAberto]);

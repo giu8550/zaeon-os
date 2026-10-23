@@ -1,41 +1,88 @@
 /**
- * O TOUR DA SALA (out/2026): a 1ª vez que a pessoa abre o laboratório FORA do tutorial do tablet, o Droid mostra a sala
- * inteira — o chat da Aura, a Sala de Estudos, o Marketplace (a pesquisa a fundo), as referências na bandeja, a Sala de
- * Pesquisa e, com mais detalhe, as CITAÇÕES. A 1ª missão (lib/onboarding/tutorialLab) mostra só o caminho de gerar a
- * pesquisa; o resto fica pra cá. Só "ver": cada passo anda no Próximo; pular/concluir marca como visto (neste navegador).
+ * O TOUR DO LABORATÓRIO (out/2026, v2): a 1ª vez que a pessoa abre o laboratório FORA do tutorial do tablet, a Aura guia
+ * o caminho de ouro — pedir um estudo no chat ("Quero estudar sobre…") → conhecer a Sala de Estudos (o caderno vivo)
+ * enquanto o estudo nasce → voltar pro chat e pedir um DIAGRAMA interativo → GERAR O PERCURSO → o mapa pronto.
+ * Os passos de ação só andam quando a pessoa FAZ a coisa (o evento chega); os de explicação têm um botão (cta).
+ * A 1ª missão do tablet (lib/onboarding/tutorialLab) e o tutorial do metaverso não mudam.
+ * Pular/concluir marca como visto (neste navegador) e no servidor (/api/onboard/tour → User.tourDone), uma vez só.
  */
 import type { AbaEstudos } from "@/lib/chat/conversasNav";
+import { EVT_ABRIR_DOC } from "@/lib/chat/documentos";
+
+/** o chat da Sala de Estudos mandou uma pergunta (components/study/StudyCoworkChat) */
+export const EVT_PERGUNTA_CHAT = "zaeon:chat:pergunta";
+/** o mapa do percurso abriu com um mapa pronto (components/cerebro/CerebroPanel) */
+export const EVT_PERCURSO_ABERTO = "zaeon:percurso:aberto";
+
+/** um evento que faz o passo andar; `kind` filtra o detail.studioKind (ex.: só o documento "diagram") */
+export type Avanco = { evento: string; kind?: string };
 
 export type PassoSala = {
   id: string;
-  /** o que o Droid diz */
+  /** a dica curta do cartão (1 linha, com emoji) */
+  dica: string;
+  /** o que a Aura diz */
   fala: string;
   /** onde fica o destaque (o 1º seletor que existir na tela) */
   alvos: string[];
   /** antes de mostrar, o laboratório vai pra esta sala (e sub-aba / vista do Marketplace) */
   ir?: { tab: "sala-de-estudos" | "pesquisa"; aba?: AbaEstudos; vista?: "vitrine" | "pesquisar" };
+  /** passo de AÇÃO: anda quando um destes eventos chega (sem botão de seguir) */
+  avancaEm?: Avanco[];
+  /** passo de EXPLICAÇÃO: o rótulo do botão que segue */
+  cta?: string;
+  /** só existe com o mapa do percurso ligado (NEXT_PUBLIC_MAP_HARNESS) */
+  precisaMapa?: boolean;
 };
 
 export const PASSOS_SALA: PassoSala[] = [
-  { id: "aura", ir: { tab: "sala-de-estudos", aba: "meus-estudos" }, alvos: ['[data-tour="estudos"]'],
-    fala: "Bora conhecer a sala inteira? Este é o chat da Aura: pergunte, peça uma aula, um resumo ou um diagrama. Cada conversa fica guardada logo abaixo." },
-  { id: "sala-de-estudos", ir: { tab: "sala-de-estudos", aba: "feed" }, alvos: ['[data-tour="tab-feed"]'],
-    fala: "A Sala de Estudos é o seu QUADRO: monte o estudo em seções, notas e perguntas — o blueprint do que você está aprendendo. Dá até pra chamar gente pra estudar junto." },
-  { id: "marketplace", ir: { tab: "sala-de-estudos", aba: "community", vista: "vitrine" }, alvos: ['[data-tour="tab-community"]'],
-    fala: "O Marketplace é a vitrine: aqui conhecimento vira PRODUTO, e vale ZAEON. Em “pesquisar na literatura” fica a pesquisa a fundo — a IA busca artigos científicos de verdade sobre o seu tema." },
-  { id: "referencias", ir: { tab: "sala-de-estudos", aba: "community", vista: "pesquisar" }, alvos: ['[data-tour="bandeja"]', '[data-tour="omega"]'],
-    fala: "Em cada resultado, “Salvar” guarda a REFERÊNCIA completa — autor, título, ano e DOI — nesta BANDEJA de fontes. É dela que nasce a pesquisa gerada, e cada fonte vira citação em ABNT." },
-  { id: "sala-de-pesquisa", ir: { tab: "pesquisa" }, alvos: ['[data-tour="pasta-conversa"]', '[data-tour="docs-panel"]', '[data-tour="pesquisa"]'],
-    fala: "Na Sala de Pesquisa o texto ganha forma. O chat te ajuda a escrever e aprofundar, e um PDF arrastado pro painel abre pra ler (ou ouvir)." },
-  { id: "citacoes", ir: { tab: "pesquisa" }, alvos: ['[data-tour="dock"]', '[data-tour="docs-panel"]', '[data-tour="pesquisa"]'],
-    fala: "CITAÇÕES: selecione um trecho do PDF e cite — ela já vem em ABNT, com autor, ano e página. No 🔖 ficam as salvas: arraste pro texto e ela entra no lugar certo. Sinal vermelho = sem fonte válida; clique em “Creditar fonte”." },
-  { id: "salvar", ir: { tab: "pesquisa" }, alvos: ['[data-tour="salvar-pesquisa"]', '[data-tour="pesquisa"]'],
-    fala: "Pronto pra entregar? “Salvar” exporta em ABNT (PDF ou DOCX) e guarda nas suas pesquisas. É isso — bons estudos! ✦" },
+  { id: "iniciar-estudo", ir: { tab: "sala-de-estudos", aba: "meus-estudos" },
+    alvos: ['[data-tour="study-start"]', '[data-tour="sugestoes"]', '[data-tour="composer-estudos"]'],
+    avancaEm: [{ evento: EVT_PERGUNTA_CHAT }],
+    dica: "✨ Clica em “Quero estudar sobre…” e escolhe um tema",
+    fala: "Oi! Que bom te ver aqui. 💜 Bora começar: clica em “Quero estudar sobre…” e me diz um tema — a matéria da prova, uma curiosidade, qualquer coisa. Dica: quanto mais específico, melhor (fotossíntese, Revolução Francesa, derivadas). Pode mandar!" },
+  { id: "sala-estudos", ir: { tab: "sala-de-estudos", aba: "feed" },
+    alvos: ['[data-tour="sala-estudos"]', '[data-tour="tab-feed"]'],
+    cta: "Bora",
+    dica: "📒 Sala de Estudos: o caderno vivo",
+    fala: "Enquanto eu monto o teu estudo, vem conhecer a tua Sala de Estudos 👇 Pensa nela como um caderno vivo e sem fundo: aqui o que a gente conversa vira videoaulas, teus arquivos, desenhos, esquemas e mapas — material de verdade, bem mais fundo que o chat." },
+  { id: "criar-diagrama", ir: { tab: "sala-de-estudos", aba: "meus-estudos" },
+    alvos: ['[data-tour="diagrama"]', '[data-tour="composer-estudos"]'],
+    avancaEm: [{ evento: EVT_ABRIR_DOC, kind: "diagram" }],
+    dica: "🧭 Peça um diagrama interativo",
+    fala: "Pronto — teu estudo nasceu! 🎉 Agora, aqui no chat, pede um diagrama interativo (ex.: “faz um diagrama interativo disso”). Ver o assunto desenhado fixa o conhecimento de um jeito que o texto sozinho não alcança." },
+  { id: "gerar-percurso", precisaMapa: true, ir: { tab: "sala-de-estudos", aba: "meus-estudos" },
+    alvos: ['[data-tour="gerar-percurso"]'],
+    avancaEm: [{ evento: EVT_PERCURSO_ABERTO }],
+    dica: "✦ Gere o percurso e abra o mapa",
+    fala: "Agora sim: você já tá bem informado sobre o assunto. 💜 Hora de criar um percurso pra não se perder nos estudos — clica aqui pra gerar e, quando ficar pronto, clica de novo pra abrir o mapa." },
+  { id: "mapa-pronto", precisaMapa: true,
+    alvos: ['[data-tour="percurso-view"]'],
+    cta: "Boa jornada! 🚀",
+    dica: "🗺️ O teu mapa de estudo",
+    fala: "Esse mapa mental é o teu guia: ele quebra qualquer assunto em etapas e passos importantes pra você dominar de verdade, um de cada vez. Tema novo? É só repetir esse caminho. Tô aqui no chat sempre que precisar — boa jornada! 🚀" },
 ];
 
-const CHAVE = "zaeon.tour.sala.v1";
+/** os passos que valem nesta instalação: sem o mapa do percurso ligado, o tour termina no diagrama */
+export const passosDaSala = (mapaLigado: boolean): PassoSala[] => PASSOS_SALA.filter((p) => mapaLigado || !p.precisaMapa);
+
+/** o evento faz o passo andar? (o tipo do documento vem no detail.studioKind) */
+export function eventoAvanca(p: PassoSala, evento: string, detail: unknown): boolean {
+  return !!p.avancaEm?.some((a) => a.evento === evento && (!a.kind || (detail as { studioKind?: string } | null)?.studioKind === a.kind));
+}
+
+// v2: o roteiro novo — quem só viu o passeio antigo (v1) ganha o novo uma vez
+const CHAVE = "zaeon.tour.sala.v2";
 export const tourSalaVisto = (): boolean => { try { return localStorage.getItem(CHAVE) === "1"; } catch { return true; } };
-export const marcarTourSalaVisto = () => { try { localStorage.setItem(CHAVE, "1"); } catch { /* ignore */ } };
+export const marcarTourSalaVisto = () => {
+  try { localStorage.setItem(CHAVE, "1"); } catch { /* ignore */ }
+  try { void fetch("/api/onboard/tour", { method: "POST" }).catch(() => {}); } catch { /* sem rede */ }
+};
 /** mostra o tour? Nunca no tutorial (a missão tem o tour dela), nunca no celular (a sidebar some), uma vez só */
 export const deveMostrarTourSala = (o: { noTutorial: boolean; largura: number; visto: boolean; outroTour: boolean }) =>
   !o.noTutorial && !o.visto && !o.outroTour && o.largura >= 768;
+
+/** um tour do laboratório está na tela agora (o do Escritório espera ele acabar) */
+let tourNaTela = false;
+export const tourDoLabAtivo = () => tourNaTela;
+export const marcarTourDoLabAtivo = (v: boolean) => { tourNaTela = v; };
