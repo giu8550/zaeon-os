@@ -375,6 +375,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   }, []);
   // Árvore de habilidades: drawer opt-in; o tópico nasce do estudo focado (ou digitado no painel).
   const [treeOpen, setTreeOpen] = useState(false);
+  const [treeExpandida, setTreeExpandida] = useState(false);
   const [tree, setTree] = useState<SkillTreeData | null>(null);
   const [skillNode, setSkillNode] = useState<{ topicSlug: string; nodeId: string; title: string } | null>(null);
   const [treeRefresh, setTreeRefresh] = useState(0);
@@ -1167,8 +1168,11 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
 
         {/* ⟁ Árvore de habilidades — drawer opt-in por cima da conversa (não troca a tela) */}
         {treeOpen && (
-          <div className="absolute inset-y-0 right-0 z-30 w-full sm:w-[460px] shadow-[-24px_0_60px_-30px_rgba(15,23,42,0.5)]">
+          // acima dos documentos/editor (z-30/35) — antes ela abria por baixo de um documento aberto; expandida = o chat inteiro
+          <div className={`absolute top-[46px] bottom-0 right-0 z-[38] w-full ${treeExpandida ? "" : "sm:w-[460px]"} shadow-[-24px_0_60px_-30px_rgba(15,23,42,0.5)]`}>
             <SkillTreePanel
+              expandida={treeExpandida}
+              onExpandir={setTreeExpandida}
               topic={focusIds[0] ? spaceTitle(focusIds[0]) : null}
               focusNodeId={skillNode?.nodeId ?? null}
               refreshKey={treeRefresh}
@@ -1471,7 +1475,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                     role="switch"
                     aria-checked={modoPesquisa}
                     onClick={() => ligarModoPesquisa(!modoPesquisa)}
-                    title={modoPesquisa ? "Modo pesquisa ligado: fontes acadêmicas, citações e rigor ABNT. Clique para desligar." : "Ligar o modo pesquisa: fontes acadêmicas, citações, artigos/TCC no editor"}
+                    title={modoPesquisa ? "Modo pesquisa ligado: fontes acadêmicas, citações e rigor científico. Clique para desligar." : "Ligar o modo pesquisa: fontes acadêmicas, citações, artigos/TCC no editor"}
                     className={`inline-flex items-center gap-1.5 pl-1.5 pr-2.5 py-1 rounded-full text-[11.5px] font-bold font-tech border transition-colors
                       ${modoPesquisa
                         ? "bg-gradient-to-r from-violet-600/20 to-fuchsia-500/15 text-violet-800 dark:text-violet-200 border-violet-500/50"

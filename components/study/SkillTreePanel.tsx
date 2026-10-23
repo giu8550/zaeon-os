@@ -11,9 +11,9 @@
  * Estados: gerando ("montando sua árvore…"), pronto, degradado (trilha linear como lista).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import ReactFlow, { Background, Controls, Handle, MarkerType, Position, type Edge, type Node, type NodeProps } from "reactflow";
+import ReactFlow, { Background, Controls, Handle, MarkerType, Position, type Edge, type Node, type NodeProps, type ReactFlowInstance } from "reactflow";
 import "reactflow/dist/style.css";
-import { Lock, Check, Sparkles, MessageSquare, RefreshCw, X, GitBranch, Loader2 } from "lucide-react";
+import { Lock, Check, Sparkles, MessageSquare, RefreshCw, X, GitBranch, Loader2, Maximize2, Minimize2 } from "lucide-react";
 import type { SkillBranch, SkillNodeState } from "@/lib/skilltree/types";
 
 export type SkillTreeData = { topicSlug: string; topicLabel: string; degraded: boolean; nodes: SkillNodeState[] };
@@ -25,6 +25,9 @@ type Props = {
   onTree?: (t: SkillTreeData | null) => void;
   onNodeChat: (node: SkillNodeState, tree: SkillTreeData) => void;
   onClose?: () => void;
+  /** a árvore ocupando o chat inteiro (true) ou a gaveta de 460 px (false) */
+  expandida?: boolean;
+  onExpandir?: (v: boolean) => void;
 };
 
 const BRANCH_LABEL: Record<SkillBranch, string> = { teoria: "Teoria", experimental: "Experimental", pratica: "Prática" };
@@ -67,6 +70,22 @@ function SkillNodeCard({ data }: NodeProps<NodeData>) {
 }
 const NODE_TYPES = { skill: SkillNodeCard };
 
+const NO_W = 170, NO_H = 70;
+
+/**
+ * O enquadramento INICIAL da árvore calculado sem depender da medição do React Flow (o `fitView` só roda depois que
+ * os nós são medidos — quando isso não acontecia, a árvore ficava presa no canto, metade fora da tela, e "não
+ * expandia"). Os nós do layout ficam centrados em x=0: aqui se centraliza na largura e escala pra caber.
+ */
+export function enquadrar(nodes: Node[], largura: number, altura: number): { x: number; y: number; zoom: number } {
+  if (!nodes.length || largura <= 0) return { x: Math.max(0, largura / 2 - NO_W / 2), y: 24, zoom: 1 };
+  const xs = nodes.map((n) => n.position.x), ys = nodes.map((n) => n.position.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs) + NO_W, minY = Math.min(...ys), maxY = Math.max(...ys) + NO_H;
+  const pad = 32;
+  const zoom = Math.max(0.3, Math.min(1.2, (largura - 2 * pad) / (maxX - minX), altura > 0 ? (altura - 2 * pad) / (maxY - minY) : 1.2));
+  return { x: largura / 2 - ((minX + maxX) / 2) * zoom, y: pad - minY * zoom, zoom };
+}
+
 /** Layout simples por camadas: y = nível, x = posição dentro da camada (centralizado). */
 export function layoutByLevel(nodes: SkillNodeState[], selectedId: string | null): { nodes: Node<NodeData>[]; edges: Edge[] } {
   const byLevel = new Map<number, SkillNodeState[]>();
@@ -102,7 +121,20 @@ export function layoutByLevel(nodes: SkillNodeState[], selectedId: string | null
 }
 
 // ───────────────────────────── painel ─────────────────────────────
-export default function SkillTreePanel({ topic, focusNodeId, refreshKey = 0, onTree, onNodeChat, onClose }: Props) {
+export default function SkillTreePanel({ topic, focusNodeId, refreshKey = 0, onTree, onNodeChat, onClose, expandida = false, onExpandir }: Props) {
+  // o tamanho da área do grafo (pro enquadramento inicial e pra reenquadrar ao expandir/recolher)
+  const areaRef = useRef<HTMLDivElement>(null);
+  const [area, setArea] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = areaRef.current;
+    if (!el) return;
+    const medir = () => { const r = el.getBoundingClientRect(); setArea({ w: Math.round(r.width), h: Math.round(r.height) }); };
+    medir();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(medir) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, []);
+  const rfRef = useRef<ReactFlowInstance | null>(null);
   const [topicInput, setTopicInput] = useState(topic ?? "");
   const [tree, setTree] = useState<SkillTreeData | null>(null);
   const [phase, setPhase] = useState<"idle" | "generating" | "ready" | "error">("idle");
@@ -154,6 +186,17 @@ export default function SkillTreePanel({ topic, focusNodeId, refreshKey = 0, onT
   const selected = useMemo(() => tree?.nodes.find((n) => n.id === selectedId) ?? null, [tree, selectedId]);
   const graph = useMemo(() => (tree ? layoutByLevel(tree.nodes, selectedId) : { nodes: [], edges: [] }), [tree, selectedId]);
   const done = tree ? tree.nodes.filter((n) => n.status === "mastered").length : 0;
+  const viewportInicial = useMemo(() => enquadrar(graph.nodes, area.w, area.h), [graph.nodes, area.w, area.h]);
+  // árvore nova ou a área mudou de tamanho (expandir/recolher, girar a tela) → reenquadra: primeiro pela conta
+  // (sempre funciona), depois o fitView do React Flow, se os nós já estiverem medidos
+  useEffect(() => {
+    const rf = rfRef.current;
+    if (!rf || !tree || tree.degraded) return;
+    rf.setViewport(viewportInicial);
+    const t = setTimeout(() => { try { rf.fitView({ padding: 0.2, duration: 200 }); } catch { /* sem medida ainda: fica a conta */ } }, 60);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tree?.topicSlug, tree?.nodes.length, area.w, area.h]);
 
   const markUnderstood = useCallback(async () => {
     if (!tree || !selected || marking) return;
@@ -179,8 +222,14 @@ export default function SkillTreePanel({ topic, focusNodeId, refreshKey = 0, onT
         <span className="text-cyan-600 dark:text-cyan-300 text-[14px] leading-none" style={{ filter: "drop-shadow(0 0 4px rgba(34,211,238,0.5))" }}>⟁</span>
         <span className="text-[12px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-white/50 font-tech">Árvore de habilidades</span>
         {tree && <span className="text-[11px] font-mono text-slate-400">{done}/{tree.nodes.length}</span>}
+        {onExpandir && (
+          <button onClick={() => onExpandir(!expandida)} className="ml-auto p-1 rounded-lg text-slate-400 hover:text-cyan-500"
+            title={expandida ? "Recolher a árvore" : "Expandir a árvore"} aria-label={expandida ? "Recolher a árvore" : "Expandir a árvore"} aria-pressed={expandida}>
+            {expandida ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+          </button>
+        )}
         {onClose && (
-          <button onClick={onClose} className="ml-auto p-1 rounded-lg text-slate-400 hover:text-cyan-500" title="Fechar árvore" aria-label="Fechar árvore"><X size={15} /></button>
+          <button onClick={onClose} className={`${onExpandir ? "" : "ml-auto "}p-1 rounded-lg text-slate-400 hover:text-cyan-500`} title="Fechar árvore" aria-label="Fechar árvore"><X size={15} /></button>
         )}
       </div>
 
@@ -208,7 +257,7 @@ export default function SkillTreePanel({ topic, focusNodeId, refreshKey = 0, onT
       </form>
 
       {/* corpo */}
-      <div className="relative flex-1 min-h-0">
+      <div ref={areaRef} className="relative flex-1 min-h-0">
         {phase === "idle" && !tree && (
           <div className="h-full flex items-center justify-center p-6 text-center text-[12.5px] text-slate-400 dark:text-white/35 font-tech leading-relaxed">
             Foque um estudo ou digite um tópico: a Aura monta uma árvore de teoria, experimental e prática pra você dominar nó a nó.
@@ -247,10 +296,13 @@ export default function SkillTreePanel({ topic, focusNodeId, refreshKey = 0, onT
         )}
         {tree && !tree.degraded && (
           <ReactFlow
+            key={tree.topicSlug}
             nodes={graph.nodes}
             edges={graph.edges}
             nodeTypes={NODE_TYPES}
             onNodeClick={(_, n) => setSelectedId(n.id)}
+            onInit={(rf) => { rfRef.current = rf; rf.setViewport(viewportInicial); }}
+            defaultViewport={viewportInicial}
             fitView
             fitViewOptions={{ padding: 0.25 }}
             minZoom={0.3}

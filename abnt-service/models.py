@@ -69,3 +69,5 @@ class DocumentPayload(BaseModel):
     validation: Optional[ValidationData] = None
     format: str = Field(..., description="pdf | docx")
     font_choice: str = Field(default="Times New Roman", description="Times New Roman | Arial")
+    # a NORMA do documento: "abnt" (NBR 14724, padrão) | "vancouver" (ICMJE) | "apa" (7ª ed.) — styles.py
+    style: str = Field(default="abnt", description="abnt | vancouver | apa")
