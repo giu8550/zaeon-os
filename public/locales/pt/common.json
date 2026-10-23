@@ -25,7 +25,9 @@
         "student": "Aluno",
         "professor": "Professor",
         "teacher": "Professor",
-        "professional": "Profissional"
+        "professional": "Profissional",
+        "researcher": "Pesquisador",
+        "entrepreneur": "Empreendedor"
     },
     "hints": {
         "new_game": "Bem vindo(a) à Zaeon. Aqui você encontra tudo para estudo e pesquisa, em qualquer área de formação.",
@@ -121,7 +123,7 @@
         "doc_content_placeholder": "Aguardando saída...",
         "chat_placeholder": "Pergunte a Zaeon sobre {{role}}...",
         "logs": {
-            "switched": "Mudou para {{nome}}",
+            "switched": "Mudou para {{name}}",
             "gen_protocol": "Protocolo iniciado por {{name}}",
             "content_gen": "Conteúdo gerado.",
             "ipfs_success": "Sucesso do IPFS: {{hash}}",
@@ -170,7 +172,10 @@
                 "full": "Auditoria",
                 "desc": "Ética e Jurídico"
             }
-        }
+        },
+        "title": "Agentes de IA de outra dimensão.",
+        "subtitle": "Eles vieram para ajudar você a ser o melhor.",
+        "button": "Saiba mais"
     },
     "study_rooms": {
         "system": "SISTEMA_OPTIMAL",
@@ -308,7 +313,7 @@
     },
     "feed": {
         "header_community": "Rede Global Zaeon",
-        "header_section": "Protocolo Zaeon // {{seção}}",
+        "header_section": "Protocolo Zaeon // {{section}}",
         "tooltip_uplink": "Link ascendente: Sincronizando...",
         "tooltip_ready": "Sistema: Pronto para Uplink",
         "tooltip_online": "ON-LINE",
@@ -333,7 +338,7 @@
         "course_label": "Curso Acadêmico",
         "course_placeholder": "Ex: Ciência da Computação",
         "verification_title": "Verificação necessária:",
-        "verification_desc": "Posteriormente, você será solicitado a fornecer um comprovante de inscrição no {{curso}} para desbloquear os recursos acadêmicos.",
+        "verification_desc": "Posteriormente, você será solicitado a fornecer um comprovante de inscrição no {{course}} para desbloquear os recursos acadêmicos.",
         "default_course": "este curso",
         "saving": "Salvando...",
         "save": "Salvar alterações",
@@ -341,5 +346,26 @@
         "session_label": "Controle de Sessão",
         "logout_action": "Desconectar (Sair)",
         "success_message": "Credenciais atualizadas"
+    },
+    "landing": {
+        "hero_tagline": "Mais do que conversas com chats e abas abertas, aqui você constrói <hl>ideias que viram produtos finais</hl>.",
+        "knowledge_title": "Transforme o seu conhecimento em um ativo do mundo real.",
+        "flow": {
+            "ideas": "ideias",
+            "projects": "projetos",
+            "studies": "estudos",
+            "research": "pesquisas",
+            "companies": "empresas",
+            "business": "negócios",
+            "pair": "{{from}} vira {{to}}",
+            "summary": "Ideias viram projetos, estudos viram pesquisas e empresas viram negócios."
+        },
+        "blueprints": {
+            "title": "Aqui você vale o que você constrói.",
+            "image_alt": "Prévia do blueprint {{title}}",
+            "tags": "Tags",
+            "cta_view": "Ver no game",
+            "cta_create": "Criar o seu"
+        }
     }
 }

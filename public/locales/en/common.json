@@ -25,7 +25,9 @@
         "student": "Student",
         "professor": "Teacher",
         "teacher": "Teacher",
-        "professional": "Professional"
+        "professional": "Professional",
+        "researcher": "Researcher",
+        "entrepreneur": "Entrepreneur"
     },
     "hints": {
         "new_game": "HINT: Start with a new profile to check out Zaeon tech.",
@@ -170,7 +172,10 @@
                 "full": "Auditing",
                 "desc": "From Ethics to Legal Compliance for producing science responsibly? We got you covered through all processes."
             }
-        }
+        },
+        "title": "AI agents from another dimension.",
+        "subtitle": "They came to help you be the best.",
+        "button": "Learn more"
     },
     "study_rooms": {
         "system": "SYSTEM_OPTIMAL",
@@ -341,5 +346,26 @@
         "session_label": "Session Control",
         "logout_action": "Disconnect (Logout)",
         "success_message": "Credentials Updated"
+    },
+    "landing": {
+        "hero_tagline": "More than conversations with chatbots and open tabs — here you build <hl>ideas that become finished products</hl>.",
+        "knowledge_title": "Turn your knowledge into a real-world asset.",
+        "flow": {
+            "ideas": "ideas",
+            "projects": "projects",
+            "studies": "studies",
+            "research": "research",
+            "companies": "companies",
+            "business": "business",
+            "pair": "{{from}} becomes {{to}}",
+            "summary": "Ideas become projects, studies become research and companies become business."
+        },
+        "blueprints": {
+            "title": "Here, you're worth what you build.",
+            "image_alt": "Preview of the blueprint {{title}}",
+            "tags": "Tags",
+            "cta_view": "View in the game",
+            "cta_create": "Create your own"
+        }
     }
 }

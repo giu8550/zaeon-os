@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 /**
  * Diagrama vivo: o que a pessoa traz -> a Zaeon -> o que ela leva.
  *
  * As duas listas pareiam NA ORDEM: sao TRES TRANSFORMACOES, uma por pilar
- * da Zaeon (ideias, estudos, negocios). Passar o dedo numa linha fixa o par.
+ * da Zaeon (ideias, estudos, empresas). Passar o dedo numa linha fixa o par.
  *
  * LEVE de proposito: um pacote de luz por fio, sem desfoque (filtro SVG) nem
  * ondulacao, e as bordas dos baloes so escorrem no par em foco. As palavras que
@@ -34,12 +35,17 @@ type Par = {
     onda: number;
 };
 
-// TRÊS PILARES (no plural): ideias → projetos, estudos → pesquisas e negócios → crescimento.
+// TRÊS PILARES (no plural): ideias → projetos, estudos → pesquisas e empresas → negócios.
+// `entra`/`sai` = chaves do i18n (landing.flow.*); o texto em pt é o fallback enquanto o JSON carrega.
 const PARES: Par[] = [
-    { entra: "ideias", sai: "projetos", tom: "#22d3ee", duracao: 3.2, atraso: 0, onda: 7.0 },
-    { entra: "estudos", sai: "pesquisas", tom: "#818cf8", duracao: 3.7, atraso: 0.6, onda: 9.3 },
-    { entra: "negócios", sai: "crescimento", tom: "#2dd4bf", duracao: 4.3, atraso: 1.2, onda: 10.7 },
+    { entra: "ideas", sai: "projects", tom: "#22d3ee", duracao: 3.2, atraso: 0, onda: 7.0 },
+    { entra: "studies", sai: "research", tom: "#818cf8", duracao: 3.7, atraso: 0.6, onda: 9.3 },
+    { entra: "companies", sai: "business", tom: "#2dd4bf", duracao: 4.3, atraso: 1.2, onda: 10.7 },
 ];
+const ROTULO_PT: Record<string, string> = {
+    ideas: "ideias", projects: "projetos", studies: "estudos", research: "pesquisas", companies: "empresas", business: "negócios",
+};
+const RESUMO_PT = "Ideias viram projetos, estudos viram pesquisas e empresas viram negócios.";
 
 const BRAIN = "/assets/zaeon-brain-logo.png";
 
@@ -144,6 +150,9 @@ const saidaM = (i: number) => {
 /* ── componente ─────────────────────────────────────────────────────────── */
 
 export default function ZaeonFlowDiagram({ className = "" }: { className?: string }) {
+    const { t } = useTranslation();
+    const rotulo = (k: string) => t(`landing.flow.${k}`, ROTULO_PT[k]);
+    const resumo = t("landing.flow.summary", RESUMO_PT);
     /** Quem o ciclo automatico esta mostrando. */
     const [auto, setAuto] = useState<number | null>(null);
     /** Quem o ponteiro/foco esta apontando. */
@@ -260,18 +269,18 @@ export default function ZaeonFlowDiagram({ className = "" }: { className?: strin
                             style={{ transition: "opacity .45s ease", cursor: "pointer" }}
                             tabIndex={0}
                             role="button"
-                            aria-label={`${p.entra} vira ${p.sai}`}
+                            aria-label={t("landing.flow.pair", { from: rotulo(p.entra), to: rotulo(p.sai), defaultValue: "{{from}} vira {{to}}" })}
                         >
                             {/* alvo de toque: a linha inteira, nao so as letras */}
                             <rect x={bE.x} y={bE.y} width={bE.w} height={bE.h} rx={bE.h / 2} fill="transparent" />
                             <rect x={bS.x} y={bS.y} width={bS.w} height={bS.h} rx={bS.h / 2} fill="transparent" />
                             <No cx={bE.x + (mobile ? 18 : 24)} cy={yE} par={p} forte={forte(i)} />
                             <Texto x={bE.x + (mobile ? 32 : 42)} y={yE} forte={forte(i)} mobile={mobile}>
-                                {p.entra}
+                                {rotulo(p.entra)}
                             </Texto>
                             <No cx={bS.x + (mobile ? 18 : 24)} cy={yS} par={p} forte={forte(i)} />
                             <Texto x={bS.x + (mobile ? 32 : 42)} y={yS} forte={forte(i)} mobile={mobile}>
-                                {p.sai}
+                                {rotulo(p.sai)}
                             </Texto>
                         </g>
                     );
@@ -302,7 +311,7 @@ export default function ZaeonFlowDiagram({ className = "" }: { className?: strin
                 viewBox={D.vb}
                 className="hidden md:block w-full h-auto"
                 role="img"
-                aria-label="Ideias viram projetos, estudos viram pesquisas e negócios viram crescimento."
+                aria-label={resumo}
             >
                 <Defs sufixo="d" />
                 {corpo(false, "d")}
@@ -312,7 +321,7 @@ export default function ZaeonFlowDiagram({ className = "" }: { className?: strin
                 viewBox={M.vb}
                 className="block md:hidden w-full h-auto"
                 role="img"
-                aria-label="Ideias viram projetos, estudos viram pesquisas e negócios viram crescimento."
+                aria-label={resumo}
             >
                 <Defs sufixo="m" />
                 {corpo(true, "m")}

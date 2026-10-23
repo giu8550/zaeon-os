@@ -66,6 +66,10 @@ jobs:
           node-version: "20"
           cache: "npm"
 
+      # i18n: os 7 locales (public/locales) com as MESMAS chaves, variáveis e tags do <Trans>. Sem deps, roda em ~1s.
+      - name: Paridade dos locales (i18n)
+        run: node scripts/i18n-check.mjs
+
       # Supply-chain (Pack Octa §1). ANTES do npm ci: pacote novo com install script (ou versão nova) só
       # entra depois de revisado em config/vetting/install-scripts.json; repo REJEITADO não entra nunca.
       - name: Vetting de dependências (lockfile + install scripts + repos rejeitados)

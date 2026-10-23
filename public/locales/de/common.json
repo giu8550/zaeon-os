@@ -25,7 +25,9 @@
         "student": "Student",
         "researcher": "Forscher",
         "professional": "Lehrer",
-        "entrepreneur": "Unternehmer"
+        "entrepreneur": "Unternehmer",
+        "professor": "Professor",
+        "teacher": "Lehrkraft"
     },
     "hints": {
         "new_game": "TIPP: Beginnen Sie mit einem neuen Profil, um sich die Zaeon-Technologie anzusehen.",
@@ -79,7 +81,7 @@
     "homework": {
         "mode_study": "Lernmodus",
         "mode_work": "Arbeitsmodus",
-        "switch_hint": "Klicken Sie hier, um zum {{Modus}} zu wechseln.",
+        "switch_hint": "Klicken Sie hier, um zum {{mode}} zu wechseln.",
         "switching": "Wechsel...",
         "study_title": "Lernmodus",
         "add_files": "PDF hinzufügen",
@@ -194,7 +196,9 @@
             "quantum_name": "Quantenfeld",
             "quantum_topic": "Mathematik und Physik",
             "global_name": "Globale Lounge",
-            "global_topic": "Allgemeine Studien"
+            "global_topic": "Allgemeine Studien",
+            "humanities_name": "Geisteswissenschaften",
+            "humanities_topic": "Geschichte, Soziologie, Anthropologie"
         }
     },
     "lounge_chat": {
@@ -342,5 +346,26 @@
         "session_label": "Sitzungskontrolle",
         "logout_action": "Trennen (Abmelden)",
         "success_message": "Anmeldeinformationen aktualisiert"
+    },
+    "landing": {
+        "hero_tagline": "Mehr als Gespräche mit Chatbots und offenen Tabs – hier bauen Sie <hl>Ideen, die zu fertigen Produkten werden</hl>.",
+        "knowledge_title": "Machen Sie Ihr Wissen zu einem realen Vermögenswert.",
+        "flow": {
+            "ideas": "Ideen",
+            "projects": "Projekte",
+            "studies": "Studien",
+            "research": "Forschung",
+            "companies": "Unternehmen",
+            "business": "Geschäfte",
+            "pair": "{{from}} wird zu {{to}}",
+            "summary": "Ideen werden zu Projekten, Studien zu Forschung und Unternehmen zu Geschäften."
+        },
+        "blueprints": {
+            "title": "Hier zählt, was Sie bauen.",
+            "image_alt": "Vorschau des Blueprints {{title}}",
+            "tags": "Tags",
+            "cta_view": "Im Spiel ansehen",
+            "cta_create": "Erstellen Sie Ihren eigenen"
+        }
     }
 }

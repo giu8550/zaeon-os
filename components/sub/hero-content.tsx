@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { ChatBubbleLeftRightIcon, PlayIcon, UserPlusIcon } from "@heroicons/react/24/outline";
@@ -210,11 +210,15 @@ export default function HeroPage() {
           )}
         </AnimatePresence>
 
-        {/* o ACEITE do game: o mini ecossistema de ideias e blueprints que já existe — e a chance de criar o seu */}
+        {/* o ACEITE: mais do que chat e abas abertas — aqui as ideias viram produtos finais (copy em landing.hero_tagline) */}
         {!showChatbox && (
           <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.45 }}
             className="mt-4 max-w-xl text-sm leading-relaxed text-slate-700 dark:text-white/70">
-            Um mini ecossistema de <span className="font-semibold text-cyan-700 dark:text-cyan-300">ideias e blueprints</span> já disponíveis no game — e a chance de você criar o seu.
+            <Trans
+              i18nKey="landing.hero_tagline"
+              defaults="Mais do que conversas com chats e abas abertas, aqui você constrói <hl>ideias que viram produtos finais</hl>."
+              components={{ hl: <span className="font-semibold text-cyan-700 dark:text-cyan-300" /> }}
+            />
           </motion.p>
         )}
 

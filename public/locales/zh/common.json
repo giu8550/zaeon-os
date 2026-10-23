@@ -25,7 +25,9 @@
         "student": "学生",
         "researcher": "研究员",
         "professional": "老师",
-        "entrepreneur": "企业家"
+        "entrepreneur": "企业家",
+        "professor": "教授",
+        "teacher": "教师"
     },
     "hints": {
         "new_game": "提示：从新的个人资料开始查看 Zaeon 技术。",
@@ -194,7 +196,9 @@
             "quantum_name": "量子场",
             "quantum_topic": "数学和物理",
             "global_name": "全球休息室",
-            "global_topic": "常识科"
+            "global_topic": "常识科",
+            "humanities_name": "人文学科",
+            "humanities_topic": "历史、社会学、人类学"
         }
     },
     "lounge_chat": {
@@ -342,5 +346,26 @@
         "session_label": "会话控制",
         "logout_action": "断开连接（注销）",
         "success_message": "凭证已更新"
+    },
+    "landing": {
+        "hero_tagline": "不只是和聊天机器人对话、开着一堆标签页——在这里，你打造<hl>能成为最终产品的想法</hl>。",
+        "knowledge_title": "把你的知识变成现实世界的资产。",
+        "flow": {
+            "ideas": "想法",
+            "projects": "项目",
+            "studies": "学习",
+            "research": "研究",
+            "companies": "企业",
+            "business": "商业",
+            "pair": "{{from}}变成{{to}}",
+            "summary": "想法变成项目，学习变成研究，企业变成商业。"
+        },
+        "blueprints": {
+            "title": "在这里，你的价值取决于你所创造的。",
+            "image_alt": "蓝图预览：{{title}}",
+            "tags": "标签",
+            "cta_view": "在游戏中查看",
+            "cta_create": "创建你自己的"
+        }
     }
 }

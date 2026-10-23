@@ -9,6 +9,7 @@ import ZaeonFlowDiagram from "./ZaeonFlowDiagram";
 import MentoresCarrossel from "./MentoresCarrossel";
 import SolanaPrivacidade from "./SolanaPrivacidade";
 import ChavesApi from "./ChavesApi";
+import BlueprintsShowcase from "./BlueprintsShowcase";
 import { TituloSecao } from "@/components/layout/secao";
 import MolecularText from "@/components/ui/MolecularText";
 
@@ -189,6 +190,7 @@ const ProcessFlowchart = () => {
 
 // --- COMPONENTE PRINCIPAL (PÁGINA) ---
 export default function Encryption() {
+    const { t } = useTranslation();
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -202,7 +204,7 @@ export default function Encryption() {
         <div className="w-full relative">
             <section id="como-funciona" className="relative z-[30] w-full bg-transparent pt-12 md:pt-16 pb-12 scroll-mt-28">
                 <div className="zaeon-borda">
-                    <TituloSecao className="font-display" forte="Transforme seu conhecimento em dinheiro." />
+                    <TituloSecao className="font-display" forte={t("landing.knowledge_title", "Transforme o seu conhecimento em um ativo do mundo real.")} />
 
                     {/* DIAGRAMA VIVO: entrada -> cerebro Zaeon -> saida.
                         O painel nao e enfeite: o ParticleSystem da landing corre
@@ -234,6 +236,9 @@ export default function Encryption() {
                 `sticky` daqui para dentro. */}
             {/* NO LUGAR dos agentes: a Solana cobrindo a digital — privacidade e credenciais (v4) */}
             <SolanaPrivacidade />
+
+            {/* BLUEPRINTS ("Aqui você vale o que você constrói.") ANTES dos agentes — some sozinha sem blueprint publicado */}
+            <BlueprintsShowcase />
 
             <div className="relative z-40 w-full overflow-x-clip flex flex-col items-center justify-center bg-transparent pt-10">
                 <HireAgentsSection />
