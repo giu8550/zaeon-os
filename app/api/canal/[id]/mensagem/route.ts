@@ -12,10 +12,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { prisma, sessaoUsuario, exigirFlag, isObjectId, agentesDoCanal, pessoas } from "@/lib/canal/server";
-import { chamadasPeloNome, falaComPessoa } from "@/lib/canal/chamada";
+import { chamadasPeloNome, falaComPessoa, pedeOutraAgente } from "@/lib/canal/chamada";
 import { podeEscrever } from "@/lib/canal/gate";
 import { montarAliases, parseMentions } from "@/lib/canal/mention";
-import { resolverAlvos, estaForaDaConversa } from "@/lib/canal/alvo";
+import { resolverAlvos, estaForaDaConversa, agentesPorRecencia } from "@/lib/canal/alvo";
 import { humanosNoCanal } from "@/lib/canal/convite";
 import { EV_MENSAGEM, publicarPusher, type MensagemWire } from "@/lib/canal/realtime";
 import { dispararTurnos, depsReais } from "@/lib/canal/queue";
@@ -65,15 +65,21 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   // #551: conversa com outras pessoas e a mensagem fala COM uma delas ("tchau martinez, até amanhã") → sem @ nem
   // nome de agente, a agente da vez fica quieta (antes respondia o que era pra pessoa) e não é dispensada
   const comPessoa = resolvido.implicito && humanos > 1 && falaComPessoa(texto, gente.filter((p) => p.id !== u.id).map((p) => p.nome));
-  const alvos = comPessoa ? [] : resolvido.alvos;
+  const disponiveis = agentes.map((a) => a.agentKey);
+  // #560: da agente que falou por último pra trás, só quem não saiu ("vocês duas", "explica você")
+  const recencia = agentesPorRecencia(historico, disponiveis).filter((k) => !estaForaDaConversa(historico, k));
+  let alvos = comPessoa ? [] : resolvido.alvos;
+  // #560: "teo explicou mal, explica você" com o Téo da vez → responde a OUTRA agente da conversa (a última que falou)
+  const daVez = resolvido.implicito && alvos.length === 1 ? agentes.find((a) => a.agentKey === alvos[0]) : undefined;
+  const outra = daVez && pedeOutraAgente(texto, daVez) ? recencia.find((k) => k !== daVez.agentKey) : undefined;
+  if (outra) alvos = [outra];
 
   // #438: a mensagem dispensa a agente da vez? (decide antes de gravar, pra barra já sair certa)
   // #443: só sai a agente PRA QUEM foi a despedida ("a zenita pode sair, aura continua comigo" → só a Zenita)
   // #551: entre TODAS da conversa ("vocês duas podem ir"); despedida de quem nem estava é ignorada
-  const disponiveis = agentes.map((a) => a.agentKey);
   const naConversa = comPessoa ? [] : [...new Set([...(canal.agentes ?? []), ...(resolvido.implicito ? alvos : [])])]
     .filter((k) => disponiveis.includes(k) && !estaForaDaConversa(historico, k));
-  const { dispensadas, respondem, chamados } = saidasDaMensagem(texto, { alvos, naConversa, agentes, humanos });
+  const { dispensadas, respondem, chamados } = saidasDaMensagem(texto, { alvos, naConversa, agentes, humanos, recencia });
   // #440: chamada com @ depois de ter saído → entra a linha "Zenita voltou para a conversa"
   const voltando = chamadas.filter((k) => respondem.includes(k) && estaForaDaConversa(historico, k));
 

@@ -80,6 +80,13 @@ const PLURAL = /\b(?:podem|vao|voces|vcs|parem|estao|tao|dispensad[ao]s|todas|to
 // #551: o segundo nome mandado ficar ("teo sai e aura continua") — aí o " e " continua cortando a frase
 const VERBO_FICA = String.raw`(?:(?:pode|vai)\s+)?(?:continua|continue|continuar|fica|fique|ficar|permanece|permaneca|segue|siga|seguir)\b`;
 
+/** #560: quantas a despedida diz ("vocês duas" → 2, "os três" → 3); 0 = não diz (todas). */
+function quantas(s: string): number {
+  if (/\b(?:duas|dois|ambas|ambos)\b/.test(s)) return 2;
+  if (/\btres\b/.test(s)) return 3;
+  return 0;
+}
+
 /** #551: "@aura e @teo" → "@aura @teo" (o " e " entre dois nomes de agente não corta a frase). */
 function juntarNomes(texto: string, candidatas: readonly Candidata[]): string {
   const nomes = [...new Set(candidatas.flatMap((c) => [c.key, ...c.nomes]).map(semAcento).filter(Boolean))].map(esc);
@@ -123,7 +130,11 @@ function marcarNomes(pedaco: string, candidatas: readonly Candidata[]): { s: str
  * #551: `daVez` = quem ia responder. Com mais agentes entre as candidatas (as que estão na conversa), "pode ir"
  * sem nome tira a da vez; "vocês duas podem ir" tira todas.
  */
-export function quemFoiDispensada(texto: string, candidatas: readonly Candidata[], humanos: number, daVez: readonly string[] = []): string[] {
+export function quemFoiDispensada(
+  texto: string, candidatas: readonly Candidata[], humanos: number, daVez: readonly string[] = [],
+  /** #560: as agentes da conversa da que falou por último pra trás ("vocês duas" = as duas primeiras daqui). */
+  recencia: readonly string[] = [],
+): string[] {
   texto = separarMencoesColadas(texto); // #468: "@aura@teo pode sair" = "@aura @teo pode sair"
   if (!candidatas.length || !normalizar(texto)) return [];
   texto = juntarNomes(semAcento(texto), candidatas);
@@ -149,7 +160,13 @@ export function quemFoiDispensada(texto: string, candidatas: readonly Candidata[
     if (!alvo.length) {
       const daVezAqui = daVez.filter((k) => candidatas.some((c) => c.key === k));
       if (candidatas.length === 1) alvo = [candidatas[0]!.key];
-      else if (PLURAL.test(s)) alvo = candidatas.map((c) => c.key);
+      else if (PLURAL.test(s)) {
+        // #560: "vocês duas" / "os três" — só as N que falaram por último (antes saíam todas da conversa)
+        const n = quantas(s);
+        const keys = candidatas.map((c) => c.key);
+        const porRecencia = [...recencia.filter((k) => keys.includes(k)), ...keys.filter((k) => !recencia.includes(k))];
+        alvo = n ? porRecencia.slice(0, n) : keys;
+      }
       else if (daVezAqui.length === 1) alvo = daVezAqui;
     }
     // "tchau" (fraca) com outras pessoas na conversa: só vale se a mensagem falar com a agente
@@ -171,12 +188,14 @@ export function saidasDaMensagem(texto: string, e: {
   naConversa: readonly string[];
   agentes: readonly { agentKey: string; nome: string }[];
   humanos: number;
+  /** #560: da agente que falou por último pra trás (lib/canal/alvo agentesPorRecencia). */
+  recencia?: readonly string[];
 }): { dispensadas: string[]; ignoradas: string[]; respondem: string[]; chamados: string[] } {
   const candidatas = [...new Set([...e.alvos, ...e.naConversa])].map((k) => {
     const nome = e.agentes.find((a) => a.agentKey === k)?.nome ?? "";
     return { key: k, nomes: [nome, nome.split(/\s+/)[0] ?? ""] };
   });
-  const saem = quemFoiDispensada(texto, candidatas, e.humanos, e.alvos);
+  const saem = quemFoiDispensada(texto, candidatas, e.humanos, e.alvos, e.recencia ?? []);
   const dispensadas = saem.filter((k) => e.naConversa.includes(k));
   const ignoradas = saem.filter((k) => !dispensadas.includes(k));
   return {

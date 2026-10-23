@@ -1,6 +1,6 @@
 /** #466 · chamar uma agente pelo NOME, sem @ — só quando é chamado de verdade. */
 import { describe, it, expect } from "vitest";
-import { chamadasPeloNome, falaComPessoa } from "./chamada";
+import { chamadasPeloNome, falaComPessoa, pedeOutraAgente } from "./chamada";
 
 const AGENTES = [
   { agentKey: "aura", nome: "Aura" }, { agentKey: "teo", nome: "Téo" }, { agentKey: "zenita", nome: "Zenita" },
@@ -116,5 +116,15 @@ describe("chamar pelo nome · #560", () => {
     ["teo me explica isso", ["teo"]],
   ] as const)("obrigado não chama quando outra é chamada: %s", (t, esperado) => {
     expect(chama(t)).toEqual(esperado);
+  });
+});
+
+describe("'explica você' fala com outra agente · #560", () => {
+  const teo = { agentKey: "teo", nome: "Téo" };
+  it.each(["teo explicou mal, explica você", "teo me explicou mal, explica você", "o téo disse isso, vc concorda?"])("sim: %s", (t) => {
+    expect(pedeOutraAgente(t, teo)).toBe(true);
+  });
+  it.each(["explica de novo", "você pode explicar melhor?", "teo explicou bem"])("não: %s", (t) => {
+    expect(pedeOutraAgente(t, teo)).toBe(false);
   });
 });

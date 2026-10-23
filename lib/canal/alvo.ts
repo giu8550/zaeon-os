@@ -72,6 +72,20 @@ export function agenteDaVez(historico: readonly MsgResumo[], disponiveis: readon
   return null;
 }
 
+/**
+ * #560: as agentes na ordem em que falaram, da última pra trás (cada uma pela sua fala mais recente, ou pela linha
+ * "voltou"). Quem nunca falou fica de fora. Serve pra "vocês duas podem ir" (as duas últimas) e pra "explica você".
+ */
+export function agentesPorRecencia(historico: readonly MsgResumo[], disponiveis: readonly string[]): string[] {
+  const out: string[] = [];
+  for (let i = historico.length - 1; i >= 0; i--) {
+    const m = historico[i]!;
+    const fala = (m.autorTipo === "agente" && disponiveis.includes(m.autorId)) || voltouParaConversa(m, disponiveis);
+    if (fala && !out.includes(m.autorId)) out.push(m.autorId);
+  }
+  return out;
+}
+
 export function resolverAlvos(e: EntradaAlvo): SaidaAlvo {
   if (e.mencoes.length) return { alvos: [...e.mencoes], implicito: false };
 

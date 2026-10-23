@@ -276,3 +276,19 @@ describe("dispensa · #560 despedidas que faltavam", () => {
     expect(ehDispensa(t, sozinha)).toBe(false);
   });
 });
+
+describe("dispensa · #560 'vocês duas' tira só as duas últimas", () => {
+  const aura = { key: "aura", nomes: ["Aura"] }, zaeon = { key: "zaeon", nomes: ["Zaeon"] }, zen = { key: "zenita", nomes: ["Zenita"] };
+  // falaram por último: Zenita, depois Aura; a Zaeon está na barra mas falou antes
+  const recencia = ["zenita", "aura", "zaeon"];
+  it("'vocês duas podem sair' com três na conversa → só Zenita e Aura (o caso do print)", () => {
+    expect(quemFoiDispensada("vocês duas podem sair", [aura, zaeon, zen], 1, ["zenita"], recencia)).toEqual(["aura", "zenita"]);
+  });
+  it("'os três podem ir' → as três; 'vocês podem ir' (sem número) → todas", () => {
+    expect(quemFoiDispensada("vocês três podem ir", [aura, zaeon, zen], 1, ["zenita"], recencia)).toEqual(["aura", "zaeon", "zenita"]);
+    expect(quemFoiDispensada("vocês podem ir", [aura, zaeon, zen], 1, ["zenita"], recencia)).toEqual(["aura", "zaeon", "zenita"]);
+  });
+  it("quem nunca falou fica por último na conta", () => {
+    expect(quemFoiDispensada("as duas podem ir", [aura, zaeon, zen], 1, ["aura"], ["aura"])).toEqual(["aura", "zaeon"]);
+  });
+});

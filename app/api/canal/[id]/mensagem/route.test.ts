@@ -375,3 +375,26 @@ describe("POST /api/canal/[id]/mensagem · #551 falando com a outra pessoa, a ag
     expect(state.disparos.map((d) => d.agentKey)).toEqual(["aura"]);
   });
 });
+
+describe("POST /api/canal/[id]/mensagem · #560 'explica você' e 'vocês duas'", () => {
+  beforeEach(() => {
+    state.criadas = []; state.disparos = []; state.publicados = []; state.atualizacoes = [];
+    state.canal = { ...canal("privado"), membros: [], agentes: ["aura", "medicina"] }; state.user = user(A);
+    // a Aura falou, depois o Osler (o da vez)
+    state.historico = [{ autorTipo: "humano", autorId: A }, { autorTipo: "agente", autorId: "aura" }, { autorTipo: "humano", autorId: A }, { autorTipo: "agente", autorId: "medicina" }];
+  });
+  it("'osler me explicou mal, explica você' → responde a Aura, não o Osler", async () => {
+    await POST(req("osler me explicou mal, explica você"), { params: { id: CANAL } });
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["aura"]);
+  });
+  it("sem outra agente na conversa, o da vez responde mesmo", async () => {
+    state.historico = state.historico.slice(2);
+    state.canal = { ...state.canal, agentes: ["medicina"] };
+    await POST(req("osler explicou mal, explica você"), { params: { id: CANAL } });
+    expect(state.disparos.map((d) => d.agentKey)).toEqual(["medicina"]);
+  });
+  it("'vocês duas podem ir' com as duas → as duas saem", async () => {
+    const j = await (await POST(req("vocês duas podem ir"), { params: { id: CANAL } })).json();
+    expect([...j.dispensadas].sort()).toEqual(["aura", "medicina"]);
+  });
+});

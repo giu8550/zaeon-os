@@ -102,6 +102,16 @@ export function falaComPessoa(texto: string, outrasPessoas: readonly string[]): 
 }
 
 /**
+ * #560: a mensagem fala DA agente da vez (o nome dela, sem chamar) e pede a "você"? ("teo explicou mal, explica
+ * você", "o teo disse X, você concorda?") — o "você" é OUTRA agente; a da vez não responde a crítica a ela mesma.
+ */
+export function pedeOutraAgente(texto: string, daVez: AgenteChamavel): boolean {
+  const toks = palavras(texto);
+  const nomes = [daVez.agentKey, daVez.nome, daVez.nome.split(/\s+/)[0] ?? ""].map(semAcento).filter(Boolean);
+  return toks.some((t) => nomes.includes(t.w)) && toks.some((t) => ["voce", "vc", "tu", "ce"].includes(t.w));
+}
+
+/**
  * As agentes chamadas pelo NOME nesta mensagem (sem @). `pessoas` = primeiros nomes das pessoas do canal (quem
  * tem o mesmo nome de uma agente não conta como chamar a agente). Mensagem com @ não passa por aqui (o @ manda).
  */
