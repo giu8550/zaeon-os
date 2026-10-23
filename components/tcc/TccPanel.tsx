@@ -31,6 +31,7 @@ import {
 } from "@/lib/tcc/pagina";
 import { EVT_TCC_MUDOU, ROTULO_OP, ROTULO_ORIGEM, avisarTccMudou, tccApi, type Revisao, type TccDoc } from "@/lib/tcc/client";
 import { chatUnicoOn } from "@/lib/chat/chatUnico";
+import { conteudoSemLatex } from "@/lib/tcc/latexTexto";
 
 type Aba = "doc" | "sugestoes" | "historico";
 const CHAT_UNICO = chatUnicoOn();
@@ -93,16 +94,47 @@ export default function TccPanel({ workId, onFechar, onTitulo }: {
   useEffect(() => { if (aba === "historico") void carregarHistorico(); }, [aba, carregarHistorico]);
   useEffect(() => { if (!mudou.size) return; const t = setTimeout(() => setMudou(new Set()), 2500); return () => clearTimeout(t); }, [mudou]);
 
-  const salvarSecao = async () => {
-    if (!editando) return;
+  const falhaAoSalvar = (e: any) => setErro(e?.status === 409 ? "Outra tela salvou ao mesmo tempo — tente de novo." : e?.status === 403 ? "Você só pode ler este trabalho." : "Não deu pra salvar.");
+  /** Salva a seção em edição (texto e, se veio, o título). true = salvou (ou nada a salvar). */
+  const salvarSecao = async (): Promise<boolean> => {
+    if (!editando) return true;
+    const atual = tcc?.secoes.find((x) => x.id === editando.id);
+    if (atual && atual.corpo === editando.corpo) { setEditando(null); return true; } // nada mudou: só fecha
     setSalvando(true);
     try {
       const r = await tccApi.editar(workId, { secaoId: editando.id, op: "substituir", corpo: editando.corpo, origem: "aluno" });
       corposRef.current = new Map(r.tcc.secoes.map((s) => [s.id, s.corpo]));
       setTcc(r.tcc); setEditando(null); avisarTccMudou(workId);
-    } catch (e: any) {
-      setErro(e?.status === 409 ? "Outra tela salvou ao mesmo tempo — tente de novo." : e?.status === 403 ? "Você só pode ler este trabalho." : "Não deu pra salvar.");
-    } finally { setSalvando(false); }
+      return true;
+    } catch (e: any) { falhaAoSalvar(e); return false; } finally { setSalvando(false); }
+  };
+  /** Clicar noutra seção com uma aberta: salva a aberta e abre a nova (como no Word, sem botão no meio). */
+  const abrirSecao = async (id: string, corpo: string) => {
+    if (editando?.id === id) return;
+    if (editando && !(await salvarSecao())) return;
+    setEditando({ id, corpo }); setEstilo("normal");
+  };
+  /** Renomear uma seção (o título na folha): mesma seção, mesmo id — vai como substituir com o corpo de agora. */
+  const renomearSecao = async (id: string, titulo: string) => {
+    const s0 = tcc?.secoes.find((x) => x.id === id);
+    const t = titulo.replace(/\s+/g, " ").trim();
+    if (!s0 || !t || t === s0.titulo) return;
+    const corpo = editando?.id === id ? editando.corpo : s0.corpo;
+    try {
+      const r = await tccApi.editar(workId, { secaoId: id, op: "substituir", titulo: t, corpo, origem: "aluno" });
+      corposRef.current = new Map(r.tcc.secoes.map((s) => [s.id, s.corpo]));
+      setTcc(r.tcc); avisarTccMudou(workId);
+    } catch (e: any) { falhaAoSalvar(e); }
+  };
+  /** Renomear o trabalho (o título da folha). */
+  const renomearTrabalho = async (titulo: string) => {
+    const t = titulo.replace(/\s+/g, " ").trim();
+    if (!tcc || !t || t === tcc.titulo) return;
+    try {
+      const r = await tccApi.renomear(workId, t);
+      setTcc(r.tcc); avisarTccMudou(workId);
+      onTituloRef.current?.({ titulo: r.tcc.titulo, tipo: r.tcc.workType || "TCC", status: r.tcc.status });
+    } catch (e: any) { falhaAoSalvar(e); }
   };
 
   const novaSecao = async () => {
@@ -135,10 +167,11 @@ export default function TccPanel({ workId, onFechar, onTitulo }: {
       const r = await fetch("/api/documents/abnt-export", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: tcc.titulo, content: tcc.content, workType: tipo, citations: [],
+          // fórmulas/reações em texto legível (o motor escreve texto; LaTeX cru sairia no Word): lib/tcc/latexTexto
+          title: tcc.titulo, content: conteudoSemLatex(tcc.content), workType: tipo, citations: [],
           author: session?.user?.name || "Autor", institution: "", course: (session?.user as any)?.course || "",
           city: "", year: String(new Date().getFullYear()), format: "docx",
-          parsedSections: parseAbntMarkers(tcc.content) ?? undefined, researchWorkId: tcc.id,
+          parsedSections: parseAbntMarkers(conteudoSemLatex(tcc.content)) ?? undefined, researchWorkId: tcc.id,
         }),
       });
       if (!r.ok) {
@@ -188,43 +221,36 @@ export default function TccPanel({ workId, onFechar, onTitulo }: {
       aria-label={`${tipo} desta conversa`}
       className="h-full w-full flex flex-col bg-[#e9ebee] dark:bg-[#15171c] text-slate-900 dark:text-white border-l border-slate-300 dark:border-white/10"
     >
-      {/* ── BARRA DE TÍTULO (como a do Word): ícone, nome do documento, status e as ações ── */}
-      <header className="shrink-0 flex items-center gap-2 px-3 h-11 bg-[#2b579a] text-white">
-        <FileText size={17} aria-hidden className="shrink-0 opacity-90" />
-        <div className="min-w-0 flex-1 flex items-baseline gap-2">
-          <h2 className="truncate text-[13.5px] font-semibold" title={tcc?.titulo}>{tcc?.titulo ?? "Carregando…"}</h2>
-          <span className="shrink-0 text-[11px] text-white/70">{tipo} · ABNT</span>
-          <span className="shrink-0 text-[11px] text-white/70" aria-live="polite">
-            {gerando ? <span className="inline-flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> A Aura está escrevendo…</span>
-              : tcc?.status === "erro" ? "a geração parou — peça no chat pra continuar"
-              : salvando ? "Salvando…" : tcc ? "Salvo" : ""}
-          </span>
+      {/* ── FAIXA DE ABAS (uma linha só, sem a barra azul): o TIPO do trabalho, as abas, Exportar e fechar ── */}
+      <nav className="shrink-0 flex items-center gap-1 px-2 h-10 bg-[#f3f3f3] dark:bg-[#1b1d22] border-b border-slate-300 dark:border-white/10">
+        <span className="shrink-0 mr-1.5 inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full text-[11px] font-bold bg-[#2b579a]/10 text-[#2b579a] dark:bg-white/10 dark:text-white/85" title={gerando ? "A Aura está escrevendo este trabalho" : tipo}>
+          {gerando ? <Loader2 size={11} className="animate-spin" aria-label="escrevendo" /> : <FileText size={11} aria-hidden />}{tipo}
+        </span>
+        <div role="tablist" className="flex items-center gap-0.5">
+          {([["doc", "Página inicial"], ["sugestoes", "Sugestões"], ["historico", "Histórico"]] as [Aba, string][]).map(([id, rotulo]) => (
+            <button key={id} type="button" role="tab" aria-selected={aba === id} onClick={() => setAba(id)}
+              className={`h-8 px-3 text-[12px] border-b-2 transition-colors ${aba === id ? "border-[#2b579a] text-[#2b579a] dark:border-white dark:text-white font-semibold" : "border-transparent text-slate-600 dark:text-white/60 hover:text-slate-900 dark:hover:text-white"}`}>
+              {rotulo}{id === "sugestoes" && sugestoes.length ? <span className="ml-1.5 px-1.5 rounded-full text-[10px] bg-amber-400 text-black">{sugestoes.length}</span> : null}
+            </button>
+          ))}
         </div>
+        <span className="flex-1" />
         <button type="button" onClick={exportar} disabled={!tcc || exportando} title="Exportar no padrão ABNT (.docx)" aria-label="Exportar no padrão ABNT"
-          className="h-8 px-3 rounded-md inline-flex items-center gap-1.5 text-[12px] font-semibold bg-white/15 hover:bg-white/25 disabled:opacity-40">
-          {exportando ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Exportar ABNT
+          className="shrink-0 h-8 px-3 rounded-md inline-flex items-center gap-1.5 text-[12px] font-semibold text-white bg-[#2b579a] hover:bg-[#244a85] disabled:opacity-40">
+          {exportando ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Exportar
         </button>
         {!CHAT_UNICO && (
           <Link href={`/research-lab?work=${workId}`} title="Lapidar com rigor na Sala de Pesquisa" aria-label="Abrir na Sala de Pesquisa"
-            className="h-8 w-8 rounded-md inline-flex items-center justify-center hover:bg-white/15">
+            className="shrink-0 h-8 w-8 rounded-md inline-flex items-center justify-center text-slate-600 dark:text-white/70 hover:bg-slate-200 dark:hover:bg-white/10">
             <FlaskConical size={16} />
           </Link>
         )}
-        <button type="button" onClick={onFechar} aria-label="Fechar o trabalho e voltar à conversa"
-          className="h-8 w-8 rounded-md inline-flex items-center justify-center hover:bg-white/15">
+        <button type="button" onClick={onFechar} aria-label="Fechar o trabalho e voltar à conversa" title="Fechar"
+          className="shrink-0 h-8 w-8 rounded-md inline-flex items-center justify-center text-slate-600 dark:text-white/70 hover:bg-slate-200 dark:hover:bg-white/10">
           <X size={18} />
         </button>
-      </header>
-
-      {/* ── FAIXA DE ABAS ── */}
-      <nav role="tablist" className="shrink-0 flex gap-0.5 px-2 bg-[#2b579a] text-white/85">
-        {([["doc", "Página inicial"], ["sugestoes", "Sugestões"], ["historico", "Histórico"]] as [Aba, string][]).map(([id, rotulo]) => (
-          <button key={id} type="button" role="tab" aria-selected={aba === id} onClick={() => setAba(id)}
-            className={`h-8 px-3 text-[12px] rounded-t-md transition-colors ${aba === id ? "bg-[#f8f9fa] dark:bg-[#23262d] text-[#2b579a] dark:text-white font-semibold" : "hover:bg-white/10"}`}>
-            {rotulo}{id === "sugestoes" && sugestoes.length ? <span className="ml-1.5 px-1.5 rounded-full text-[10px] bg-amber-400 text-black">{sugestoes.length}</span> : null}
-          </button>
-        ))}
       </nav>
+      {tcc?.status === "erro" && <p className="shrink-0 px-4 py-1.5 text-[12px] text-amber-800 bg-amber-50 dark:text-amber-200 dark:bg-amber-500/10">A geração parou no meio — peça no chat pra continuar.</p>}
 
       {/* ── BARRA DE FORMATAÇÃO (Página inicial) ── */}
       {aba === "doc" && (
@@ -282,7 +308,11 @@ export default function TccPanel({ workId, onFechar, onTitulo }: {
                 lineHeight: 1.5,
               }}
             >
-              <p style={{ textAlign: "center", fontWeight: 700, textTransform: "uppercase", margin: `0 0 ${cqw(1)}` }}>{tcc.titulo}</p>
+              <TituloEditavel
+                valor={tcc.titulo} podeEditar={!!podeEscrever} rotulo="Título do trabalho"
+                estilo={{ textAlign: "center", fontWeight: 700, textTransform: "uppercase", margin: `0 0 ${cqw(1)}` }}
+                onSalvar={renomearTrabalho}
+              />
               {tcc.papel === "leitor" && <p className="font-sans text-[11px] text-slate-500 mb-2">Você está lendo este trabalho (sem edição).</p>}
               {pagina.map((s) => (
                 <SecaoNaFolha
@@ -294,7 +324,8 @@ export default function TccPanel({ workId, onFechar, onTitulo }: {
                   onVerSugestoes={() => setAba("sugestoes")}
                   podeEscrever={!!podeEscrever}
                   editando={editando?.id === s.id ? editando.corpo : null}
-                  onEditar={() => { if (!editando) { setEditando({ id: s.id, corpo: s.corpo }); setEstilo("normal"); } }}
+                  onEditar={() => void abrirSecao(s.id, s.corpo)}
+                  onRenomear={(t) => void renomearSecao(s.id, t)}
                   onMudar={(corpo) => setEditando({ id: s.id, corpo })}
                   onSalvar={salvarSecao}
                   onCancelar={() => setEditando(null)}
@@ -397,9 +428,9 @@ function Regua() {
 }
 
 /** Uma seção na folha: título ABNT + o corpo como o motor desenha; clicar edita ali mesmo (texto em Times, sem sair da folha). */
-function SecaoNaFolha({ s, realce, gerando, pendentes, onVerSugestoes, podeEscrever, editando, onEditar, onMudar, onSalvar, onCancelar, salvando, areaRef, onCursor, onAtalho }: {
+function SecaoNaFolha({ s, realce, gerando, pendentes, onVerSugestoes, podeEscrever, editando, onEditar, onRenomear, onMudar, onSalvar, onCancelar, salvando, areaRef, onCursor, onAtalho }: {
   s: SecaoPagina; realce: boolean; gerando: boolean; pendentes: number; onVerSugestoes: () => void;
-  podeEscrever: boolean; editando: string | null; onEditar: () => void; onMudar: (corpo: string) => void;
+  podeEscrever: boolean; editando: string | null; onEditar: () => void; onRenomear: (titulo: string) => void; onMudar: (corpo: string) => void;
   onSalvar: () => void; onCancelar: () => void; salvando: boolean;
   areaRef: React.MutableRefObject<HTMLTextAreaElement | null>; onCursor: () => void; onAtalho: (m: "**" | "*") => void;
 }) {
@@ -412,7 +443,10 @@ function SecaoNaFolha({ s, realce, gerando, pendentes, onVerSugestoes, podeEscre
   return (
     <section className={`relative rounded-[2px] transition-colors duration-700 ${realce ? "bg-sky-100" : ""}`}>
       <h2 style={{ ...titulo, textAlign: s.centralizada ? "center" : "left" }} className="flex items-center gap-2" >
-        <span className="flex-1" style={{ textAlign: s.centralizada ? "center" : "left" }}>{s.numero ? `${s.numero} ` : ""}{s.titulo}</span>
+        <span className="flex-1 flex items-baseline gap-[0.5em]" style={{ justifyContent: s.centralizada ? "center" : "flex-start" }}>
+          {s.numero && <span>{s.numero}</span>}
+          <TituloEditavel valor={s.titulo} podeEditar={podeEscrever} rotulo={`Título da seção ${s.titulo}`} estilo={{ textTransform: "uppercase" }} onSalvar={onRenomear} />
+        </span>
         {pendentes > 0 && (
           <button type="button" onClick={onVerSugestoes} className="font-sans normal-case text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">
             {pendentes} sugestão{pendentes > 1 ? "ões" : ""}
@@ -474,5 +508,39 @@ function SecaoNaFolha({ s, realce, gerando, pendentes, onVerSugestoes, podeEscre
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * Um título da folha que se edita ali mesmo (como no Word): clique → vira campo com a mesma letra; Enter ou
+ * clicar fora salva, Esc desiste. Sem permissão de escrita, é só texto.
+ */
+function TituloEditavel({ valor, podeEditar, rotulo, estilo, onSalvar }: {
+  valor: string; podeEditar: boolean; rotulo: string; estilo?: React.CSSProperties; onSalvar: (t: string) => void;
+}) {
+  const [editando, setEditando] = useState<string | null>(null);
+  const salvar = () => { if (editando !== null) { const t = editando.trim(); setEditando(null); if (t && t !== valor) onSalvar(t); } };
+  if (!podeEditar) return <span style={estilo}>{valor}</span>;
+  if (editando !== null) {
+    return (
+      <input
+        autoFocus value={editando} aria-label={rotulo}
+        onChange={(e) => setEditando(e.target.value)}
+        onBlur={salvar}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); salvar(); } if (e.key === "Escape") { e.preventDefault(); setEditando(null); } }}
+        onFocus={(e) => e.currentTarget.select()}
+        className="min-w-0 w-full bg-[#fbfdff] outline outline-2 outline-[#2b579a]/50 px-1"
+        style={{ ...estilo, font: "inherit", fontWeight: "inherit", textAlign: (estilo?.textAlign as any) ?? "inherit", display: "block" }}
+      />
+    );
+  }
+  return (
+    <span
+      role="button" tabIndex={0} title="Clique para editar o título" aria-label={`${rotulo} — clique para editar`}
+      onClick={(e) => { e.stopPropagation(); setEditando(valor); }}
+      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setEditando(valor); } }}
+      className="cursor-text rounded-[2px] hover:bg-slate-50 hover:outline hover:outline-1 hover:outline-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#2b579a]/50"
+      style={{ ...estilo, display: estilo?.textAlign ? "block" : undefined }}
+    >{valor}</span>
   );
 }

@@ -131,6 +131,13 @@ describe("GET /api/tcc/:id", () => {
 });
 
 describe("POST /api/tcc/:id/edit", () => {
+  it("{ tituloDoc } renomeia o trabalho (sem op, sem seção); vazio = 400", async () => {
+    m.aplicar.mockResolvedValue({ ok: true, tcc: tcc({ titulo: "Novo nome" }), efeitos: [] });
+    const r = await EDIT(req("/api/tcc/w1/edit", { tituloDoc: "  Novo   nome " }, "POST"), P);
+    expect(r.status).toBe(200);
+    expect(m.aplicar.mock.calls[0].slice(1)).toEqual(["u1", [], "aluno", { titulo: "Novo nome" }]);
+    expect((await EDIT(req("/api/tcc/w1/edit", { tituloDoc: "  " }, "POST"), P)).status).toBe(400);
+  });
   it("op inválida / corpo vazio = 400", async () => {
     expect((await EDIT(req("/api/tcc/w1/edit", { op: "apagar_tudo" }, "POST"), P)).status).toBe(400);
     expect((await EDIT(new Request("http://x/api/tcc/w1/edit", { method: "POST", body: "lixo" }), P)).status).toBe(400);

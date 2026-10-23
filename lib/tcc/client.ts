@@ -38,6 +38,8 @@ export const tccApi = {
   ler: (id: string) => fetch(`/api/tcc/${id}`).then((r) => json<{ tcc: TccDoc; sugestoes: Revisao[] }>(r)),
   editar: (id: string, body: { secaoId?: string; op: string; corpo?: string; titulo?: string; aposId?: string; origem?: string }) =>
     post(`/api/tcc/${id}/edit`, body).then((r) => json<{ tcc: TccDoc }>(r)),
+  /** renomeia o trabalho inteiro (o título da folha) */
+  renomear: (id: string, titulo: string) => post(`/api/tcc/${id}/edit`, { tituloDoc: titulo }).then((r) => json<{ tcc: TccDoc }>(r)),
   decidir: (id: string, revId: string, aceitar: boolean) =>
     post(`/api/tcc/${id}/suggestion/${revId}`, { aceitar }).then((r) => json<{ tcc: TccDoc; revisao: Revisao }>(r)),
   historico: (id: string) => fetch(`/api/tcc/${id}/history`).then((r) => json<{ revisoes: Revisao[] }>(r)),
