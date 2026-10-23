@@ -38,6 +38,8 @@ import { LinhaSistema, AvisoDigitando } from "./Presenca";
 import AgendaBandeja from "./AgendaBandeja";
 import { VIDRO_PAINEL, VIDRO_BOLHA, VIDRO_BOLHA_MINHA, VIDRO_INPUT, VIDRO_POPOVER, VIDRO_CHIP, TXT, TXT_2, TXT_MUDO, TOQUE } from "@/lib/canal/vidro";
 import { useNotificacoesSO } from "./useNotificacoesSO";
+import { enviarLote, type EstadoEnvio } from "@/lib/chat/enviarBase";
+import { mensagemComAnexos, separarArquivos } from "@/lib/canal/anexos";
 
 type Canal = { id: string; titulo: string; acesso: string; ownerId: string; membros: string[]; agentes: string[]; cartolinaId: string | null; souDono: boolean; dmCom?: string | null };
 type Convites = { recebidos: ConviteVista[]; enviados: ConviteVista[]; contatos: ConviteVista[]; historico: HistoricoSino[]; sino: EstadoSino };
@@ -72,6 +74,29 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   }, [digitando.length]);
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
+  // 📎 ANEXOS (como no chat): o PDF sobe pra "Minha base" e a mensagem leva "📎 nome.pdf" — o agente lê pela base.
+  const [anexos, setAnexos] = useState<{ chave: string; nome: string; estado: EstadoEnvio }[]>([]);
+  const [arrastandoArquivo, setArrastandoArquivo] = useState(false);
+  const arquivoRef = useRef<HTMLInputElement>(null);
+  const subindo = anexos.some((a) => a.estado === "na_fila" || a.estado === "enviando");
+  const anexar = useCallback(async (lista: File[]) => {
+    const { pdfs, recusados } = separarArquivos(lista);
+    if (recusados.length) setErro(`Por aqui vai PDF: ${recusados.map((f) => f.name).join(", ")} ficou de fora.`);
+    if (!pdfs.length) return;
+    const base = Date.now();
+    const novos = pdfs.map((f, i) => ({ chave: `${base}-${i}-${f.name}`, nome: f.name, estado: "na_fila" as EstadoEnvio }));
+    setAnexos((xs) => [...xs, ...novos]);
+    const r = await enviarLote(pdfs, {
+      aoMudar: (i, estado) => setAnexos((xs) => xs.map((a) => (a.chave === novos[i].chave ? { ...a, estado } : a))),
+    });
+    if (r === "nao_logado") {
+      setAnexos((xs) => xs.filter((a) => !novos.some((n) => n.chave === a.chave)));
+      setErro("Entre na sua conta para anexar arquivos.");
+    } else if (r.some((x) => x?.status === "erro")) {
+      setErro("Um dos arquivos não subiu (grande demais ou a base está fora do ar). Os outros seguem.");
+    }
+    inputRef.current?.focus();
+  }, []);
   const [menu, setMenu] = useState<"canais" | "convidar" | "sino" | `pessoa:${string}` | null>(null); // #425: "pessoa:<id>" = menu da foto
   // #396 (D): abas do seletor (dividem o espaço, não misturam) + convites da aba Privado
   const [aba, setAba] = useState<Aba>("turma");
@@ -384,8 +409,9 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
 
   // ─── enviar ───
   const enviar = useCallback(async () => {
-    const t = texto.trim();
-    if (!t || !ativoId || enviando) return;
+    const guardados = anexos.filter((a) => a.estado === "guardado").map((a) => a.nome);
+    const t = mensagemComAnexos(texto, guardados);
+    if (!t || !ativoId || enviando || subindo) return;
     setEnviando(true);
     try {
       void pedirPermissao(); // 1ª vez: gesto do usuário → pode pedir
@@ -404,6 +430,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       }
       setDet((d) => (d && !d.mensagens.some((x) => x.id === m.id) ? { ...d, mensagens: [...d.mensagens, m] } : d));
       setTexto("");
+      setAnexos([]);
       ultimoAvisoDigitando.current = null; // a próxima mensagem volta a avisar na primeira tecla
       setErro(null);
       // agentes na barra: os chamados entram, a dispensada sai (#440 — o servidor manda a lista final)
@@ -419,7 +446,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       setEnviando(false);
       inputRef.current?.focus();
     }
-  }, [texto, ativoId, enviando, pedirPermissao]);
+  }, [texto, anexos, subindo, ativoId, enviando, pedirPermissao]);
 
   const aoTeclar = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (aberta && sugestoes.length) {
@@ -695,7 +722,12 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
         </div>
 
         {/* input (fixo, safe-area) */}
-        <div className={`relative px-2 sm:px-3 pt-2 pb-[max(8px,env(safe-area-inset-bottom))] ${VIDRO_INPUT}`}>
+        <div
+          className={`relative px-2 sm:px-3 pt-2 pb-[max(8px,env(safe-area-inset-bottom))] ${VIDRO_INPUT} ${arrastandoArquivo ? "ring-2 ring-blue-400/60 dark:ring-cyan-300/50" : ""}`}
+          onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setArrastandoArquivo(true); } }}
+          onDragLeave={() => setArrastandoArquivo(false)}
+          onDrop={(e) => { if (!e.dataTransfer.files?.length) return; e.preventDefault(); setArrastandoArquivo(false); void anexar([...e.dataTransfer.files]); }}
+        >
           {aberta && sugestoes.length > 0 && (
             <div role="listbox" className={`absolute left-3 bottom-full mb-1.5 z-30 w-[min(92vw,300px)] p-1.5 rounded-2xl ${VIDRO_POPOVER}`}>
               {sugestoes.map((a, i) => (
@@ -709,7 +741,26 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
           )}
           {/* agentes convocáveis: presentes no canal + os meus contratados (toque = @) — #443: componente próprio */}
           <BarraAgentes agentes={agentes} naConversa={canal.agentes} digitando={digitando} estado={estadoAgente} onChamar={prefixarAgente} />
+          {anexos.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pb-2" aria-label="Arquivos anexados">
+              {anexos.map((a) => (
+                <span key={a.chave} className={`inline-flex items-center gap-1.5 pl-2.5 pr-1 h-7 rounded-full text-[12px] ${VIDRO_CHIP} ${a.estado === "erro" ? "text-rose-600 dark:text-rose-300" : TXT_2}`}>
+                  <span aria-hidden>{a.estado === "guardado" ? "📎" : a.estado === "erro" ? "⚠️" : "⏳"}</span>
+                  <span className="max-w-[180px] truncate" title={a.nome}>{a.nome}</span>
+                  <span className={`text-[10.5px] ${TXT_MUDO}`}>{a.estado === "guardado" ? "pronto" : a.estado === "erro" ? "falhou" : "subindo…"}</span>
+                  <button type="button" aria-label={`Tirar ${a.nome}`} onClick={() => setAnexos((xs) => xs.filter((x) => x.chave !== a.chave))}
+                    className="grid place-items-center w-5 h-5 rounded-full hover:bg-slate-500/15">×</button>
+                </span>
+              ))}
+            </div>
+          )}
           <div className="flex items-end gap-2">
+            <input ref={arquivoRef} type="file" accept="application/pdf,.pdf" multiple className="hidden"
+              onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ""; if (f.length) void anexar(f); }} />
+            <button type="button" onClick={() => arquivoRef.current?.click()} aria-label="Anexar arquivo (PDF)" title="Anexar PDF — o agente lê e responde sobre ele"
+              className={`${TOQUE} shrink-0 rounded-2xl text-[18px] ${TXT_2} hover:bg-slate-500/10 dark:hover:bg-white/10`}>
+              📎
+            </button>
             <textarea
               ref={inputRef}
               value={texto}
@@ -723,7 +774,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
               className={`flex-1 min-h-[44px] max-h-[140px] px-4 py-3 rounded-2xl resize-none text-[14px] leading-5 bg-white/70 dark:bg-white/[0.06] border border-white/70 dark:border-white/10 ${TXT} placeholder:text-slate-400 dark:placeholder:text-white/35 outline-none focus:border-blue-400/70 dark:focus:border-cyan-300/50`}
               style={{ height: Math.min(140, 24 + 20 * Math.max(1, texto.split("\n").length)) }}
             />
-            <button type="button" onClick={() => void enviar()} disabled={!texto.trim() || enviando} aria-label="Enviar"
+            <button type="button" onClick={() => void enviar()} disabled={(!texto.trim() && !anexos.some((a) => a.estado === "guardado")) || enviando || subindo} aria-label="Enviar"
               className={`${TOQUE} rounded-2xl text-[15px] font-black transition-all disabled:opacity-40 bg-blue-600 text-white dark:bg-cyan-400 dark:text-slate-900 shadow-[0_8px_24px_-8px_rgba(37,99,235,0.6)] dark:shadow-[0_8px_24px_-8px_rgba(34,211,238,0.5)] hover:scale-[1.03] active:scale-95`}>
               ↑
             </button>

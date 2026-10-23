@@ -177,8 +177,16 @@ const gerarComHarness: Gerar = async ({ agente, objective, history, canal, userI
   };
   // C5/C6: o turno do canal é o ÚNICO opt-in ao gateway nesta fatia (e só com GATEWAY_URL); o ledger
   // leva agentKey/surface/scopeId e cada fase (plan/reason/draft) grava sua linha.
+  // BASE DE CONHECIMENTO (RAG, o mesmo do chat): a da turma + a pessoal de quem pediu (os PDFs que ela anexou
+  // pelo 📎 do Escritório sobem pra "Minha base") + a da área do mentor. Nunca derruba o turno (null = sem base).
+  const baseConhecimento = await import("@/lib/rag/turno")
+    .then(async (m) => m.baseParaTurno({
+      userId: userId ?? null, pergunta: objective,
+      areas: (await import("@/lib/rag/areas")).areasDoTurno(agente.tipo === "mentor" ? agente.agentKey : undefined),
+    }))
+    .catch(() => null);
   const deps = buildHarnessDeps(hctx, {
-    systemContext, history, transformarSystem,
+    systemContext, history, transformarSystem, baseConhecimento,
     // o harness já emite cada fase em step.detail; aqui só repassamos pro estado visível no canal
     onStep: (s) => onFase?.(String(s?.detail ?? "")),
     rota: gatewayLigado() ? "gateway" : "vertex",
