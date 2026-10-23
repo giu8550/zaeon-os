@@ -25,6 +25,7 @@ import { surfaceLedger } from "@/lib/llm/ledger";
 import { runTrajectoryTraced } from "@/lib/agent/trajectory";
 import * as mem from "@/lib/agent/memory-provider";
 import { serializarProgresso, serializarModelo } from "@/lib/agent/progresso";
+import { blocoFonteColada, objetivoComFonte, pedidoParaTitulo, separarFonteColada } from "@/lib/agent/fonteColada";
 import { modeloDoId, nomeDoModeloServido } from "@/lib/chat/modelos";
 import { markRunning, saveDone, saveError } from "@/lib/agent/chat-turn-store";
 import type { Wing } from "@/lib/agent/memory";
@@ -52,6 +53,10 @@ export async function runChatTurn(
 ): Promise<HarnessOutput> {
   const { userId, surface, mentor } = params;
   const prompt = String(params.prompt || "");
+  // "escreva um artigo com base neste: <artigo colado>": o PEDIDO (curto) é o objetivo do turno — roteador, buscas,
+  // título; o texto colado vira bloco de contexto (lib/agent/fonteColada). Sem texto colado, tudo igual a antes.
+  const colada = separarFonteColada(prompt);
+  const objetivo = colada.fonte ? objetivoComFonte(colada) : prompt;
   // Tudo que o turno narrou até aqui — vai junto com a resposta pro banco, pra quem
   // reengatar depois ver as mesmas fases que quem ficou na sala viu.
   let narrado = "";
@@ -67,7 +72,7 @@ export async function runChatTurn(
     // rejeita, mas se rejeitar (ou o import falhar) loga e vira null — a base nunca derruba o turno.
     const basePromise = import("@/lib/rag/turno")
       // + as bases por área (lib/rag/areas): a do mentor ativo e a geral (ENEM, conceitos)
-      .then(async (m) => m.baseParaTurno({ userId, pergunta: prompt, areas: (await import("@/lib/rag/areas")).areasDoTurno(mentor?.slug) }))
+      .then(async (m) => m.baseParaTurno({ userId, pergunta: objetivo, areas: (await import("@/lib/rag/areas")).areasDoTurno(mentor?.slug) }))
       .catch((e) => {
         console.error("[rag/chat] base do turno falhou:", (e as Error)?.message ?? String(e));
         return null;
@@ -79,7 +84,7 @@ export async function runChatTurn(
       activeTab: surface || ac.activeTab || "sala-de-estudos", // academicMode vem daqui (pesquisa→enforced)
       plan: "free",     // memória/studio/research = free; gate de plano é só compute pesado (PR03)
       execMode: "auto", // HITL "guiado" entra no PR07
-      currentGoal: ac.currentGoal || prompt.slice(0, 200),
+      currentGoal: ac.currentGoal || objetivo.slice(0, 200),
       // Mentor ativo: andar de memória "<slug>/<userId>" (isola por mentor E por usuário).
       mentor: mentor?.slug,
       wing: mentor?.wing.label,
@@ -118,7 +123,7 @@ export async function runChatTurn(
     // Memória do estudo → agente (a "bússola"): o que já foi estudado nesta conversa e o que está
     // em aberto. Com MAP_HARNESS o grafo (cérebro) é a fonte; senão a cartolina. "" sem nada.
     const cartolina = await import("@/lib/map/memoria-turno");
-    const cartolinaBlock = await cartolina.bussolaParaTurno(userId, ac.cartolinaScopeId, prompt);
+    const cartolinaBlock = await cartolina.bussolaParaTurno(userId, ac.cartolinaScopeId, objetivo);
     // TCC cross-sala: se a conversa já tem TCC, a Aura sabe (e edita por seção). "" com TCC_CROSS
     // off / sem TCC. O scope é o mesmo da cartolina (a aba do chat).
     const tccMod = await import("@/lib/tcc/turno");
@@ -139,7 +144,7 @@ export async function runChatTurn(
     const deps = buildHarnessDeps(hctx, {
       modelo: escolhido?.provedor === "google" ? escolhido.vertex : undefined,
       onModelo(m) { if (!servido || servido.phase !== "draft" || m.phase === "draft") servido = m; },
-      systemContext: [params.systemContext, memBlock, cartolinaBlock, tccBlock, skillBlock].filter(Boolean).join("\n\n") || undefined,
+      systemContext: [params.systemContext, memBlock, cartolinaBlock, tccBlock, skillBlock, colada.fonte ? blocoFonteColada(colada.fonte) : ""].filter(Boolean).join("\n\n") || undefined,
       history: params.history,
       baseConhecimento: await basePromise,
       // C5: cada chamada do turno grava no TokenLedger com quem/onde (mentor em agentKey E mentorSlug, como o registrarUso).
@@ -153,12 +158,12 @@ export async function runChatTurn(
         narrar(serializarProgresso({ fase: String(step.detail ?? ""), rotulo }));
       },
     });
-    const { answer, state } = await runTrajectoryTraced(prompt, hctx, deps);
-    const out = resolveHarnessOutput(state, answer, surface, prompt, { trabalhoNoEditor: multi });
+    const { answer, state } = await runTrajectoryTraced(objetivo, hctx, deps);
+    const out = resolveHarnessOutput(state, answer, surface, objetivo, { trabalhoNoEditor: multi });
     // TCC cross-sala: "crie um TCC sobre X" cria o TCC da conversa; nos turnos seguintes
     // `work.sections` vira operação por seção. AGUARDADO (é só banco, sem modelo) porque o cliente
     // precisa do workId pra abrir a aba — e best-effort: null nunca derruba o turno.
-    const tcc = await tccMod.tccDoTurno({ userId, scopeId: ac.cartolinaScopeId, surface, intent: state.intent, kind: state.kind, prompt, answer, multi, abertoId: ac.trabalhoAbertoId });
+    const tcc = await tccMod.tccDoTurno({ userId, scopeId: ac.cartolinaScopeId, surface, intent: state.intent, kind: state.kind, prompt: colada.fonte ? pedidoParaTitulo(colada) : prompt, answer, multi, abertoId: ac.trabalhoAbertoId });
     // O texto das seções mora na ABA do TCC (e a Aura relê as seções pela bússola do TCC): a bolha
     // do chat leva só o núcleo + o aviso `tcc`, sem repetir o documento.
     if (tcc && out.mode === "structured") out.answer = { ...out.answer, work: undefined, tcc };

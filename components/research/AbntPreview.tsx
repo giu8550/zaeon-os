@@ -16,7 +16,9 @@ import { segmentarInline } from "@/lib/chat/matematica";
 import { trechosComEnfase } from "@/lib/tcc/pagina";
 
 const CM = 100 / 21; // 1 cm em cqw
-export const cqw = (cm: number) => `${(cm * CM).toFixed(3)}cqw`;
+/** Medida da folha em cm → CSS. A unidade é `--abnt-u` (padrão 1cqw = a folha escala com a largura). No CELULAR o
+ *  editor fixa a unidade em px ("modo celular", como o do Word): a letra fica legível e o texto reflui na tela. */
+export const cqw = (cm: number) => `calc(${(cm * CM).toFixed(3)} * var(--abnt-u, 1cqw))`;
 export const PT = 2.54 / 72; // 1 pt em cm
 
 /** **negrito** e *itálico* do editor (o motor faz o mesmo: lib/tcc/pagina `trechosComEnfase`) e as FÓRMULAS
@@ -58,7 +60,7 @@ export function Bloco({ texto, n }: { texto: string; n: number }) {
       <figure style={{ margin: `${cqw(12 * PT)} 0`, textAlign: "center" }}>
         <figcaption style={{ fontSize: cqw(10 * PT) }}>Figura {n} – {titulo?.trim() || "sem título"}</figcaption>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={m[2]} alt={titulo} style={{ maxWidth: cqw(15), margin: "0 auto", display: "block" }} />
+        <img src={m[2]} alt={titulo} style={{ maxWidth: `min(100%, ${cqw(15)})`, margin: "0 auto", display: "block" }} />
         <div style={{ fontSize: cqw(10 * PT) }}>Fonte: {fonte(src)}.</div>
       </figure>
     );

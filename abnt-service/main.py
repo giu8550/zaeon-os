@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from models import DocumentPayload
 from formatter import build_abnt_document
+from styles import STYLES, build_styled_document
 from pdf_converter import docx_bytes_to_pdf
 
 app = FastAPI(
@@ -36,11 +37,12 @@ def format_document(payload: DocumentPayload):
     Recebe DocumentPayload e retorna o arquivo formatado (.docx ou .pdf).
     """
     try:
-        docx_bytes = build_abnt_document(payload)
+        docx_bytes = build_styled_document(payload) if payload.style in STYLES else build_abnt_document(payload)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erro ao gerar documento: {str(e)}")
 
     filename_safe = payload.title.replace(" ", "_").replace("/", "-")[:60]
+    sufixo = (payload.style if payload.style in STYLES else "abnt").upper()
 
     if payload.format == "pdf":
         try:
@@ -52,7 +54,7 @@ def format_document(payload: DocumentPayload):
             content=pdf_bytes,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f'attachment; filename="{filename_safe}_ABNT.pdf"',
+                "Content-Disposition": f'attachment; filename="{filename_safe}_{sufixo}.pdf"',
                 "Content-Length": str(len(pdf_bytes)),
             },
         )
@@ -62,7 +64,7 @@ def format_document(payload: DocumentPayload):
         content=docx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename_safe}_ABNT.docx"',
+            "Content-Disposition": f'attachment; filename="{filename_safe}_{sufixo}.docx"',
             "Content-Length": str(len(docx_bytes)),
         },
     )

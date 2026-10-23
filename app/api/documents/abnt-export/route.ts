@@ -5,6 +5,7 @@ import { authOptions } from "@/src/lib/auth";
 import { VertexAI } from '@google-cloud/vertexai';
 import { prisma } from '@/src/lib/prisma';
 import { onWorkFinalized } from '@/lib/solana/hooks';
+import { ehEstilo, prepararParaNorma, type Estilo } from '@/lib/export/norma';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
@@ -33,6 +34,8 @@ interface ABNTExportRequest {
     city: string;
     year: string;
     format: 'pdf' | 'docx';
+    /** a NORMA: "abnt" (padrão, com capa) | "vancouver" | "apa" — lib/export/norma + abnt-service/styles.py */
+    style?: Estilo;
     fontChoice?: string;
     parsedSections?: Array<{
         type: string;
@@ -203,9 +206,13 @@ export async function POST(req: Request) {
             );
         }
 
-        if (!body.institution?.trim() || !body.city?.trim() || !body.year?.trim()) {
+        const estilo: Estilo = ehEstilo(body.style) ? body.style : 'abnt';
+        body.citations = Array.isArray(body.citations) ? body.citations : [];
+        if (!body.year?.trim()) body.year = String(new Date().getFullYear());
+        // Só a ABNT tem CAPA e folha de rosto com instituição e cidade (NBR 14724); Vancouver/APA não exigem.
+        if (estilo === 'abnt' && (!body.institution?.trim() || !body.city?.trim())) {
             return NextResponse.json(
-                { error: 'Metadados obrigatórios: instituição, cidade e ano.' },
+                { error: 'Para a ABNT, preencha instituição e cidade (vão na capa).', faltando: ['institution', 'city'].filter((k) => !(body as any)[k]?.trim()) },
                 { status: 400 }
             );
         }
@@ -292,8 +299,14 @@ export async function POST(req: Request) {
             }
         }
 
+        // Step 1.5: Vancouver/APA — chamadas no texto na forma da norma e referências em campos (a seção REFERÊNCIAS
+        // em texto ABNT sai do corpo; o serviço monta a lista na ordem/forma da norma)
+        const norma = prepararParaNorma(structured.sections, body.citations, estilo);
+        structured.sections = norma.sections;
+
         // Step 2: Build DocumentPayload for Python service
         const documentPayload = {
+            style: estilo,
             title: body.title || 'Trabalho Acadêmico',
             work_type: body.workType || 'Artigo',
             cover: {
@@ -309,7 +322,10 @@ export async function POST(req: Request) {
             abstract: structured.abstract || null,
             keywords: structured.keywords || [],
             sections: structured.sections,
-            references: body.citations.map((c) => ({
+            references: norma.references ? norma.references.map((r) => ({
+                text: r.text, authors: r.authors, title: r.title ?? null, year: r.year ?? null,
+                venue: r.venue ?? null, doi: r.doi ?? null, url: r.url ?? null,
+            })) : body.citations.map((c) => ({
                 text: c.text,
                 authors: c.authors || [],
                 title: c.title ?? null,
@@ -377,7 +393,7 @@ export async function POST(req: Request) {
             ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
             : 'application/pdf';
         const extension = isDocx ? 'docx' : 'pdf';
-        const filename = `${(body.title || 'documento').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '')}_ABNT.${extension}`;
+        const filename = `${(body.title || 'documento').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '')}_${estilo.toUpperCase()}.${extension}`;
 
         return new Response(fileBytes, {
             status: 200,

@@ -34,5 +34,6 @@ export function gravarEscala(a: Pick<Storage, "setItem"> | null | undefined, esc
   try { a?.setItem(CHAVE_ESCALA, String(normalizarEscala(escala))); } catch { /* sem L0: vale só nesta sessão */ }
 }
 
-/** Tamanho de fonte de um corpo de mensagem: `px` × escala, com piso de 14px. */
-export const fonteChat = (px: number) => `max(${MINIMO_PX}px, calc(${px}px * var(--chat-font-scale, 1)))`;
+/** Tamanho de fonte de um corpo de mensagem: `px` × escala × tela, com piso de 14px. `--chat-font-tela` é o ajuste do
+ *  CELULAR (app/globals.css: 0.78 até 767px) — os 22px do desktop ocupavam a tela do telefone com 3 palavras por linha. */
+export const fonteChat = (px: number) => `max(${MINIMO_PX}px, calc(${px}px * var(--chat-font-scale, 1) * var(--chat-font-tela, 1)))`;
