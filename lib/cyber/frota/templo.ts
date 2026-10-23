@@ -104,7 +104,7 @@ export function spotsDoTemplo(): Spot[] {
   out.push(...rodas("torre-deck", { sala: "torre", yRel: CYBER.h, andar: 1 }, 10, noAnel(CYBER, CUBO_CYBER.meia * 1.6 + 2, CYBER.r - 2.5), (q) => livreDe(q, c1) && fora(q, CYBER.h)
     && PILARES_ALTO.every((pl) => Math.hypot(q.x - pl.x, q.z - pl.z) > 2) && !CABINES_TORRE.some((c) => c.nivel === 1 && Math.hypot(q.x - c.x, q.z - c.z) < 3.2)));
   // CODAR: as cabines do campus (em baixo) e as da torre (no topo e no mirante — as da Nina e do Téo, não)
-  ESTACOES_TI.forEach((e, k) => out.push(cabine(`campus-${k}`, e, { sala: "campus", yRel: -SALAO.desce, andar: 0 })));
+  // (os terminais do CAMPUS são dos AGENTES DE TRADING — lib/cyber/agentesTrading: a frota não senta neles)
   for (const c of CABINES_TORRE) if (!c.quem) out.push(cabine(c.id, c, { sala: "torre", yRel: c.y, andar: c.nivel }));
   void PIRAMIDE; void ALTO_TI;
   return (cache = out);
