@@ -142,34 +142,42 @@ export function nivelNaTorre(q: P2, yRel: number): 0 | 1 | 2 | null {
   if (Math.hypot(q.x - TORRE_TI.x, q.z - TORRE_TI.z) > TORRE_TI.baseR + 1) return null;
   return yRel < CYBER.h - 4 ? 0 : yRel < ALTO_TI.h - 4 ? 1 : 2;
 }
-/** as ESTAÇÕES DE TRABALHO do campus (out/2026, o dono: "estações de trabalho de verdade, como as da cidadela, nas cores da
- *  sala"): CABINES no molde das da cidadela (lib/cyber/ceu `CABINE`: o piso, a mesa, o monitor, a cadeira, os painéis de
- *  vidro), em fileiras dos dois lados do CORREDOR do meio (livre), viradas pra torre (o −z) — e, do lado de cada uma, o
- *  DIFUSOR que recebe os raios da tempestade de cima */
-/** os TELÕES DO MERCADO na ponte inicial do campus (out/2026, o dono: "o epicentro financeiro — telões em perspectiva de
- *  cinema dos lados da ponte central; na ponte inicial, só observação: 2 na esquerda — um dashboard só pra Solana, outro
- *  pras outras moedas — e um na direita com as métricas da blockchain, algo como Bloomberg"). Ficam no lugar das
- *  primeiras fileiras de cabines, em pé sobre dois pilares, virados pro corredor e um pouco pra quem chega do salão.
+/** os TELÕES DO MERCADO no corredor do campus (out/2026, o dono: "telões em perspectiva de cinema dos lados da ponte
+ *  central — 2 na esquerda: um dashboard só pra Solana, outro pras outras moedas; um na direita com as métricas da
+ *  blockchain, algo como Bloomberg"; depois: "não todos juntos — perto dos computadores, de preferência mais perto da
+ *  torre"). Espalhados no trecho final do corredor, cada um com a sua MESA DE OPERAÇÕES na frente, em pé sobre dois
+ *  pilares, virados pro corredor e um pouco pra quem chega do salão.
  *  `x`/`z` = o centro da base da tela; `l`/`a` = largura/altura; `rot` = pra onde a tela olha (ângulo no plano, a partir do
  *  +x); `base` = a altura da borda de baixo acima do piso do salão */
 export type TelaoMercado = { id: "solana" | "moedas" | "blockchain"; x: number; z: number; l: number; a: number; rot: number; base: number };
-export const ZONA_TELOES = { z0: SALAO.z - SALAO.r - 4, z1: SALAO.z - SALAO.r - 80 } as const;
 export const TELOES_MERCADO: readonly TelaoMercado[] = (() => {
   const olha = (lado: -1 | 1) => (lado < 0 ? 0 : Math.PI) - lado * 0.6;   // (pro corredor, girado ~35° pra quem vem do salão)
+  const pe = TORRE_TI.z + TORRE_TI.baseR;   // (o pé da torre: os telões contam a partir dele)
   return [
     // (a sala do lounge é ESPELHADA: o +x do layout fica à ESQUERDA de quem vem do salão)
-    { id: "solana", x: SALAO.x + 24, z: SALAO.z - SALAO.r - 22, l: 26, a: 14.6, rot: olha(1), base: 3.2 },
-    { id: "moedas", x: SALAO.x + 24, z: SALAO.z - SALAO.r - 58, l: 26, a: 14.6, rot: olha(1), base: 3.2 },
-    { id: "blockchain", x: SALAO.x - 23, z: SALAO.z - SALAO.r - 40, l: 34, a: 19, rot: olha(-1), base: 3.2 },
+    { id: "solana", x: SALAO.x + 24, z: pe + 104, l: 26, a: 14.6, rot: olha(1), base: 3.2 },
+    { id: "blockchain", x: SALAO.x - 23, z: pe + 66, l: 34, a: 19, rot: olha(-1), base: 3.2 },
+    { id: "moedas", x: SALAO.x + 24, z: pe + 28, l: 26, a: 14.6, rot: olha(1), base: 3.2 },
   ];
 })();
 /** um ponto na tela (`u` -0,5..0,5 ao longo da largura) → layout */
 export const naTelaMercado = (t: TelaoMercado, u: number): P2 => ({ x: t.x - Math.sin(t.rot) * u * t.l, z: t.z + Math.cos(t.rot) * u * t.l });
 /** os dois PILARES de cada telão (a 1/3 de cada ponta) */
 export const pilaresDoTelao = (t: TelaoMercado): P2[] => [naTelaMercado(t, -0.3), naTelaMercado(t, 0.3)];
-export const ESTACOES_TI: readonly { x: number; z: number }[] = (() => {
-  const out: { x: number; z: number }[] = [];
-  for (let z = ZONA_TELOES.z1 - 6; z >= CAMPUS.zFim + 20; z -= 9) for (const lado of [-1, 1]) for (const dx of [11, 18, 25]) out.push({ x: SALAO.x + lado * dx, z });
+/** os TERMINAIS DE TRADING do campus (out/2026, o dono: "retire essa enorme quantidade de computadores com fusíveis e
+ *  deixe apenas terminais integrados aos monitores, onde poderemos fazer trade real"): a mesa de operações de cada
+ *  telão — 4 terminais em arco NA FRENTE dele, virados pra tela (quem senta vê o telão por cima dos monitores). O
+ *  molde é o da cabine (`CABINE_TI`), com três monitores. `telao` = de qual telão é a mesa */
+export type TerminalTI = { x: number; z: number; rot: number; telao: TelaoMercado["id"] };
+export const ESTACOES_TI: readonly TerminalTI[] = (() => {
+  const out: TerminalTI[] = [];
+  for (const t of TELOES_MERCADO) {
+    const nx = Math.cos(t.rot), nz = Math.sin(t.rot), FRENTE = 9;
+    for (const u of [-0.33, -0.11, 0.11, 0.33]) {
+      const p = naTelaMercado(t, u * (t.l >= 30 ? 0.85 : 1)), x = p.x + nx * FRENTE, z = p.z + nz * FRENTE;
+      out.push({ x, z, rot: Math.atan2(t.x - x, t.z - z), telao: t.id });   // (o monitor — o +z da cabine — virado pro telão)
+    }
+  }
   return out;
 })();
 /** a cabine do campus (o mesmo molde da da cidadela; referencial dela: x ao longo da largura, z pra FRENTE — o monitor
@@ -202,12 +210,8 @@ export const CABINES_TORRE: readonly CabineTorre[] = (() => {
   if (alto[0]) alto[0].quem = "nina"; if (alto[1]) alto[1].quem = "teo";
   return out;
 })();
-/** o DIFUSOR de cada cabine (do lado dela, fora do painel): onde fica (referencial da cabine) e a altura da ponta, onde o
- *  raio chega */
-export const DIFUSOR_TI = { lx: 2.15, lz: 0.4, alt: 3.6, r: 0.35 } as const;
-export const difusorDe = (e: { x: number; z: number }) => daCabineTI(e, DIFUSOR_TI.lx, DIFUSOR_TI.lz);
-/** a TEMPESTADE do campus (no lugar dos telões de código): as nuvens por cima das fileiras (altura acima do salão) e de
- *  quanto em quanto tempo cai um raio (s, em média, no campus todo) */
+/** a TEMPESTADE do campus: as nuvens por cima das mesas de operações (altura acima do salão) e de quanto em quanto tempo
+ *  pisca um clarão nelas (s, em média — os raios e os difusores saíram com as fileiras de computadores) */
 export const TEMPESTADE_TI = { alt: 24, cadaRaio: 0.45 } as const;
 
 // ───────────── o que o RENDER desenha e a COLISÃO usa (o mesmo lugar nos dois — out/2026, o dono: "as colisões mais bem
@@ -217,7 +221,7 @@ export const CUBO_CYBER = { meia: NUCLEO_CYBER.r * Math.SQRT2 * 0.45, alt: NUCLE
 /** os RACKS de servidor nas laterais do campus (centro; a caixa tem 1,6 × 1,1 m, 4,2 de altura) */
 export const RACKS_TI: readonly P2[] = (() => {
   const out: P2[] = [], z0 = SALAO.z - SALAO.r + 1.5, z1 = TORRE_TI.z + TORRE_TI.baseR - 1.5;
-  for (let z = z0 - 14; z > z1 + 10; z -= 7) if (z < ZONA_TELOES.z1 || z > ZONA_TELOES.z0) for (const s of [-1, 1]) out.push({ x: SALAO.x + s * (CAMPUS.meia - 2.4), z });   // (na zona dos telões, não)
+  for (let z = z0 - 14; z > z1 + 10; z -= 7) for (const s of [-1, 1]) if (!TELOES_MERCADO.some((t) => Math.sign(t.x - SALAO.x) === s && Math.abs(t.z - z) < 17)) out.push({ x: SALAO.x + s * (CAMPUS.meia - 2.4), z });   // (atrás dos telões, não)
   return out;
 })();
 /** as LUMINÁRIAS de pé e as PLANTAS dos lounges estudantis (a partir do centro, sem espelho; em todos os andares) */
@@ -428,10 +432,9 @@ export function colisoresDoComplexo(rLounge: number): { x: number; z: number; r:
     for (const [lx, lz] of PLANTAS_ESTUDO) out.push({ x: p.x + lx, z: p.z + lz, r: 0.8 });
   }
   for (const p of PLATS) if (ehEstudo(p)) out.push({ x: p.x, z: p.z, r: CARACOL.col });   // a COLUNA do caracol dos lounges estudantis
-  for (const e of ESTACOES_TI) {   // as CABINES do campus (a mesa, os painéis) e o DIFUSOR do lado
+  for (const e of ESTACOES_TI) {   // os TERMINAIS do campus (a mesa com os três monitores, os painéis)
     for (const x of [-0.65, 0.65]) out.push({ ...daCabineTI(e, x, CABINE_TI.mesaZ + 0.1), r: 0.75 });
     for (const sx of [-1, 1]) for (const z of [-0.7, 0.5]) out.push({ ...daCabineTI(e, sx * CABINE_TI.painelX, z), r: 0.4 });
-    out.push({ ...difusorDe(e), r: DIFUSOR_TI.r + 0.1 });
   }   // as MESAS do campus   // o NÚCLEO do monumento da Cyber Room (fechado, por ora)   // o tronco da ÁRVORE DA VIDA no meio do disco rasta
   for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; out.push({ x: TORRE_RASTA.x + Math.cos(a) * TORRE_RASTA.r, z: TORRE_RASTA.z + Math.sin(a) * TORRE_RASTA.r, r: 0.8 }); }
   return out;

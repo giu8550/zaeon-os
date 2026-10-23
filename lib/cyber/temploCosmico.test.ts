@@ -5,7 +5,7 @@ import { empurrarParaFora } from "./colisao";
 import { FIO, saidaDaSala } from "./fiosCosmicos";
 import { definirNivel } from "./nivelAtivo";
 import { nivelDoPonto } from "./niveis";
-import { RACKS_TI, PILARES_FESTAS, LUMINARIAS_ESTUDO, PLANTAS_ESTUDO, CUBO_CYBER, portaDosCasais, CABINE_TI, DIFUSOR_TI, daCabineTI, difusorDe, ANDARES_ESTUDO, CARACOL, PLATS, aberturasDe, doEstudoLocal, noEstudoLocal, type PlatTC, ESTACOES_TI, TORRE_TI, POCOS_TC, CABINES_TORRE, bocaDoPoco, capsulaEm, embarcam, ESTUDO, ALCANCE_DUELO, ARVORE_RASTA, BOCA_SAIDA_SALAO, CASAIS, CYBER, NUCLEO_CYBER, barradoNaCupula, portaDaCupula, CHEGADA_SALAO, ESP, FESTAS, PIRAMIDE, PONTES, PONTE_LOUNGE, RASTA, SALAO, TEMPLO_RASTA, alturaDaEscadariaRasta, naPiramide } from "./temploCosmico";
+import { TELOES_MERCADO, RACKS_TI, PILARES_FESTAS, LUMINARIAS_ESTUDO, PLANTAS_ESTUDO, CUBO_CYBER, portaDosCasais, CABINE_TI, daCabineTI, ANDARES_ESTUDO, CARACOL, PLATS, aberturasDe, doEstudoLocal, noEstudoLocal, type PlatTC, ESTACOES_TI, TORRE_TI, POCOS_TC, CABINES_TORRE, bocaDoPoco, capsulaEm, embarcam, ESTUDO, ALCANCE_DUELO, ARVORE_RASTA, BOCA_SAIDA_SALAO, CASAIS, CYBER, NUCLEO_CYBER, barradoNaCupula, portaDaCupula, CHEGADA_SALAO, ESP, FESTAS, PIRAMIDE, PONTES, PONTE_LOUNGE, RASTA, SALAO, TEMPLO_RASTA, alturaDaEscadariaRasta, naPiramide } from "./temploCosmico";
 import { ESCADARIA, TEMPLO, curvaDaEscadaria, noTemplo } from "./templo";
 import { RotinaExaminer, lugarDeGuarda } from "./examiner";
 
@@ -88,7 +88,7 @@ describe("o Templo Cósmico: o SALÃO central e a ponte pro lounge", () => {
 
   it("o CAMINHO DO MEIO: o CAMPUS DE TI (estações dos dois lados, o corredor livre) até a TORRE alta, e o ELEVADOR até o topo", () => {
     expect(CYBER.x).toBe(PIRAMIDE.x); expect(CHEGADA_SALAO.x).toBe(PIRAMIDE.x);   // a mesma linha de quem chega
-    expect(ESTACOES_TI.length).toBeGreaterThan(70);   // muitas estações de trabalho (as primeiras fileiras viraram os telões do mercado)
+    expect(ESTACOES_TI.length).toBe(12);   // só os TERMINAIS DE TRADING: 4 na frente de cada telão do mercado
     expect(CYBER.h).toBeGreaterThanOrEqual(100); expect(SALAO.z - TORRE_TI.z).toBeGreaterThan(280);   // mais alta e mais longe
     const cs = colisoresDaCidade();
     // o corredor do meio, de trás da pirâmide até o anel do elevador: livre e no nível do salão
@@ -98,10 +98,12 @@ describe("o Templo Cósmico: o SALÃO central e a ponte pro lounge", () => {
     }
     // e entre as fileiras dá pra chegar numa estação
     const e = ESTACOES_TI[5]!, w = W(e.x, e.z + 2); expect(cs.every((c) => Math.hypot(c.x - w.x, c.z - w.z) > c.r)).toBe(true);
-    // a CADEIRA de cada cabine fica livre (dá pra chegar nela) e o DIFUSOR não invade a cabine vizinha
+    // a CADEIRA de cada terminal fica livre (dá pra chegar nela), os terminais não se encostam e cada um olha pro telão dele
     for (const e of ESTACOES_TI) {
       const ca = daCabineTI(e, 0, CABINE_TI.assentoZ), wc = W(ca.x, ca.z); expect(cs.every((c) => Math.hypot(c.x - wc.x, c.z - wc.z) > c.r)).toBe(true);
-      const d = difusorDe(e); expect(ESTACOES_TI.every((o) => o === e || Math.abs(o.x - d.x) > CABINE_TI.larg / 2 + DIFUSOR_TI.r + 0.3 || Math.abs(o.z - d.z) > CABINE_TI.prof)).toBe(true);
+      expect(ESTACOES_TI.every((o) => o === e || Math.hypot(o.x - e.x, o.z - e.z) > CABINE_TI.larg)).toBe(true);
+      const t = TELOES_MERCADO.find((x) => x.id === e.telao)!, frente = daCabineTI(e, 0, 5);
+      expect(Math.hypot(frente.x - t.x, frente.z - t.z)).toBeLessThan(Math.hypot(e.x - t.x, e.z - t.z));
     }
     // as CÁPSULAS: a boca de baixo de cada poço fica no anel da base, livre (dá pra entrar), e a de cima no deck do topo
     for (const p of POCOS_TC) {
