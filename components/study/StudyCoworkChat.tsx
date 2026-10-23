@@ -231,6 +231,14 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const [cerebroAberto, setCerebroAberto] = useState(false);
   const cerebro = useCerebro(abaAtiva, { aberto: cerebroAberto });
   const conferirCerebro = useRef(cerebro.conferirDepoisDoTurno); conferirCerebro.current = cerebro.conferirDepoisDoTurno;
+  // o mapa é um MODAL sem "x": sai clicando fora dele (o painel segura o próprio mousedown) ou trocando de conversa
+  useEffect(() => { setCerebroAberto(false); }, [abaAtiva]);
+  useEffect(() => {
+    if (!cerebroAberto) return;
+    const fora = (e: MouseEvent) => { if (!(e.target as Element | null)?.closest?.("[data-bolinha-cerebro]")) setCerebroAberto(false); };
+    document.addEventListener("mousedown", fora);
+    return () => document.removeEventListener("mousedown", fora);
+  }, [cerebroAberto]);
   useEffect(() => { setCerebroAberto(false); }, [abaAtiva]);
   useEffect(() => { if (trabalhoAberto && abaAtiva) focoPorAbaRef.current[abaAtiva] = trabalhoAberto; }, [trabalhoAberto, abaAtiva]);
   const trabalhosDaAba = TCC_CROSS_ON && abaAtiva ? trabalhosPorAba[abaAtiva] ?? [] : [];
@@ -277,20 +285,43 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const slotSidebar = useConversasSlot("estudos");
   // DOCUMENTOS em aba (diagrama interativo, aula — lib/chat/documentos): abertos aqui; `docAtivo`
   // = o que ocupa a sala agora (null = a conversa).
-  const [docs, setDocs] = useState<DocArtefato[]>([]);
-  const [docAtivo, setDocAtivo] = useState<string | null>(null);
+  // POR CONVERSA (como os trabalhos): um diagrama gerado numa conversa não aparece nas abas de outra.
+  const [docsPorAba, setDocsPorAba] = useState<Record<string, DocArtefato[]>>({});
+  const [docAtivoPorAba, setDocAtivoPorAba] = useState<Record<string, string | null>>({});
+  const docs = abaAtiva ? docsPorAba[abaAtiva] ?? [] : [];
+  const docAtivo = abaAtiva ? docAtivoPorAba[abaAtiva] ?? null : null;
+  const setDocAtivo = useCallback((id: string | null) => {
+    const aba = abaAtivaRef.current;
+    if (aba) setDocAtivoPorAba((p) => ({ ...p, [aba]: id }));
+  }, []);
+  const setDocs = useCallback((f: (xs: DocArtefato[]) => DocArtefato[]) => {
+    const aba = abaAtivaRef.current;
+    if (aba) setDocsPorAba((p) => ({ ...p, [aba]: f(p[aba] ?? []) }));
+  }, []);
   useEffect(() => {
     const on = (e: Event) => {
       const d = (e as CustomEvent<DocArtefato>).detail;
       if (!d || d.sala !== "estudos") return;
-      setDocs((xs) => (xs.some((x) => x.artifactId === d.artifactId) ? xs : [...xs, d]));
-      if (d.focar) setDocAtivo(d.artifactId);
+      // a conversa DE ONDE o documento saiu (a geração leva segundos — a pessoa pode ter trocado de conversa)
+      const aba = d.scopeId ?? abaAtivaRef.current;
+      if (!aba) return;
+      setDocsPorAba((p) => {
+        const xs = p[aba] ?? [];
+        return xs.some((x) => x.artifactId === d.artifactId) ? p : { ...p, [aba]: [...xs, d] };
+      });
+      if (d.focar && aba === abaAtivaRef.current) setDocAtivoPorAba((p) => ({ ...p, [aba]: d.artifactId }));
     };
     window.addEventListener(EVT_ABRIR_DOC, on);
     return () => window.removeEventListener(EVT_ABRIR_DOC, on);
   }, []);
   const [studioOpen, setStudioOpen] = useState(false);
-  const [focusIds, setFocusIds] = useState<string[]>([]);
+  // estudos em FOCO — por conversa: o foco de uma não pode mandar o artefato de outra pro estudo errado
+  const [focoPorAba, setFocoPorAba] = useState<Record<string, string[]>>({});
+  const focusIds = useMemo(() => (abaAtiva ? focoPorAba[abaAtiva] ?? [] : []), [focoPorAba, abaAtiva]);
+  const setFocusIds = useCallback((f: (prev: string[]) => string[]) => {
+    const aba = abaAtivaRef.current;
+    if (aba) setFocoPorAba((p) => ({ ...p, [aba]: f(p[aba] ?? []) }));
+  }, []);
   // ANEXAR (📎 / soltar arquivo / soltar um documento da biblioteca na conversa): a IA lê o PDF e responde
   // sobre ele — o mesmo comportamento da Sala de Pesquisa (components/chat/useAnexoChat).
   const colunaRef = useRef<HTMLDivElement>(null);
@@ -486,6 +517,17 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         studioKind: d.studioKind, title: d.title, data: d.data ?? null,
         artifactId: d.artifactId, dataUrl: d.dataUrl,
       };
+      // Gerado numa conversa que não está mais na tela: volta pra ELA (a bolha guardada), nunca cai nesta.
+      if (d.scopeId && d.scopeId !== abaAtivaRef.current) {
+        if (d.attachMsgId) {
+          try {
+            const guardadas = carregarMensagens<Msg>(localStorage, d.scopeId);
+            const novas = guardadas.map((m) => (m.id === d.attachMsgId ? (!m.studioBlock || m.studioBlock.studioKind === block.studioKind ? { ...m, studioBlock: block } : { ...m, blocosExtra: [...(m.blocosExtra ?? []).filter((b) => b.studioKind !== block.studioKind), block] }) : m));
+            salvarMensagens(localStorage, d.scopeId, novas.map(enxugarArtefatos));
+          } catch { /* ignore */ }
+        }
+        return;
+      }
       if (d.attachMsgId) {
         // artefato INLINE (harness): anexa à bolha estruturada existente, sem msg nova. Se ela já tem
         // um artefato (molécula), o segundo (diagrama) entra ao lado em vez de substituir.
@@ -691,6 +733,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
    * explícito continua reclamando alto: aí a pessoa está esperando.
    */
   const runStudioAction = useCallback(async (kind: string, topic: string, attachMsgId?: string, silencioso = false, contexto?: string, pdf?: { dataUrl: string; nome?: string }) => {
+    // a conversa que pediu: o artefato volta pra ela mesmo se a pessoa trocar de conversa durante a geração
+    const scopeId = abaAtivaRef.current ?? undefined;
     // Fonte da geração: o estudo EM FOCO (se a pessoa está trabalhando nele) OU um
     // estudo NOVO criado pelo tópico. Nunca pega um estudo arbitrário da biblioteca
     // (senão "gere um podcast sobre X" sairia sobre o conteúdo errado). Diagrama, mapa,
@@ -710,10 +754,10 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     const r = await gerarArtefato(kind, { spaceId, topic, contexto, sala: "estudos", ...(pdf ? { pdf } : {}) });
     if (aviso) marcar(undefined);
     if (r.tipo === "pronto") {
-      window.dispatchEvent(new CustomEvent("zaeon:study:embed", { detail: { ...r.bloco, attachMsgId } }));
+      window.dispatchEvent(new CustomEvent("zaeon:study:embed", { detail: { ...r.bloco, attachMsgId, scopeId } }));
       // Documento (diagrama/aula): abre a aba em "Documentos"; pedido explícito já mostra ela.
       if (KINDS_EM_ABA.has(r.bloco.studioKind) && r.bloco.artifactId) {
-        abrirDocumento({ sala: "estudos", studioKind: r.bloco.studioKind, artifactId: r.bloco.artifactId, titulo: r.bloco.title || topic, data: r.bloco.data, focar: !silencioso });
+        abrirDocumento({ sala: "estudos", studioKind: r.bloco.studioKind, artifactId: r.bloco.artifactId, titulo: r.bloco.title || topic, data: r.bloco.data, focar: !silencioso, scopeId });
       }
     } else if (r.tipo === "erro" && !r.silencioso && !silencioso) {
       avisarFalha(r.mensagem);
@@ -1078,8 +1122,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       completude={cerebro.mapa?.completudeAprendizado ?? 0}
       aberto={cerebroAberto}
       onClick={() => {
-        if (cerebro.estado === "sugerida" || cerebro.estado === "vazia") { void cerebro.gerar(); setCerebroAberto(true); }
-        else setCerebroAberto((v) => !v);
+        // gerar NÃO abre a tela: a barra corre no botão; o mapa abre quando a pessoa clicar nele pronto
+        if (cerebro.estado === "sugerida" || cerebro.estado === "vazia") void cerebro.gerar();
+        else if (cerebro.estado === "ativa") setCerebroAberto((v) => !v);
       }}
     />
   ) : null;

@@ -8,7 +8,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { X, RefreshCw, Sparkles, MessageSquare, ChevronDown, History } from "lucide-react";
+import { RefreshCw, Sparkles, MessageSquare, ChevronDown, History } from "lucide-react";
 import { pedirConversa } from "@/lib/chat/conversasNav";
 import { ARQUETIPOS } from "@/lib/map/arquetipo";
 import { proximoDoBackbone } from "@/lib/map/backbone";
@@ -56,7 +56,7 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
   const ficha = useMemo(() => (mapa && fichaId ? mapa.nos.find((n) => n.id === fichaId) ?? null : null), [mapa, fichaId]);
   const membros = useMemo(() => (mapa && ficha ? mapa.nos.filter((n) => n.id !== ficha.id && n.regiao === ficha.id && (n.drawers?.length ?? 0) > 0) : []), [mapa, ficha]);
   const aoRegiao = (r: RegiaoVisual) => setFichaId((cur) => (cur === r.id ? null : r.id));
-  // Esc fecha (o X, o clique fora e a bolinha são tratados por quem monta o painel).
+  // Esc fecha (o clique fora e a bolinha são tratados por quem monta o painel — o mapa é modal, sem "x").
   useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") { if (fichaId) setFichaId(null); else onFechar(); } }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [fichaId, onFechar]);
   const gerar = onGerar ?? (() => void st.gerar());
   const [anteriores, setAnteriores] = useState(false);
@@ -67,9 +67,9 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
       className="absolute inset-0 z-50 flex flex-col bg-[#060a1a] text-[#dbe8ff]" role="dialog" aria-modal="true" aria-label="Mapa de conhecimento"
       onMouseDown={(e) => e.stopPropagation()}
     >
-      {/* cabeçalho: SEM título da conversa nem subtítulo — só o botão CIRCULAR que gera/retraça, a aba
-          "mapas anteriores" e o fechar */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-4 py-2">
+      {/* SEM barra, título nem "x" no topo: o botão CIRCULAR que gera/retraça e "mapas anteriores" flutuam por cima
+          do cérebro; sair = clicar fora (quem monta o painel) ou Esc */}
+      <div className="absolute left-3 top-3 z-20 flex items-center gap-2">
         <button
           onClick={st.estado === "gerando" ? undefined : gerar}
           disabled={st.estado === "gerando"}
@@ -87,24 +87,21 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
         >
           <History size={13} /> Mapas anteriores
         </button>
-        <div className="flex-1" />
-        <button onClick={onFechar} aria-label="Fechar o mapa" className="rounded-lg border border-white/15 p-1.5 text-[#9fb6e0] hover:text-white"><X size={16} /></button>
       </div>
-      {/* sub-aba: as GAVETAS dos mapas gerados antes (abre embaixo do cabeçalho) */}
-      {anteriores && <MapasAnteriores atualId={mapa?.id ?? null} onFechar={() => setAnteriores(false)} />}
+      {/* sub-aba: as GAVETAS dos mapas gerados antes (abre embaixo dos botões) */}
+      {anteriores && <div className="absolute left-3 top-14 z-20 w-[min(420px,88vw)] overflow-hidden rounded-2xl border border-white/10 shadow-2xl"><MapasAnteriores atualId={mapa?.id ?? null} onFechar={() => setAnteriores(false)} /></div>}
 
-      {/* corpo por estado */}
-      <div className="relative min-h-0 flex-1">
-        {st.estado === "ativa" && mapa && (mobile ? <Lista regioes={regioes} aoRegiao={aoRegiao} /> : <CerebroCanvas regioes={regioes} sinapses={sinapses} onRegiao={aoRegiao} />)}
+      {/* corpo por estado — clicar no vazio fecha a ficha (sem "x") */}
+      <div className="relative min-h-0 flex-1" onClick={(e) => { const t = e.target as Element; if (fichaId && !t.closest(".cerebro-node, [data-ficha], [data-cerebro-acao]")) setFichaId(null); }}>
+        {st.estado === "ativa" && mapa && (mobile ? <Lista regioes={regioes} aoRegiao={aoRegiao} /> : <CerebroCanvas regioes={regioes} sinapses={sinapses} onRegiao={aoRegiao} destaque={fichaId} />)}
         {/* FICHA do nó: closet + gavetas (verbatim) + abrir a conversa */}
         {ficha && st.estado === "ativa" && (
-          <motion.aside initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} className="absolute bottom-3 right-3 top-3 z-10 flex w-[min(360px,88vw)] flex-col rounded-2xl border border-[rgba(120,170,255,.25)] bg-[rgba(10,21,38,.92)] backdrop-blur">
+          <motion.aside data-ficha initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} className="absolute bottom-3 right-3 top-3 z-10 flex w-[min(360px,88vw)] flex-col rounded-2xl border border-[rgba(120,170,255,.25)] bg-[rgba(10,21,38,.92)] backdrop-blur">
             <div className="flex items-start gap-2 border-b border-white/10 px-4 py-3">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[13px] font-bold">{ficha.label}</p>
                 <p className="text-[11px] text-[#9fb6e0]">{ficha.estado.replace("_", " ")}</p>
               </div>
-              <button onClick={() => setFichaId(null)} aria-label="Fechar ficha" className="rounded-lg border border-white/15 p-1 text-[#9fb6e0] hover:text-white"><X size={14} /></button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
               {/* RESUMO: o que é · o que precisa ser atendido pra concluir · (no último passo) como é validado */}
@@ -155,7 +152,7 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
         )}
         {/* ação do aluno: aplicar o próximo nó do percurso */}
         {mapa && st.estado === "ativa" && proximo && (
-          <div className="absolute right-3 top-3 flex flex-col items-end gap-1">
+          <div data-cerebro-acao className="absolute right-3 top-3 flex flex-col items-end gap-1">
             <button
               onClick={() => void aplicar(proximo)}
               disabled={aplicando === proximo.id || proximo.estado === "aplicado"}
@@ -182,7 +179,7 @@ function Lista({ regioes, aoRegiao }: { regioes: RegiaoVisual[]; aoRegiao: (r: R
       <ol className="flex flex-col gap-1.5">
         {regioes.map((r, i) => (
           <li key={r.id}>
-            <button onClick={() => aoRegiao(r)} className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-left">
+            <button data-ficha onClick={() => aoRegiao(r)} className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-left">
               <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: COR[r.estado], boxShadow: `0 0 8px ${COR[r.estado]}` }} aria-hidden />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13px] font-semibold">{i + 1}. {r.label}</span>
