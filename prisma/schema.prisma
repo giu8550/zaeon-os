@@ -1534,3 +1534,44 @@ model ChatFeedback {
   @@index([usuarioHash, msgId])
   @@index([exportadoEm])
 }
+
+// O COFRE de cada usuário (lib/cyber/cofre — out/2026, o dono: "um fundo privado de cada usuário; se eu quiser colocar
+// um fundo lá, eu coloco"). Uma carteira da Solana gerada pra pessoa: a SEMENTE vai cifrada (lib/projects/crypto,
+// TOKEN_ENC_KEY) — o cofre assina sozinho as operações que os agentes de trading decidem, dentro do que a PESSOA
+// configurou (`config`: quanto do fundo por operação, as moedas, ligado/desligado). `posicoes` = o livro do fundo
+// ({ "SOL": 1.2, "JUP": 300 }); `saldoRede` = o último saldo de SOL visto na rede (a diferença = depósito/saque).
+model Cofre {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId         String   @unique @db.ObjectId
+  endereco       String   @unique
+  sementeCifrada String
+  rede           String   @default("devnet")
+  config         Json
+  posicoes       Json
+  saldoRede      Float    @default(0)
+  ultimaRodada   DateTime?
+  criadoEm       DateTime @default(now())
+  atualizadoEm   DateTime @updatedAt
+
+  @@map("cofres")
+}
+
+// cada OPERAÇÃO do cofre (compra, venda, depósito, saque): quem decidiu, a que preço, por quê e a ASSINATURA da
+// transação que registrou na rede (o memo — conferível no explorer)
+model CofreOperacao {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  cofreId    String   @db.ObjectId
+  userId     String   @db.ObjectId
+  tipo       String   // compra | venda | deposito | saque
+  ativo      String
+  quantidade Float
+  preco      Float    // em dólar, na hora
+  valorUsd   Float
+  agenteId   String?
+  motivo     String?
+  assinatura String?  // a transação na rede (null = não registrou: rede fora)
+  criadoEm   DateTime @default(now())
+
+  @@index([cofreId, criadoEm])
+  @@map("cofre_operacoes")
+}
