@@ -8,19 +8,36 @@
  *
  * Escala com a largura do painel: tudo é medido em `cqw` (21 cm = 100cqw).
  */
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import { parseAbntMarkers } from "@/lib/abntTemplate";
 import { normalizeBlocks, isFigure, isTableBlock, isQuotation } from "@/lib/abntBlocks";
+import Formula from "@/components/chat/Formula";
+import { segmentarInline } from "@/lib/chat/matematica";
 import { trechosComEnfase } from "@/lib/tcc/pagina";
 
 const CM = 100 / 21; // 1 cm em cqw
 export const cqw = (cm: number) => `${(cm * CM).toFixed(3)}cqw`;
 export const PT = 2.54 / 72; // 1 pt em cm
 
-/** **negrito** e *itálico* do editor (o motor faz o mesmo: lib/tcc/pagina `trechosComEnfase`). */
+/** **negrito** e *itálico* do editor (o motor faz o mesmo: lib/tcc/pagina `trechosComEnfase`) e as FÓRMULAS
+ *  ($…$, \(…\), \ce{…} das reações) em KaTeX — o mesmo componente do chat. A fórmula sai antes da ênfase:
+ *  o `*` de "a*b" dentro dela não vira itálico. */
 export function Inline({ texto }: { texto: string }) {
-  return <>{trechosComEnfase(texto).map((t, i) => (t.negrito ? <strong key={i}>{t.t}</strong> : t.italico ? <em key={i}>{t.t}</em> : t.t))}</>;
+  return (
+    <>
+      {segmentarInline(texto).map((p, i) => p.tipo === "formula"
+        ? <Formula key={i} latex={p.conteudo} />
+        : <Fragment key={i}>{trechosComEnfase(p.conteudo).map((t, j) => (t.negrito ? <strong key={j}>{t.t}</strong> : t.italico ? <em key={j}>{t.t}</em> : t.t))}</Fragment>)}
+    </>
+  );
 }
+
+/** Um parágrafo que é SÓ uma fórmula em destaque ($$…$$ ou \[…\]) → equação centralizada. */
+const DISPLAY_RE = /^\$\$([\s\S]+)\$\$$|^\\\[([\s\S]+)\\\]$/;
+export const formulaEmDestaque = (texto: string): string | null => {
+  const m = DISPLAY_RE.exec(texto.trim());
+  return m ? (m[1] ?? m[2]).trim() : null;
+};
 const CHARS_PER_LINE = 75;
 const OWN = new Set(["própria", "propria", "autor", "autoral", "own", "elaboração própria", "elaboracao propria"]);
 
@@ -32,6 +49,8 @@ function fonte(raw: string | undefined, fem = false): string {
 
 /** Um parágrafo/figura/tabela/citação como o motor ABNT o desenha (dentro de um container em `cqw`). */
 export function Bloco({ texto, n }: { texto: string; n: number }) {
+  const eq = formulaEmDestaque(texto);
+  if (eq) return <div style={{ textAlign: "center", margin: `${cqw(6 * PT)} 0` }}><Formula latex={eq} display /></div>;
   if (isFigure(texto)) {
     const m = /^!\[([\s\S]*?)\]\((\S+?)\)$/.exec(texto.trim())!;
     const [titulo, src] = m[1].split("|");
