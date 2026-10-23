@@ -7,7 +7,7 @@
 import type { ReactNode } from "react";
 import { NOME_FASE, type Critico, type DocBlueprint, type Fase } from "@/lib/blueprint/tipos";
 import FiguraIso from "./FiguraIso";
-import { MAO, PAPEL, corNaSkin, inclinacao, useCor, useSkin } from "./skin";
+import { MAO, PAPEL, REDONDA, ROSA, corNaSkin, inclinacao, useCor, useSkin } from "./skin";
 
 export const COR = {
   estudo: "#7fe0ff", passo: "#ffd36b", critico: "#ff4d5e", provado: "#7dffb0", figura: "#7fe0ff", repos: "#7fe0ff",
@@ -30,6 +30,24 @@ export function CardPrancha({ cor: cor0, carimbo, direita, children, fundo, bril
         <div className={`relative mb-2 flex items-center gap-2 text-[15px] ${onArrastar ? "cursor-grab active:cursor-grabbing" : ""}`} style={{ color: cor, fontFamily: MAO }} onPointerDown={onArrastar}>
           <span className="whitespace-nowrap font-bold">{carimbo.toLowerCase()}</span>
           <svg className="h-2 flex-1" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden><path d="M0 5 Q 12 1, 25 4 T 50 4 T 75 5 T 100 3" fill="none" stroke={cor} strokeWidth="1.4" opacity="0.6" /></svg>
+          {direita}
+        </div>
+        <div className="relative">{children}</div>
+      </div>
+    );
+  }
+  if (skin === "barbie") {
+    // VIDRO: translúcido, desfoca o rosa atrás, borda branca e brilho na quina de cima; o carimbo vira uma pílula
+    return (
+      <div className="relative rounded-[22px] text-[15px] leading-snug" style={{
+        background: ROSA.vidro, color: ROSA.tinta, padding: "14px 18px 14px", opacity: apagado ? 0.66 : 1, fontFamily: REDONDA,
+        backdropFilter: "blur(18px) saturate(160%)", WebkitBackdropFilter: "blur(18px) saturate(160%)", border: `1px solid ${ROSA.borda}`,
+        boxShadow: `0 22px 44px -22px ${ROSA.sombra}, inset 0 1px 0 rgba(255,255,255,.85), inset 0 -1px 0 rgba(255,255,255,.25)${brilho ? `, 0 0 0 3px ${cor}33, 0 0 34px ${cor}55` : ""}`,
+      }}>
+        <span aria-hidden className="pointer-events-none absolute inset-x-6 top-0 h-px" style={{ background: "linear-gradient(90deg,transparent,rgba(255,255,255,.95),transparent)" }} />
+        <div className={`relative mb-2.5 flex items-center gap-2 ${onArrastar ? "cursor-grab active:cursor-grabbing" : ""}`} onPointerDown={onArrastar}>
+          <span className="whitespace-nowrap rounded-full px-3 py-0.5 text-[12.5px] font-bold tracking-wide text-white" style={{ background: `linear-gradient(135deg, ${cor}, ${cor}cc)`, boxShadow: `0 4px 12px -4px ${cor}` }}>{carimbo.toLowerCase()}</span>
+          <span className="h-px flex-1" style={{ background: `linear-gradient(90deg, ${cor}66, transparent)` }} />
           {direita}
         </div>
         <div className="relative">{children}</div>

@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { caixaDoFoco, layoutBlueprint, type Caixa, type Fio } from "@/lib/blueprint/layout";
-import { CSS_CARTOLINA, FiltrosRabisco, PAPEL, SkinProvider, corNaSkin, type Skin } from "./skin";
+import { CSS_BARBIE, CSS_CARTOLINA, FiltrosRabisco, PAPEL, ROSA, SkinProvider, corNaSkin, type Skin } from "./skin";
 import type { DocBlueprint } from "@/lib/blueprint/tipos";
 import { COR, Modulo, type AcoesModulo } from "./Modulos";
 
@@ -15,16 +15,33 @@ const INTERATIVO = "a, button, input, textarea, select, label, [contenteditable]
 const AZUL = "#0b2c4d", LINHA_FRACA = "rgba(150,205,255,.14)", ALTURA_PADRAO = 150;
 const COR_FIO: Record<Fio["tipo"], string> = { percurso: COR.passo, pratica: "rgba(170,220,255,.75)", critico: COR.critico, figura: COR.figura, avaliacao: COR.avaliacao };
 
-export default function PranchaBlueprint({ id, doc, acoes, onFixar, sobre, skin = "blueprint" }: {
-  id: string; doc: DocBlueprint; acoes: AcoesModulo; onFixar: (modulo: string, x: number, y: number) => void; sobre?: ReactNode; skin?: Skin;
+export default function PranchaBlueprint({ id, doc, acoes, onFixar, sobre, skin = "blueprint", letra = 1 }: {
+  id: string; doc: DocBlueprint; acoes: AcoesModulo; onFixar: (modulo: string, x: number, y: number) => void; sobre?: ReactNode; skin?: Skin; /** o tamanho da letra dos cards (1 = 100%) */ letra?: number;
 }) {
-  const papel = skin === "cartolina";
+  const papel = skin === "cartolina", rosa = skin === "barbie";
   const raiz = useRef<HTMLDivElement>(null);
   const [cam, setCam] = useState({ x: 0, y: 0, z: 0.8 });
   const mexeu = useRef(false);   // a pessoa mexeu na câmera (pan/zoom): para de reenquadrar sozinho
   const [alturas, setAlturas] = useState<Record<string, number>>({});
   useEffect(() => { setAlturas({}); }, [id]);   // os ids dos módulos ("passo:p1"…) se repetem entre blueprints
-  const medir = useCallback((k: string, el: HTMLDivElement | null) => { if (!el) return; const h = el.offsetHeight; setAlturas((a) => (Math.abs((a[k] ?? 0) - h) > 1 ? { ...a, [k]: h } : a)); }, []);
+  const guarda = useCallback((k: string, h: number) => setAlturas((a) => (Math.abs((a[k] ?? 0) - h) > 1 ? { ...a, [k]: h } : a)), []);
+  // um card muda de altura sozinho (a ficha da figura aparece, a letra cresce, um vídeo carrega): o ResizeObserver
+  // refaz o layout na hora — medir só quando a prancha re-renderiza deixava os lados por cima da figura
+  const observador = useRef<ResizeObserver | null>(null), vistos = useRef(new Map<Element, string>());
+  useEffect(() => {
+    const ro = new ResizeObserver((es) => { for (const e of es) {
+      if (!e.target.isConnected) { vistos.current.delete(e.target); ro.unobserve(e.target); continue; }   // o card saiu da prancha
+      const k = vistos.current.get(e.target); if (k) guarda(k, (e.target as HTMLElement).offsetHeight);
+    } });
+    observador.current = ro;
+    for (const el of vistos.current.keys()) ro.observe(el);
+    return () => { ro.disconnect(); observador.current = null; };
+  }, [guarda]);
+  const medir = useCallback((k: string, el: HTMLDivElement | null) => {
+    if (!el) return;
+    if (vistos.current.get(el) !== k) { vistos.current.set(el, k); observador.current?.observe(el); }
+    guarda(k, el.offsetHeight);
+  }, [guarda]);
   const { caixas, fios } = useMemo(() => layoutBlueprint(doc, (k) => alturas[k] ?? ALTURA_PADRAO), [doc, alturas]);
 
   // ── arrastar (fundo = pan; carimbo = mover e fixar o card) ──
@@ -111,6 +128,15 @@ export default function PranchaBlueprint({ id, doc, acoes, onFixar, sobre, skin 
     else { x1 = a.x + a.w / 2; y1 = a.y + a.h; x2 = b.x + b.w / 2; y2 = b.y; vertical = true; }
     const d = vertical ? `M ${x1} ${y1} C ${x1} ${(y1 + y2) / 2}, ${x2} ${(y1 + y2) / 2}, ${x2} ${y2}` : `M ${x1} ${y1} C ${(x1 + x2) / 2} ${y1}, ${(x1 + x2) / 2} ${y2}, ${x2} ${y2}`;
     const cor = corNaSkin(skin, COR_FIO[f.tipo]), tracejado = f.tipo === "critico" && f.de.startsWith("critico:");
+    if (rosa) return (
+      // na barbie, o fio é uma fita brilhante: rosa com o brilho branco por cima e as pontas em pérola
+      <g key={`${f.de}>${f.para}`}>
+        <path d={d} fill="none" stroke={cor} strokeWidth={3.4} strokeDasharray={tracejado ? "8 6" : undefined} opacity={0.55} strokeLinecap="round" />
+        <path d={d} fill="none" stroke="rgba(255,255,255,.85)" strokeWidth={1.1} strokeDasharray={tracejado ? "8 6" : undefined} strokeLinecap="round" />
+        <circle cx={x2} cy={y2} r={4.5} fill="#fff" stroke={cor} strokeWidth={2} />
+        <circle cx={x1} cy={y1} r={3} fill={cor} />
+      </g>
+    );
     if (papel) return (
       // na cartolina, o fio é a lápis: tremido, sem sombra, com a pontinha de seta desenhada à mão
       <g key={`${f.de}>${f.para}`} filter="url(#rabisco)">
@@ -130,11 +156,18 @@ export default function PranchaBlueprint({ id, doc, acoes, onFixar, sobre, skin 
 
   return (
     <SkinProvider value={skin}>
-    <div ref={raiz} className={`relative h-full w-full cursor-grab touch-none select-none overflow-hidden active:cursor-grabbing ${papel ? "skin-cartolina" : ""}`} style={{ background: papel ? PAPEL.fundo : AZUL }}
+    <div ref={raiz} className={`relative h-full w-full cursor-grab touch-none select-none overflow-hidden active:cursor-grabbing ${papel ? "skin-cartolina" : rosa ? "skin-barbie" : ""}`} style={{ background: papel ? PAPEL.fundo : rosa ? ROSA.fundo : AZUL }}
       onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
       {papel && <style>{CSS_CARTOLINA}</style>}
+      {rosa && <style>{CSS_BARBIE}</style>}
       <FiltrosRabisco />
-      {papel ? (
+      {rosa ? (
+        // a BARBIE: rosa em degradê, pontinhos brancos que andam com a câmera e dois brilhos suaves (luz de estúdio)
+        <>
+          <div className="pointer-events-none absolute inset-0" style={{ backgroundImage: "radial-gradient(rgba(255,255,255,.55) 1.2px, transparent 1.5px)", backgroundSize: `${28 * cam.z}px ${28 * cam.z}px`, backgroundPosition: `${cam.x}px ${cam.y}px` }} />
+          <div className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(circle at 18% 12%, rgba(255,255,255,.55), transparent 38%), radial-gradient(circle at 85% 80%, rgba(236,72,153,.28), transparent 45%)" }} />
+        </>
+      ) : papel ? (
         // a CARTOLINA: papel creme com pontinhos de caderno e a sombra quente nas bordas
         <>
           <div className="pointer-events-none absolute inset-0" style={{ backgroundImage: "radial-gradient(rgba(107,90,62,.22) 1.1px, transparent 1.3px)", backgroundSize: `${26 * cam.z}px ${26 * cam.z}px`, backgroundPosition: `${cam.x}px ${cam.y}px` }} />
@@ -155,14 +188,18 @@ export default function PranchaBlueprint({ id, doc, acoes, onFixar, sobre, skin 
           const c = pos(c0);
           return (
             <div key={c.id} ref={(el) => medir(c.id, el)} className="absolute" style={{ left: c.x, top: c.y, width: c.w, zIndex: arrastando?.id === c.id ? 50 : 1 }}>
-              <Modulo id={c.id} doc={doc} acoes={acoes} onArrastar={acoes.podeEditar ? (e) => comecarCard(e, c0) : undefined} />
+              {/* o TAMANHO DA LETRA: o conteúdo cresce por dentro (zoom) numa largura menor, então o card mantém a
+                  largura da planta e só fica mais alto — a altura medida refaz o layout */}
+              <div style={letra !== 1 ? { zoom: letra, width: c.w / letra } : undefined}>
+                <Modulo id={c.id} doc={doc} acoes={acoes} onArrastar={acoes.podeEditar ? (e) => comecarCard(e, c0) : undefined} />
+              </div>
             </div>
           );
         })}
       </div>
 
       {sobre}
-      <div className="absolute bottom-3 right-3 z-[90] flex items-center gap-1 font-mono text-[11px] text-sky-100" style={papel ? { color: PAPEL.tinta } : undefined} onPointerDown={(e) => e.stopPropagation()}>
+      <div className="absolute bottom-3 right-3 z-[90] flex items-center gap-1 font-mono text-[11px] text-sky-100" style={papel ? { color: PAPEL.tinta } : rosa ? { color: ROSA.tinta } : undefined} onPointerDown={(e) => e.stopPropagation()}>
         <button type="button" className="rounded-sm border border-sky-300/40 px-2 py-1 hover:bg-white/10" onClick={() => { mexeu.current = true; setCam((c) => ({ ...c, z: Math.max(0.25, c.z * 0.85) })); }}>−</button>
         <span className="w-12 text-center">{Math.round(cam.z * 100)}%</span>
         <button type="button" className="rounded-sm border border-sky-300/40 px-2 py-1 hover:bg-white/10" onClick={() => { mexeu.current = true; setCam((c) => ({ ...c, z: Math.min(2, c.z * 1.15) })); }}>+</button>

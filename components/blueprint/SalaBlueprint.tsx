@@ -12,7 +12,7 @@ import { useState } from "react";
 import { NOME_FASE } from "@/lib/blueprint/tipos";
 import { precisaAvaliar } from "@/lib/blueprint/fases";
 import { useBlueprint } from "./useBlueprint";
-import { MAO, PAPEL, SKINS, corNaSkin, useSkinEscolhida, type Skin } from "./skin";
+import { CSS_BARBIE, LETRAS, MAO, PAPEL, REDONDA, ROSA, SKINS, corNaSkin, useLetraEscolhida, useSkinEscolhida, type Skin } from "./skin";
 import dynamic from "next/dynamic";
 
 const PlayerVideoDoc = dynamic(() => import("@/components/videodoc/PlayerVideoDoc"), { ssr: false });
@@ -57,7 +57,15 @@ function ProvaForm({ criticoId, tipo, enviar }: { criticoId: string; tipo: strin
 
 export default function SalaBlueprint({ inicialId }: { inicialId?: string | null }) {
   const B = useBlueprint(inicialId);
-  const [skin, setSkin] = useSkinEscolhida(), papel = skin === "cartolina";
+  const [skin, setSkin] = useSkinEscolhida(), papel = skin === "cartolina", rosa = skin === "barbie";
+  const [letra, setLetra] = useLetraEscolhida(), iLetra = LETRAS.indexOf(letra as (typeof LETRAS)[number]);
+  // as cores da barra de cima por skin
+  const barra = papel ? { background: "#e6dcc2", borderColor: "rgba(107,90,62,.35)", color: PAPEL.tinta, fontFamily: MAO }
+    : rosa ? { background: ROSA.barra, borderColor: ROSA.borda, color: ROSA.tinta, fontFamily: REDONDA, backdropFilter: "blur(16px) saturate(150%)", WebkitBackdropFilter: "blur(16px) saturate(150%)" }
+    : { background: "rgba(5,22,42,.9)", borderColor: "rgba(127,224,255,.3)" };
+  const contorno = papel ? "rgba(107,90,62,.45)" : rosa ? "rgba(219,39,119,.4)" : "rgba(127,224,255,.35)";
+  const ligado = papel ? { background: PAPEL.tinta, color: "#efe7d3" } : rosa ? { background: "linear-gradient(135deg,#ff4fa3,#e6007e)", color: "#fff" } : { background: "rgba(127,224,255,.2)", color: "#fff" };
+  const desligado = { color: papel ? PAPEL.tintaSuave : rosa ? ROSA.tintaSuave : "rgba(186,230,253,.75)" };
   const { lista, atual } = B;
   const [aviso, setAviso] = useState<string | null>(null), [avaliando, setAvaliando] = useState(false), [videoAberto, setVideoAberto] = useState<string | null>(null);
   const enviar = async (criticoId: string | null, url: string) => {
@@ -69,20 +77,26 @@ export default function SalaBlueprint({ inicialId }: { inicialId?: string | null
     return r;
   };
   return (
-    <div className={`flex h-full w-full flex-col ${papel ? "skin-cartolina" : ""}`} style={{ background: papel ? PAPEL.fundo : AZUL }}>
-      <div className="flex flex-none items-stretch gap-2 overflow-x-auto border-b px-3 py-2" style={papel ? { background: "#e6dcc2", borderColor: "rgba(107,90,62,.35)", color: PAPEL.tinta, fontFamily: MAO } : { background: "rgba(5,22,42,.9)", borderColor: "rgba(127,224,255,.3)" }}>
-        {/* a SKIN da sala: o papel azul técnico ou a cartolina rabiscada (fica lembrada neste navegador) */}
-        <div className="flex flex-none self-center overflow-hidden rounded-full border font-mono text-[11px]" style={{ borderColor: papel ? "rgba(107,90,62,.45)" : "rgba(127,224,255,.35)" }} role="group" aria-label="Skin da sala">
+    <div className={`flex h-full w-full flex-col ${papel ? "skin-cartolina" : rosa ? "skin-barbie" : ""}`} style={{ background: papel ? PAPEL.fundo : rosa ? ROSA.fundo : AZUL }}>
+      {rosa && <style>{CSS_BARBIE}</style>}
+      <div className="relative z-[96] flex flex-none items-stretch gap-2 overflow-x-auto border-b px-3 py-2" style={barra}>
+        {/* a SKIN da sala: o papel azul técnico, a cartolina rabiscada ou a barbie de vidro (fica lembrada neste navegador) */}
+        <div className="flex flex-none self-center overflow-hidden rounded-full border font-mono text-[11px]" style={{ borderColor: contorno }} role="group" aria-label="Skin da sala">
           {SKINS.map((k) => (
-            <button key={k.id} type="button" onClick={() => setSkin(k.id)} aria-pressed={skin === k.id} className="px-3 py-1 transition"
-              style={skin === k.id ? (papel ? { background: PAPEL.tinta, color: "#efe7d3" } : { background: "rgba(127,224,255,.2)", color: "#fff" }) : { color: papel ? PAPEL.tintaSuave : "rgba(186,230,253,.75)" }}>{k.nome}</button>
+            <button key={k.id} type="button" onClick={() => setSkin(k.id)} aria-pressed={skin === k.id} className="px-3 py-1 transition" style={skin === k.id ? ligado : desligado}>{k.nome}</button>
           ))}
+        </div>
+        {/* o TAMANHO DA LETRA dos cards (lembrado neste navegador) */}
+        <div className="flex flex-none items-center self-center overflow-hidden rounded-full border font-mono text-[11px]" style={{ borderColor: contorno }} role="group" aria-label="Tamanho da letra">
+          <button type="button" onClick={() => setLetra(LETRAS[Math.max(0, iLetra - 1)]!)} disabled={iLetra <= 0} aria-label="Diminuir a letra" className="px-2.5 py-1 disabled:opacity-35" style={desligado}>A−</button>
+          <span className="px-1 tabular-nums" style={desligado}>{Math.round(letra * 100)}%</span>
+          <button type="button" onClick={() => setLetra(LETRAS[Math.min(LETRAS.length - 1, iLetra + 1)]!)} disabled={iLetra >= LETRAS.length - 1} aria-label="Aumentar a letra" className="px-2.5 py-1 text-[13px] font-bold disabled:opacity-35" style={desligado}>A+</button>
         </div>
         <span className="self-center whitespace-nowrap pr-1 font-mono text-[11px] tracking-[0.2em] text-sky-300">BLUEPRINTS</span>
         {lista === null && <span className="self-center font-mono text-[11px] text-sky-200/50">carregando…</span>}
         {lista?.map((b) => (
           <button key={b.id} type="button" onClick={() => void B.abrir(b.id)} className="min-w-[190px] flex-none rounded-[3px] border px-2.5 py-1.5 text-left font-mono transition hover:bg-white/5"
-            style={{ borderColor: corNaSkin(skin, atual?.id === b.id ? COR.estudo : "rgba(127,224,255,.25)"), background: atual?.id === b.id ? (papel ? "rgba(255,255,255,.45)" : "rgba(127,224,255,.08)") : undefined }}>
+            style={{ borderColor: corNaSkin(skin, atual?.id === b.id ? COR.estudo : "rgba(127,224,255,.25)"), background: atual?.id === b.id ? (papel || rosa ? "rgba(255,255,255,.5)" : "rgba(127,224,255,.08)") : undefined }}>
             <b className="block max-w-[240px] truncate text-[12px] text-sky-50">{b.titulo}</b>
             <small className="text-[10px] text-sky-200/70">
               {b.area} · {b.aguardandoMentor ? <span style={{ color: corNaSkin(skin, "#ffd36b") }}>aguardando mentor</span> : <>fase {b.fase}{b.criticosAbertos ? <> · <span style={{ color: corNaSkin(skin, COR.critico) }}>{b.criticosAbertos} crítico{b.criticosAbertos > 1 ? "s" : ""}</span></> : null}</>}
@@ -93,7 +107,7 @@ export default function SalaBlueprint({ inicialId }: { inicialId?: string | null
       </div>
       <div className="relative min-h-0 flex-1">
         {atual ? (
-          <PranchaBlueprint id={atual.id} doc={atual.doc} onFixar={B.fixar} skin={skin}
+          <PranchaBlueprint id={atual.id} doc={atual.doc} onFixar={B.fixar} skin={skin} letra={letra}
             acoes={{ podeEditar: podeEscrever(atual.papel), avaliando, abrirVideo: setVideoAberto,
               avaliar: podeEscrever(atual.papel) && precisaAvaliar(atual.doc) ? () => { setAvaliando(true); void enviar(null, "").finally(() => setAvaliando(false)); } : undefined, recompor: atual.papel === "dono" ? B.recompor : undefined, recompondo: B.recompondo, reorganizar: B.reorganizar, temFixos: Object.keys(atual.doc.fixos).length > 0,
               extra: podeEscrever(atual.papel) ? (id) => { const c = id.startsWith("critico:") ? atual.doc.criticos.find((k) => `critico:${k.id}` === id) : undefined; return c ? <ProvaForm criticoId={c.id} tipo={c.tipoProva} enviar={enviar} /> : undefined; } : undefined }}

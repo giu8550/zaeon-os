@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ISO_CSS, translateAlong } from "@/lib/anatomy/iso-kit";
 import { montarMaquina, FORMAS } from "@/lib/blueprint/maquina";
 import type { DocBlueprint } from "@/lib/blueprint/tipos";
-import { MAO, PAPEL, useSkin } from "./skin";
+import { MAO, PAPEL, REDONDA, ROSA, useSkin } from "./skin";
 
 /** os dois temas da prancha, nas variáveis do kit */
 export const TEMAS = `
@@ -22,6 +22,10 @@ export const TEMAS = `
 .iso[data-theme="cartolina"]{--anatomy-paper:#f7efdd;--anatomy-face:#fffaf0;--anatomy-top:#fbf5e7;--anatomy-shade-0:#ddcfae;--anatomy-shade-1:#e6dabd;--anatomy-shade-2:#eee4cc;--anatomy-shade-3:#f4ecd9;
   --anatomy-lit-top:#ffffff;--anatomy-lit-shade:#efe4c8;--anatomy-hi:#3a2f1e;--anatomy-mid:#7d6644;--anatomy-lo:#ad9670;--anatomy-faint:#d2c19c;--anatomy-lit:#0e7490;
   --anatomy-halo:#8a7350;--anatomy-halo-opacity:.3;--anatomy-dot:#3a2f1e;--anatomy-red:#c0392b;--anatomy-green:#2e7d32;--anatomy-weight:.9px}
+.iso[data-theme="barbie"]{--anatomy-paper:#ffe3f1;--anatomy-face:#fff6fb;--anatomy-top:#fffbfd;--anatomy-shade-0:#f6bfdc;--anatomy-shade-1:#f9cde5;--anatomy-shade-2:#fbd9ec;--anatomy-shade-3:#fde6f2;
+  --anatomy-lit-top:#ffffff;--anatomy-lit-shade:#ffd1ea;--anatomy-hi:#5b1240;--anatomy-mid:#b0336f;--anatomy-lo:#e48cbd;--anatomy-faint:#f4bfdc;--anatomy-lit:#ff1493;
+  --anatomy-halo:#be185d;--anatomy-halo-opacity:.22;--anatomy-dot:#5b1240;--anatomy-red:#e11d48;--anatomy-green:#059669;--anatomy-weight:.85px}
+.iso[data-theme="barbie"] .iso-face-text{font-family:${REDONDA.replace(/"/g, "'")}}
 .iso[data-theme="cartolina"] .iso-svg{filter:url(#rabisco)}
 .iso[data-theme="cartolina"] .iso-face-text{font-family:${MAO.replace(/"/g, "'")}}
 /* a seleção (raptor.css): a peça em foco vira o único acento aceso; o resto desce um tom */
@@ -45,17 +49,32 @@ export const TEMAS = `
 .mq-vazio{fill:var(--anatomy-shade-0);stroke:none}
 .mq-led-ok{fill:var(--anatomy-green)} .mq-led-trava{fill:var(--anatomy-red)} .mq-led-futuro{fill:var(--anatomy-faint)}
 .mq-palco:focus-visible{outline:1px solid var(--anatomy-mid);outline-offset:6px}
+/* a FICHA da peça escolhida entra deslizando (e parada, com "reduzir movimento") */
+@keyframes mqFicha{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.mq-ficha{animation:mqFicha .26s ease-out}
+@media (prefers-reduced-motion: reduce){.mq-ficha{animation:none}}
 `;
-const COR_ESTADO = { ok: { blueprint: "#7dffb0", cartolina: "#2e7d32" }, trava: { blueprint: "#ff4d5e", cartolina: "#c0392b" }, futuro: { blueprint: "rgba(186,230,253,.55)", cartolina: PAPEL.tintaSuave } } as const;
+const COR_ESTADO = {
+  ok: { blueprint: "#7dffb0", cartolina: "#2e7d32", barbie: "#059669" }, trava: { blueprint: "#ff4d5e", cartolina: "#c0392b", barbie: "#e11d48" },
+  futuro: { blueprint: "rgba(186,230,253,.55)", cartolina: PAPEL.tintaSuave, barbie: ROSA.tintaSuave },
+} as const;
+/** as cores do cartão e da ficha por skin */
+const VISUAL = {
+  blueprint: { tinta: "#e8f6ff", suave: "rgba(186,230,253,.72)", borda: "rgba(127,224,255,.28)", aceso: "#7fe0ff", fundoFicha: "rgba(127,224,255,.09)", marca: "rgba(127,224,255,.1)", raio: 3 },
+  cartolina: { tinta: PAPEL.tinta, suave: PAPEL.tintaSuave, borda: "rgba(107,90,62,.35)", aceso: "#0e7490", fundoFicha: "rgba(255,255,255,.55)", marca: "rgba(107,90,62,.12)", raio: 6 },
+  barbie: { tinta: ROSA.tinta, suave: ROSA.tintaSuave, borda: ROSA.borda, aceso: ROSA.choque, fundoFicha: "rgba(255,255,255,.55)", marca: "rgba(255,255,255,.55)", raio: 22 },
+} as const;
 const DIZ_ESTADO = { ok: "provada", trava: "travada por um crítico", futuro: "ainda não construída" } as const;
 const MOLA = { rigidez: 64, amortecimento: 14.2, subpassos: 4 };
 
 export default function FiguraIso({ doc, alca }: { doc: DocBlueprint; alca?: (e: React.PointerEvent) => void }) {
-  const skin = useSkin(), tema = skin === "cartolina" ? "cartolina" : "blueprint";
+  const skin = useSkin(), tema = skin;
   const m = useMemo(() => montarMaquina(doc), [doc]);
   const palco = useRef<HTMLDivElement>(null), leitura = useRef<HTMLSpanElement>(null);
-  const [sel, setSel] = useState<number | null>(null);
+  const [sel, setSel] = useState<number | null>(null), [fixa, setFixa] = useState<number | null>(null);
   const escolher = useRef<(i: number | null, porQuem: "pessoa" | "passeio") => void>(() => {});
+  /** CLICAR numa peça (no desenho ou na legenda) a FIXA: a ficha fica nela até clicar de novo; o mouse só pré-visualiza */
+  const fixar = useRef<(i: number) => void>(() => {});
 
   useEffect(() => {
     const raiz = palco.current, svg = raiz?.querySelector("svg");
@@ -65,7 +84,7 @@ export default function FiguraIso({ doc, alca }: { doc: DocBlueprint; alca?: (e:
     const V = m.V, lift = meta.map((it) => (it.m ? it.m[0] * V[0] + it.m[1] * V[1] + it.m[2] * V[2] : 0));
     const molas = m.legenda.map(() => ({ x: 0, v: 0, alvo: 0 }));
     const calmo = matchMedia("(prefers-reduced-motion: reduce)");
-    let foco: number | null = null, quadro = 0, ultimo = 0, visivel = false, passeando = !calmo.matches, relogio = 0, ocioso = 0, passo = -1, ordem = meta.map((_, i) => i);
+    let fixo: number | null = null, foco: number | null = null, quadro = 0, ultimo = 0, visivel = false, passeando = !calmo.matches, relogio = 0, ocioso = 0, passo = -1, ordem = meta.map((_, i) => i);
     const resumo = () => { const ok = m.legenda.filter((l) => l.estado === "ok").length; return `${m.legenda.length} peças · ${ok} provada${ok === 1 ? "" : "s"}`; };
     const diz = () => {
       const qualquerMexendo = molas.some((s) => Math.abs(s.alvo - s.x) > 0.02);
@@ -121,18 +140,18 @@ export default function FiguraIso({ doc, alca }: { doc: DocBlueprint; alca?: (e:
     escolher.current = (i, porQuem) => {
       if (porQuem === "pessoa") {
         passeando = false; clearTimeout(ocioso);
-        ocioso = window.setTimeout(() => { passeando = !calmo.matches; relogio = 1.4; passo = -1; roda(); }, 3600);
+        ocioso = window.setTimeout(() => { if (fixo !== null) return; passeando = !calmo.matches; relogio = 1.4; passo = -1; roda(); }, 3600);
       }
       if (i === foco) return;
       foco = i;
       molas.forEach((s, j) => (s.alvo = j === i ? 1 : 0));
       marca(); setSel(i); roda();
     };
-    const sobre = (ev: PointerEvent) => {
-      const g = (ev.target as Element).closest?.(".it") as SVGGElement | null, p = g?.dataset.piece;
-      escolher.current(p && p !== "base" ? Number(p) : null, "pessoa");
-    };
-    const sai = () => escolher.current(null, "pessoa");
+    const pecaDe = (ev: Event) => { const p = ((ev.target as Element).closest?.(".it") as SVGGElement | null)?.dataset.piece; return p && p !== "base" ? Number(p) : null; };
+    const sobre = (ev: PointerEvent) => { const p = pecaDe(ev); escolher.current(p ?? fixo, "pessoa"); };
+    const sai = () => escolher.current(fixo, "pessoa");
+    fixar.current = (i) => { fixo = fixo === i ? null : i; setFixa(fixo); escolher.current(i, "pessoa"); };
+    const clique = (ev: MouseEvent) => { const p = pecaDe(ev); if (p !== null) fixar.current(p); };
     const tecla = (ev: KeyboardEvent) => {
       const n = m.legenda.length;
       const para = ev.key === "ArrowRight" || ev.key === "ArrowDown" ? ((foco ?? -1) + 1) % n : ev.key === "ArrowLeft" || ev.key === "ArrowUp" ? ((foco ?? n) - 1 + n) % n : ev.key === "Home" ? 0 : ev.key === "End" ? n - 1 : ev.key === "Escape" ? null : undefined;
@@ -141,44 +160,80 @@ export default function FiguraIso({ doc, alca }: { doc: DocBlueprint; alca?: (e:
     };
     svg.addEventListener("pointermove", sobre);
     svg.addEventListener("pointerleave", sai);
+    svg.addEventListener("click", clique);
     raiz.addEventListener("keydown", tecla);
     const io = new IntersectionObserver((es) => { visivel = es[es.length - 1]!.isIntersecting; if (visivel) roda(); }, { rootMargin: "120px 0px" });
     io.observe(raiz);
     marca(); diz();
-    return () => { io.disconnect(); cancelAnimationFrame(quadro); clearTimeout(ocioso); svg.removeEventListener("pointermove", sobre); svg.removeEventListener("pointerleave", sai); raiz.removeEventListener("keydown", tecla); };
+    return () => { io.disconnect(); cancelAnimationFrame(quadro); clearTimeout(ocioso); svg.removeEventListener("pointermove", sobre); svg.removeEventListener("pointerleave", sai); svg.removeEventListener("click", clique); raiz.removeEventListener("keydown", tecla); };
   }, [m]);
 
   if (!m) return null;
-  const tinta = skin === "cartolina" ? PAPEL.tinta : "#e8f6ff", suave = skin === "cartolina" ? PAPEL.tintaSuave : "rgba(186,230,253,.72)";
-  const borda = skin === "cartolina" ? "rgba(107,90,62,.35)" : "rgba(127,224,255,.28)";
+  const v = VISUAL[tema], { tinta, suave, borda } = v, l = sel === null ? null : m.legenda[sel] ?? null;
+  const corDe = (e: keyof typeof COR_ESTADO) => COR_ESTADO[e][tema];
+  const mix = (c: string, pct: number) => `color-mix(in srgb, ${c} ${pct}%, transparent)`;
   return (
     <div className="iso" data-theme={tema}>
       <style>{ISO_CSS + TEMAS}</style>
       {/* o CARTÃO do anatomy: Fig 1 / título em cima, dica / leitura ao vivo embaixo; nada de texto dentro do desenho */}
-      <div className="relative rounded-[3px] border px-4 pb-3 pt-3" style={{ borderColor: borda }}>
+      <div className="relative border px-4 pb-3 pt-3" style={{ borderColor: borda, borderRadius: v.raio, ...(tema === "barbie" ? { background: "rgba(255,255,255,.28)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)" } : {}) }}>
         <div className={`flex items-baseline justify-between font-mono text-[11px] tracking-[0.18em] ${alca ? "cursor-grab active:cursor-grabbing" : ""}`} style={{ color: suave }} onPointerDown={alca}>
           <span>FIG 1</span><span className="max-w-[70%] truncate text-right uppercase">{doc.titulo}</span>
         </div>
-        <div ref={palco} className="mq-palco outline-none" tabIndex={0} role="slider" aria-valuemin={0} aria-valuemax={m.legenda.length}
+        <div ref={palco} className="mq-palco outline-none" tabIndex={0} role="slider" aria-valuemin={0} aria-valuemax={m.legenda.length} aria-valuenow={sel === null ? 0 : sel + 1}
           aria-label="A máquina do estudo: setas escolhem a peça, Esc solta">
           <svg className="iso-svg" viewBox={`0 0 ${m.largura} ${m.altura}`} role="img" aria-label={`A máquina do tema: ${m.legenda.map((l) => `${l.codigo} ${l.nome}`).join(", ")}`}
             style={{ width: "100%", height: "auto", maxHeight: 560 }} dangerouslySetInnerHTML={{ __html: m.svg }} />
         </div>
         <div className="flex items-baseline justify-between gap-4 font-mono text-[11px] tracking-[0.14em]" style={{ color: suave }}>
-          <span className="uppercase">passe o mouse numa peça pra desmontar</span>
+          <span className="uppercase">passe o mouse pra desmontar · clique pra fixar</span>
           <span ref={leitura} className="truncate text-right" style={{ color: tinta }} aria-live="off" />
         </div>
+      </div>
+      {/* a FICHA da peça escolhida: grande e destacada, com a cor do estado — o que é, pra que serve, a fase e o que trava */}
+      <div className="mx-auto mt-3 max-w-[900px]" aria-live="polite">
+        {l ? (
+          <div key={sel} className="mq-ficha relative overflow-hidden px-5 py-4" style={{
+            borderRadius: v.raio + 4, background: v.fundoFicha, border: `1.5px solid ${corDe(l.estado)}`, color: tinta,
+            boxShadow: `0 0 0 4px ${mix(corDe(l.estado), 13)}, 0 0 32px ${mix(corDe(l.estado), 25)}`, ...(tema === "barbie" ? { backdropFilter: "blur(16px) saturate(160%)", WebkitBackdropFilter: "blur(16px) saturate(160%)" } : {}),
+          }}>
+            <span aria-hidden className="absolute inset-y-0 left-0 w-1.5" style={{ background: corDe(l.estado) }} />
+            <div className="flex items-start gap-4">
+              <span className="grid h-12 w-12 flex-none place-items-center rounded-full font-mono text-[18px] font-bold" style={{ background: corDe(l.estado), color: tema === "blueprint" ? "#05162a" : "#fff" }}>{String(l.n).padStart(2, "0")}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <h4 className="text-[20px] font-bold leading-tight">{l.nome}</h4>
+                  <span className="rounded-full px-2.5 py-0.5 text-[12px] font-semibold" style={{ background: `${mix(corDe(l.estado), 15)}`, color: corDe(l.estado) }}>{DIZ_ESTADO[l.estado]}</span>
+                  <span className="rounded-full px-2.5 py-0.5 text-[12px]" style={{ background: v.marca, color: suave }}>fase {l.fase}</span>
+                  <span className="ml-auto text-[11.5px]" style={{ color: suave }}>{fixa === sel ? "📌 fixada · clique de novo pra soltar" : "clique pra fixar"}</span>
+                </div>
+                {l.sub && <p className="mt-1.5 text-[16px] leading-snug">{l.sub}</p>}
+                <p className="mt-1.5 text-[13.5px]" style={{ color: suave }}>na máquina: <b style={{ color: tinta }}>{FORMAS[l.forma].split(":")[0]}</b> — {FORMAS[l.forma].split(":")[1]?.trim()}</p>
+                {l.critico && (
+                  <div className="mt-2.5 px-3 py-2 text-[13.5px]" style={{ borderRadius: v.raio, background: `${mix(corDe(l.critico.aberto ? "trava" : "ok"), 12)}`, borderLeft: `3px solid ${corDe(l.critico.aberto ? "trava" : "ok")}` }}>
+                    <b style={{ color: corDe(l.critico.aberto ? "trava" : "ok") }}>{l.critico.aberto ? "o que trava: " : "provado: "}</b>{l.critico.titulo}
+                    <span style={{ color: suave }}> — prova: {l.critico.prova}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="px-5 py-4 text-center text-[14px]" style={{ borderRadius: v.raio + 4, border: `1px dashed ${borda}`, color: suave }}>
+            Passe o mouse ou clique numa peça da máquina (ou num número abaixo) pra ver o que ela é.
+          </div>
+        )}
       </div>
       {doc.objeto && <p className="mx-auto mt-2 max-w-[680px] text-center text-[14px] italic" style={{ color: suave }}>{doc.objeto}</p>}
       {/* a LEGENDA: números que selecionam, como passar o mouse (references/craft.md §9) */}
       <ol className="mx-auto mt-2 grid max-w-[760px] grid-cols-1 gap-x-6 gap-y-0.5 sm:grid-cols-2">
-        {m.legenda.map((l, i) => (
-          <li key={l.n}>
-            <button type="button" onMouseEnter={() => escolher.current(i, "pessoa")} onFocus={() => escolher.current(i, "pessoa")} onClick={() => escolher.current(i, "pessoa")}
-              className="flex w-full items-baseline gap-2 rounded-sm px-1 py-0.5 text-left text-[13px] leading-snug transition" title={FORMAS[l.forma]}
-              style={{ color: tinta, background: sel === i ? (skin === "cartolina" ? "rgba(107,90,62,.12)" : "rgba(127,224,255,.1)") : undefined }}>
-              <span className="font-mono text-[12px] font-bold" style={{ color: COR_ESTADO[l.estado][tema] }}>{String(l.n).padStart(2, "0")}</span>
-              <span><b>{l.nome}</b>{l.estado === "ok" ? " ✓" : l.estado === "trava" ? " ✕" : ""}{l.sub ? <span style={{ color: suave }}> — {l.sub}</span> : null}</span>
+        {m.legenda.map((it, i) => (
+          <li key={it.n}>
+            <button type="button" onMouseEnter={() => escolher.current(i, "pessoa")} onFocus={() => escolher.current(i, "pessoa")} onClick={() => fixar.current(i)} aria-pressed={fixa === i}
+              className="flex w-full items-baseline gap-2 rounded-sm px-1 py-0.5 text-left text-[13px] leading-snug transition" title={FORMAS[it.forma]}
+              style={{ color: tinta, background: sel === i ? v.marca : undefined }}>
+              <span className="font-mono text-[12px] font-bold" style={{ color: corDe(it.estado) }}>{String(it.n).padStart(2, "0")}</span>
+              <span><b>{it.nome}</b>{it.estado === "ok" ? " ✓" : it.estado === "trava" ? " ✕" : ""}{fixa === i ? " 📌" : ""}{it.sub ? <span style={{ color: suave }}> — {it.sub}</span> : null}</span>
             </button>
           </li>
         ))}

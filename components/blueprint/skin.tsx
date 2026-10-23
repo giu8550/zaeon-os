@@ -4,15 +4,25 @@
  * (22/10): a antiga cartolina do caderno (components/lounge/LoungeCartolina) — papel creme, tinta marrom, letra escrita
  * à mão, cards tortinhos colados com fita, bordas e fios RABISCADOS (filtro SVG de turbulência no traço — o texto fica
  * nítido, só a linha treme). Os módulos são os mesmos; a skin troca cor, fonte e traço.
- * A escolha é por pessoa e por navegador (localStorage — conveniência; nada no servidor).
+ * "barbie" = pedido do dono (23/10): fundo rosa, cards de VIDRO (translúcidos, desfocando o que está atrás), letra
+ * arredondada, rosa-choque e ameixa no lugar do ciano — mais feminino.
+ * A escolha é por pessoa e por navegador (localStorage — conveniência; nada no servidor), como o TAMANHO DA LETRA.
  */
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
-export type Skin = "blueprint" | "cartolina";
-export const SKINS: { id: Skin; nome: string }[] = [{ id: "blueprint", nome: "blueprint" }, { id: "cartolina", nome: "cartolina" }];
-const CHAVE = "zaeon:sala-estudos:skin";
+export type Skin = "blueprint" | "cartolina" | "barbie";
+export const SKINS: { id: Skin; nome: string }[] = [{ id: "blueprint", nome: "blueprint" }, { id: "cartolina", nome: "cartolina" }, { id: "barbie", nome: "barbie" }];
+const CHAVE = "zaeon:sala-estudos:skin", CHAVE_LETRA = "zaeon:sala-estudos:letra";
 
 export const PAPEL = { fundo: "#efe7d3", card: "rgba(250,244,230,.97)", tinta: "#3a2f1e", tintaSuave: "#6b5a3e", fita: "rgba(14,116,144,.22)" } as const;
+/** a skin barbie: rosa, vidro e ameixa */
+export const ROSA = {
+  fundo: "linear-gradient(135deg,#ffd1e8 0%,#ffb6d9 38%,#f9a8d4 62%,#fbcfe8 100%)", barra: "rgba(255,255,255,.42)", vidro: "rgba(255,255,255,.38)",
+  borda: "rgba(255,255,255,.75)", tinta: "#5b1240", tintaSuave: "#9d3a72", choque: "#e6007e", sombra: "rgba(190,24,93,.22)",
+} as const;
+/** a letra arredondada (fontes do sistema) */
+export const REDONDA = "ui-rounded,'SF Pro Rounded','Nunito','Quicksand','Varela Round','Avenir Next',system-ui,sans-serif";
+
 /** a letra de mão (fontes do sistema — sem baixar nada): títulos e corpo */
 export const MAO = "'Segoe Print','Bradley Hand','Chalkboard SE','Comic Sans MS','Comic Neue',cursive";
 
@@ -20,6 +30,12 @@ export const MAO = "'Segoe Print','Bradley Hand','Chalkboard SE','Comic Sans MS'
 const MARCADOR: Record<string, string> = {
   "#7fe0ff": "#0e7490", "#ffd36b": "#b45309", "#ff4d5e": "#c0392b", "#7dffb0": "#2e7d32", "#ff9ec7": "#be185d",
   "#c9b6ff": "#6d28d9", "#e8f6ff": PAPEL.tinta, "#8cf4ff": "#0e7490", "#fff": PAPEL.tinta, "#ffffff": PAPEL.tinta, "#ffc2c8": "#9b2c2c",
+};
+
+/** as cores neon do blueprint → os rosas/ameixas da barbie */
+const BATOM: Record<string, string> = {
+  "#7fe0ff": "#e6007e", "#ffd36b": "#c026d3", "#ff4d5e": "#e11d48", "#7dffb0": "#059669", "#ff9ec7": "#db2777",
+  "#c9b6ff": "#9333ea", "#e8f6ff": ROSA.tinta, "#8cf4ff": "#e6007e", "#fff": ROSA.tinta, "#ffffff": ROSA.tinta, "#ffc2c8": "#be123c",
 };
 
 const Ctx = createContext<Skin>("blueprint");
@@ -30,6 +46,17 @@ export const useSkin = () => useContext(Ctx);
 export function corNaSkin(skin: Skin, c: string): string {
   if (skin === "blueprint") return c;
   const k = c.toLowerCase();
+  if (skin === "barbie") {
+    if (BATOM[k]) return BATOM[k];
+    const m = /^rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)$/.exec(k);
+    if (m) {
+      const [r, , b, a] = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
+      if (b >= 200 && r >= 100) return `rgba(91,18,64,${Math.min(0.85, a + 0.25)})`;
+      if (r >= 240 && b < 120) return `rgba(225,29,72,${a})`;
+      if (r < 140 && b > 150) return `rgba(5,150,105,${a})`;
+    }
+    return c;
+  }
   if (MARCADOR[k]) return MARCADOR[k];
   const m = /^rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)$/.exec(k);
   if (m) {
@@ -51,9 +78,18 @@ export function inclinacao(semente: string): number {
 /** a skin escolhida (lembrada no navegador) */
 export function useSkinEscolhida(): [Skin, (s: Skin) => void] {
   const [s, setS] = useState<Skin>("blueprint");
-  useEffect(() => { try { const v = localStorage.getItem(CHAVE); if (v === "cartolina" || v === "blueprint") setS(v); } catch { /* sem storage */ } }, []);
+  useEffect(() => { try { const v = localStorage.getItem(CHAVE); if (v === "cartolina" || v === "blueprint" || v === "barbie") setS(v); } catch { /* sem storage */ } }, []);
   const trocar = useCallback((n: Skin) => { setS(n); try { localStorage.setItem(CHAVE, n); } catch { /* sem storage */ } }, []);
   return [s, trocar];
+}
+
+/** o TAMANHO DA LETRA dos cards (lembrado no navegador): de 100% a 160% */
+export const LETRAS = [1, 1.15, 1.3, 1.45, 1.6] as const;
+export function useLetraEscolhida(): [number, (n: number) => void] {
+  const [l, setL] = useState(1);
+  useEffect(() => { try { const v = Number(localStorage.getItem(CHAVE_LETRA)); if ((LETRAS as readonly number[]).includes(v)) setL(v); } catch { /* sem storage */ } }, []);
+  const trocar = useCallback((n: number) => { setL(n); try { localStorage.setItem(CHAVE_LETRA, String(n)); } catch { /* sem storage */ } }, []);
+  return [l, trocar];
 }
 
 /** os filtros do traço rabiscado (uma vez por prancha) */
@@ -84,4 +120,14 @@ export const CSS_CARTOLINA = `
 .skin-cartolina [class*="text-rose-"] { color: #9b2c2c !important; }
 .skin-cartolina [class*="bg-sky-950"] { background: rgba(58,47,30,.12) !important; }
 .skin-cartolina input { background: rgba(255,255,255,.6) !important; color: ${PAPEL.tinta} !important; }
+`;
+
+/** o CSS da barbie (escopo .skin-barbie): letra arredondada e os azuis/cianos do blueprint viram ameixa e rosa */
+export const CSS_BARBIE = `
+.skin-barbie, .skin-barbie * { font-family: ${REDONDA} !important; }
+.skin-barbie [class*="text-sky-"], .skin-barbie [class*="text-emerald-"], .skin-barbie [class*="text-cyan-"] { color: ${ROSA.tintaSuave} !important; }
+.skin-barbie [class*="text-rose-"] { color: #be123c !important; }
+.skin-barbie [class*="bg-sky-950"] { background: rgba(255,255,255,.35) !important; }
+.skin-barbie input { background: rgba(255,255,255,.7) !important; color: ${ROSA.tinta} !important; border-radius: 999px !important; }
+.skin-barbie button { border-radius: 999px; }
 `;
