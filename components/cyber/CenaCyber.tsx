@@ -6,6 +6,7 @@ import BarrasHud, { juntarEstadoIA } from "./BarrasHud";
 import type { EstadoIALab } from "@/lib/ui/loungeHub";
 import PainelAdminCyber from "./admin/PainelAdminCyber";
 import InventarioPainel from "./InventarioPainel";
+import ConversaTrader from "./ConversaTrader";
 import type { Carregando } from "@/lib/cyber/carregamento";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -124,6 +125,8 @@ export default function CenaCyber(p: CenaCyberProps) {
   const lerBarras = useCallback(() => { const e = engine.current; if (!e) return null; const c = e.combate(), a = e.aguaAgora(); return { vida: c.vida, vidaMax: c.max, caido: c.caido, agua: a.v, seco: a.seco, fonte: a.fonte, sede: a.sede, energia: c.energia, escudo: c.escudo }; }, []);
   // o INVENTÁRIO (tecla I — lib/cyber/inventario): a arma equipada vai pra mão
   const [inventarioAberto, setInventarioAberto] = useState(false);
+  // a CONVERSA com um agente de trading da mesa de operações (lib/cyber/agentesTrading)
+  const [agenteTrading, setAgenteTrading] = useState<string | null>(null);
   const [destaqueInv, setDestaqueInv] = useState<PesquisaSalva | null>(null);   // a pesquisa nova do tutorial
   const lerInventario = useCallback(() => engine.current?.inventario() ?? null, []);
   const equiparItem = useCallback((id: Parameters<CyberEngine["equipar"]>[0]) => engine.current?.equipar(id) ?? null, []);
@@ -282,7 +285,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       container: cont.current, overlay: overlay.current, els: { menu: null, hold: null, monLabel: monLabel.current },
       eu: cb.current.eu, membros: cb.current.membros, menu: !tela, low, qualidade, teclasSempre: tela, somLounge: p.somLounge ?? null, offsetMusica: p.offsetMusica ?? 0,
       remotos: cb.current.remotos, enviarPos: (x) => cb.current.enviarPos?.(x),
-      onPerto: setPerto, onFalarCom: setFalandoCom, onEntrarEstudo: entrarEstudo,
+      onPerto: setPerto, onFalarCom: setFalandoCom, onAgenteTrading: (id) => { if (document.pointerLockElement) document.exitPointerLock(); setAgenteTrading(id); }, onEntrarEstudo: entrarEstudo,
       onTablet: (on) => { setTabletAberto(on); if (on) engine.current?.soltarMouse(); }, onDescanso: setDescanso,   // (o som é o do tablet abrindo/guardando, no engine)
       onSessao: () => { setMenu(false); cb.current.onSessaoIniciada?.(); }, onPronto: () => setPronto(true), onCarregando: setCarga,
       landmarks: landmarksOn(), onLandmark: (poi) => { setErroTopo(null); setPoiAberto(poi); }, onTopo: (v) => { setNoTopo(v); if (v) setPoiAberto(null); },
@@ -413,6 +416,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       {/* as barras do HUD: SAÚDE, VIGOR e o uso CONCORRENTE de IA (o laboratório do tablet) */}
       {tela && !menu && !tabletAberto && <BarrasHud ler={lerBarras} ia={iaLab} touch={touch} />}
       {tela && <ContadorFps mostrar={prefs.fps} gpu={gpu} classe={perfil.gpu} ler={lerFps} />}
+      <ConversaTrader agenteId={agenteTrading} onFechar={() => setAgenteTrading(null)} />
       <InventarioPainel aberto={inventarioAberto} destaque={destaqueInv} encaixe={encaixeAtivo ? { ativo: true, onEntregar: (it: ItemEncaixe) => void entregar(it), enviando: encaixeEnviando, erro: encaixeErro } : undefined} onFechar={() => { setInventarioAberto(false); setEncaixeAtivo(false); setEncaixeErro(null); engine.current?.inventarioFechado(); }} ler={lerInventario} equipar={equiparItem} armadura={lerArmadura} aoEnquadrar={setCxVitrine} />
 
       {/* rótulo do monitor (hover) */}

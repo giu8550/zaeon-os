@@ -10,7 +10,8 @@ describe("os lugares da frota no Templo Cósmico", () => {
   const spots = spotsDoTemplo();
   it("muitos (as rodas de todas as salas + as cabines), em rodas de 2 a 5", () => {
     expect(spots.length).toBeGreaterThan(450);
-    const salas = new Set(spots.map((s) => s.templo!.sala)); for (const s of ["salao", "estudoL", "estudoR", "campus", "torre", "rasta", "capelaRasta", "festas"]) expect(salas.has(s as never), s).toBe(true);
+    const salas = new Set(spots.map((s) => s.templo!.sala)); for (const s of ["salao", "estudoL", "estudoR", "torre", "rasta", "capelaRasta", "festas"]) expect(salas.has(s as never), s).toBe(true);
+    expect(salas.has("campus")).toBe(false);   // (os terminais do campus são dos agentes de trading)
     const rodas = new Map<string, number>(); for (const s of spots) if (s.tipo !== "cabine") { const k = s.id.replace(/-\d+$/, ""); rodas.set(k, (rodas.get(k) ?? 0) + 1); }
     for (const [k, n] of rodas) { expect(n, k).toBeGreaterThanOrEqual(2); expect(n, k).toBeLessThanOrEqual(5); }
     // os 3 andares dos lounges estudantis
@@ -79,7 +80,7 @@ describe("as motos estacionam onde a IA pousa (qualquer chão aberto do Templo)"
       for (const c of cs) expect(Math.hypot(p.q.x - c.x, p.q.z - c.z), `${s.id} pouso`).toBeGreaterThan(c.r + 0.5);
       for (const o of solidos) if (Math.hypot(p.q.x - o.x, p.q.z - o.z) < o.r + 2) expect(o.topo, `${s.id} céu`).toBeLessThanOrEqual(p.yRel + 0.3);
     });
-    expect(salas.size).toBeGreaterThanOrEqual(4);   // (não só o salão)
+    expect(salas.size).toBeGreaterThanOrEqual(3);   // (não só o salão)
   });
   it("depois do trânsito, a moto fica parada no pouso enquanto ela está no lugar seguinte", async () => {
     const { gerarFrota, LOTE_INICIAL } = await import("./frota"), { planejarDia } = await import("./plano"), { FLAGS_PADRAO } = await import("./agenda"), { estadoDaIA } = await import("./corpo");

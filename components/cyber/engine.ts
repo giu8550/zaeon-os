@@ -17,7 +17,8 @@ import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } fro
 import { alternarModoCamera, distPerto, faixaDaDistancia, limitarPitch, olhoDoOmbro, poseDaCamera, seguirPerto, type ModoCamera } from "@/lib/cyber/camera";
 import { PISTA, rotDaSala, espelhoDe, CAPELA_NA_ZAEON, ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, bocaDaGaragem, durDaViagem, naColunaDaGaragem, salaEm, ESCADAS, FIO, alturaDoFio, naEscadaLocal, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PISO_FESTA, PALCO as PALCO_LOUNGE, naSala, daSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade, colisoresDoAndar, dentroDoEstudo, rumoNaSala } from "@/lib/cyber/ceu";
 import { DECK, TEMPLO, curvaDaEscadaria, noTemplo } from "@/lib/cyber/templo";
-import { ALCANCE_DUELO, TORRE_TI, CABINES_TORRE, CABINE_TI, CUPULA, ESTUDO, barradoNaCupula, daCabineTI, bocaDoPoco, capsulaEm, embarcam, type PocoTC } from "@/lib/cyber/temploCosmico";
+import { ALCANCE_DUELO, TORRE_TI, CABINES_TORRE, CABINE_TI, CUPULA, ESTACOES_TI, ESTUDO, SALAO, barradoNaCupula, daCabineTI, bocaDoPoco, capsulaEm, embarcam, type PocoTC } from "@/lib/cyber/temploCosmico";
+import { AGENTES_TRADING, agentePorId } from "@/lib/cyber/agentesTrading";
 import { ESPERA_S, FALA_DESAFIO } from "@/lib/cyber/dueloIngles";
 import { estadoDoShow, trovoesEntre } from "@/lib/cyber/showLounge";
 import { criarMandala, type MandalaHandle } from "./MandalaSagrada";
@@ -267,6 +268,8 @@ export type CyberOpts = {
   remotosSuaves?: boolean;
   onPerto?: (perto: boolean) => void;
   onFalarCom?: (nome: string | null) => void;
+  /** a pessoa chamou um AGENTE DE TRADING (lib/cyber/agentesTrading) pra conversar */
+  onAgenteTrading?: (id: string) => void;
   onEntrarEstudo?: () => void;
   /** o MODO ESTUDO no TABLET (lib/cyber/descanso): o tablet terminou de materializar (abre o laboratório por cima) ou
    *  sumiu — o React abre/fecha a janela; `engine.fecharTablet()` guarda o tablet */
@@ -372,6 +375,8 @@ const CRUZ_HTML = `<style>.zc-t{position:absolute;background:#e9f7ff;box-shadow:
 <div class="zc-c"></div><div class="zc-t zc-h" style="left:calc(-9px - var(--abre))"></div><div class="zc-t zc-h" style="left:var(--abre)"></div>
 <div class="zc-t zc-v" style="top:calc(-9px - var(--abre))"></div><div class="zc-t zc-v" style="top:var(--abre)"></div><div class="zc-t" style="left:-1px;top:-1px;width:2px;height:2px"></div><div class="zc-x"></div>`;
 const DICA_MIRA_CSS = "position:absolute;left:50%;bottom:92px;transform:translateX(-50%);font:600 12px system-ui,sans-serif;color:#cfeaff;background:rgba(8,14,34,.62);border:1px solid rgba(150,220,255,.3);padding:5px 12px;border-radius:999px;pointer-events:none;white-space:nowrap;";
+/** o crachá de quem OPERA (os agentes de trading): dourado, destacado dos outros */
+const TAG_TRADER = "color:#ffe2a8;background:rgba(26,16,4,.82);border:1px solid #ffc46b;box-shadow:0 0 12px -2px #ffc46b;";
 const TAG_CSS = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);font:700 11px system-ui,sans-serif;padding:2px 8px;border-radius:999px;background:rgba(10,8,30,.62);border:1px solid rgba(160,140,255,.3);white-space:nowrap;pointer-events:none;";
 const FALA_CSS = "position:absolute;left:0;top:0;transform:translate(-50%,-100%);max-width:200px;font:12.5px system-ui,sans-serif;color:#eee8ff;background:rgba(14,12,36,.82);border:1px solid;padding:6px 10px;border-radius:12px;pointer-events:none;overflow-wrap:anywhere;";
 
@@ -1212,6 +1217,16 @@ export class CyberEngine {
       const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + "color:" + p.cor + ";"; tag.textContent = p.nome; this.o.overlay.appendChild(tag);
       this.personagens.push({ h, tag });
     }
+    // os AGENTES DE TRADING (lib/cyber/agentesTrading): FIXOS nos terminais da mesa de operações do campus, com as skins
+    // comuns e o crachá DOURADO de quem opera (destacados do resto — dá pra falar com eles)
+    AGENTES_TRADING.forEach((a, k) => {
+      const corpo = CORPOS_VRM[a.skin], term = ESTACOES_TI[k]; if (!corpo || !term) return;
+      const perfil = { id: a.id, semente: k, lado: 0, vaga: { x: 0, z: 0, rumo: 0 } };
+      const L = CIDADE.salas.lounge, assento = daCabineTI(term, 0, CABINE_TI.assentoZ + 0.1);
+      const h = criarPersonagemVivo({ id: a.id, nome: a.nome, cor: a.cor, corMoto: a.cor, corpo, perfil, starTex: this.cena.starTex, low: this.o.low, gltf: this.gltf!, cena: this.cena.scene, preparar: (obj) => this.prepararVrm(obj), fixo: { pos: mundo(daSala(L, assento.x, assento.z)), y: ALTURA_LOUNGE - SALAO.desce, rumo: rumoNaSala(L, term.rot), trabalha: true } });
+      const tag = document.createElement("div"); tag.style.cssText = TAG_CSS + TAG_TRADER; tag.innerHTML = `<span style="color:#1a1004;background:#ffc46b;border-radius:999px;padding:0 5px;margin-right:5px;font-weight:900">◆ TRADER IA</span>${a.nome} · <span style="opacity:.8">${a.papel}</span>`; this.o.overlay.appendChild(tag);
+      this.personagens.push({ h, tag });
+    });
     for (const p of PERSONAGENS_DA_CIDADELA) {
       const corpo = CORPOS_VRM[p.id]; if (!corpo) continue;
       const perfil = PERFIS_VIDA[p.id]; if (!perfil) continue;
@@ -1221,6 +1236,12 @@ export class CyberEngine {
     }
   }
   // ───────────── o DUELO DE LINGUAGEM da Examiner (o Templo Cósmico — lib/cyber/dueloIngles) ─────────────
+  /** o agente de trading ao meu alcance (a menos de 3,2 m, na mesma altura) */
+  private traderPerto() {
+    let melhor: { h: PersonagemVivoHandle; tag: HTMLDivElement } | null = null, dm = 3.2;
+    for (const p of this.personagens) { if (!p.h.id.startsWith("trader-") || !p.h.group.visible) continue; const d = Math.hypot(p.h.pos.x - this.eu.pos.x, p.h.pos.z - this.eu.pos.z); if (d < dm && Math.abs(p.h.alt - this.eu.alt) < 2.5) { dm = d; melhor = p; } }
+    return melhor;
+  }
   private examiner() { return this.personagens.find((p) => p.h.id === "examiner")?.h ?? null; }
   /** a cúpula, a guardiã e o duelo — a cada quadro */
   private atualizarDuelo(dt: number) {
@@ -3975,6 +3996,8 @@ export class CyberEngine {
     }
     // na RECEPÇÃO, perto da mesa (o lar do Droid): chamar ele de novo (refaz o tutorial)
     if (!this.guia && this.droid && this.altoEm && !this.noCeu) { const c = this.casaDoAgente(); if (Math.hypot(this.eu.pos.x - c.x, this.eu.pos.z - c.z) < 5 && Math.abs(this.eu.alt - c.y) < 2.5) return { id: "chamar-droid", rotulo: `Chamar o ${DROID.nome}`, fazer: () => this.guiaRefazer() }; }
+    // perto de um AGENTE DE TRADING (na mesa de operações): falar com ele
+    { const tr = this.traderPerto(); if (tr) { const a = agentePorId(tr.h.id)!; return { id: `trader-${a.id}`, rotulo: `Falar com ${a.nome} · ${a.papel}`, fazer: () => this.o.onAgenteTrading?.(a.id) }; } }
     let colega: Ator | null = null, dc = 3.0;
     for (const a of this.remotos.values()) { const d = Math.hypot(a.pos.x - this.eu.pos.x, a.pos.z - this.eu.pos.z); if (d < dc && Math.abs(a.alt - this.eu.alt) < 2) { dc = d; colega = a; } }
     if (colega) { const c = colega; return { id: `falar-${c.id}`, rotulo: `Falar com ${c.name}`, fazer: () => { this.falandoCom = c; this.alvo = null; this.o.onFalarCom?.(c.name); c.av.olharPara(Math.atan2(this.eu.pos.x - c.pos.x, this.eu.pos.z - c.pos.z)); } }; }

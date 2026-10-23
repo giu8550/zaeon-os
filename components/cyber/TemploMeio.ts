@@ -8,7 +8,7 @@
  */
 import * as THREE from "three";
 import { criarTeloesMercado } from "./TeloesMercado";
-import { RACKS_TI, ALTO_TI, PIRAMIDE_INV, CABINES_TORRE, CABINE_TI, CAMPUS, CYBER, ESTACOES_TI, NUCLEO_CYBER, PILARES_ALTO, POCOS_TC, PONTES, SALAO, TEMPESTADE_TI, TORRE_TI, capsulaEm, portaDoPoco } from "@/lib/cyber/temploCosmico";
+import { RACKS_TI, ALTO_TI, PIRAMIDE_INV, CABINES_TORRE, CABINE_TI, CAMPUS, CYBER, ESTACOES_TI, NUCLEO_CYBER, PILARES_ALTO, POCOS_TC, PONTES, SALAO, TEMPESTADE_TI, TORRE_TI, capsulaEm, daCabineTI, portaDoPoco } from "@/lib/cyber/temploCosmico";
 
 export type MeioHandle = { group: THREE.Group; alvos: THREE.Object3D[]; /** os RAIOS que caíram desde a última leitura (onde, no MUNDO) — o engine toca o trovão */ raios(): { x: number; y: number; z: number }[]; /** a cápsula em que eu estou (a vista de DENTRO: sem o teto, o vidro quase sumido), ou null */ capsulaDentro(id: string | null): void; /** os ESTILHAÇOS girando em volta do cubo agora (MUNDO: centro e raio) — o engine empurra quem encosta */ estilhacos(): { x: number; y: number; z: number; r: number }[]; atualizar(dt: number, t: number): void; dispose(): void };
 
@@ -159,6 +159,13 @@ export function criarMeio(o: { low: boolean }): MeioHandle {
       fechar(im); if (p.mat === escuro && p.pos[1] < 0.1) alvos.push(im);
     }
     if (!mats.includes(vidroV)) mats.push(vidroV);
+  }
+  // ── o DESTAQUE de quem opera: o anel dourado no chão de cada terminal de trading (o agente sentado ali — lib/cyber/
+  //    agentesTrading — atende quem chega perto) ──
+  { const ouro = aditivo(0xffc46b, 0.55), aneis = instanciar(new THREE.RingGeometry(1.55, 1.75, 48), ouro, NC);
+    ESTACOES_TI.forEach((e, i) => { const c = daCabineTI(e, 0, 0.1); q.setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)); aneis.setMatrixAt(i, m4.compose(v.set(c.x, y0 + 0.13, c.z), q, um)); });
+    fechar(aneis); aneis.userData.semLote = true;
+    anim.push((_, t) => { ouro.opacity = 0.35 + 0.25 * Math.sin(t * 2.2); });
   }
   // ── a TEMPESTADE: a nuvem por cima das mesas de operações, escura, com os clarões dentro (e o trovão) ──
   const zs = ESTACOES_TI.map((e) => e.z), zMax = Math.max(...zs) + 14, zMin = Math.min(...zs) - 14, yN = y0 + TEMPESTADE_TI.alt;
