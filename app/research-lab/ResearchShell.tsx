@@ -133,6 +133,8 @@ export default function ResearchShell({
   // portal, na `lateral`) e DOCUMENTOS nas abas do TOPO. Trocar de conversa não troca o documento, e vice-versa.
   const abas = unifiedView === "abas";
   const [vista, setVista] = useState<string>("chat");
+  // a Aura está respondendo na conversa (ResearchChat) → o friso da pasta "Conversa" varre
+  const [chatGerando, setChatGerando] = useState(false);
   const [lateral, setLateral] = useState<HTMLDivElement | null>(null);
   // O traçador de percurso (bolinha do cérebro) mora no TOPO da sala, sem nome — o chat desenha aqui por portal.
   const [slotTopo, setSlotTopo] = useState<HTMLDivElement | null>(null);
@@ -311,6 +313,7 @@ export default function ResearchShell({
             <PastasEmpilhadas
               pastas={pastas}
               ativa={vista}
+              gerando={chatGerando ? "chat" : null}
               onAbrir={(id) => (id === "chat" ? setVista("chat") : verJanela(id))}
               // o traçador de percurso: só o sinal da bolinha (gira quando um percurso está pronto pra ser criado)
               antes={<div ref={setSlotTopo} className="shrink-0 flex items-center self-center empty:hidden" />}
@@ -403,6 +406,7 @@ export default function ResearchShell({
                 slotTopo={abas ? slotTopo : undefined}
                 emCena={chatVisible}
                 onAtivar={abas ? () => setVista("chat") : undefined}
+                onGerando={abas ? setChatGerando : undefined}
               />
             </div>
           )}

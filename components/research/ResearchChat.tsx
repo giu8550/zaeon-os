@@ -121,6 +121,7 @@ export default function ResearchChat({
   slotTopo,
   emCena = true,
   onAtivar,
+  onGerando,
 }: {
   workType?: string | null;
   /** TCC cross-sala aberto na folha: o chat lapida ESTE documento — e tudo nasce como sugestão. */
@@ -141,6 +142,8 @@ export default function ResearchChat({
   emCena?: boolean;
   /** Clicou numa conversa → a sala mostra o chat (o documento aberto no topo continua o mesmo). */
   onAtivar?: () => void;
+  /** Avisa a sala quando a resposta começa/termina (o friso da pasta "Conversa" varre enquanto gera). */
+  onGerando?: (gerando: boolean) => void;
 }) {
   const recuo = compacto ? "ml-0 mr-0" : "ml-4 sm:ml-8 lg:ml-14 mr-0 sm:mr-2";
   // Com um TCC cross-sala aberto, o padrão é LAPIDAR (sugestões com fonte verificada); o aluno
@@ -150,6 +153,9 @@ export default function ResearchChat({
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  // o friso da pasta "Conversa" (PastasEmpilhadas, na sala) varre enquanto gera; ao desmontar, apaga
+  useEffect(() => { onGerando?.(sending); }, [sending, onGerando]);
+  useEffect(() => () => onGerando?.(false), [onGerando]);
   const [quick, setQuick] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   // Editar a própria pergunta e reenviar (estilo ChatGPT): id da mensagem em edição.

@@ -1243,6 +1243,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
             ...(CARTOLINA_ON && abaAtiva ? [{ id: "cartolina", rotulo: "Cartolina", titulo: "Cartolina desta conversa", icone: <FileText size={13} /> }] : []),
           ]}
           ativa={cartolinaAberta && CARTOLINA_ON ? "cartolina" : trabalhoAberto && TCC_CROSS_ON ? `trab:${trabalhoAberto}` : docAtivo ?? "conversa"}
+          // enquanto a Aura responde, o friso da pasta "Conversa" varre (o mesmo sinal do ponto pulsando na barra)
+          gerando={sending ? "conversa" : null}
           onAbrir={(id) => {
             if (id.startsWith("trab:")) { setTrabalhoAberto(id.slice(5)); setCartolinaAberta(false); return; }
             if (id === "cartolina") { setCartolinaAberta(true); return; }
