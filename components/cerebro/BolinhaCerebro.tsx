@@ -2,7 +2,8 @@
 /**
  * BolinhaCerebro — a bolinha azul da conversa + o botão "ver mapa" (HANDOFF §3). Estados:
  * oculta (nada) · sugerida (azul fraca pulsando, "gerar") · gerando (anel girando) · ativa (anel de
- * completude) · vazia (traçar percurso). Clique: sugerida/vazia → gera; ativa/gerando → abre o painel.
+ * completude) · vazia (traçar percurso). Clique: sugerida/vazia → gera (SEM abrir: a barra de carregamento corre
+ * aqui mesmo); ativa → abre o painel. O mapa só abre quando a pessoa entra nele.
  */
 import { ROTULO, type EstadoBolinha } from "@/lib/map/bolinha";
 
@@ -14,6 +15,7 @@ export default function BolinhaCerebro({ estado, completude = 0, onClick, aberto
   return (
     <button
       type="button"
+      data-bolinha-cerebro
       onClick={onClick}
       aria-pressed={!!aberto}
       title={ROTULO[estado]}
@@ -26,7 +28,18 @@ export default function BolinhaCerebro({ estado, completude = 0, onClick, aberto
         {estado === "ativa" && <span className="absolute inset-0 grid place-items-center text-[9px] font-black text-cyan-100">{pct}</span>}
         {estado === "gerando" && <span className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-cyan-300" />}
       </span>
-      {!soSinal && <span className="whitespace-nowrap">{ROTULO[estado]}</span>}
+      {!soSinal && (
+        <span className="flex flex-col items-start gap-1">
+          <span className="whitespace-nowrap">{ROTULO[estado]}</span>
+          {/* gerando: a barra de carregamento corre no próprio botão — o mapa abre quando a pessoa clicar nele pronto */}
+          {estado === "gerando" && (
+            <span role="progressbar" aria-label="Gerando o mapa" className="block h-1 w-24 overflow-hidden rounded-full bg-cyan-500/15">
+              <span className="block h-full w-1/3 animate-[bolinha-gerando_1.4s_ease-in-out_infinite] rounded-full bg-gradient-to-r from-cyan-300 to-sky-500" />
+              <style>{`@keyframes bolinha-gerando{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}`}</style>
+            </span>
+          )}
+        </span>
+      )}
     </button>
   );
 }

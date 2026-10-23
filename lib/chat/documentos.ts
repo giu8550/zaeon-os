@@ -19,6 +19,8 @@ export type DocArtefato = {
   data?: any;
   /** true = além de abrir a aba, mostra ela agora (pedido explícito, clique no cartão) */
   focar?: boolean;
+  /** a conversa de onde o documento saiu (a aba entra SÓ nela); ausente = a conversa na tela */
+  scopeId?: string;
 };
 
 export const ROTULO_DOC: Record<string, { emoji: string; nome: string }> = {

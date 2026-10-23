@@ -4,6 +4,8 @@
  * docs/prototypes/cerebro-particulas.html). Desktop-only, lazy, PAUSA fora de tela (IntersectionObserver)
  * e com a aba oculta. Cada nó do BACKBONE governa uma REGIÃO: laranja = a conquistar, âmbar = você está
  * aqui, azul = aprendido/aplicado, quase-branco = validado. Arraste pra girar.
+ * Ligações entre nós = FILAMENTOS NEURAIS (nunca reta): feixes de fios curvos que atravessam o cérebro,
+ * balançam devagar e acendem com pulsos de luz no sentido do percurso; os do nó selecionado brilham mais.
  */
 import { useEffect, useMemo, useRef } from "react";
 import type { EstadoNo, MapaAresta, MapaNo } from "@/lib/map/tipos";
@@ -58,6 +60,52 @@ function construirNuvem(nReg: number): { P: P[]; SYN: Syn[] } {
   return { P, SYN };
 }
 
+// ── FILAMENTOS NEURAIS ────────────────────────────────────────────────────────────────────────────
+type V3 = { x: number; y: number; z: number };
+/** Um fio do feixe entre duas âncoras: cúbica 3D com dois controles desviados (curva orgânica, nunca reta). */
+export type Fio = { a: V3; b: V3; c1: V3; c2: V3; ph: number; w: number; amp: number };
+/** pseudo-aleatório determinístico (o feixe não "pula" a cada render) */
+function semente(n: number): () => number { let x = (n * 2654435761) >>> 0 || 1; return () => { x ^= x << 13; x >>>= 0; x ^= x >> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; }; }
+export function fiosEntre(A: [number, number, number], B: [number, number, number], n: number, seed: number): Fio[] {
+  const rnd = semente(seed + 1), a = { x: A[0], y: A[1], z: A[2] }, b = { x: B[0], y: B[1], z: B[2] };
+  const len = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) || 1;
+  const ctrl = (t: number) => {
+    // ao longo da corda, puxado pro MIOLO do cérebro (o fio atravessa a massa) + um desvio próprio de cada fio
+    const m = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t };
+    const puxa = 0.35 + rnd() * 0.25, d = len * (0.18 + rnd() * 0.22);
+    return { x: m.x * (1 - puxa) + (rnd() - 0.5) * d, y: m.y * (1 - puxa) + (rnd() - 0.5) * d, z: m.z * (1 - puxa) + (rnd() - 0.5) * d };
+  };
+  return [...Array(n)].map(() => ({ a, b, c1: ctrl(0.3), c2: ctrl(0.7), ph: rnd() * Math.PI * 2, w: 0.6 + rnd() * 0.8, amp: 0.02 + rnd() * 0.03 }));
+}
+/** ponto do fio em t ∈ [0,1], com o balanço lento dos controles (vivo) */
+export function pontoDoFio(f: Fio, t: number, tempo: number): V3 {
+  const o1 = Math.sin(tempo * 0.5 + f.ph) * f.amp, o2 = Math.cos(tempo * 0.43 + f.ph * 1.7) * f.amp;
+  const c1 = { x: f.c1.x + o1, y: f.c1.y - o2, z: f.c1.z + o2 }, c2 = { x: f.c2.x - o2, y: f.c2.y + o1, z: f.c2.z - o1 };
+  const m = 1 - t, k0 = m * m * m, k1 = 3 * m * m * t, k2 = 3 * m * t * t, k3 = t * t * t;
+  return { x: k0 * f.a.x + k1 * c1.x + k2 * c2.x + k3 * f.b.x, y: k0 * f.a.y + k1 * c1.y + k2 * c2.y + k3 * f.b.y, z: k0 * f.a.z + k1 * c1.z + k2 * c2.z + k3 * f.b.z };
+}
+const SEG_FIO = 26;
+/** Desenha um feixe: fio-base fino com brilho + pulsos de luz que percorrem o fio de a → b. `forca` 0..1.5 */
+function desenharFeixe(ctx: CanvasRenderingContext2D, proj: (p: V3) => { sx: number; sy: number }, fios: Fio[], tempo: number, cor: string, forca: number, velocidade = 0.22) {
+  ctx.strokeStyle = cor; ctx.shadowColor = cor; ctx.lineCap = "round";
+  for (const f of fios) {
+    const pts = [...Array(SEG_FIO + 1)].map((_, k) => proj(pontoDoFio(f, k / SEG_FIO, tempo)));
+    // base: o filamento aceso de leve
+    ctx.shadowBlur = 6; ctx.lineWidth = 0.7 * f.w; ctx.globalAlpha = Math.min(1, 0.22 * forca + 0.06 * Math.sin(tempo * 0.8 + f.ph)); ctx.beginPath();
+    pts.forEach((q, k) => (k ? ctx.lineTo(q.sx, q.sy) : ctx.moveTo(q.sx, q.sy))); ctx.stroke();
+    // o pulso: uma janela que corre pelo fio (o sinal), mais grossa e brilhante no centro
+    const pos = ((tempo * velocidade + f.ph / (Math.PI * 2)) % 1) * (SEG_FIO + 8) - 4;
+    ctx.shadowBlur = 14;
+    for (let k = Math.max(0, Math.floor(pos - 4)); k < Math.min(SEG_FIO, Math.ceil(pos + 4)); k++) {
+      const brilho = Math.max(0, 1 - Math.abs(k + 0.5 - pos) / 4);
+      if (brilho <= 0) continue;
+      ctx.globalAlpha = Math.min(1, brilho * 0.95 * forca); ctx.lineWidth = (0.8 + 1.8 * brilho) * f.w;
+      ctx.beginPath(); ctx.moveTo(pts[k]!.sx, pts[k]!.sy); ctx.lineTo(pts[k + 1]!.sx, pts[k + 1]!.sy); ctx.stroke();
+    }
+  }
+  ctx.shadowBlur = 0;
+}
+
 function glow(size: number, core: string): HTMLCanvasElement {
   const s = document.createElement("canvas"); s.width = s.height = size;
   const g = s.getContext("2d")!; const grd = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
@@ -66,12 +114,13 @@ function glow(size: number, core: string): HTMLCanvasElement {
 }
 const hexRgba = (hex: string, a: number) => { const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
 
-export default function CerebroCanvas({ regioes, sinapses = [], onRegiao }: { regioes: RegiaoVisual[]; sinapses?: Sinapse[]; onRegiao?: (r: RegiaoVisual) => void }) {
+export default function CerebroCanvas({ regioes, sinapses = [], onRegiao, destaque = null }: { regioes: RegiaoVisual[]; sinapses?: Sinapse[]; onRegiao?: (r: RegiaoVisual) => void; /** id da região selecionada (a ficha aberta): os filamentos dela acendem mais */ destaque?: string | null }) {
   const cvRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const labelsRef = useRef<HTMLDivElement>(null);
   const regioesRef = useRef(regioes); regioesRef.current = regioes;
   const sinapsesRef = useRef(sinapses); sinapsesRef.current = sinapses;
+  const destaqueRef = useRef(destaque); destaqueRef.current = destaque;
   const nReg = Math.max(1, regioes.length);
   const nuvem = useMemo(() => (typeof window === "undefined" ? null : construirNuvem(nReg)), [nReg]);
 
@@ -92,6 +141,10 @@ export default function CerebroCanvas({ regioes, sinapses = [], onRegiao }: { re
     const project = (p: { x: number; y: number; z: number }) => { const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch); const x = p.x * cy - p.z * sy, z = p.x * sy + p.z * cy, y = p.y; const y2 = y * cp - z * sp, z2 = y * sp + z * cp; const f = 3.0, s = f / (f - z2), scale = Math.min(W, H) * 0.42; return { sx: W / 2 + x * scale * s, sy: H / 2 - y2 * scale * s, s, z: z2 }; };
     const bez = (a: P, c: { x: number; y: number; z: number }, b: P, t: number) => { const m = 1 - t, k0 = m * m, k1 = 2 * m * t, k2 = t * t; return { x: k0 * a.x + k1 * c.x + k2 * b.x, y: k0 * a.y + k1 * c.y + k2 * b.y, z: k0 * a.z + k1 * c.z + k2 * b.z }; };
     const anc = [...Array(nReg)].map((_, i) => ancora(i, nReg));
+    // os feixes do percurso (i → i+1), fixos por mapa; os das sinapses de memória, por par de regiões (cache)
+    const feixes = anc.slice(0, -1).map((A, i) => fiosEntre(A, anc[i + 1]!, 4, i * 97 + nReg));
+    const feixesMem = new Map<string, Fio[]>();
+    const proj3 = (p: V3) => project(p);
     const draw = () => {
       raf = requestAnimationFrame(draw);
       if (!visivel || oculto) return; // fora de tela / aba trocada: não gasta CPU
@@ -123,15 +176,14 @@ export default function CerebroCanvas({ regioes, sinapses = [], onRegiao }: { re
       const proj = anc.map((p) => project({ x: p[0], y: p[1], z: p[2] }));
       // ── SINAPSES AZUIS (memória, §4.3): entre regiões ligadas por memória — curvas puxadas pro centro,
       //    pulsando de leve (vivo); e, ao redor de cada região, um pontinho azul por nó com gaveta.
+      const sel = regs.findIndex((r) => r.id === destaqueRef.current);
+      const tf = performance.now() * 0.001;
       for (const s of sinapsesRef.current) {
         const A = anc[s.a], B = anc[s.b]; if (!A || !B || s.a >= regs.length || s.b >= regs.length) continue;
-        const ctrl = { x: (A[0] + B[0]) * 0.25, y: (A[1] + B[1]) * 0.25, z: (A[2] + B[2]) * 0.25 };
-        const pulso = 0.55 + 0.45 * Math.sin(t * 0.6 + (s.a + 1) * (s.b + 1));
-        ctx.strokeStyle = AZUL; ctx.lineWidth = 1 + 1.2 * s.peso; ctx.globalAlpha = 0.18 + 0.32 * pulso; ctx.beginPath();
-        for (let k = 0; k <= 10; k++) { const pt = project(bez({ x: A[0], y: A[1], z: A[2] } as P, ctrl, { x: B[0], y: B[1], z: B[2] } as P, k / 10)); k ? ctx.lineTo(pt.sx, pt.sy) : ctx.moveTo(pt.sx, pt.sy); }
-        ctx.stroke();
-        const f = (t * 0.25 + s.a * 0.37) % 1, pt = project(bez({ x: A[0], y: A[1], z: A[2] } as P, ctrl, { x: B[0], y: B[1], z: B[2] } as P, f));
-        ctx.globalAlpha = 0.9; ctx.fillStyle = AZUL; ctx.beginPath(); ctx.arc(pt.sx, pt.sy, 2, 0, 7); ctx.fill();
+        const k = `${s.a}-${s.b}`;
+        let fios = feixesMem.get(k); if (!fios) { fios = fiosEntre(A, B, 2, 1000 + s.a * 31 + s.b); feixesMem.set(k, fios); }
+        const aceso = sel >= 0 && (s.a === sel || s.b === sel);
+        desenharFeixe(ctx, proj3, fios, tf, AZUL, (0.55 + 0.6 * s.peso) * (aceso ? 1.6 : sel >= 0 ? 0.5 : 1), 0.16);
       }
       regs.forEach((n, i) => {
         const m = Math.min(n.memoria ?? 0, 14); if (!m) return; const A = anc[i]!;
@@ -143,9 +195,12 @@ export default function CerebroCanvas({ regioes, sinapses = [], onRegiao }: { re
           ctx.fillStyle = AZUL; ctx.beginPath(); ctx.arc(pt.sx, pt.sy, 1.6 + 1.2 * pulso, 0, 7); ctx.fill();
         }
       });
-      // ── PERCURSO AMARELO (pré-requisito: pra onde ir) ──
-      ctx.globalAlpha = 0.9; ctx.lineWidth = 2.2; ctx.strokeStyle = AMARELO; ctx.shadowColor = AMARELO; ctx.shadowBlur = 8; ctx.beginPath();
-      proj.slice(0, regs.length).forEach((q, i) => (i ? ctx.lineTo(q.sx, q.sy) : ctx.moveTo(q.sx, q.sy))); ctx.stroke(); ctx.shadowBlur = 0;
+      // ── PERCURSO (pré-requisito: pra onde ir) = FILAMENTOS que acendem no sentido do caminho, nunca reta ──
+      feixes.forEach((fios, i) => {
+        if (i + 1 >= regs.length) return;
+        const aceso = sel >= 0 && (i === sel || i + 1 === sel);
+        desenharFeixe(ctx, proj3, fios, tf, AMARELO, aceso ? 1.5 : sel >= 0 ? 0.45 : 1);
+      });
       // ── BOARDS (as palavras) FORA do mapa, ligados ao nó por uma linha: o mapa de partículas fica livre ──
       const cx = W / 2, cy = H / 2, rx = W * 0.43, ry = H * 0.4;
       const bx: number[] = [], by: number[] = [], bw: number[] = [];
