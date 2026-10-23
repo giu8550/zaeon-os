@@ -54,17 +54,8 @@ export function CardPrancha({ cor: cor0, carimbo, direita, children, fundo, bril
 
 /** a FIGURA do tema — a protagonista: grande, fora de card, no topo do eixo (padrão do anatomy: o objeto é a explicação) */
 function FiguraHeroi({ doc, onArrastar }: { doc: DocBlueprint; onArrastar?: (e: React.PointerEvent) => void }) {
-  const skin = useSkin(), k = useCor();
-  return (
-    <div className="relative px-2 pb-2" style={{ color: skin === "cartolina" ? PAPEL.tinta : "#e8f6ff" }}>
-      <div className={`mb-1 flex items-baseline justify-center gap-3 text-center ${onArrastar ? "cursor-grab active:cursor-grabbing" : ""}`} onPointerDown={onArrastar}>
-        <span className="font-mono text-[13.5px] tracking-[0.3em]" style={{ color: k(COR.figura) }}>FIG. 1</span>
-        <span className="font-mono text-[20px] font-semibold">{doc.titulo}</span>
-      </div>
-      <FiguraIso doc={doc} />
-      <p className="mt-1 text-center font-mono text-[14px] text-sky-200/65">a máquina do tema, peça por peça — cada uma acende quando uma entrega a prova</p>
-    </div>
-  );
+  // o cartão do anatomy (Fig 1 / título, dica / leitura) já vem da FiguraIso; o topo dele é a alça de arrastar
+  return <div className="relative px-2 pb-2"><FiguraIso doc={doc} alca={onArrastar} /></div>;
 }
 
 /** ESTUDE NO YOUTUBE: as buscas que a Zaeon sugeriu (tema + fase atual) abrem o YouTube numa aba nova */

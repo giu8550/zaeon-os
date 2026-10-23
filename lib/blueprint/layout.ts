@@ -10,8 +10,8 @@
  *    ESTUDO, a avaliação da Zaeon e os críticos da fase (um embaixo do outro);
  *  - à DIREITA, a prática: estudar no YouTube, repositórios, conversas, produto, próximos — e a demo só a partir da
  *    fase em que ela é construída (3).
- * Os dois lados ficam centrados no meio do estudo; a figura tem exatamente a largura do centro + os vãos, então nunca
- * encosta nos lados. O que a pessoa arrastou (`fixos`) fica onde ela soltou. Alturas medidas do DOM (`alturaDe`).
+ * Os dois lados ficam centrados no meio do estudo, mas nunca sobem acima do pé da figura (que é mais larga que o
+ * centro: a máquina precisa de espaço). O que a pessoa arrastou (`fixos`) fica onde ela soltou. Alturas medidas do DOM (`alturaDe`).
  */
 import type { DocBlueprint } from "./tipos";
 
@@ -20,7 +20,8 @@ export type Lado = "esq" | "centro" | "dir";
 export type Caixa = { id: IdModulo; x: number; y: number; w: number; h: number; lado: Lado };
 export type Fio = { de: IdModulo; para: IdModulo; tipo: "percurso" | "pratica" | "critico" | "figura" | "avaliacao" };
 const VAO_LADO = 120, GAP = 28, GAP_CENTRO = 36;
-export const LARG = { centro: 520, lado: 400, critico: 520, figura: 520 + 2 * VAO_LADO } as const;
+/** a figura é larga (a máquina do anatomy precisa de espaço pra ler de perto): passa por cima dos lados, que começam embaixo dela */
+export const LARG = { centro: 520, lado: 400, critico: 520, figura: 1100 } as const;
 /** a fase em que a demo é construída (antes disso ela não aparece — "vamos vendo conforme progredimos") */
 export const FASE_DA_DEMO = 3;
 
@@ -62,7 +63,8 @@ export function layoutBlueprint(doc: DocBlueprint, alturaDe: (id: IdModulo) => n
   const pilha = (lado: "esq" | "dir", x: number) => {
     const ms = mods.filter((m) => m.lado === lado); if (!ms.length) return;
     const total = ms.reduce((s, m) => s + h(m.id), 0) + GAP * (ms.length - 1);
-    let yy = meio - total / 2;
+    const fig = caixas.find((c) => c.id === "figura");
+    let yy = Math.max(meio - total / 2, fig ? fig.y + fig.h + GAP : -Infinity);
     for (const m of ms) { caixas.push({ id: m.id, x, y: yy, w: LARG.lado, h: h(m.id), lado }); yy += h(m.id) + GAP; }
   };
   pilha("esq", -LARG.centro / 2 - VAO_LADO - LARG.lado);

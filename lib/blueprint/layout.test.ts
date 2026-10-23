@@ -26,12 +26,16 @@ describe("layoutBlueprint — simetria, nunca caos", () => {
     for (const c of caixas.filter((c) => c.lado === "esq")) expect(c.x + c.w).toBeLessThan(e.x);
     for (const c of caixas.filter((c) => c.lado === "dir")) expect(c.x).toBeGreaterThan(e.x + e.w);
   });
-  it("os dois lados centrados no meio do estudo", () => {
-    const { caixas } = layoutBlueprint(cheio(), alt); const e = doId(caixas, "estudo"), meio = e.y + e.h / 2;
+  it("os dois lados centrados no meio do estudo — mas nunca acima do pé da figura (que é mais larga que o centro)", () => {
+    const { caixas } = layoutBlueprint(cheio(), alt); const e = doId(caixas, "estudo"), meio = e.y + e.h / 2, f = doId(caixas, "figura");
     for (const lado of ["esq", "dir"] as const) {
       const cs = caixas.filter((c) => c.lado === lado), topo = Math.min(...cs.map((c) => c.y)), fundo = Math.max(...cs.map((c) => c.y + c.h));
-      expect(Math.abs((topo + fundo) / 2 - meio)).toBeLessThanOrEqual(1);
+      expect(topo).toBeGreaterThanOrEqual(f.y + f.h);
+      if (topo > f.y + f.h + 28 + 1) expect(Math.abs((topo + fundo) / 2 - meio)).toBeLessThanOrEqual(1);
     }
+    const semFigura = layoutBlueprint(cheio({ pecas: [] }), alt).caixas, e2 = doId(semFigura, "estudo");
+    const cs = semFigura.filter((c) => c.lado === "esq");
+    expect(Math.abs((Math.min(...cs.map((c) => c.y)) + Math.max(...cs.map((c) => c.y + c.h))) / 2 - (e2.y + e2.h / 2))).toBeLessThanOrEqual(1);
   });
   it("críticos da fase empilhados no eixo, um embaixo do outro", () => {
     const { caixas } = layoutBlueprint(cheio(), alt); const a = doId(caixas, "critico:r1"), b = doId(caixas, "critico:r2");
@@ -74,6 +78,6 @@ describe("foco da fase — não panorâmico", () => {
   it("o enquadramento inicial é o eixo central", async () => {
     const { caixaDoFoco } = await import("./layout");
     const { caixas } = layoutBlueprint(cheio(), alt); const f = caixaDoFoco(caixas)!;
-    expect(f.x1 - f.x0).toBeLessThan(1000);
+    expect(f.x1 - f.x0).toBeLessThan(1200);
   });
 });
