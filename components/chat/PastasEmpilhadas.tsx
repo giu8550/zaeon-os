@@ -5,6 +5,8 @@
  * com as abas à mostra. Trocar = puxar a pasta: a escolhida vem pra frente (mais alta, clara, com o friso de luz em
  * cima, colada no corpo do módulo); as de trás afundam em 3D (trapézio em perspectiva, mais escuras, mais baixas).
  * As bordas de cada uma ficam inteiras e clicáveis — só as quinas inclinadas se sobrepõem.
+ * GERANDO: enquanto a Aura responde na pasta da frente (`gerando` = id dela), o friso vira um SCANNER — uma luz nasce
+ * no começo da aba e corre até o fim, em loop, até a resposta acabar. Com movimento reduzido: só o friso mais aceso.
  */
 import type { ReactNode } from "react";
 
@@ -19,11 +21,20 @@ export type Pasta = {
 };
 
 const FRISO = "linear-gradient(90deg, rgba(34,211,238,0) 0%, rgba(34,211,238,0.95) 22%, rgba(167,139,250,0.95) 78%, rgba(167,139,250,0) 100%)";
+/** a luz que varre o friso durante a geração: o miolo quase branco, as pontas no ciano e no roxo do friso */
+const VARREDURA = "linear-gradient(90deg, rgba(34,211,238,0) 0%, rgba(34,211,238,0.9) 30%, rgba(236,254,255,1) 50%, rgba(167,139,250,0.9) 70%, rgba(167,139,250,0) 100%)";
+const CSS_VARREDURA = `
+@keyframes pe-varre { from { transform: translateX(-100%) } to { transform: translateX(300%) } }
+.pe-varre { animation: pe-varre 1.2s cubic-bezier(.45,0,.55,1) infinite; }
+@media (prefers-reduced-motion: reduce) { .pe-varre { display: none } }
+`;
 
-export default function PastasEmpilhadas({ pastas, ativa, onAbrir, antes, depois, rotulo = "Documentos da conversa" }: {
+export default function PastasEmpilhadas({ pastas, ativa, gerando = null, onAbrir, antes, depois, rotulo = "Documentos da conversa" }: {
   /** a 1ª é a CONVERSA; as demais, os documentos (na ordem em que abriram) */
   pastas: Pasta[];
   ativa: string;
+  /** id da pasta cuja resposta está sendo gerada agora — o friso dela varre (só se for a da frente) */
+  gerando?: string | null;
   onAbrir: (id: string) => void;
   /** à esquerda das pastas (a bolinha do percurso) */
   antes?: ReactNode;
@@ -34,10 +45,12 @@ export default function PastasEmpilhadas({ pastas, ativa, onAbrir, antes, depois
   const n = pastas.length;
   return (
     <div className="relative shrink-0 flex items-end gap-2 px-3 pt-2.5 min-h-[46px] bg-slate-100/80 dark:bg-black/30">
+      {gerando && <style>{CSS_VARREDURA}</style>}
       {antes}
       <div role="tablist" aria-label={rotulo} className="flex min-w-0 flex-1 items-end overflow-x-auto overflow-y-hidden no-scrollbar pl-1 pt-1">
         {pastas.map((p, i) => {
           const frente = p.id === ativa;
+          const varrendo = frente && gerando === p.id;
           // as de trás: quanto mais pra direita, mais "funda" (z menor) — a da frente fica acima de todas
           const z = frente ? 40 : 30 - i;
           return (
@@ -46,6 +59,7 @@ export default function PastasEmpilhadas({ pastas, ativa, onAbrir, antes, depois
               role="tab"
               data-tour={i === 0 ? "pasta-conversa" : undefined}
               aria-selected={frente}
+              aria-busy={varrendo || undefined}
               tabIndex={0}
               title={p.titulo ?? p.rotulo}
               onClick={() => onAbrir(p.id)}
@@ -64,7 +78,13 @@ export default function PastasEmpilhadas({ pastas, ativa, onAbrir, antes, depois
                 style={{ transform: `perspective(90px) rotateX(${frente ? 7 : 12}deg)`, transformOrigin: "bottom" }}
               />
               {/* o friso de luz no alto da pasta da frente — a distinção dela das de trás */}
-              {frente && <span aria-hidden className="absolute left-3 right-3 top-0 h-[2px] rounded-full" style={{ background: FRISO, boxShadow: "0 0 10px rgba(34,211,238,0.55)" }} />}
+              {frente && (
+                <span aria-hidden data-friso className="absolute left-3 right-3 top-0 h-[2px] overflow-hidden rounded-full transition-shadow duration-300"
+                  style={{ background: FRISO, boxShadow: varrendo ? "0 0 14px rgba(34,211,238,0.85), 0 0 4px rgba(167,139,250,0.9)" : "0 0 10px rgba(34,211,238,0.55)" }}>
+                  {/* o scanner: um terço do friso, correndo do começo ao fim enquanto a resposta não termina */}
+                  {varrendo && <span data-varredura className="pe-varre absolute inset-y-0 left-0 w-1/3 rounded-full" style={{ background: VARREDURA }} />}
+                </span>
+              )}
               <span className={`relative flex items-center gap-1.5 whitespace-nowrap px-4 ${frente ? "h-[36px] text-slate-900 dark:text-white" : "h-[31px] text-slate-600 dark:text-white/55 group-hover:text-slate-800 dark:group-hover:text-white/85"}`}>
                 {p.icone && <span className="shrink-0 leading-none text-[12px]">{p.icone}</span>}
                 <span className="max-w-[170px] truncate text-[11px] font-black tracking-wide">{p.rotulo}</span>
