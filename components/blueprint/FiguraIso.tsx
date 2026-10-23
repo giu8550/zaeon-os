@@ -1,53 +1,49 @@
 "use client";
 /**
- * FiguraIso — a máquina isométrica do estudo (lib/blueprint/figura). Padrão do anatomy (wheresryan22/anatomy, MIT):
- * o objeto é a explicação. Três faces por bloco; verde = peça provada, vermelha pulsando = travada por um crítico,
- * tracejada = ainda não construída. A ligação entre duas peças provadas "flui".
+ * FiguraIso — a MÁQUINA do tema (lib/blueprint/maquina), desenhada com o kit do anatomy (wheresryan22/anatomy, MIT):
+ * um objeto real cujo mecanismo é o conceito, com a legenda e a frase do objeto EMBAIXO (nada de rótulo solto no
+ * desenho). Os temas são as variáveis do próprio kit (`.iso`): no blueprint, tinta ciano no papel azul; na cartolina,
+ * tinta marrom no papel creme, com o traço tremido do filtro #rabisco.
  */
-import { iso, montarFigura, type EstadoPeca, type PecaPosta } from "@/lib/blueprint/figura";
+import { useMemo } from "react";
+import { ISO_CSS } from "@/lib/anatomy/iso-kit";
+import { montarMaquina, FORMAS } from "@/lib/blueprint/maquina";
 import type { DocBlueprint } from "@/lib/blueprint/tipos";
+import { MAO, PAPEL, useSkin } from "./skin";
 
-const CORES: Record<EstadoPeca, { traco: string; topo: string; lado: string }> = {
-  ok: { traco: "#7dffb0", topo: "rgba(125,255,176,.22)", lado: "rgba(125,255,176,.10)" },
-  trava: { traco: "#ff4d5e", topo: "rgba(255,77,94,.25)", lado: "rgba(255,77,94,.12)" },
-  futuro: { traco: "rgba(170,220,255,.55)", topo: "rgba(170,220,255,.05)", lado: "rgba(170,220,255,.02)" },
-};
-const MONO = "ui-monospace, SFMono-Regular, Menlo, monospace";
-const pts = (...ps: [number, number][]) => ps.map((p) => p.join(",")).join(" ");
-
-function Bloco({ p }: { p: PecaPosta }) {
-  const { traco, topo, lado } = CORES[p.estado], tr = p.estado === "futuro" ? "4 3" : undefined;
-  const P = (x: number, y: number, z: number) => iso(p.gx + x, p.gy + y, z);
-  const { w, d, h } = p, [lx, ly] = P(w / 2, d / 2, h);
-  return (
-    <g>
-      <polygon points={pts(P(0, d, 0), P(w, d, 0), P(w, d, h), P(0, d, h))} fill={lado} stroke={traco} strokeDasharray={tr} strokeWidth={1.2} />
-      <polygon points={pts(P(w, 0, 0), P(w, d, 0), P(w, d, h), P(w, 0, h))} fill={lado} stroke={traco} strokeDasharray={tr} strokeWidth={1.2} />
-      <polygon points={pts(P(0, 0, h), P(w, 0, h), P(w, d, h), P(0, d, h))} fill={topo} stroke={traco} strokeDasharray={tr} strokeWidth={1.4} />
-      {/* o "mecanismo": as camadas internas na face da frente */}
-      {[1, 2].map((k) => <polyline key={k} points={pts(P(8, d, (h * k) / 3), P(w - 8, d, (h * k) / 3))} stroke={traco} strokeWidth={0.7} fill="none" opacity={0.55} />)}
-      <text x={lx} y={ly - 26} textAnchor="middle" fill={traco} fontSize={17} fontWeight={700} fontFamily={MONO}>{p.codigo} {p.nome}{p.estado === "ok" ? " ✓" : p.estado === "trava" ? " ✕" : ""}</text>
-      {p.sub && <text x={lx} y={ly - 10} textAnchor="middle" fill="rgba(186,230,253,.7)" fontSize={13} fontFamily={MONO}>{p.sub}</text>}
-      {p.estado === "trava" && <circle cx={lx} cy={ly + 6} r={4} fill="#ff4d5e"><animate attributeName="opacity" values="1;.3;1" dur="1.6s" repeatCount="indefinite" /></circle>}
-    </g>
-  );
-}
+/** os dois temas da prancha, nas variáveis do kit */
+const TEMAS = `
+.iso[data-theme="blueprint"]{--anatomy-paper:#0f3a64;--anatomy-face:#15497b;--anatomy-top:#1a548a;--anatomy-shade-0:#0b2d4f;--anatomy-shade-1:#0d3359;--anatomy-shade-2:#103a63;--anatomy-shade-3:#13416f;
+  --anatomy-lit-top:#1f6a9e;--anatomy-lit-shade:#185a88;--anatomy-hi:#e8f6ff;--anatomy-mid:#8cc4e6;--anatomy-lo:#4f86b0;--anatomy-faint:#2d5f8a;--anatomy-lit:#7fe0ff;
+  --anatomy-halo:#03101f;--anatomy-halo-opacity:.75;--anatomy-dot:#d6f0ff;--anatomy-red:#ff4d5e;--anatomy-green:#7dffb0;--anatomy-weight:.9px}
+.iso[data-theme="cartolina"]{--anatomy-paper:#f7efdd;--anatomy-face:#fffaf0;--anatomy-top:#fbf5e7;--anatomy-shade-0:#ddcfae;--anatomy-shade-1:#e6dabd;--anatomy-shade-2:#eee4cc;--anatomy-shade-3:#f4ecd9;
+  --anatomy-lit-top:#ffffff;--anatomy-lit-shade:#efe4c8;--anatomy-hi:#3a2f1e;--anatomy-mid:#7d6644;--anatomy-lo:#ad9670;--anatomy-faint:#d2c19c;--anatomy-lit:#0e7490;
+  --anatomy-halo:#8a7350;--anatomy-halo-opacity:.3;--anatomy-dot:#3a2f1e;--anatomy-red:#c0392b;--anatomy-green:#2e7d32;--anatomy-weight:1.1px}
+.iso[data-theme="cartolina"] .iso-svg{filter:url(#rabisco)}
+.iso[data-theme="cartolina"] .iso-face-text{font-family:${MAO.replace(/"/g, "'")}}
+`;
+const COR_ESTADO = { ok: { blueprint: "#7dffb0", cartolina: "#2e7d32" }, trava: { blueprint: "#ff4d5e", cartolina: "#c0392b" }, futuro: { blueprint: "rgba(186,230,253,.55)", cartolina: PAPEL.tintaSuave } } as const;
 
 export default function FiguraIso({ doc }: { doc: DocBlueprint }) {
-  const f = montarFigura(doc), porId = new Map(f.pecas.map((p) => [p.id, p] as const));
+  const skin = useSkin(), tema = skin === "cartolina" ? "cartolina" : "blueprint";
+  const m = useMemo(() => montarMaquina(doc), [doc]);
+  if (!m) return null;
+  const tinta = skin === "cartolina" ? PAPEL.tinta : "#e8f6ff", suave = skin === "cartolina" ? PAPEL.tintaSuave : "rgba(186,230,253,.72)";
   return (
-    <svg viewBox={`${f.caixa.x} ${f.caixa.y} ${f.caixa.w} ${f.caixa.h}`} className="block w-full" style={{ maxHeight: 340 }} role="img" aria-label={`Figura: ${f.pecas.map((p) => `${p.codigo} ${p.nome} (${p.estado === "ok" ? "provada" : p.estado === "trava" ? "travada" : "a construir"})`).join(", ")}`}>
-      {/* as ligações (no chão, por baixo dos blocos) */}
-      {f.ligacoes.map(([a, b]) => {
-        const A = porId.get(a)!, B = porId.get(b)!, vivo = A.estado === "ok" && B.estado === "ok";
-        const [x1, y1] = iso(A.gx + A.w / 2, A.gy + A.d / 2, 6), [x2, y2] = iso(B.gx + B.w / 2, B.gy + B.d / 2, 6);
-        return (
-          <line key={`${a}-${b}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke={vivo ? "#7dffb0" : "rgba(170,220,255,.45)"} strokeWidth={vivo ? 2.2 : 1.3} strokeDasharray={vivo ? "8 6" : "3 5"}>
-            {vivo && <animate attributeName="stroke-dashoffset" from="28" to="0" dur="1s" repeatCount="indefinite" />}
-          </line>
-        );
-      })}
-      {f.ordem.map((id) => <Bloco key={id} p={porId.get(id)!} />)}
-    </svg>
+    <div className="iso" data-theme={tema}>
+      <style>{ISO_CSS + TEMAS}</style>
+      <svg className="iso-svg" viewBox={`0 0 ${m.largura} ${m.altura}`} role="img" aria-label={`A máquina do tema: ${m.legenda.map((l) => `${l.codigo} ${l.nome}`).join(", ")}`}
+        style={{ maxHeight: 470 }} dangerouslySetInnerHTML={{ __html: m.svg }} />
+      {doc.objeto && <p className="mx-auto mt-1 max-w-[640px] text-center text-[14px] italic" style={{ color: suave }}>{doc.objeto}</p>}
+      {/* a LEGENDA (o anatomy põe o que é cada peça embaixo, não no desenho) */}
+      <ol className="mx-auto mt-2 grid max-w-[700px] grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+        {m.legenda.map((l) => (
+          <li key={l.n} className="flex items-baseline gap-2 text-[13px] leading-snug" style={{ color: tinta }} title={FORMAS[l.forma]}>
+            <span className="font-mono text-[12px] font-bold" style={{ color: COR_ESTADO[l.estado][tema] }}>{String(l.n).padStart(2, "0")}</span>
+            <span><b>{l.nome}</b>{l.estado === "ok" ? " ✓" : l.estado === "trava" ? " ✕" : ""}{l.sub ? <span style={{ color: suave }}> — {l.sub}</span> : null}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }

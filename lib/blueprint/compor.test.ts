@@ -76,3 +76,18 @@ describe("documentos-base", () => {
     expect(r.documentos.map((d) => [d.id, d.base])).toEqual([["da", false], ["db", true]]);
   });
 });
+
+describe("a figura não some e o YouTube vem da Zaeon", () => {
+  it("plano sem peças mantém a máquina anterior; com 3+ peças, troca", () => {
+    const pecas = [{ id: "a", nome: "A", fase: 1 as const }, { id: "b", nome: "B", fase: 1 as const }, { id: "c", nome: "C", fase: 2 as const }];
+    const antes = doc({ pecas, ligacoes: [["a", "b"]] });
+    expect(mesclarComposicao(antes, plano({ pecas: [] }), 1).pecas).toEqual(pecas);
+    const novas = [{ id: "x", nome: "X", fase: 1 as const }, { id: "y", nome: "Y", fase: 1 as const }, { id: "z", nome: "Z", fase: 2 as const }];
+    expect(mesclarComposicao(antes, plano({ pecas: novas }), 1).pecas.map((p) => p.id)).toEqual(["x", "y", "z"]);
+  });
+  it("buscas do YouTube entram (até 4) e ficam se o plano não trouxer", () => {
+    const r = mesclarComposicao(doc(), lerPlano({ titulo: "T", passos: [{ id: "p1", titulo: "a", fase: 1 }], buscasYoutube: ["zk proofs explicado", "token-2022 tutorial"] })!, 1);
+    expect(r.buscasYoutube).toEqual(["zk proofs explicado", "token-2022 tutorial"]);
+    expect(mesclarComposicao(r, plano(), 2).buscasYoutube).toEqual(r.buscasYoutube);
+  });
+});

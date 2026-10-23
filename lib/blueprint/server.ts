@@ -8,7 +8,7 @@
  */
 import { papelDe, podeEscrever, type Papel } from "@/lib/cartolina/access";
 import { fasesAprovadas } from "./fases";
-import { COMPOR_SYSTEM, lerPlano, mesclarComposicao, promptComposicao } from "./compor";
+import { COMPOR_SYSTEM, PECAS_SYSTEM, lerPecas, lerPlano, mesclarComposicao, promptComposicao, promptPecas } from "./compor";
 import { buscarRepos } from "./github";
 import { documentosDaResposta, juntarDocumentos } from "@/lib/videodoc/documentos";
 import { MAX_BASE, SURFACE_BLUEPRINT, blueprintOn, docVazio, sanitizarDoc, type Area, type DocBlueprint, type Documento, type Fase } from "./tipos";
@@ -183,7 +183,13 @@ export async function blueprintDoTurno(i: EntradaTurno): Promise<"off" | "nao-es
       if (achados.length) { const meus = atual.repos.filter((x) => x.meu); novo.repos = [...meus, ...achados.filter((x) => !meus.some((m) => m.nome === x.nome))]; }
       return novo;
     }, db);
-    if (r.ok) await videosDosDocumentosBase(linha.id, userId, r.view.doc, db, i.videos, i.estadosVideos).catch((e) => console.warn("[blueprint] vídeos:", e instanceof Error ? e.message : e));
+    // a FIGURA é a protagonista do estudo: composição que veio sem máquina pede só as peças (uma chamada curta)
+    if (r.ok && r.view.doc.pecas.length < 3) {
+      const pecas = lerPecas(await gen<unknown>(PECAS_SYSTEM, promptPecas(r.view.doc)).catch(() => null));
+      if (pecas) await gravarDoc(linha.id, userId, (atual) => (atual.pecas.length < 3 ? { ...atual, ...pecas } : atual), db);
+    }
+    // (o vídeo automático dos documentos-base saiu da Sala — pedido do dono, 22/10: no lugar, o card "estude no YouTube".
+    //  `videosDosDocumentosBase` continua aqui pro dia em que voltar; o vídeo pedido no chat segue funcionando)
     return r.ok ? "composto" : "falhou";
   } catch (e: unknown) {
     console.warn("[blueprint] turno falhou:", e instanceof Error ? e.message : e);

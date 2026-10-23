@@ -87,17 +87,23 @@ describe("documentos do turno", () => {
   });
 });
 
-describe("vídeos dos documentos-base", () => {
+describe("Sala sem vídeo automático; figura garantida", () => {
   beforeEach(() => { process.env.BLUEPRINT_PRATICO = "1"; });
-  it("o documento que vira base ganha o vídeo (o id fica no blueprint); no máximo 3 por estudo", async () => {
+  it("documentos-base não disparam vídeo na Sala (o card do YouTube substitui)", async () => {
     const { db, linhas } = bancoFalso();
-    const sources = ["a", "b", "c", "d"].map((k) => ({ title: `Artigo ${k}`, url: `https://doi.org/10.1007/${k}` }));
+    const sources = ["a", "b"].map((k) => ({ title: `Artigo ${k}`, url: `https://doi.org/10.1007/${k}` }));
     const { documentosDaResposta } = await import("@/lib/videodoc/documentos");
     const ids = documentosDaResposta({ sources }).map((d) => d.id);
     let n = 0; const videos = async () => ({ videoId: (++n).toString(16).padStart(24, "f") });
-    await blueprintDoTurno({ ...base, sinal: { estudavel: true, tituloSugerido: "X" }, db, gen: gen({ ...plano, documentosBase: ids }), answer: { sources }, videos, estadosVideos: async () => ({}) });
-    const docs = (linhas[0]!.cards as DocBlueprint).documentos;
-    expect(docs.filter((d) => d.videoId)).toHaveLength(3); expect(n).toBe(3);
+    await blueprintDoTurno({ ...base, sinal: { estudavel: true, tituloSugerido: "X" }, db, gen: gen({ ...plano, documentosBase: ids }), answer: { sources }, videos });
+    expect(n).toBe(0); expect((linhas[0]!.cards as DocBlueprint).documentos.filter((d) => d.base)).toHaveLength(2);
+  });
+  it("composição sem peças → um pedido só da figura; a máquina aparece", async () => {
+    const { db, linhas } = bancoFalso(); const { PECAS_SYSTEM } = await import("./compor");
+    const pecas = { pecas: [{ id: "a", nome: "Carteira", fase: 1 }, { id: "b", nome: "Cifrador", fase: 1 }, { id: "c", nome: "Prova ZK", fase: 2 }], ligacoes: [["a", "b"], ["b", "c"]] };
+    const g: GenJson = async <T,>(system: string) => (system === PECAS_SYSTEM ? pecas : { ...plano, pecas: [] }) as T;
+    await blueprintDoTurno({ ...base, sinal: { estudavel: true, tituloSugerido: "X" }, db, gen: g });
+    expect((linhas[0]!.cards as DocBlueprint).pecas.map((p) => p.nome)).toEqual(["Carteira", "Cifrador", "Prova ZK"]);
   });
 });
 
