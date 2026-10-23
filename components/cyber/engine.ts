@@ -17,7 +17,7 @@ import { alturaEm, colisoresDoAlto, deEscada, resolverPasso, type MarcoNav } fro
 import { alternarModoCamera, distPerto, faixaDaDistancia, limitarPitch, olhoDoOmbro, poseDaCamera, seguirPerto, type ModoCamera } from "@/lib/cyber/camera";
 import { PISTA, rotDaSala, espelhoDe, CAPELA_NA_ZAEON, ALTURA_CORPO_ILHOTA, BURACO_NEGRO, CAMPO_DJ, CIDADE, alturaNaCidade, foraDaTorreDJ, naCabineDJ, naPistaDeDanca, naTorreDJ, pontoDaCabineDJ, rumoDaPista, rumoDoDJ, bocaDeEscada, bocaDoElevador, bocaDaGaragem, durDaViagem, naColunaDaGaragem, salaEm, ESCADAS, FIO, alturaDoFio, naEscadaLocal, type NomeSala, naEscadaDoLounge, posDaViagem, TORRE_DJ, VIAGEM_ESCADA, ALTURA_LOUNGE, PISO_FESTA, PALCO as PALCO_LOUNGE, naSala, daSala, ILHOTAS, foraDaIlha, pisoDeVoo, pisoNoAr, ilhotaEm, mundo, naIlhaPrincipal, resolverCidade, resolverCidadeLivre, solidosDaCidade, colisoresDoAndar, dentroDoEstudo, rumoNaSala } from "@/lib/cyber/ceu";
 import { DECK, TEMPLO, curvaDaEscadaria, noTemplo } from "@/lib/cyber/templo";
-import { ALCANCE_DUELO, TORRE_TI, CABINES_TORRE, CABINE_TI, CUPULA, ESTACOES_TI, ESTUDO, SALAO, barradoNaCupula, daCabineTI, bocaDoPoco, capsulaEm, embarcam, type PocoTC } from "@/lib/cyber/temploCosmico";
+import { ALCANCE_DUELO, TORRE_TI, CABINES_TORRE, CABINE_TI, CUBO_CYBER, CUPULA, CYBER, ESTACOES_TI, ESTUDO, SALAO, barradoNaCupula, daCabineTI, bocaDoPoco, capsulaEm, embarcam, type PocoTC } from "@/lib/cyber/temploCosmico";
 import { AGENTES_TRADING, agentePorId } from "@/lib/cyber/agentesTrading";
 import { ESPERA_S, FALA_DESAFIO } from "@/lib/cyber/dueloIngles";
 import { estadoDoShow, trovoesEntre } from "@/lib/cyber/showLounge";
@@ -270,6 +270,8 @@ export type CyberOpts = {
   onFalarCom?: (nome: string | null) => void;
   /** a pessoa chamou um AGENTE DE TRADING (lib/cyber/agentesTrading) pra conversar */
   onAgenteTrading?: (id: string) => void;
+  /** a pessoa abriu o COFRE (o portal do monumento, no deck do topo da torre de TI — lib/cyber/cofre) */
+  onCofre?: () => void;
   onEntrarEstudo?: () => void;
   /** o MODO ESTUDO no TABLET (lib/cyber/descanso): o tablet terminou de materializar (abre o laboratório por cima) ou
    *  sumiu — o React abre/fecha a janela; `engine.fecharTablet()` guarda o tablet */
@@ -1236,6 +1238,12 @@ export class CyberEngine {
     }
   }
   // ───────────── o DUELO DE LINGUAGEM da Examiner (o Templo Cósmico — lib/cyber/dueloIngles) ─────────────
+  /** na frente do PORTAL do monumento (o cubo no deck do topo da torre de TI), a pé: a entrada do cofre */
+  private pertoDoCofre(): boolean {
+    if (this.nivel !== "lounge" || this.jet.noAr) return false;
+    const L = CIDADE.salas.lounge, w = mundo(daSala(L, CYBER.x, CYBER.z + CUBO_CYBER.meia + 1.2));
+    return Math.hypot(this.eu.pos.x - w.x, this.eu.pos.z - w.z) < 4 && Math.abs(this.eu.alt - (CIDADE.pisoY + ALTURA_LOUNGE + CYBER.h)) < 2;
+  }
   /** o agente de trading ao meu alcance (a menos de 3,2 m, na mesma altura) */
   private traderPerto() {
     let melhor: { h: PersonagemVivoHandle; tag: HTMLDivElement } | null = null, dm = 3.2;
@@ -3996,6 +4004,8 @@ export class CyberEngine {
     }
     // na RECEPÇÃO, perto da mesa (o lar do Droid): chamar ele de novo (refaz o tutorial)
     if (!this.guia && this.droid && this.altoEm && !this.noCeu) { const c = this.casaDoAgente(); if (Math.hypot(this.eu.pos.x - c.x, this.eu.pos.z - c.z) < 5 && Math.abs(this.eu.alt - c.y) < 2.5) return { id: "chamar-droid", rotulo: `Chamar o ${DROID.nome}`, fazer: () => this.guiaRefazer() }; }
+    // no PORTAL do monumento, no deck do topo da torre: o COFRE (o fundo que os agentes operam)
+    if (this.pertoDoCofre()) return { id: "cofre", rotulo: "Abrir o cofre", fazer: () => this.o.onCofre?.() };
     // perto de um AGENTE DE TRADING (na mesa de operações): falar com ele
     { const tr = this.traderPerto(); if (tr) { const a = agentePorId(tr.h.id)!; return { id: `trader-${a.id}`, rotulo: `Falar com ${a.nome} · ${a.papel}`, fazer: () => this.o.onAgenteTrading?.(a.id) }; } }
     let colega: Ator | null = null, dc = 3.0;

@@ -1,0 +1,29 @@
+name: Cofres (mesa automática)
+
+# a MESA DE OPERAÇÕES roda sozinha nos cofres ligados (app/api/cyber/cofre/cron) — cada cofre só opera quando passou
+# o intervalo que a pessoa escolheu; aqui é só o relógio
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: cofres
+  cancel-in-progress: false
+
+jobs:
+  rodar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Rodar as mesas
+        env:
+          OCTA_CRON_SECRET: ${{ secrets.OCTA_CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL || 'https://zaeon.com.br' }}
+        run: |
+          if [ -z "$OCTA_CRON_SECRET" ]; then echo "::warning::OCTA_CRON_SECRET ausente — nada a fazer."; exit 0; fi
+          code=$(curl -sS -o resp.json -w '%{http_code}' --max-time 300 -X POST \
+            -H "Authorization: Bearer $OCTA_CRON_SECRET" "${APP_URL%/}/api/cyber/cofre/cron")
+          cat resp.json; echo
+          echo "HTTP $code"
+          [ "$code" = "200" ] || { echo "::error::a rota dos cofres respondeu $code"; exit 1; }

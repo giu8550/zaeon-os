@@ -103,6 +103,8 @@ export const totalEmDolar = (ms: readonly MoedaCarteira[]) => ms.reduce((s, m) =
 
 /** TROCAR na Jupiter (abre com o par já escolhido: desta moeda pra USDC; do USDC, pra SOL) */
 export const linkDeTroca = (mint: string) => `https://jup.ag/swap/${mint}-${mint === TOKENS_CONHECIDOS[1]!.mint ? MINT_SOL : TOKENS_CONHECIDOS[1]!.mint}`;
+/** o explorer oficial (uma transação ou um endereço; na devnet, com o cluster) */
+export const linkExplorer = (assinaturaOuEndereco: string, tipo: "tx" | "address" = "tx", rede: "devnet" | "mainnet" = "devnet") => `https://explorer.solana.com/${tipo}/${assinaturaOuEndereco}${rede === "devnet" ? "?cluster=devnet" : ""}`;
 export const linkDoSolscan = (endereco: string, rede: "mainnet" | "devnet" = "mainnet") => `https://solscan.io/account/${endereco}${rede === "devnet" ? "?cluster=devnet" : ""}`;
 
 /** quantidade no estilo do inventário: 1.234,5 · 0,0213 · 12,3 mi */
