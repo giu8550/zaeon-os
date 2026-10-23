@@ -24,6 +24,7 @@ import {
   PanelRightClose, PanelRightOpen, FileText, X, ChevronDown, GitBranch, GraduationCap, FlaskConical,
 } from "lucide-react";
 import { DIRETRIZ_ESTUDOS, DIRETRIZ_PESQUISA } from "@/lib/ai/salaPersona";
+import { useIsMobile } from "@/lib/ui/useIsMobile";
 import CoworkComposer from "@/components/study/CoworkComposer";
 import ChatMarkdown from "@/components/study/ChatMarkdown";
 import LivrosCartao from "@/components/chat/LivrosCartao";
@@ -279,6 +280,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [libOpen, setLibOpen] = useState(true);
+  // celular: a biblioteca começa RECOLHIDA (empilhada embaixo, ela roubava metade da tela da conversa)
+  const celular = useIsMobile();
+  useEffect(() => { if (celular) setLibOpen(false); }, [celular]);
   // Editar a própria pergunta e reenviar (estilo ChatGPT) + o A−/A+ do texto.
   const [editando, setEditando] = useState<string | null>(null);
   const zoom = useChatFontScale();
@@ -1453,8 +1457,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
               <BarraBase envios={envios} versao={versaoBase} />
               {anexo && <ChipAnexo anexo={anexo} onTirar={tirarAnexo} />}
               <ChipsLote lote={lote} onTirar={tirarDoLote} />
-              {/* ⟁ Aura ▾ — seletor: Aura base ou um mentor plugado */}
-              <div className="flex items-center gap-2">
+              {/* ⟁ Aura ▾ — seletor: Aura base ou um mentor plugado (quebra linha no celular em vez de vazar pra fora) */}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
                 <MentorPill value={activeMentor} onChange={(slug) => setActiveMentor(slug)} />
                 {/* MODELO: com quem o aluno fala de verdade (Google ou o servidor da Zaeon) */}
                 <SeletorModelo valor={modeloEscolhido} onChange={escolherModelo} desabilitado={sending} />

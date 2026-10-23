@@ -124,3 +124,8 @@ body {
 @media (prefers-reduced-motion: reduce) {
     .zaeon-pensando i { animation: none; opacity: 0.8; }
 }
+
+/* Celular: o texto do chat (fonteChat, lib/ui/chatFontScale) encolhe pra caber — o A−/A+ continua valendo por cima. */
+@media (max-width: 767px) {
+  :root { --chat-font-tela: 0.78; }
+}

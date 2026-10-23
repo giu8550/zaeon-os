@@ -24,6 +24,6 @@ describe("zoom do texto do chat", () => {
     expect(() => gravarEscala(quebrado, 1.15)).not.toThrow();
   });
   it("o corpo nunca fica abaixo de 14px", () => {
-    expect(fonteChat(16)).toBe("max(14px, calc(16px * var(--chat-font-scale, 1)))");
+    expect(fonteChat(16)).toBe("max(14px, calc(16px * var(--chat-font-scale, 1) * var(--chat-font-tela, 1)))");
   });
 });
