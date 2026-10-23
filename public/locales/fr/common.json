@@ -25,7 +25,9 @@
         "student": "Étudiant",
         "researcher": "Chercheur",
         "professional": "Professeur",
-        "entrepreneur": "Entrepreneur"
+        "entrepreneur": "Entrepreneur",
+        "professor": "Professeur",
+        "teacher": "Enseignant"
     },
     "hints": {
         "new_game": "CONSEIL : Commencez avec un nouveau profil pour découvrir la technologie Zaeon.",
@@ -194,7 +196,9 @@
             "quantum_name": "Champ quantique",
             "quantum_topic": "Mathématiques et physique",
             "global_name": "Salon mondial",
-            "global_topic": "Études générales"
+            "global_topic": "Études générales",
+            "humanities_name": "Sciences humaines",
+            "humanities_topic": "Histoire, sociologie et anthropologie"
         }
     },
     "lounge_chat": {
@@ -334,7 +338,7 @@
         "course_label": "Cours académique",
         "course_placeholder": "Ex : informatique",
         "verification_title": "Vérification requise :",
-        "verification_desc": "Il vous sera demandé de fournir une preuve d'inscription au {{cours}} ultérieurement pour débloquer les fonctionnalités académiques.",
+        "verification_desc": "Il vous sera demandé de fournir une preuve d'inscription au {{course}} ultérieurement pour débloquer les fonctionnalités académiques.",
         "default_course": "ce cours",
         "saving": "Économie...",
         "save": "Enregistrer les modifications",
@@ -342,5 +346,26 @@
         "session_label": "Contrôle de session",
         "logout_action": "Déconnecter (Déconnexion)",
         "success_message": "Informations d'identification mises à jour"
+    },
+    "landing": {
+        "hero_tagline": "Bien plus que des conversations avec des chatbots et des onglets ouverts : ici, vous construisez <hl>des idées qui deviennent des produits finis</hl>.",
+        "knowledge_title": "Transformez vos connaissances en un actif du monde réel.",
+        "flow": {
+            "ideas": "idées",
+            "projects": "projets",
+            "studies": "études",
+            "research": "recherches",
+            "companies": "entreprises",
+            "business": "affaires",
+            "pair": "{{from}} devient {{to}}",
+            "summary": "Les idées deviennent des projets, les études des recherches et les entreprises des affaires."
+        },
+        "blueprints": {
+            "title": "Ici, vous valez ce que vous construisez.",
+            "image_alt": "Aperçu du blueprint {{title}}",
+            "tags": "Étiquettes",
+            "cta_view": "Voir dans le jeu",
+            "cta_create": "Créez le vôtre"
+        }
     }
 }

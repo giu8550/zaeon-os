@@ -12,6 +12,13 @@ i18n
         fallbackLng: "en",
         debug: false,
 
+        // Só existem estes 7 em public/locales. Variante regional (en-GB, pt-BR, es-MX…) cai no idioma base
+        // (`load: "languageOnly"` → pede /locales/en/common.json, nunca /locales/en-GB/…, que dava 404 em produção).
+        // Idioma fora da lista cai no fallbackLng. A paridade das chaves é checada no CI (scripts/i18n-check.mjs).
+        supportedLngs: ["de", "en", "es", "fr", "ko", "pt", "zh"],
+        nonExplicitSupportedLngs: true,
+        load: "languageOnly",
+
         // Namespaces: 'common' é o nome do arquivo common.json que criamos
         ns: ["common"],
         defaultNS: "common",

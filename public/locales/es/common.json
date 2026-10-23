@@ -25,7 +25,9 @@
         "student": "Alumno",
         "researcher": "Investigador",
         "professional": "Maestro",
-        "entrepreneur": "Emprendedor"
+        "entrepreneur": "Emprendedor",
+        "professor": "Profesor",
+        "teacher": "Docente"
     },
     "hints": {
         "new_game": "SUGERENCIA: Comience con un nuevo perfil para ver la tecnología de Zaeon.",
@@ -121,7 +123,7 @@
         "doc_content_placeholder": "Esperando salida...",
         "chat_placeholder": "Pregúntale a Zaeon sobre {{role}}....",
         "logs": {
-            "switched": "Cambiado a {{nombre}}",
+            "switched": "Cambiado a {{name}}",
             "gen_protocol": "Protocolo iniciado a través de {{name}}",
             "content_gen": "Contenido generado.",
             "ipfs_success": "Éxito de IPFS: {{hash}}",
@@ -194,7 +196,9 @@
             "quantum_name": "Campo cuántico",
             "quantum_topic": "matematicas y fisica",
             "global_name": "Salón global",
-            "global_topic": "Estudios Generales"
+            "global_topic": "Estudios Generales",
+            "humanities_name": "Humanidades",
+            "humanities_topic": "Historia, Sociología y Antropología"
         }
     },
     "lounge_chat": {
@@ -309,7 +313,7 @@
     },
     "feed": {
         "header_community": "Red Global Zaeon",
-        "header_section": "Protocolo Zaeon // {{sección}}",
+        "header_section": "Protocolo Zaeon // {{section}}",
         "tooltip_uplink": "Enlace ascendente: Sincronizando...",
         "tooltip_ready": "Sistema: Listo para enlace ascendente",
         "tooltip_online": "EN LÍNEA",
@@ -334,7 +338,7 @@
         "course_label": "Curso Académico",
         "course_placeholder": "Ej: Ciencias de la Computación",
         "verification_title": "Verificación requerida:",
-        "verification_desc": "Se le pedirá que proporcione un comprobante de inscripción en {{curso}} más adelante para desbloquear las funciones académicas.",
+        "verification_desc": "Se le pedirá que proporcione un comprobante de inscripción en {{course}} más adelante para desbloquear las funciones académicas.",
         "default_course": "este curso",
         "saving": "Ahorro...",
         "save": "Guardar cambios",
@@ -342,5 +346,26 @@
         "session_label": "Control de sesión",
         "logout_action": "Desconectar (Cerrar sesión)",
         "success_message": "Credenciales actualizadas"
+    },
+    "landing": {
+        "hero_tagline": "Más que conversaciones con chats y pestañas abiertas: aquí construyes <hl>ideas que se convierten en productos finales</hl>.",
+        "knowledge_title": "Convierte tu conocimiento en un activo del mundo real.",
+        "flow": {
+            "ideas": "ideas",
+            "projects": "proyectos",
+            "studies": "estudios",
+            "research": "investigaciones",
+            "companies": "empresas",
+            "business": "negocios",
+            "pair": "{{from}} se convierte en {{to}}",
+            "summary": "Las ideas se convierten en proyectos, los estudios en investigaciones y las empresas en negocios."
+        },
+        "blueprints": {
+            "title": "Aquí vales lo que construyes.",
+            "image_alt": "Vista previa del blueprint {{title}}",
+            "tags": "Etiquetas",
+            "cta_view": "Ver en el juego",
+            "cta_create": "Crea el tuyo"
+        }
     }
 }
