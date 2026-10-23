@@ -15,7 +15,7 @@
  * A CARTEIRA (components/cyber/CarteiraInventario): a aba das MOEDAS — a AURA e as da Solana, cada uma um item; a
  * bolsa no cabeçalho mostra a AURA e o total em dólar.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { COMBO, danoDoGolpe } from "@/lib/cyber/combate";
 import { ITENS, type IdItem, type Inventario } from "@/lib/cyber/inventario";
 import { encaixaNoRelicario, type ItemEncaixe } from "@/lib/cyber/relicario";
@@ -24,7 +24,7 @@ import { VALOR_PESQUISA_SEM_BASE } from "@/lib/cyber/livroHolograma";
 import { paginasDe } from "@/lib/onboarding/tutorialLab";
 import type { PesquisaSalva } from "@/lib/ui/loungeHub";
 import LivroHolograma from "./LivroHolograma";
-import { BolsaCabecalho, GradeCarteira, InspetorMoeda, useCarteira } from "./CarteiraInventario";
+import { BolsaCabecalho, ColdWallet, GradeCarteira, InspetorMoeda, useCarteira } from "./CarteiraInventario";
 
 /** o acabamento das peças (out/2026, o dono: "o inventário poderia seguir uma estética mais detalhada"): o espaço com
  *  chanfro, o vidro escuro por dentro, o brilho da raridade (`--c`) subindo do fundo e os cantos marcados; a moeda do
@@ -84,12 +84,25 @@ function IconeEspada({ tam = 40 }: { tam?: number }) {
   );
 }
 
+/** o ícone da ARMADURA (o peitoral com as ombreiras, na cor do traje) */
+function IconeArmadura({ cor, tam = 40 }: { cor: string; tam?: number }) {
+  return (
+    <svg width={tam} height={tam} viewBox="0 0 40 40" aria-hidden style={{ filter: `drop-shadow(0 0 4px ${cor}77)` }}>
+      <path d="M8 9 Q13 6 16 8 L20 11 L24 8 Q27 6 32 9 L35 15 L30 17 L30 33 Q20 37 10 33 L10 17 L5 15 Z" fill="#0d1118" stroke={cor} strokeWidth="1.3" />
+      <path d="M14 14 L20 17 L26 14 M14 21 H26 M15 27 H25" stroke={cor} strokeOpacity=".6" strokeWidth=".9" fill="none" />
+      <circle cx="20" cy="22.5" r="1.6" fill={cor} />
+    </svg>
+  );
+}
+export type ArmaduraItem = { nome: string; cor: string; raridade: "comum" | "rara" | "epica" | "lendaria"; descricao: string };
+
 type Entrada =
   | { tipo: "arma"; key: string; id: IdItem; cor: string }
   | { tipo: "livro"; key: string; it: ItemEstudo; cor: string }
-  | { tipo: "pesquisa"; key: string; it: ItemPesquisa; cor: string; nova: boolean };
+  | { tipo: "pesquisa"; key: string; it: ItemPesquisa; cor: string; nova: boolean }
+  | { tipo: "armadura"; key: string; it: ArmaduraItem; cor: string };
 type Aba = "tudo" | "arma" | "livro" | "pesquisa" | "carteira";
-const ABAS: { id: Aba; nome: string }[] = [{ id: "tudo", nome: "Tudo" }, { id: "arma", nome: "Armas" }, { id: "livro", nome: "Livros de estudo" }, { id: "pesquisa", nome: "Pesquisas" }, { id: "carteira", nome: "Carteira" }];
+const ABAS: { id: Aba; nome: string }[] = [{ id: "tudo", nome: "Tudo" }, { id: "arma", nome: "Equipamento" }, { id: "livro", nome: "Estudos" }, { id: "pesquisa", nome: "Pesquisas" }, { id: "carteira", nome: "Carteira" }];
 
 /** a pesquisa do tutorial como item (antes do servidor listar, ou sem id): as páginas pelas palavras */
 const pesquisaLocal = (p: PesquisaSalva): ItemPesquisa => ({ id: p.workId ?? `local:${p.titulo}`, titulo: p.titulo, paginas: paginasDe(p.palavras), palavras: p.palavras, atualizadoEm: null });
@@ -97,7 +110,7 @@ const pesquisaLocal = (p: PesquisaSalva): ItemPesquisa => ({ id: p.workId ?? `lo
 /** o MODO DE ENTREGA: `enviando` = o id do item indo pro servidor agora (ou null); `erro` = o texto do servidor/rede pra mostrar */
 export type EncaixeInventario = { ativo: boolean; onEntregar: (it: ItemEncaixe) => void; enviando?: string | null; erro?: string | null };
 /** a entrada como item de encaixe (null = não cabe no Relicário: as armas) */
-const itemDeEncaixe = (e: Entrada): ItemEncaixe | null => (e.tipo !== "arma" && encaixaNoRelicario(e.tipo) ? { tipo: e.tipo, id: e.it.id, titulo: e.it.titulo } : null);
+const itemDeEncaixe = (e: Entrada): ItemEncaixe | null => ((e.tipo === "livro" || e.tipo === "pesquisa") && encaixaNoRelicario(e.tipo) ? { tipo: e.tipo, id: e.it.id, titulo: e.it.titulo } : null);
 /** a pesquisa que ainda não tem id do servidor (o tutorial, antes de sincronizar) — não dá pra entregar */
 const aindaLocal = (it: ItemEncaixe) => it.tipo === "pesquisa" && it.id.startsWith("local:");
 
@@ -116,8 +129,23 @@ function BotaoEntregar({ it, encaixe }: { it: ItemEncaixe; encaixe: EncaixeInven
   );
 }
 
-export default function InventarioPainel({ aberto, onFechar, ler, equipar, destaque, encaixe }: { aberto: boolean; onFechar: () => void; ler: () => Inventario | null; equipar: (id: IdItem | null) => Inventario | null; destaque?: PesquisaSalva | null; encaixe?: EncaixeInventario }) {
+export default function InventarioPainel({ aberto, onFechar, ler, equipar, destaque, encaixe, armadura, aoEnquadrar }: { aberto: boolean; onFechar: () => void; ler: () => Inventario | null; equipar: (id: IdItem | null) => Inventario | null; destaque?: PesquisaSalva | null; encaixe?: EncaixeInventario; /** a armadura que estou vestindo (o engine) */ armadura?: () => ArmaduraItem | null; /** onde o personagem deve ficar na tela (0..1 da largura) — o meio da vitrine */ aoEnquadrar?: (cx: number) => void }) {
   const [inv, setInv] = useState<Inventario | null>(null);
+  const [arm, setArm] = useState<ArmaduraItem | null>(null);
+  useEffect(() => { if (aberto) setArm(armadura?.() ?? null); }, [aberto, armadura]);
+  // o ENQUADRAMENTO: o personagem no meio da área livre entre os espaços equipados e a cold wallet
+  const vitrineRef = useRef<HTMLElement | null>(null), equipRef = useRef<HTMLDivElement | null>(null), walletRef = useRef<HTMLDivElement | null>(null);
+  const prontoPraMedir = aberto && !!inv;
+  useEffect(() => {
+    if (!prontoPraMedir || !aoEnquadrar) return;
+    const medir = () => {
+      const v = vitrineRef.current?.getBoundingClientRect(), a = equipRef.current?.getBoundingClientRect(), b = walletRef.current?.getBoundingClientRect();
+      if (!v || v.width <= 0) { aoEnquadrar(0.5); return; }   // (no celular a vitrine some: o personagem no meio)
+      aoEnquadrar(((a ? a.right : v.left) + (b ? b.left : v.right)) / 2 / window.innerWidth);
+    };
+    const id = requestAnimationFrame(medir), t = setTimeout(medir, 350); window.addEventListener("resize", medir);   // (de novo depois do layout assentar)
+    return () => { cancelAnimationFrame(id); clearTimeout(t); window.removeEventListener("resize", medir); };
+  }, [prontoPraMedir, aoEnquadrar]);
   const [livros, setLivros] = useState<ItemEstudo[] | null>(null), [pesquisas, setPesquisas] = useState<ItemPesquisa[] | null>(null);
   const [aba, setAba] = useState<Aba>("tudo"), [sel, setSel] = useState<string | null>(null), [selMoeda, setSelMoeda] = useState<string | null>(null);
   const carteira = useCarteira(aberto);
@@ -143,11 +171,12 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
     const ps = [...(pesquisas ?? [])];
     if (destaque) { const local = pesquisaLocal(destaque); const i = ps.findIndex((p) => p.id === local.id); if (i >= 0) ps.splice(i, 1); ps.unshift(i >= 0 ? { ...(pesquisas ?? [])[i]!, paginas: Math.max((pesquisas ?? [])[i]!.paginas, local.paginas) } : local); }
     ps.forEach((it, i) => out.push({ tipo: "pesquisa", key: `p:${it.id}`, it, cor: COR_PESQUISA, nova: !!destaque && i === 0 }));
+    if (arm) out.push({ tipo: "armadura", key: "t:armadura", it: arm, cor: COR_RARIDADE[arm.raridade]! });   // (a armadura vestida: sempre a 1ª do equipamento)
     for (const id of inv?.espacos ?? []) if (id) out.push({ tipo: "arma", key: `a:${id}`, id, cor: COR_RARIDADE[ITENS[id].raridade]! });
     for (const it of livros ?? []) out.push({ tipo: "livro", key: `l:${it.id}`, it, cor: COR_RARIDADE[it.raridade]! });
     return out;
-  }, [inv, livros, pesquisas, destaque]);
-  const visiveis = aba === "tudo" ? entradas : aba === "carteira" ? [] : entradas.filter((e) => e.tipo === aba);
+  }, [inv, livros, pesquisas, destaque, arm]);
+  const visiveis = aba === "tudo" ? entradas : aba === "carteira" ? [] : entradas.filter((e) => e.tipo === aba || (aba === "arma" && e.tipo === "armadura"));
   const atual = visiveis.find((e) => e.key === sel) ?? visiveis[0] ?? null;
   useEffect(() => { if (aberto && destaque) { setAba("tudo"); setSel(`p:${pesquisaLocal(destaque).id}`); } }, [aberto, destaque]);
 
@@ -159,13 +188,41 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
   const entrega = encaixe?.ativo ? encaixe : null;
 
   return (
-    <div role="dialog" aria-label="Inventário" onPointerDown={(e) => e.stopPropagation()}
-      className="absolute left-1/2 top-1/2 z-40 flex h-[min(88vh,660px)] w-[min(96vw,1080px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[18px] border-2 text-sky-50"
-      style={{ borderColor: "#3b6fb066", background: "linear-gradient(180deg,rgba(9,14,32,.97),rgba(4,6,16,.98))", boxShadow: "0 0 0 1px #000 inset, 0 0 0 5px rgba(127,232,255,.05) inset, 0 30px 90px -20px rgba(0,0,0,.9), 0 0 60px -20px rgba(127,232,255,.45)" }}>
+    <div role="dialog" aria-label="Inventário" onPointerDown={(e) => e.stopPropagation()} className="absolute inset-0 z-40 flex items-center gap-4 p-3 text-sky-50 md:p-5">
       <style>{ESTILO}</style>
+      {/* a VITRINE (out/2026, o dono: "ao apertar I a câmera se aproxima do personagem de frente, e mostra a armadura
+          dele e a carteira"): transparente — o personagem aparece aqui, de frente (a câmera do engine); em volta, o que
+          ele veste e a COLD WALLET do lado direito dele */}
+      <section ref={vitrineRef} aria-label="O viajante" className="pointer-events-none relative hidden h-full flex-1 md:block" style={{ background: "radial-gradient(ellipse 46% 60% at 46% 55%, transparent 55%, rgba(2,4,12,.55))" }}>
+        <div className="absolute left-2 top-14">
+          <p className="text-[10px] font-black uppercase tracking-[0.34em] text-sky-200/70" style={{ textShadow: "0 0 10px rgba(0,0,0,.9)" }}>Ficha do viajante</p>
+        </div>
+        {/* o EQUIPADO: a armadura e a arma, à esquerda do personagem */}
+        <div ref={equipRef} className="pointer-events-auto absolute left-2 top-1/2 grid w-[160px] -translate-y-1/2 gap-2">
+          {[
+            { k: "t:armadura", rotulo: "Armadura", nome: arm?.nome ?? "—", cor: arm ? COR_RARIDADE[arm.raridade]! : "#ffffff33", icone: arm ? <IconeArmadura cor={arm.cor} tam={34} /> : null },
+            { k: armaEquipada ? `a:${armaEquipada.id}` : "", rotulo: "Arma", nome: armaEquipada?.nome ?? "Nenhuma", cor: armaEquipada ? COR_RARIDADE[armaEquipada.raridade]! : "#ffffff33", icone: armaEquipada ? <IconeEspada tam={34} /> : null },
+          ].map((x) => (
+            <button key={x.rotulo} type="button" disabled={!x.k} onClick={() => { setAba("tudo"); setSel(x.k); }}
+              className="flex items-center gap-2 rounded-lg border bg-black/55 p-2 text-left backdrop-blur-sm transition-colors hover:bg-black/70" style={{ borderColor: `${x.cor}66` }}>
+              <span className="tile-inv relative grid h-11 w-11 shrink-0 place-items-center rounded-md" style={{ ["--c" as string]: x.cor, borderColor: `${x.cor}99` }}>{x.icone ?? <span className="text-[10px] text-white/30">—</span>}</span>
+              <span className="min-w-0 text-[11px]"><span className="block uppercase tracking-wider text-white/45">{x.rotulo}</span><span className="block truncate font-bold">{x.nome}</span></span>
+            </button>
+          ))}
+          <dl className="mt-1 grid gap-1 text-[11px]">
+            {[["AURA", carteira.aura ? Math.round(carteira.aura.quantidade) : "—"], ["Pesquisas", nPesq], ["Livros de estudo", nLivros], ["Páginas escritas", paginasTotais]].map(([k, v]) => (
+              <div key={k as string} className="flex justify-between rounded-md bg-black/50 px-2.5 py-1 backdrop-blur-sm"><dt className="text-sky-100/60">{k}</dt><dd className="font-black tabular-nums">{v}</dd></div>
+            ))}
+          </dl>
+        </div>
+        {/* a CARTEIRA em destaque, do lado direito do personagem */}
+        <div ref={walletRef} className="absolute right-2 top-1/2 -translate-y-1/2"><ColdWallet est={carteira} ativo={aba === "carteira"} onAbrir={() => setAba("carteira")} /></div>
+      </section>
+      <div className="relative flex h-[min(88vh,660px)] w-full flex-col overflow-hidden rounded-[18px] border-2 md:w-[min(54vw,740px)]"
+      style={{ borderColor: "#3b6fb066", background: "linear-gradient(180deg,rgba(9,14,32,.97),rgba(4,6,16,.98))", boxShadow: "0 0 0 1px #000 inset, 0 0 0 5px rgba(127,232,255,.05) inset, 0 30px 90px -20px rgba(0,0,0,.9), 0 0 60px -20px rgba(127,232,255,.45)" }}>
       {["left-2 top-2", "right-2 top-2", "left-2 bottom-2", "right-2 bottom-2"].map((k) => <span key={k} aria-hidden className={`pointer-events-none absolute ${k} text-[10px] text-[#ffc46b]`}>◆</span>)}
       {/* o título e as abas */}
-      <div className="flex items-center gap-4 border-b border-white/10 px-5 py-3" style={{ background: entrega ? `linear-gradient(90deg,${OURO}24,transparent 55%,${OURO}10)` : "linear-gradient(90deg,rgba(127,232,255,.08),transparent 40%,rgba(185,140,255,.08))" }}>
+      <div className="flex items-center gap-3 border-b border-white/10 px-4 py-2.5" style={{ background: entrega ? `linear-gradient(90deg,${OURO}24,transparent 55%,${OURO}10)` : "linear-gradient(90deg,rgba(127,232,255,.08),transparent 40%,rgba(185,140,255,.08))" }}>
         {entrega ? (
           <div className="min-w-0 rounded-md border px-3 py-1.5" style={{ borderColor: `${OURO}80`, background: `${OURO}14`, boxShadow: `0 0 18px -8px ${OURO}` }}>
             <h2 className="truncate text-[13px] font-black tracking-[0.12em]" style={{ color: OURO, textShadow: `0 0 14px ${OURO}99` }}>◆ MODO DE ENTREGA · Escolha o que vai pro Relicário do Saber</h2>
@@ -173,16 +230,15 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
           </div>
         ) : (
           <div>
-            <h2 className="text-[15px] font-black uppercase tracking-[0.32em] text-white" style={{ textShadow: "0 0 14px rgba(127,232,255,.6)" }}>Inventário</h2>
-            <p className="text-[10.5px] uppercase tracking-[0.2em] text-sky-200/50">A mochila do viajante</p>
+            <h2 className="whitespace-nowrap text-[14px] font-black uppercase tracking-[0.28em] text-white" style={{ textShadow: "0 0 14px rgba(127,232,255,.6)" }}>Inventário</h2>
           </div>
         )}
-        <div role="tablist" aria-label="Categorias" className="ml-2 flex flex-wrap gap-1.5">
+        <div role="tablist" aria-label="Categorias" className="flex min-w-0 gap-1 overflow-x-auto">
           {ABAS.map((a) => {
-            const n = a.id === "tudo" ? entradas.length : a.id === "carteira" ? moedas.length : entradas.filter((e) => e.tipo === a.id).length;
+            const n = a.id === "tudo" ? entradas.length : a.id === "carteira" ? moedas.length : entradas.filter((e) => e.tipo === a.id || (a.id === "arma" && e.tipo === "armadura")).length;
             return (
               <button key={a.id} role="tab" aria-selected={aba === a.id} type="button" onClick={() => setAba(a.id)}
-                className={`rounded-md border px-3 py-1 text-[11.5px] font-bold uppercase tracking-wider transition-colors ${aba === a.id ? "border-[#ffc46b]/70 bg-[#ffc46b]/12 text-[#ffe2a8]" : "border-white/10 text-sky-100/60 hover:text-white"}`}>
+                className={`shrink-0 whitespace-nowrap rounded-md border px-2 py-1 text-[10.5px] font-bold uppercase tracking-wider transition-colors ${aba === a.id ? "border-[#ffc46b]/70 bg-[#ffc46b]/12 text-[#ffe2a8]" : "border-white/10 text-sky-100/60 hover:text-white"}`}>
                 {a.nome} <span className="tabular-nums opacity-60">{n}</span>
               </button>
             );
@@ -193,24 +249,7 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
         <button type="button" onClick={onFechar} aria-label="Fechar o inventário" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-white/70 hover:text-white">✕</button>
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-4 p-4 md:grid-cols-[200px,1fr,320px]">
-        {/* a FICHA do viajante */}
-        <aside className="hidden min-h-0 flex-col gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-3 md:flex">
-          <div className="mx-auto grid h-24 w-24 place-items-center rounded-full border-2 border-sky-300/40 bg-[radial-gradient(circle,rgba(127,232,255,.18),transparent_70%)]">
-            <svg viewBox="0 0 40 40" className="h-14 w-14" aria-hidden><circle cx="20" cy="13" r="6.5" fill="none" stroke="#7fe8ff" strokeWidth="1.4" /><path d="M8 35 Q8 23 20 23 Q32 23 32 35" fill="none" stroke="#7fe8ff" strokeWidth="1.4" /></svg>
-          </div>
-          <p className="text-center text-[10px] font-black uppercase tracking-[0.24em] text-sky-200/60">Equipado</p>
-          <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/30 p-2">
-            <div className="grid h-11 w-11 place-items-center rounded-md border" style={{ borderColor: armaEquipada ? `${COR_RARIDADE[armaEquipada.raridade]}88` : "#ffffff22" }}>{armaEquipada ? <IconeEspada tam={34} /> : <span className="text-[10px] text-white/30">—</span>}</div>
-            <div className="min-w-0 text-[11px]"><div className="text-white/45 uppercase tracking-wider">Arma</div><div className="truncate font-bold">{armaEquipada?.nome ?? "Nenhuma"}</div></div>
-          </div>
-          <dl className="mt-auto grid gap-1.5 text-[11.5px]">
-            {[["AURA", carteira.aura ? Math.round(carteira.aura.quantidade) : "—"], ["Pesquisas", nPesq], ["Livros de estudo", nLivros], ["Páginas escritas", paginasTotais]].map(([k, v]) => (
-              <div key={k as string} className="flex justify-between rounded-md bg-black/25 px-2.5 py-1.5"><dt className="text-sky-100/55">{k}</dt><dd className="font-black tabular-nums">{v}</dd></div>
-            ))}
-          </dl>
-        </aside>
-
+      <div className="grid min-h-0 flex-1 gap-4 p-4 md:grid-cols-[1fr,290px]">
         {/* a MOCHILA */}
         <div className="min-h-0 overflow-y-auto rounded-xl border border-white/10 bg-black/20 p-3">
           {aba === "carteira" ? <GradeCarteira est={carteira} sel={moedaAtual?.id ?? null} onSel={setSelMoeda} conectar={carteira.conectar} desconectar={carteira.desconectar} /> : <>
@@ -220,15 +259,15 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
               const e = visiveis[i];
               if (!e) return <div key={`v${i}`} aria-hidden className="vaga-inv aspect-square rounded-lg border border-white/[0.07] bg-[repeating-linear-gradient(45deg,rgba(255,255,255,.018)_0_6px,transparent_6px_12px)] shadow-[inset_0_0_14px_rgba(0,0,0,.6)]" />;
               const on = atual?.key === e.key;
-              const nome = e.tipo === "arma" ? ITENS[e.id].nome : e.it.titulo;
+              const nome = e.tipo === "arma" ? ITENS[e.id].nome : e.tipo === "armadura" ? e.it.nome : e.it.titulo;
               // no modo de entrega: o ▶ nos que cabem (irmão do tile — botão dentro de botão não vale), as armas apagadas
-              const cabe = entrega ? itemDeEncaixe(e) : null, local = !!cabe && aindaLocal(cabe), apagado = !!entrega && e.tipo === "arma";
+              const cabe = entrega ? itemDeEncaixe(e) : null, local = !!cabe && aindaLocal(cabe), apagado = !!entrega && (e.tipo === "arma" || e.tipo === "armadura");
               return (
                 <div key={e.key} className="relative">
                   <button type="button" onClick={() => setSel(e.key)} aria-pressed={on} aria-label={nome}
                     className={`tile-inv relative grid aspect-square w-full place-items-center rounded-lg transition-transform ${on ? "scale-[1.04]" : "hover:scale-[1.03]"} ${apagado ? "pointer-events-none opacity-40" : ""}`}
                     style={{ ["--c" as string]: e.cor, borderColor: `${e.cor}${on ? "ee" : "66"}`, boxShadow: on ? `0 0 18px -2px ${e.cor}, inset 0 0 14px -4px ${e.cor}` : undefined }}>
-                    {e.tipo === "arma" ? <IconeEspada tam={42} /> : e.tipo === "livro" ? <IconeLivro cor={e.cor} tam={42} /> : <IconePesquisa tam={42} />}
+                    {e.tipo === "armadura" ? <IconeArmadura cor={e.it.cor} tam={42} /> : e.tipo === "arma" ? <IconeEspada tam={42} /> : e.tipo === "livro" ? <IconeLivro cor={e.cor} tam={42} /> : <IconePesquisa tam={42} />}
                     {e.tipo === "arma" && inv.equipado === e.id && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_6px_#35ffd0]" title="Equipado" />}
                     {e.tipo === "pesquisa" && <span className="absolute bottom-0.5 right-1 text-[9.5px] font-black tabular-nums text-sky-100/80">{e.it.paginas}p</span>}
                     {e.tipo === "livro" && <span className="absolute bottom-0.5 right-1 text-[9px] font-black text-white/70">{e.it.nivel}</span>}
@@ -281,6 +320,15 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
               {entrega && <BotaoEntregar it={{ tipo: "livro", id: atual.it.id, titulo: atual.it.titulo }} encaixe={entrega} />}
               <a href={`/research-lab?tab=sala-de-estudos&board=${atual.it.boardId}`} className="mt-3 flex min-h-[40px] w-full items-center justify-center rounded-full bg-gradient-to-b from-sky-200 to-sky-400 text-xs font-black uppercase tracking-widest text-slate-950">Abrir o estudo no board</a>
             </>
+          ) : atual.tipo === "armadura" ? (
+            <>
+              <div className="text-[10px] font-black uppercase tracking-[0.22em]" style={{ color: atual.cor }}>Armadura · {NOME_RARIDADE[atual.it.raridade]}</div>
+              <h3 className="mt-0.5 text-[16px] font-black">{atual.it.nome}</h3>
+              <div className="my-3 grid place-items-center rounded-lg border bg-black/30 py-4" style={{ borderColor: `${atual.it.cor}44`, background: `radial-gradient(circle at 50% 45%, ${atual.it.cor}26, transparent 65%)` }}><IconeArmadura cor={atual.it.cor} tam={110} /></div>
+              <p className="text-xs leading-relaxed text-white/70">{atual.it.descricao}</p>
+              <div className="mt-3 flex items-center gap-2 rounded-lg bg-black/30 px-3 py-2 text-[11.5px]"><span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_6px_#35ffd0]" /> Vestindo agora — é o que aparece no personagem ao lado.</div>
+              {entrega && <p className="mt-2 text-center text-[11.5px] text-white/40">Armaduras não cabem no Relicário.</p>}
+            </>
           ) : (() => {
             const item = ITENS[atual.id], equipado = inv.equipado === atual.id;
             return (
@@ -304,6 +352,7 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
             );
           })()}
         </section>
+      </div>
       </div>
     </div>
   );

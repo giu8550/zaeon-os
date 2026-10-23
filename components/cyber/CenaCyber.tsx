@@ -127,6 +127,10 @@ export default function CenaCyber(p: CenaCyberProps) {
   const [destaqueInv, setDestaqueInv] = useState<PesquisaSalva | null>(null);   // a pesquisa nova do tutorial
   const lerInventario = useCallback(() => engine.current?.inventario() ?? null, []);
   const equiparItem = useCallback((id: Parameters<CyberEngine["equipar"]>[0]) => engine.current?.equipar(id) ?? null, []);
+  const lerArmadura = useCallback(() => engine.current?.armadura() ?? null, []);
+  // a câmera de FRENTE pro personagem enquanto o inventário está aberto
+  const [cxVitrine, setCxVitrine] = useState(0.3);
+  useEffect(() => { engine.current?.inventarioAberto(inventarioAberto, cxVitrine); }, [inventarioAberto, cxVitrine]);
   useEffect(() => {
     const tecla = (e: KeyboardEvent) => {
       const a = document.activeElement; if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || (a as HTMLElement).isContentEditable)) return;
@@ -409,7 +413,7 @@ export default function CenaCyber(p: CenaCyberProps) {
       {/* as barras do HUD: SAÚDE, VIGOR e o uso CONCORRENTE de IA (o laboratório do tablet) */}
       {tela && !menu && !tabletAberto && <BarrasHud ler={lerBarras} ia={iaLab} touch={touch} />}
       {tela && <ContadorFps mostrar={prefs.fps} gpu={gpu} classe={perfil.gpu} ler={lerFps} />}
-      <InventarioPainel aberto={inventarioAberto} destaque={destaqueInv} encaixe={encaixeAtivo ? { ativo: true, onEntregar: (it: ItemEncaixe) => void entregar(it), enviando: encaixeEnviando, erro: encaixeErro } : undefined} onFechar={() => { setInventarioAberto(false); setEncaixeAtivo(false); setEncaixeErro(null); engine.current?.inventarioFechado(); }} ler={lerInventario} equipar={equiparItem} />
+      <InventarioPainel aberto={inventarioAberto} destaque={destaqueInv} encaixe={encaixeAtivo ? { ativo: true, onEntregar: (it: ItemEncaixe) => void entregar(it), enviando: encaixeEnviando, erro: encaixeErro } : undefined} onFechar={() => { setInventarioAberto(false); setEncaixeAtivo(false); setEncaixeErro(null); engine.current?.inventarioFechado(); }} ler={lerInventario} equipar={equiparItem} armadura={lerArmadura} aoEnquadrar={setCxVitrine} />
 
       {/* rótulo do monitor (hover) */}
       <div ref={monLabel} className="pointer-events-none absolute z-[22] hidden -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-full bg-gradient-to-b from-cyan-100 to-sky-400 px-3 py-1.5 text-[12.5px] font-bold text-slate-950 shadow-[0_0_18px_rgba(90,200,255,.7)] data-[longe=true]:border data-[longe=true]:border-sky-300/35 data-[longe=true]:bg-slate-900/80 data-[longe=true]:from-transparent data-[longe=true]:to-transparent data-[longe=true]:text-sky-100 data-[longe=true]:shadow-none" />
