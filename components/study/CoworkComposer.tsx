@@ -175,8 +175,10 @@ export default function CoworkComposer({
             onKeyDown={onKeyDown}
             rows={1}
             placeholder={placeholder}
-            className="flex-1 min-w-[8rem] max-h-[min(220px,25dvh)] resize-none overflow-y-auto bg-transparent outline-none border-0
-              font-tech text-[22px] leading-[1.55] py-2 text-slate-800 dark:text-white/90
+            // celular: o texto ocupa a 1ª linha inteira e os botões ficam embaixo (antes os botões espremiam a caixa);
+            // 17px no celular (≥16 = o iPhone não dá zoom ao focar)
+            className="order-first basis-full md:order-none md:basis-auto flex-1 min-w-[8rem] max-h-[min(220px,25dvh)] resize-none overflow-y-auto bg-transparent outline-none border-0
+              font-tech text-[17px] md:text-[22px] leading-[1.55] py-2 px-1 md:px-0 text-slate-800 dark:text-white/90
               placeholder:text-slate-400 dark:placeholder:text-white/30 custom-scrollbar"
           />
 
@@ -188,7 +190,7 @@ export default function CoworkComposer({
             type="button"
             onClick={() => fileRef.current?.click()}
             title="Anexar arquivo"
-            className="shrink-0 self-end mb-0.5 w-10 h-10 rounded-full flex items-center justify-center text-slate-400 dark:text-white/50 hover:bg-slate-500/10 hover:text-slate-600 dark:hover:text-white/80 transition-colors"
+            className="ml-auto shrink-0 self-end mb-0.5 w-10 h-10 rounded-full flex items-center justify-center text-slate-400 dark:text-white/50 hover:bg-slate-500/10 hover:text-slate-600 dark:hover:text-white/80 transition-colors"
           >
             <Paperclip size={17} />
           </button>

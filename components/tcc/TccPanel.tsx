@@ -32,6 +32,7 @@ import {
 import { EVT_TCC_MUDOU, ROTULO_OP, ROTULO_ORIGEM, avisarTccMudou, tccApi, type Revisao, type TccDoc } from "@/lib/tcc/client";
 import { chatUnicoOn } from "@/lib/chat/chatUnico";
 import { conteudoSemLatex } from "@/lib/tcc/latexTexto";
+import { useIsMobile } from "@/lib/ui/useIsMobile";
 
 type Aba = "doc" | "sugestoes" | "historico";
 const CHAT_UNICO = chatUnicoOn();
@@ -56,6 +57,7 @@ export default function TccPanel({ workId, onFechar, onTitulo }: {
   const onTituloRef = useRef(onTitulo);
   onTituloRef.current = onTitulo;
   const areaRef = useRef<HTMLTextAreaElement | null>(null);
+  const celular = useIsMobile();
 
   const podeEscrever = tcc?.papel === "dono" || tcc?.papel === "editor";
   const tipo = tcc?.workType || "TCC";
@@ -222,14 +224,14 @@ export default function TccPanel({ workId, onFechar, onTitulo }: {
       className="h-full w-full flex flex-col bg-[#e9ebee] dark:bg-[#15171c] text-slate-900 dark:text-white border-l border-slate-300 dark:border-white/10"
     >
       {/* ── FAIXA DE ABAS (uma linha só, sem a barra azul): o TIPO do trabalho, as abas, Exportar e fechar ── */}
-      <nav className="shrink-0 flex items-center gap-1 px-2 h-10 bg-[#f3f3f3] dark:bg-[#1b1d22] border-b border-slate-300 dark:border-white/10">
+      <nav className="shrink-0 flex items-center gap-1 px-2 h-10 overflow-x-auto no-scrollbar bg-[#f3f3f3] dark:bg-[#1b1d22] border-b border-slate-300 dark:border-white/10">
         <span className="shrink-0 mr-1.5 inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full text-[11px] font-bold bg-[#2b579a]/10 text-[#2b579a] dark:bg-white/10 dark:text-white/85" title={gerando ? "A Aura está escrevendo este trabalho" : tipo}>
           {gerando ? <Loader2 size={11} className="animate-spin" aria-label="escrevendo" /> : <FileText size={11} aria-hidden />}{tipo}
         </span>
-        <div role="tablist" className="flex items-center gap-0.5">
+        <div role="tablist" className="flex shrink-0 items-center gap-0.5">
           {([["doc", "Página inicial"], ["sugestoes", "Sugestões"], ["historico", "Histórico"]] as [Aba, string][]).map(([id, rotulo]) => (
             <button key={id} type="button" role="tab" aria-selected={aba === id} onClick={() => setAba(id)}
-              className={`h-8 px-3 text-[12px] border-b-2 transition-colors ${aba === id ? "border-[#2b579a] text-[#2b579a] dark:border-white dark:text-white font-semibold" : "border-transparent text-slate-600 dark:text-white/60 hover:text-slate-900 dark:hover:text-white"}`}>
+              className={`h-8 px-2 sm:px-3 shrink-0 whitespace-nowrap text-[12px] border-b-2 transition-colors ${aba === id ? "border-[#2b579a] text-[#2b579a] dark:border-white dark:text-white font-semibold" : "border-transparent text-slate-600 dark:text-white/60 hover:text-slate-900 dark:hover:text-white"}`}>
               {rotulo}{id === "sugestoes" && sugestoes.length ? <span className="ml-1.5 px-1.5 rounded-full text-[10px] bg-amber-400 text-black">{sugestoes.length}</span> : null}
             </button>
           ))}
@@ -237,7 +239,7 @@ export default function TccPanel({ workId, onFechar, onTitulo }: {
         <span className="flex-1" />
         <button type="button" onClick={exportar} disabled={!tcc || exportando} title="Exportar no padrão ABNT (.docx)" aria-label="Exportar no padrão ABNT"
           className="shrink-0 h-8 px-3 rounded-md inline-flex items-center gap-1.5 text-[12px] font-semibold text-white bg-[#2b579a] hover:bg-[#244a85] disabled:opacity-40">
-          {exportando ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Exportar
+          {exportando ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}<span className="hidden sm:inline">Exportar</span>
         </button>
         {!CHAT_UNICO && (
           <Link href={`/research-lab?work=${workId}`} title="Lapidar com rigor na Sala de Pesquisa" aria-label="Abrir na Sala de Pesquisa"
@@ -295,14 +297,16 @@ export default function TccPanel({ workId, onFechar, onTitulo }: {
         {!tcc && !erro && <div className="flex justify-center py-16"><Loader2 className="animate-spin text-slate-400" /></div>}
 
         {tcc && aba === "doc" && (
-          <div className="mx-auto w-full max-w-[816px] px-3 sm:px-6 py-4 [container-type:inline-size]">
-            <Regua />
+          <div className="mx-auto w-full max-w-[816px] px-1.5 sm:px-6 py-2 sm:py-4 [container-type:inline-size]">
+            {!celular && <Regua />}
             <article
               aria-label="Folha do trabalho"
               className="bg-white text-black shadow-[0_1px_3px_rgba(0,0,0,0.18),0_8px_28px_-10px_rgba(0,0,0,0.35)]"
               style={{
-                minHeight: "141.4cqw", // A4: 29,7 / 21
-                padding: `${cqw(3)} ${cqw(2)} ${cqw(2)} ${cqw(3)}`,
+                // CELULAR = "modo celular" do Word: a A4 encolhida à largura do telefone deixava a letra com ~6px. Lá a
+                // unidade da folha vira px (letra ~15px), a margem vira 16px e o texto reflui; o .docx sai igual.
+                ...(celular ? { ["--abnt-u" as string]: "7.5px" } : { minHeight: "141.4cqw" }), // A4: 29,7 / 21
+                padding: celular ? "20px 16px 28px" : `${cqw(3)} ${cqw(2)} ${cqw(2)} ${cqw(3)}`,
                 fontFamily: '"Times New Roman", Times, serif',
                 fontSize: cqw(12 * PT),
                 lineHeight: 1.5,
@@ -385,10 +389,10 @@ export default function TccPanel({ workId, onFechar, onTitulo }: {
 
       {/* ── BARRA DE STATUS ── */}
       <footer className="shrink-0 flex items-center gap-3 px-3 h-7 text-[11px] bg-[#f3f3f3] dark:bg-[#1b1d22] text-slate-600 dark:text-white/55 border-t border-slate-300 dark:border-white/10">
-        <span>{tcc ? `${tcc.secoes.length} seções` : "—"}</span>
-        <span>{tcc ? `${palavrasDaPagina(tcc.secoes)} palavras` : ""}</span>
+        <span className="whitespace-nowrap">{tcc ? `${tcc.secoes.length} seções` : "—"}</span>
+        <span className="whitespace-nowrap">{tcc ? `${palavrasDaPagina(tcc.secoes)} palavras` : ""}</span>
         <span className="hidden sm:inline">Português (Brasil)</span>
-        <span className="ml-auto truncate">A4 · ABNT NBR 14724 · margens 3/2 cm · entrelinha 1,5</span>
+        <span className="ml-auto truncate hidden sm:inline">A4 · ABNT NBR 14724 · margens 3/2 cm · entrelinha 1,5</span>
       </footer>
     </aside>
   );

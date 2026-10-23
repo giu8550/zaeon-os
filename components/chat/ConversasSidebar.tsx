@@ -109,7 +109,7 @@ export default function ConversasSidebar({
     if (confirmando === t.id) {
       const nFilhas = filha ? 0 : threads.filter((x) => x.parentId === t.id).length;
       return (
-        <div key={t.id} className={`flex items-center gap-1 rounded-lg px-2 py-1.5 bg-rose-500/10 ${filha ? "ml-5" : ""}`}>
+        <div key={t.id} data-gaveta-fica className={`flex items-center gap-1 rounded-lg px-2 py-1.5 bg-rose-500/10 ${filha ? "ml-5" : ""}`}>
           <span className="flex-1 min-w-0 text-[12px] font-semibold text-rose-700 dark:text-rose-200 truncate">
             Excluir{nFilhas ? ` (+${nFilhas} sub-tema${nFilhas > 1 ? "s" : ""})` : ""}?
           </span>
@@ -135,7 +135,7 @@ export default function ConversasSidebar({
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); setAbertas((a) => ({ ...a, [t.id]: !a[t.id] })); }}
-            aria-label={abertas[t.id] ? "Recolher sub-temas" : "Mostrar sub-temas"}
+            data-gaveta-fica aria-label={abertas[t.id] ? "Recolher sub-temas" : "Mostrar sub-temas"}
             aria-expanded={!!abertas[t.id]}
             className="shrink-0 w-4 h-4 flex items-center justify-center rounded text-slate-500 dark:text-white/50 hover:text-slate-900 dark:hover:text-white"
           >
@@ -162,10 +162,10 @@ export default function ConversasSidebar({
               <GitBranchPlus size={12} />
             </button>
           )}
-          <button type="button" onClick={(e) => { e.stopPropagation(); setEditando(t.id); }} className={BTN_MINI} aria-label={`Renomear ${t.titulo}`} title="Renomear">
+          <button type="button" onClick={(e) => { e.stopPropagation(); setEditando(t.id); }} className={BTN_MINI} data-gaveta-fica aria-label={`Renomear ${t.titulo}`} title="Renomear">
             <Pencil size={12} />
           </button>
-          <button type="button" onClick={(e) => { e.stopPropagation(); setConfirmando(t.id); }} className={`${BTN_MINI} hover:!text-rose-600 dark:hover:!text-rose-300`} aria-label={`Excluir ${t.titulo}`} title="Excluir">
+          <button type="button" onClick={(e) => { e.stopPropagation(); setConfirmando(t.id); }} className={`${BTN_MINI} hover:!text-rose-600 dark:hover:!text-rose-300`} data-gaveta-fica aria-label={`Excluir ${t.titulo}`} title="Excluir">
             <Trash2 size={12} />
           </button>
         </span>
@@ -178,7 +178,7 @@ export default function ConversasSidebar({
       {!embutida && (
         <div className="flex items-center gap-1 px-2.5 pt-2.5 pb-1">
           <span className="flex-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-white/50">Conversas</span>
-          <button type="button" onClick={alternar} className={BTN_ICONE} aria-label="Recolher conversas" title="Recolher conversas">
+          <button type="button" onClick={alternar} className={BTN_ICONE} data-gaveta-fica aria-label="Recolher conversas" title="Recolher conversas">
             <PanelLeftClose size={15} />
           </button>
         </div>

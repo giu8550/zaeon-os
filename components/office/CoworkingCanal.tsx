@@ -40,6 +40,7 @@ import { VIDRO_PAINEL, VIDRO_BOLHA, VIDRO_BOLHA_MINHA, VIDRO_INPUT, VIDRO_POPOVE
 import { useNotificacoesSO } from "./useNotificacoesSO";
 import { enviarLote, type EstadoEnvio } from "@/lib/chat/enviarBase";
 import { mensagemComAnexos, separarArquivos } from "@/lib/canal/anexos";
+import { useIsMobile } from "@/lib/ui/useIsMobile";
 
 type Canal = { id: string; titulo: string; acesso: string; ownerId: string; membros: string[]; agentes: string[]; cartolinaId: string | null; souDono: boolean; dmCom?: string | null };
 type Convites = { recebidos: ConviteVista[]; enviados: ConviteVista[]; contatos: ConviteVista[]; historico: HistoricoSino[]; sino: EstadoSino };
@@ -73,6 +74,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     return () => clearInterval(t);
   }, [digitando.length]);
   const [texto, setTexto] = useState("");
+  const celular = useIsMobile();
   const [enviando, setEnviando] = useState(false);
   // 📎 ANEXOS (como no chat): o PDF sobe pra "Minha base" e a mensagem leva "📎 nome.pdf" — o agente lê pela base.
   const [anexos, setAnexos] = useState<{ chave: string; nome: string; estado: EstadoEnvio }[]>([]);
@@ -668,13 +670,13 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
 
           {/* #423: "+" (convidar) à ESQUERDA, depois do sino; abre NA HORIZONTAL, ao lado do botão.
               O convite cai no sino da pessoa. */}
-          <div className="flex items-center gap-1.5 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-[44px]">
             <button type="button" onClick={() => setMenu(menu === "convidar" ? null : "convidar")} aria-label="Convidar pessoa" aria-expanded={menu === "convidar"}
               title={conversaDoConvite ? "Chamar alguém pra esta conversa" : "Convidar pessoa"} className={`${TOQUE} shrink-0 rounded-full text-[18px] font-bold leading-none ${VIDRO_CHIP} ${TXT}`}>+</button>
             {menu === "convidar" && <ConvidarForm onEnviar={enviarConvite} variante="linha" onFechar={() => setMenu(null)} paraConversa={conversaDoConvite?.titulo ?? null} />}
           </div>
 
-          <div className="ml-auto flex items-center gap-1.5">
+          <div className="ml-auto shrink-0 flex items-center gap-1.5">
             {/* pessoas do canal (dono, membros e você), com espaço entre as fotos (#423). Os agentes ficam embaixo. */}
             <PessoasTopo visiveis={topo.visiveis} extras={topo.extras} onlineIds={topo.onlineIds} total={topo.total}
               aberta={pessoaAberta} onAlternar={(id) => setMenu(pessoaAberta === id ? null : `pessoa:${id}`)}
@@ -696,7 +698,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
             )}
             {/* #425: a engrenagem saiu — o tipo do escritório é escolhido no seletor ao criar, e o "remover" foi pro menu da foto */}
             {/* zoom das letras, no canto superior direito (igual ao chat das salas) */}
-            <ChatZoom escala={zoom.escala} menor={zoom.menor} maior={zoom.maior} />
+            {/* celular: a linha não cabe — o A−/A+ (o menos usado) sai; o texto já vem no tamanho do celular */}
+            <span className="hidden sm:contents"><ChatZoom escala={zoom.escala} menor={zoom.menor} maior={zoom.maior} /></span>
           </div>
         </div>
 
@@ -769,7 +772,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
               onKeyUp={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
               onClick={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
               onKeyDown={aoTeclar}
-              placeholder={agenteAtivo ? `Mensagem · ${agenteAtivo.nome} responde · @ troca de agente` : "Mensagem · @agente convoca"}
+              // celular: o placeholder curto cabe numa linha (o longo quebrava e a caixa nascia com 2 linhas)
+              placeholder={celular ? (agenteAtivo ? `Mensagem pra ${agenteAtivo.nome}` : "Mensagem") : agenteAtivo ? `Mensagem · ${agenteAtivo.nome} responde · @ troca de agente` : "Mensagem · @agente convoca"}
               aria-label="Mensagem"
               className={`flex-1 min-h-[44px] max-h-[140px] px-4 py-3 rounded-2xl resize-none text-[14px] leading-5 bg-white/70 dark:bg-white/[0.06] border border-white/70 dark:border-white/10 ${TXT} placeholder:text-slate-400 dark:placeholder:text-white/35 outline-none focus:border-blue-400/70 dark:focus:border-cyan-300/50`}
               style={{ height: Math.min(140, 24 + 20 * Math.max(1, texto.split("\n").length)) }}

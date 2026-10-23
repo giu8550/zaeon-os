@@ -14,6 +14,7 @@ import { Mic, MicOff, Code2, Building2, Loader2 } from "lucide-react";
 import { ConversasSlotContext } from "@/components/chat/ConversasSlot";
 import ConversasDaSala from "@/components/chat/ConversasDaSala";
 import { useSidebarHover } from "@/components/lab/useSidebarHover";
+import { useIsMobile } from "@/lib/ui/useIsMobile";
 import { EVT_PESQUISA_SALVA, contarPalavras } from "@/lib/onboarding/tutorialLab";
 import RostoDaAba from "@/components/agents/avatar/RostoDaAba";
 import SeletorDeAgente from "@/components/agents/SeletorDeAgente";
@@ -814,6 +815,10 @@ export default function HomeworkPage({
   // Sidebar POR HOVER: passar o mouse em cima abre; tirar o mouse a devolve pro canto (o trilho de ícones). Ela passa
   // POR CIMA do módulo do chat. A lógica (e o porquê de ela ficar presa aberta antes) mora em components/lab/useSidebarHover.
   const { aberta: isSidebarOpen, navRef, handlers: hoverSidebar } = useSidebarHover<HTMLElement>();
+  // CELULAR (≤767px): não existe hover — um toque abria a sidebar por cima de tudo e ela nunca fechava. Lá a sidebar
+  // vira GAVETA (☰ na barra de baixo, fecha ao escolher) e a barra de baixo leva às salas; o conteúdo usa a largura toda.
+  const celular = useIsMobile();
+  const [gaveta, setGaveta] = useState(false);
   // a aba em que a Sala de Estudos está (a conversa, Meus Estudos ou Estudos) — os subitens dela moram na sidebar
   const [abaEstudos, setAbaEstudos] = useState<AbaEstudos>("meus-estudos");
   useEffect(() => {
@@ -2625,16 +2630,18 @@ export default function HomeworkPage({
   }
 
   const salaComChat = activeTab === "sala-de-estudos" || activeTab === "pesquisa";
-  const sidebarAberta = isSidebarOpen;
+  // no celular a gaveta mostra sempre os rótulos (é a sidebar aberta, só que escondida até o ☰)
+  const sidebarAberta = celular ? true : isSidebarOpen;
   // Aberta, a sidebar passa POR CIMA do conteúdo — a página nunca se reorganiza por causa dela.
-  const recuoSidebar: React.CSSProperties = isEmbedded ? {} : { [isChatLeft ? "paddingRight" : "paddingLeft"]: SIDEBAR_FECHADA + 26 };
+  const recuoSidebar: React.CSSProperties = isEmbedded || celular ? {} : { [isChatLeft ? "paddingRight" : "paddingLeft"]: SIDEBAR_FECHADA + 26 };
+  const barraCelular = celular && !isEmbedded && !isFocusMode;
 
   return (
     <ConversasSlotContext.Provider value={isEmbedded ? null : { el: slotConversas, sala: activeTab === "pesquisa" ? "pesquisa" : activeTab === "sala-de-estudos" ? "estudos" : null }}>
     <div
       className={`relative transition-all duration-500 overflow-hidden flex font-sans w-full bg-slate-100 dark:bg-[#030014]
-            ${isEmbedded ? "h-full" : "h-screen"}
-            ${!isEmbedded ? (isFocusMode ? "pt-4" : "pt-[100px]") : ""}
+            ${isEmbedded ? "h-full" : "h-screen h-[100dvh]"}
+            ${!isEmbedded ? (isFocusMode ? "pt-4" : "pt-[68px] md:pt-[100px]") : ""}
         `}
     >
       {/* NOTIFICAÇÃO FLUTUANTE (TOAST) */}
@@ -2671,16 +2678,28 @@ export default function HomeworkPage({
       {/* SIDEBAR — fina (ícones) ou FIXADA aberta com as conversas da sala ativa (estilo ChatGPT).
           Oculta quando embutido (workstation provê a navegação). */}
       {!isEmbedded && (
+        <>
+        {/* celular: o fundo escuro da gaveta aberta (toque fora = fecha) */}
+        {celular && gaveta && <div aria-hidden className="fixed inset-0 z-[589] bg-black/45 backdrop-blur-[2px]" onClick={() => setGaveta(false)} />}
         <motion.nav
           ref={navRef}
-          {...hoverSidebar}
+          {...(celular ? {} : hoverSidebar)}
+          // celular: escolher um destino na gaveta fecha a gaveta (menus/campos dentro dela, não)
+          onClickCapture={celular ? (e) => {
+            const tocado = e.target as HTMLElement;
+            const alvo = tocado.closest("button, a");
+            // (renomear/excluir/abrir sub-temas de conversa marcam `data-gaveta-fica`: mexem na lista, não saem dela)
+            if (alvo && !tocado.closest("[aria-haspopup], [role=menu], [data-gaveta-fica]")) setTimeout(() => setGaveta(false), 0);
+          } : undefined}
+          aria-hidden={celular && !gaveta ? true : undefined}
           initial={false}
-          animate={{ width: sidebarAberta ? SIDEBAR_ABERTA : SIDEBAR_FECHADA }}
+          animate={{ width: sidebarAberta ? SIDEBAR_ABERTA : SIDEBAR_FECHADA, x: celular && !gaveta ? -(SIDEBAR_ABERTA + 24) : 0 }}
           transition={{ type: "tween", duration: 0.22, ease: [0.22, 0.61, 0.36, 1] }}
-          className={`fixed ${isChatLeft ? "right-4" : "left-4"} z-[590] py-6 rounded-[24px] border backdrop-blur-2xl overflow-hidden transition-colors
+          className={`fixed ${celular ? "left-2" : isChatLeft ? "right-4" : "left-4"} z-[590] py-6 rounded-[24px] border backdrop-blur-2xl overflow-hidden transition-colors
             bg-gradient-to-b from-sky-100/90 to-blue-200/80 border-blue-300/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]
             dark:from-transparent dark:to-transparent dark:bg-[rgba(22,22,34,0.55)] dark:border-white/10 dark:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.6)]
-            ${isFocusMode ? "top-4 h-[calc(100vh-32px)]" : "top-[100px] h-[calc(100vh-140px)]"}`}
+            ${celular ? "dark:bg-[rgba(14,14,24,0.96)] bg-sky-50" : ""}
+            ${isFocusMode ? "top-4 h-[calc(100vh-32px)]" : celular ? "top-[68px] h-[calc(100dvh-68px-76px)]" : "top-[100px] h-[calc(100vh-140px)]"}`}
         >
           {/* Conteúdo com LARGURA FIXA: a sidebar só recorta (54 ↔ 264 px) — nada se reorganiza no meio da animação.
               DESCANSADA (o trilho): cada ícone na sua pill, os rótulos somem; ABERTA: as pills se esticam com o nome. */}
@@ -2856,6 +2875,25 @@ export default function HomeworkPage({
           </div>
           </div>
         </motion.nav>
+        {/* celular: a BARRA DE BAIXO — ☰ abre a gaveta (conversas, Marketplace, layout…); o resto leva direto às salas */}
+        {barraCelular && (
+          <nav aria-label="Navegação" className="fixed inset-x-0 bottom-0 z-[591] flex items-stretch justify-around border-t border-slate-200 bg-white/95 backdrop-blur-xl dark:border-white/10 dark:bg-[#0b0b16]/95"
+            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+            {[
+              { id: "menu", rotulo: "Menu", icone: <span className="text-[20px] leading-none">☰</span>, ativo: gaveta, onClick: () => setGaveta((v) => !v) },
+              { id: "aura", rotulo: agente.nome, icone: <span className="text-[18px] leading-none text-cyan-500 dark:text-cyan-300">⟁</span>, ativo: !gaveta && (agente.tela === "ide" ? activeTab === "octa" : activeTab === "sala-de-estudos" && abaEstudos === "meus-estudos"), onClick: () => { setGaveta(false); abrirAgente(); } },
+              { id: "estudos", rotulo: "Estudos", icone: <DocumentTextIcon className="w-5 h-5" />, ativo: !gaveta && activeTab === "sala-de-estudos" && abaEstudos === "feed", onClick: () => { setGaveta(false); irEstudos("feed"); } },
+              { id: "escritorio", rotulo: "Escritório", icone: <Building2 className="w-5 h-5" />, ativo: !gaveta && activeTab === "escritorio", onClick: () => { setGaveta(false); setActiveTab("escritorio"); } },
+              { id: "perfil", rotulo: "Perfil", icone: <UserCircleIcon className="w-5 h-5" />, ativo: !gaveta && activeTab === "profile", onClick: () => { setGaveta(false); setPerfilVisitado(null); setActiveTab("profile"); } },
+            ].map((b) => (
+              <button key={b.id} type="button" onClick={b.onClick} aria-current={b.ativo ? "page" : undefined}
+                className={`flex min-h-[60px] flex-1 flex-col items-center justify-center gap-0.5 text-[10.5px] font-semibold transition-colors ${b.ativo ? "text-blue-600 dark:text-cyan-300" : "text-slate-500 dark:text-white/55"}`}>
+                {b.icone}<span className="max-w-[72px] truncate">{b.rotulo}</span>
+              </button>
+            ))}
+          </nav>
+        )}
+        </>
       )}
 
       {/* LOADING da troca de agente: cobre a área até a tela do novo agente estar pronta */}
@@ -2868,8 +2906,11 @@ export default function HomeworkPage({
         </div>
       )}
       <main
-        style={recuoSidebar}
-        className={`flex-1 flex flex-col h-full overflow-hidden ${(activeTab === "sala-de-estudos" || activeTab === "pesquisa") ? "px-6 pb-10" : activeTab === "escritorio" ? "px-4 pt-4 pb-4" : "p-6"} gap-6`}
+        style={barraCelular ? { ...recuoSidebar, paddingBottom: "calc(66px + env(safe-area-inset-bottom))" } : recuoSidebar}
+        className={`flex-1 flex flex-col h-full overflow-hidden ${barraCelular
+          // celular: largura toda e o pé livre pra barra de baixo (60px + a área segura do iPhone)
+          ? `px-1.5 pt-1 gap-3 ${activeTab === "sala-de-estudos" || activeTab === "pesquisa" || activeTab === "escritorio" ? "" : "px-3"}`
+          : `${(activeTab === "sala-de-estudos" || activeTab === "pesquisa") ? "px-6 pb-10" : activeTab === "escritorio" ? "px-4 pt-4 pb-4" : "p-6"} gap-6`}`}
       >
         {/* CABEÇALHO — oculto na Sala de Estudos: a barra do Omega assume o topo,
                     alinhada à borda superior da sidebar */}
