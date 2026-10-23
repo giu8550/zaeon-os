@@ -87,7 +87,7 @@ import { CARROS_NA_ZAEON, LOTES_CARRO, pisoDaVaga, posseDosCarros, vagaDoLote, v
 import { criarPisoCarros, type PisoCarrosHandle } from "./EstacionamentoCarros";
 import { LOOPS_CARRO, mixDoCarro, sonsDaCabine } from "@/lib/cyber/somCarro";
 import { paletaFeminina, type Paleta } from "./CorpoAstronauta";
-import { paletaDoPersonagem, type Personagem } from "@/lib/cyber/personagem";
+import { PALETAS_FEMININAS, paletaDoPersonagem, type Personagem } from "@/lib/cyber/personagem";
 /** o CARRO VOADOR estacionado na praça, perto das vagas das motos (x, z, rumo) e a altura em que ele paira acima do
  *  chão; a cabine leva 1,6 s pra abrir/fechar inteira (as portas e o vidro em cascata — components/cyber/CarroHex) */
 const CARRO_PAIRA = 0.45, CARRO_CABINE = 1.6;
@@ -436,7 +436,22 @@ export class CyberEngine {
   private etapaLab: string | null = null;
   etapaDoTablet(etapa: string) { this.etapaLab = etapa; }
   /** a pessoa fechou o inventário (no passo do inventário, o tutorial anda) */
-  inventarioFechado() { const g = this.guia; if (g && this.rot[g.passo]?.cond.tipo === "inventario" && g.ativo) g.invT = Infinity; }
+  inventarioFechado() { const g = this.guia; if (g && this.rot[g.passo]?.cond.tipo === "inventario" && g.ativo) g.invT = Infinity; this.vitrine = false; }
+  /** o INVENTÁRIO abriu (out/2026, o dono: "ao apertar I a câmera se aproxima do personagem de frente e mostra a
+   *  armadura dele"): a câmera vai pra frente do personagem (ele à esquerda da tela, o painel à direita) */
+  inventarioAberto(aberto: boolean, cx = 0.3) { this.vitrine = aberto; this.vitrineCx = Math.max(0.1, Math.min(0.9, cx)); }
+  /** onde (0..1 da largura da tela) o personagem fica na vitrine — o meio da área livre à esquerda do painel */
+  private vitrineCx = 0.3;
+  /** a ARMADURA que estou vestindo, como item do inventário (a do fundador: a preta; quem tem corpo próprio: a skin) */
+  armadura(): { nome: string; cor: string; raridade: "comum" | "rara" | "epica" | "lendaria"; descricao: string } {
+    const proprio = corpoProprio(this.pessoaDe(this.eu.id), location.search);
+    if (proprio && proprio.corpo !== CORPO_DO_FUNDADOR) return { nome: "Skin própria", cor: "#c9b6ff", raridade: "epica", descricao: "O corpo que você criou — sem armadura por cima." };
+    const fund = !!proprio || !!this.o.eu.fundador || this.ehFundador(this.eu.id);
+    if (fund) return { nome: "Armadura Negra", cor: "#3a3f4c", raridade: "lendaria", descricao: "A armadura preta do fundador: placas foscas, manoplas de repulsor e a mochila de voo." };
+    const ps = this.personagemDe(this.eu.id), pal = ps ? paletaDoPersonagem(ps) : this.paletaDe(this.eu);
+    const cor = pal.startsWith("fem:") ? `#${(PALETAS_FEMININAS.find((x) => `fem:${x.nome}` === pal)?.placa ?? 0xff7ab8).toString(16).padStart(6, "0")}` : pal.startsWith("#") ? pal : "#e8eef6";
+    return { nome: "Traje Cósmico", cor, raridade: "rara", descricao: "O traje de astronauta da Zaeon, nas cores que você escolheu: placas, capacete e mochila de voo." };
+  }
   /** depois do tutorial, o Droid fica ESPERANDO na Sala do Saber ("só venha falar comigo quando tiver algo de valor") —
    *  pra quem já fez o tutorial (não está nascendo agora), desde a entrada */
   private droidNoSaber = false;
@@ -4296,8 +4311,21 @@ export class CyberEngine {
   /** em cena, quem joga não anda (a câmera está noutro lugar) */
   private get emCena() { return !!this.cine.plano; }
 
+  private vitrine = false;
   private atualizarCamera(dt = 1 / 60) {
     const l = this.minhaBase;
+    // a VITRINE do inventário: a câmera de FRENTE pro personagem, perto, um pouco de lado (ele fica à esquerda — o
+    // painel ocupa a direita); suave na ida
+    if (this.vitrine && !this.menu) {
+      const f = this.eu.facing, y = this.eu.alt, fx = Math.sin(f), fz = Math.cos(f), rx = Math.cos(f), rz = -Math.sin(f), k = 1 - Math.exp(-dt * 5);
+      // a câmera na frente dele (um pouco de lado) e o OLHAR girado o ângulo certo pra ele cair em `vitrineCx` da tela
+      const D = 4.9, px = this.eu.pos.x + fx * D - rx * 0.7, pz = this.eu.pos.z + fz * D - rz * 0.7;   // (de corpo inteiro)
+      const tanH = Math.tan(THREE.MathUtils.degToRad(this.cam.fov) / 2) * this.cam.aspect, giro = Math.atan((0.5 - this.vitrineCx) * 2 * tanH);
+      const ang = Math.atan2(this.eu.pos.x - px, this.eu.pos.z - pz) - giro;   // (girar o olhar desse lado joga ele pra esquerda da tela)
+      this.cam.position.lerp(this.vCamA.set(px, y + 1.3, pz), k);
+      this.camT.lerp(this.vCamA.set(px + Math.sin(ang) * D, y + 0.92, pz + Math.cos(ang) * D), k); this.cam.lookAt(this.camT);
+      return;
+    }
     if (this.menu && l) {
       const pm = Math.min(2.4, Math.max(1, 0.9 / this.cam.aspect));   // retrato: afasta p/ caber a base
       const rel = localParaMundo(l, -2.6 * pm, 4.8 * pm);

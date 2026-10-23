@@ -169,3 +169,43 @@ export function InspetorMoeda({ m, endereco }: { m: MoedaCarteira; endereco: str
     </>
   );
 }
+
+/** a COLD WALLET (out/2026, o dono: "a carteira em destaque, do lado direito do personagem, em formato cold wallet"):
+ *  o aparelho — corpo de metal escovado, a tela OLED com o total e as moedas rolando, os dois botões, o conector e a
+ *  gravação ZAEON VAULT. Clicar abre a aba Carteira */
+export function ColdWallet({ est, onAbrir, ativo }: { est: EstadoCarteira; onAbrir: () => void; ativo: boolean }) {
+  const moedas = [...(est.aura ? [est.aura] : []), ...est.carteiras.flatMap((c) => c.moedas)];
+  const total = totalEmDolar(est.carteiras.flatMap((c) => c.moedas)), conectada = est.carteiras.some((c) => c.tipo === "conectada");
+  return (
+    <button type="button" onClick={onAbrir} aria-label="Abrir a carteira" className="group pointer-events-auto relative block w-[188px] text-left transition-transform hover:-translate-y-0.5" style={{ filter: ativo ? "drop-shadow(0 0 18px rgba(153,69,255,.55))" : "drop-shadow(0 14px 22px rgba(0,0,0,.7))" }}>
+      {/* o CONECTOR em cima */}
+      <span aria-hidden className="mx-auto block h-2.5 w-12 rounded-t-md border border-b-0 border-zinc-500/70 bg-gradient-to-b from-zinc-300 to-zinc-500" />
+      <div className="relative overflow-hidden rounded-[18px] border border-zinc-400/50 p-3" style={{ background: "linear-gradient(145deg,#3a3d46 0%,#1a1c22 38%,#0c0d11 62%,#2a2c33 100%)", boxShadow: "inset 0 1px 0 rgba(255,255,255,.25), inset 0 -2px 6px rgba(0,0,0,.6), 0 0 0 1px #000" }}>
+        {/* o metal escovado */}
+        <span aria-hidden className="pointer-events-none absolute inset-0 opacity-30" style={{ background: "repeating-linear-gradient(90deg,rgba(255,255,255,.05) 0 1px,transparent 1px 3px)" }} />
+        <div className="relative mb-2 flex items-center justify-between">
+          <span className="text-[9px] font-black tracking-[0.34em] text-zinc-300/80">ZAEON VAULT</span>
+          <span className={`h-1.5 w-1.5 rounded-full ${conectada ? "bg-emerald-400 shadow-[0_0_6px_#34d399]" : "bg-zinc-500"}`} title={conectada ? "carteira conectada" : "sem carteira conectada"} />
+        </div>
+        {/* a TELA OLED */}
+        <div className="relative rounded-md border border-black bg-black px-2.5 py-2 font-mono text-[10.5px] leading-tight text-[#d9f7ff] shadow-[inset_0_0_12px_rgba(0,0,0,1)]">
+          <span aria-hidden className="pointer-events-none absolute inset-0 opacity-20" style={{ background: "repeating-linear-gradient(0deg,rgba(255,255,255,.07) 0 1px,transparent 1px 2px)" }} />
+          <div className="text-[8.5px] uppercase tracking-[0.2em] text-[#7fe8ff]/70">saldo</div>
+          <div className="text-[17px] font-black tabular-nums text-white" style={{ textShadow: "0 0 8px rgba(127,232,255,.6)" }}>{est.carteiras.length ? fmtDolar(total) : "—"}</div>
+          <div className="mt-1.5 grid gap-0.5">
+            {moedas.slice(0, 4).map((m) => (
+              <div key={m.id} className="flex items-center justify-between gap-2"><span className="font-bold" style={{ color: m.cor }}>{m.simbolo}</span><span className="tabular-nums text-white/85">{fmtQuantidade(m.quantidade)}</span></div>
+            ))}
+            {!moedas.length && <div className="text-white/45">{est.carregando ? "lendo…" : "vazia"}</div>}
+            {moedas.length > 4 && <div className="text-white/40">+{moedas.length - 4} moedas</div>}
+          </div>
+        </div>
+        {/* os BOTÕES físicos */}
+        <div className="relative mt-2.5 flex items-center justify-between px-3">
+          {[0, 1].map((k) => <span key={k} aria-hidden className="h-5 w-5 rounded-full border border-zinc-400/60 bg-gradient-to-b from-zinc-300 to-zinc-600 shadow-[inset_0_-2px_3px_rgba(0,0,0,.5),0_1px_0_rgba(255,255,255,.2)]" />)}
+        </div>
+        <div className="relative mt-2 text-center text-[9px] font-bold uppercase tracking-[0.18em] text-zinc-300/60 group-hover:text-white">{conectada ? "abrir carteira" : "conectar carteira"}</div>
+      </div>
+    </button>
+  );
+}
