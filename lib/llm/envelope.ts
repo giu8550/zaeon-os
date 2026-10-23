@@ -13,6 +13,7 @@
  */
 import { usageDoVertex, usageDoOpenAI, classificarErroLlm, chaveDoAgente, gatewayLigado, type Usage, type ClasseErroLlm, USAGE_VAZIO } from "@/lib/llm/usage";
 import { registrarTokens, type LedgerCtx } from "@/lib/llm/ledger";
+import { parseJsonComLatex } from "@/lib/llm/latexJson";
 import { GEMINI_MODEL_FLASH } from "@/lib/ai/model";
 import { alvoDe, ehModeloLocal, ehModeloPool, poolConfigurado, type Alvo } from "@/lib/llm/pool";
 import { HF_ROUTER_URL, erroPedeReserva, modeloSemProvedor, modelosReservaHf, reservaHfLigada, timeoutReservaHf } from "@/lib/llm/reservaHf";
@@ -275,7 +276,9 @@ export async function gerarJsonRes<T>(req: GerarReq, deps: Deps = {}): Promise<{
   const res = await gerar({ ...req, json: true }, deps);
   const cleaned = res.texto.replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
   if (!cleaned) throw new ErroLlm("outro", res.provedor, new Error(`Gemini retornou resposta vazia (finishReason=${res.finishReason ?? "?"})`));
-  try { return { valor: JSON.parse(cleaned) as T, res }; }
+  // LaTeX com UMA barra dentro do JSON ("$\frac{a}{b}$", "$\rightarrow$") viraria form feed/retorno de carro no
+  // parse — os "caracteres errados" nas fórmulas e reações dos trabalhos. lib/llm/latexJson repara antes.
+  try { return { valor: parseJsonComLatex<T>(cleaned), res }; }
   catch { throw new ErroLlm("resposta_nao_json", res.provedor, new Error(`Gemini retornou JSON inválido (finishReason=${res.finishReason ?? "?"}): ${cleaned.slice(0, 160)}`)); }
 }
 /** = gerar({json:true}) + parse. Mesmos erros diagnósticos do geminiJson legado (nunca "{}" silencioso). */

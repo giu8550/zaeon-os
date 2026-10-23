@@ -13,7 +13,12 @@ type Katex = { renderToString(tex: string, opts: Record<string, unknown>): strin
 let katexMod: Katex | null = null;
 let promessa: Promise<Katex> | null = null;
 function carregarKatex(): Promise<Katex> {
-  if (!promessa) promessa = import("katex").then((m) => (katexMod = ((m as any).default ?? m) as Katex));
+  // + mhchem: `\ce{2H2 + O2 -> 2H2O}` (reações e fórmulas químicas) vira notação química de verdade
+  if (!promessa) promessa = import("katex").then(async (m) => {
+    // @ts-expect-error — a extensão não tem tipos; ela só registra a macro \ce no katex
+    await import("katex/contrib/mhchem").catch(() => {});
+    return (katexMod = ((m as any).default ?? m) as Katex);
+  });
   return promessa;
 }
 
