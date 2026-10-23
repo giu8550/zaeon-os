@@ -41,14 +41,18 @@ export type Candidata = { key: string; nomes: string[] };
 // ── as peças da frase (texto já sem acento, nomes trocados por §) ──
 // #466: "por favor", "pfv" também abrem e fecham ("por favor pode sair", "pode ir embora por favor")
 // #551: "vocês duas", "as duas", "todas" também abrem ("vocês duas podem ir")
-const ABRE = String.raw`(?:(?:a|o|as|os|voce|vc|tu|voces|vcs|duas|dois|tres|todas|todos|ok|okay|blz|beleza|valeu|vlw|obrigad\w*|brigad\w*|entao|bom|certo|agora|ja|ei|oi|por favor|pfv|pf|§)\s+)*`;
+// #560: "obg" também ("obg aura, até")
+const ABRE = String.raw`(?:(?:a|o|as|os|voce|vc|tu|voces|vcs|duas|dois|tres|todas|todos|ok|okay|blz|beleza|valeu|vlw|obg|obrigad\w*|brigad\w*|entao|bom|certo|agora|ja|ei|oi|por favor|pfv|pf|§)\s+)*`;
 // #466: "aqui", "por agora", "por favor" também fecham ("não precisamos mais de você aqui", "pode sair por agora")
 // #468: "também" ("@aura pode sair também"), "daqui", "da conversa" também fecham
 // #551: "todas", "as duas", "por aqui" também fecham ("podem sair todas", "pode encerrar por aqui")
-const FECHA = String.raw`(?:\s+(?:embora|agora|ja|entao|valeu|vlw|obrigad\w*|brigad\w*|tchau\w*|bj\w*|beij\w*|flw|falou|ok|blz|beleza|ta|de vez|por hoje|por enquanto|por agora|por aqui|aqui|por favor|pfv|pf|tambem|voce tambem|vc tambem|voces tambem|daqui|da conversa|da sala|do chat|todas|todos|as duas|os dois|as tres|os tres|voces|vcs|§))*`;
+// #560: "fora" ("sai fora aura"), "pra vocês" ("tchau pra vocês"), "obg"
+const FECHA = String.raw`(?:\s+(?:embora|agora|ja|entao|valeu|vlw|obg|obrigad\w*|brigad\w*|tchau\w*|bj\w*|beij\w*|flw|falou|ok|blz|beleza|ta|de vez|por hoje|por enquanto|por agora|por aqui|aqui|por favor|pfv|pf|tambem|voce tambem|vc tambem|voces tambem|daqui|da conversa|da sala|do chat|fora|pra (?:voce|vc|voces|vcs|todas|todos|as duas|os dois)|todas|todos|as duas|os dois|as tres|os tres|voces|vcs|§))*`;
 const FORTES = [
-  // #551: "pode ir descansar", "pode se retirar", "pode encerrar"
-  String.raw`(?:ja\s+)?(?:pode|podem|podes)\s+(?:ir|sair|parar|descansar|ir\s+descansar|se\s+retirar|encerrar|finalizar)(?:\s+embora)?`,
+  // #551: "pode ir descansar", "pode se retirar", "pode encerrar" (#560: "pode finalizar" saiu — é terminar a tarefa)
+  String.raw`(?:ja\s+)?(?:pode|podem|podes)\s+(?:ir|sair|parar|descansar|ir\s+descansar|se\s+retirar|encerrar)(?:\s+embora)?`,
+  // #560: "cala a boca"
+  String.raw`(?:cala|cale|calem)\s+(?:a\s+)?boca`,
   // #551: "chega (por hoje)", "vamos encerrar", "encerramos"
   String.raw`chega`,
   String.raw`(?:(?:podemos|vamos)\s+)?(?:encerrar|encerra|encerramos)`,
@@ -60,10 +64,13 @@ const FORTES = [
   String.raw`nao\s+(?:preciso|precisamos|precisa|vou precisar|vamos precisar)\s+mais\s+(?:(?:de|da|do)\s+)?(?:voce|voces|vc|vcs|tu|ti|sua ajuda|ajuda|nada|§)`,
   String.raw`pode\s+deixar`,
   String.raw`(?:(?:e|eh|era)\s+)?so\s+isso`,
+  // #560: "valeu, era isso"
+  String.raw`era\s+isso`,
   String.raw`(?:(?:esta|ta|estao|tao)\s+)?dispensad[ao]s?`,
   String.raw`por\s+hoje\s+e\s+so`,
 ];
-const FRACAS = [String.raw`tchau\w*`, String.raw`ate\s+(?:mais|logo|a proxima|amanha)`, String.raw`(?:falou|flw)`, String.raw`bye`];
+// #560: "até" sozinho também ("obg aura, até")
+const FRACAS = [String.raw`tchau\w*`, String.raw`ate(?:\s+(?:mais|logo|a proxima|amanha|breve|depois))?`, String.raw`(?:falou|flw)`, String.raw`bye`];
 const NUCLEO = (nucleos: string[]) => `(?:${nucleos.join("|")})`;
 const PEDACO_FORTE = new RegExp(String.raw`^${ABRE}${NUCLEO(FORTES)}${FECHA}(?:\s+${NUCLEO([...FORTES, ...FRACAS])}${FECHA})*$`);
 const PEDACO_FRACO = new RegExp(String.raw`^${ABRE}${NUCLEO(FRACAS)}${FECHA}(?:\s+${NUCLEO(FRACAS)}${FECHA})*$`);

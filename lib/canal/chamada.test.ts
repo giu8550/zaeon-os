@@ -98,3 +98,23 @@ describe("falar COM uma pessoa da conversa · #551", () => {
     expect(falaComPessoa(t, ["Martinez Silva", "Ana"])).toBe(false);
   });
 });
+
+describe("chamar pelo nome · #560", () => {
+  it.each([
+    ["teo me explicou mal, explica você", []],
+    ["teo me disse que era assim", []],
+    ["aura te respondeu?", []],
+  ] as const)("pronome + passado é falar SOBRE: %s", (t, esperado) => {
+    expect(chama(t)).toEqual(esperado);
+  });
+  it.each([
+    ["valeu aura, agora teo me ajuda", ["teo"]],
+    ["obrigada zenita! teo, sua vez", ["teo"]],
+    ["valeu aura", ["aura"]],
+    ["valeu aura, me explica a parte 2", ["aura"]],
+    ["teo me ajuda", ["teo"]],
+    ["teo me explica isso", ["teo"]],
+  ] as const)("obrigado não chama quando outra é chamada: %s", (t, esperado) => {
+    expect(chama(t)).toEqual(esperado);
+  });
+});
