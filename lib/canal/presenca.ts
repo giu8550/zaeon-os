@@ -117,6 +117,21 @@ export function quemDigita(
 }
 
 /**
+ * #560: a internet caiu e voltou → o Pusher reconecta, mas o que chegou enquanto estava fora se perdeu (só aparecia
+ * com F5). Devolve um vigia: diz `true` quando a conexão VOLTA (não na primeira vez que conecta) — aí a tela relê
+ * a conversa aberta.
+ */
+export function vigiaReconexao(): (estado: string) => boolean {
+  let jaConectou = false;
+  return (estado) => {
+    if (estado !== "connected") return false;
+    const voltou = jaConectou;
+    jaConectou = true;
+    return voltou;
+  };
+}
+
+/**
  * Limite no SERVIDOR: deixa passar 1 aviso por pessoa+canal a cada LIMITE_SERVIDOR_MS. O mapa é injetado
  * (a rota usa um do módulo); entradas velhas são limpas pra não crescer sem fim.
  */

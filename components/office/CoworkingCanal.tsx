@@ -33,7 +33,7 @@ import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
 import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, EV_HUMANO_DIGITANDO, EV_REMOVIDO, type MensagemWire } from "@/lib/canal/wire";
 import { comFotoDaLista, type AvisoMensagem } from "@/lib/canal/aviso";
 import { quemRespondeSemArroba } from "@/lib/canal/alvo";
-import { deveAvisarDigitando, podarDigitando, quemDigita, estaNoFim, TTL_DIGITANDO_MS, type Digitando } from "@/lib/canal/presenca";
+import { deveAvisarDigitando, podarDigitando, quemDigita, estaNoFim, vigiaReconexao, TTL_DIGITANDO_MS, type Digitando } from "@/lib/canal/presenca";
 import { LinhaSistema, AvisoDigitando } from "./Presenca";
 import AgendaBandeja from "./AgendaBandeja";
 import { VIDRO_PAINEL, VIDRO_BOLHA, VIDRO_BOLHA_MINHA, VIDRO_INPUT, VIDRO_POPOVER, VIDRO_CHIP, TXT, TXT_2, TXT_MUDO, TOQUE } from "@/lib/canal/vidro";
@@ -255,7 +255,15 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   useEffect(() => {
     const key = process.env.NEXT_PUBLIC_PUSHER_KEY, cluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER;
     if (!key || !cluster || !canais.length) return;
-    const p = pusherRef.current ?? new PusherClient(key, { cluster, channelAuthorization: { endpoint: "/api/canal/pusher-auth", transport: "ajax" } });
+    let p = pusherRef.current;
+    if (!p) {
+      p = new PusherClient(key, { cluster, channelAuthorization: { endpoint: "/api/canal/pusher-auth", transport: "ajax" } });
+      // #560: a conexão caiu e voltou → relê a conversa aberta (o que chegou enquanto estava fora não vem pelo Pusher)
+      const voltou = vigiaReconexao();
+      p.connection.bind("state_change", (s: { current: string }) => {
+        if (voltou(s?.current) && ativoRef.current) void carregarDetalhe(ativoRef.current);
+      });
+    }
     pusherRef.current = p;
     const nomes = p.allChannels().map((c) => c.name);
     for (const c of canais) {
