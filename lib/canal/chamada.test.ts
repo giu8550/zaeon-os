@@ -1,6 +1,6 @@
 /** #466 · chamar uma agente pelo NOME, sem @ — só quando é chamado de verdade. */
 import { describe, it, expect } from "vitest";
-import { chamadasPeloNome, falaComPessoa } from "./chamada";
+import { chamadasPeloNome, falaComPessoa, pedeOutraAgente } from "./chamada";
 
 const AGENTES = [
   { agentKey: "aura", nome: "Aura" }, { agentKey: "teo", nome: "Téo" }, { agentKey: "zenita", nome: "Zenita" },
@@ -96,5 +96,35 @@ describe("falar COM uma pessoa da conversa · #551", () => {
   });
   it.each(["o martinez disse que a prova é amanhã, é verdade?", "me explica a parte 2", "a ana falou de martingale"])("não: %s", (t) => {
     expect(falaComPessoa(t, ["Martinez Silva", "Ana"])).toBe(false);
+  });
+});
+
+describe("chamar pelo nome · #560", () => {
+  it.each([
+    ["teo me explicou mal, explica você", []],
+    ["teo me disse que era assim", []],
+    ["aura te respondeu?", []],
+  ] as const)("pronome + passado é falar SOBRE: %s", (t, esperado) => {
+    expect(chama(t)).toEqual(esperado);
+  });
+  it.each([
+    ["valeu aura, agora teo me ajuda", ["teo"]],
+    ["obrigada zenita! teo, sua vez", ["teo"]],
+    ["valeu aura", ["aura"]],
+    ["valeu aura, me explica a parte 2", ["aura"]],
+    ["teo me ajuda", ["teo"]],
+    ["teo me explica isso", ["teo"]],
+  ] as const)("obrigado não chama quando outra é chamada: %s", (t, esperado) => {
+    expect(chama(t)).toEqual(esperado);
+  });
+});
+
+describe("'explica você' fala com outra agente · #560", () => {
+  const teo = { agentKey: "teo", nome: "Téo" };
+  it.each(["teo explicou mal, explica você", "teo me explicou mal, explica você", "o téo disse isso, vc concorda?"])("sim: %s", (t) => {
+    expect(pedeOutraAgente(t, teo)).toBe(true);
+  });
+  it.each(["explica de novo", "você pode explicar melhor?", "teo explicou bem"])("não: %s", (t) => {
+    expect(pedeOutraAgente(t, teo)).toBe(false);
   });
 });

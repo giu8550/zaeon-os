@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolverAlvos, agenteDaVez, estaForaDaConversa, quemRespondeSemArroba, AGENTE_PADRAO, type MsgResumo } from "./alvo";
+import { resolverAlvos, agenteDaVez, estaForaDaConversa, quemRespondeSemArroba, AGENTE_PADRAO, type MsgResumo, agentesPorRecencia } from "./alvo";
 
 const A = "a".repeat(24), B = "b".repeat(24);
 const DISP = ["aura", "zaeon", "medicina"];
@@ -132,5 +132,15 @@ describe("alvo · #466 a dica 'Zenita responde' usa a regra do servidor", () => 
   });
   it("depois que ela saiu: ninguém", () => {
     expect(quemRespondeSemArroba([...conversa, { autorTipo: "sistema", autorId: "medicina", texto: "Osler saiu da conversa" }], DISP, B, 1)).toBeNull();
+  });
+});
+
+describe("alvo · #560 agentes pela ordem em que falaram", () => {
+  it("da última pra trás; 'voltou' conta; quem nunca falou fica de fora", () => {
+    const h = [
+      { autorTipo: "agente", autorId: "aura" }, { autorTipo: "agente", autorId: "teo" }, { autorTipo: "agente", autorId: "aura" },
+      { autorTipo: "sistema", autorId: "zenita", texto: "Zenita voltou para a conversa" },
+    ];
+    expect(agentesPorRecencia(h, ["aura", "teo", "zenita", "nina"])).toEqual(["zenita", "aura", "teo"]);
   });
 });

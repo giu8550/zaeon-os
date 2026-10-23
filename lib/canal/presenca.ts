@@ -22,6 +22,11 @@ export function textoEntrou(nome: string | null | undefined, opts: { conversa?: 
   return opts.conversa ? `${n} aceitou o convite e entrou na conversa` : `${n} entrou no escritório`;
 }
 
+/** #560: o dono tirou a pessoa do escritório — antes não ficava nenhum aviso no chat. */
+export function textoRemovido(nome: string | null | undefined): string {
+  return `${(nome || "").trim() || "Alguém"} não está mais no escritório`;
+}
+
 /** Quem é NOVO em `depois` (não estava em `antes` e não é o dono) — só esses ganham o aviso. */
 export function novosMembros(antes: readonly string[], depois: readonly string[], donoId: string): string[] {
   const ja = new Set(antes);
@@ -36,13 +41,14 @@ export type DepsAnuncio = {
 
 /**
  * Grava a linha "fulano entrou" e avisa o canal em tempo real. Best-effort: um erro aqui NUNCA derruba
- * a rota (a pessoa entra mesmo assim) — devolve null.
+ * a rota (a pessoa entra mesmo assim) — devolve null. #560: `removido` grava "fulano não está mais no escritório".
  */
 export async function anunciarEntrada(
-  deps: DepsAnuncio, canalId: string, pessoa: { id: string; nome: string | null; avatar?: string | null }, opts: { conversa?: boolean } = {},
+  deps: DepsAnuncio, canalId: string, pessoa: { id: string; nome: string | null; avatar?: string | null },
+  opts: { conversa?: boolean; removido?: boolean } = {},
 ): Promise<MensagemWire | null> {
   try {
-    const texto = textoEntrou(pessoa.nome, opts);
+    const texto = opts.removido ? textoRemovido(pessoa.nome) : textoEntrou(pessoa.nome, opts);
     const row = await deps.criar({ canalId, autorTipo: "sistema", autorId: pessoa.id, texto, mencoes: [] });
     const wire: MensagemWire = {
       id: row.id, canalId, autorTipo: "sistema", autorId: pessoa.id, texto, mencoes: [],
@@ -114,6 +120,21 @@ export function quemDigita(
     const p = pessoas.find((x) => x.id === id);
     return { id, nome: (v.nome || "").trim() || p?.nome || "Alguém", avatar: p?.avatar ?? null };
   });
+}
+
+/**
+ * #560: a internet caiu e voltou → o Pusher reconecta, mas o que chegou enquanto estava fora se perdeu (só aparecia
+ * com F5). Devolve um vigia: diz `true` quando a conexão VOLTA (não na primeira vez que conecta) — aí a tela relê
+ * a conversa aberta.
+ */
+export function vigiaReconexao(): (estado: string) => boolean {
+  let jaConectou = false;
+  return (estado) => {
+    if (estado !== "connected") return false;
+    const voltou = jaConectou;
+    jaConectou = true;
+    return voltou;
+  };
 }
 
 /**

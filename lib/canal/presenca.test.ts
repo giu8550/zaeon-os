@@ -3,6 +3,7 @@ import {
   tipoDoAutor, textoEntrou, novosMembros, anunciarEntrada,
   deveAvisarDigitando, podarDigitando, textoDigitando, permitirDigitando,
   INTERVALO_DIGITANDO_MS, LIMITE_SERVIDOR_MS, quemDigita, MAX_BALOES_DIGITANDO, estaNoFim, MARGEM_FIM_PX,
+  vigiaReconexao, textoRemovido,
 } from "./presenca";
 
 describe("presença · 'fulano entrou'", () => {
@@ -109,5 +110,21 @@ describe("presença · #427 descer até o balão de quem digita", () => {
   });
   it("conversa curta (cabe toda na tela): está no fim", () => {
     expect(estaNoFim({ scrollTop: 0, scrollHeight: 300, clientHeight: 400 })).toBe(true);
+  });
+});
+
+describe("presenca · #560 linha de quem foi removido", () => {
+  it("cita o nome; sem nome vira 'Alguém'", () => {
+    expect(textoRemovido("Martinez")).toBe("Martinez não está mais no escritório");
+    expect(textoRemovido("  ")).toBe("Alguém não está mais no escritório");
+  });
+});
+
+describe("presenca · #560 a conexão caiu e voltou", () => {
+  it("a 1ª conexão não relê; cada volta depois de cair relê", () => {
+    const voltou = vigiaReconexao();
+    expect(["connecting", "connected"].map(voltou)).toEqual([false, false]);
+    expect(["unavailable", "connecting", "connected"].map(voltou)).toEqual([false, false, true]);
+    expect(["disconnected", "connected"].map(voltou)).toEqual([false, true]);
   });
 });

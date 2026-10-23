@@ -44,6 +44,13 @@ const VERBO_SOBRE = new Set([
   "e", "eh", "foi", "era", "sao", "eram", "estava", "estavam", "tava", "tinha", "disse", "sabia", "fez", "deu", "parece",
 ]);
 const NO_PASSADO = /^[a-z]{2,}(?:ou|eu|iu)$/;
+/** #560: "teo ME explicou mal" — pronome entre o nome e o verbo que conta algo dela (fala SOBRE, não chama). */
+const PRONOME_OBJ = new Set(["me", "te", "nos", "lhe"]);
+/**
+ * #560: agradecer não é chamar quando a mensagem chama OUTRA agente ("valeu aura, agora teo me ajuda" → só o Téo).
+ * Sozinho ("valeu aura") continua contando como falar com ela.
+ */
+const AGRADECE = new Set(["valeu", "vlw", "obrigado", "obrigada", "brigado", "brigada", "obg", "brigadao", "brigadona"]);
 
 /**
  * #468: nomes de agente que também são PALAVRA COMUM (ou o nome da plataforma). Esses só chamam em posição de
@@ -95,6 +102,16 @@ export function falaComPessoa(texto: string, outrasPessoas: readonly string[]): 
 }
 
 /**
+ * #560: a mensagem fala DA agente da vez (o nome dela, sem chamar) e pede a "você"? ("teo explicou mal, explica
+ * você", "o teo disse X, você concorda?") — o "você" é OUTRA agente; a da vez não responde a crítica a ela mesma.
+ */
+export function pedeOutraAgente(texto: string, daVez: AgenteChamavel): boolean {
+  const toks = palavras(texto);
+  const nomes = [daVez.agentKey, daVez.nome, daVez.nome.split(/\s+/)[0] ?? ""].map(semAcento).filter(Boolean);
+  return toks.some((t) => nomes.includes(t.w)) && toks.some((t) => ["voce", "vc", "tu", "ce"].includes(t.w));
+}
+
+/**
  * As agentes chamadas pelo NOME nesta mensagem (sem @). `pessoas` = primeiros nomes das pessoas do canal (quem
  * tem o mesmo nome de uma agente não conta como chamar a agente). Mensagem com @ não passa por aqui (o @ manda).
  */
@@ -106,12 +123,18 @@ export function chamadasPeloNome(texto: string, agentes: readonly AgenteChamavel
     if (!t || t.w.startsWith("@") || humanos.has(t.w)) return null;
     return agentes.find((a) => [a.agentKey, a.nome, a.nome.split(/\s+/)[0] ?? ""].map(semAcento).some((n) => n && n === t.w)) ?? null;
   };
-  /** O nome na posição i está CHAMANDO a agente? */
-  const chama = (i: number): boolean => {
+  /** O nome na posição i está CHAMANDO a agente? ("agradece" = só um obrigado — ver AGRADECE) */
+  const chama = (i: number): boolean | "agradece" => {
     const t = toks[i]!, ant = toks[i - 1], prox = toks[i + 1];
     if (ant && (COISA.has(ant.w) || TITULO.has(ant.w) || PARENTE.has(ant.w)) && !/[,!:]/.test(t.antes)) return false; // "a aura", "sobre aura", "rei davi", "minha amiga nina"
     // #551: "teo e zenita, me ajudem" / "teo e zenita são agentes de quê?" — a lista decide pelo último nome
     if (prox?.w === "e" && !/[,!:.?]/.test(t.depois) && agenteEm(i + 2)) return chama(i + 2);
+    // #560: "teo me explicou mal", "aura te disse" — o pronome não faz do nome um chamado
+    const depois2 = toks[i + 2];
+    if (prox && depois2 && PRONOME_OBJ.has(prox.w) && !/[,!:.?]/.test(t.depois + prox.depois) &&
+      (VERBO_SOBRE.has(depois2.w) || NO_PASSADO.test(depois2.w))) return false;
+    // #560: "valeu aura, …" — obrigado; chama de verdade só se vier um pedido logo depois ("valeu aura, me explica")
+    if (ant && AGRADECE.has(ant.w) && !/[.?]/.test(t.antes)) return prox !== undefined && PEDIDO.has(prox.w) && !AGRADECE.has(prox.w) ? true : "agradece";
     const vocativo =
       /^\s*[,!:]/.test(t.depois) ||                                        // "aura, me explica"
       (!prox && /,/.test(t.antes)) ||                                       // "me explica isso, aura"
@@ -126,9 +149,14 @@ export function chamadasPeloNome(texto: string, agentes: readonly AgenteChamavel
     return true;
   };
   const chamadas = new Set<string>();
+  const agradecidas = new Set<string>();
   toks.forEach((_, i) => {
     const ag = agenteEm(i);
-    if (ag && chama(i)) chamadas.add(ag.agentKey);
+    const r = ag ? chama(i) : false;
+    if (r === "agradece") agradecidas.add(ag!.agentKey);
+    else if (r) chamadas.add(ag!.agentKey);
   });
+  // #560: só agradeceu (ninguém mais chamado) → continua falando com ela; com outra chamada, o obrigado não chama
+  if (!chamadas.size) agradecidas.forEach((k) => chamadas.add(k));
   return agentes.map((a) => a.agentKey).filter((k) => chamadas.has(k));
 }

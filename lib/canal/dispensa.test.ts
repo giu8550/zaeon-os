@@ -243,7 +243,7 @@ describe("dispensa · #551 'vocês duas', 'todas'", () => {
 
 describe("dispensa · #551 despedidas novas", () => {
   const sozinha = { ...zenita, humanos: 1 };
-  it.each(["pode encerrar", "chega por hoje", "chega", "pode ir descansar", "zenita, pode se retirar", "pode encerrar por aqui", "vamos encerrar", "pode finalizar"])("sai: %s", (t) => {
+  it.each(["pode encerrar", "chega por hoje", "chega", "pode ir descansar", "zenita, pode se retirar", "pode encerrar por aqui", "vamos encerrar"])("sai: %s", (t) => {
     expect(ehDispensa(t, sozinha)).toBe(true);
   });
   it.each(["chega de exemplos, me explica a teoria", "pode encerrar o assunto anterior e explicar o novo", "vamos encerrar o capítulo 2 hoje?", "quando a aula chega ao fim?", "pode ir descansando a mente enquanto lê"])("fica: %s", (t) => {
@@ -260,5 +260,35 @@ describe("dispensa · #551 saidasDaMensagem (quem está na conversa)", () => {
   it("conversa normal: ninguém sai, a da vez responde e fica na barra", () => {
     expect(saidasDaMensagem("me explica isso", { alvos: ["aura"], naConversa: ["aura", "teo"], agentes, humanos: 1 }))
       .toEqual({ dispensadas: [], ignoradas: [], respondem: ["aura"], chamados: ["aura"] });
+  });
+});
+
+describe("dispensa · #560 despedidas que faltavam", () => {
+  const sozinha = { ...zenita, humanos: 1 };
+  it.each(["valeu, era isso", "sai fora zenita", "zenita cala a boca", "obg zenita, até", "vlw zenita flw", "AURA PODE IR".replace("AURA", "ZENITA")])("sai: %s", (t) => {
+    expect(ehDispensa(t, sozinha)).toBe(true);
+  });
+  it("'tchau pra vocês' com as duas na conversa → as duas", () => {
+    const aura = { key: "aura", nomes: ["Aura"] }, teo = { key: "teo", nomes: ["Téo", "Teo"] };
+    expect(quemFoiDispensada("tchau pra vocês", [aura, teo], 1, ["teo"])).toEqual(["aura", "teo"]);
+  });
+  it.each(["pode finalizar", "pode finalizar o trabalho?", "era isso que eu queria saber, continua", "isso", "até que ponto isso vale?", "saia fora do modo resumo", "brigada! e a parte 2?"])("fica: %s", (t) => {
+    expect(ehDispensa(t, sozinha)).toBe(false);
+  });
+});
+
+describe("dispensa · #560 'vocês duas' tira só as duas últimas", () => {
+  const aura = { key: "aura", nomes: ["Aura"] }, zaeon = { key: "zaeon", nomes: ["Zaeon"] }, zen = { key: "zenita", nomes: ["Zenita"] };
+  // falaram por último: Zenita, depois Aura; a Zaeon está na barra mas falou antes
+  const recencia = ["zenita", "aura", "zaeon"];
+  it("'vocês duas podem sair' com três na conversa → só Zenita e Aura (o caso do print)", () => {
+    expect(quemFoiDispensada("vocês duas podem sair", [aura, zaeon, zen], 1, ["zenita"], recencia)).toEqual(["aura", "zenita"]);
+  });
+  it("'os três podem ir' → as três; 'vocês podem ir' (sem número) → todas", () => {
+    expect(quemFoiDispensada("vocês três podem ir", [aura, zaeon, zen], 1, ["zenita"], recencia)).toEqual(["aura", "zaeon", "zenita"]);
+    expect(quemFoiDispensada("vocês podem ir", [aura, zaeon, zen], 1, ["zenita"], recencia)).toEqual(["aura", "zaeon", "zenita"]);
+  });
+  it("quem nunca falou fica por último na conta", () => {
+    expect(quemFoiDispensada("as duas podem ir", [aura, zaeon, zen], 1, ["aura"], ["aura"])).toEqual(["aura", "zaeon"]);
   });
 });

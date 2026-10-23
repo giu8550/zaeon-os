@@ -82,7 +82,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const db = prisma as unknown as DbAtomico;
   const entrou = entra ? (await entrarComoMembro(db, canal.id, entra)) === "entrou" : false;
   // #468: o canal é privado, mas quem já estava ouvindo continua até recarregar — avisa a tela dela pra parar agora
-  if (sai && (await sairComoMembro(db, canal.id, sai)) === "saiu") await publicarPusher(canal.id, EV_REMOVIDO, { userId: sai });
+  if (sai && (await sairComoMembro(db, canal.id, sai)) === "saiu") {
+    // #560: fica a linha "fulano não está mais no escritório" no chat (antes ninguém via que a pessoa saiu)
+    const quem = (await pessoas([sai]).catch(() => new Map())).get(sai);
+    await anunciarEntrada({ criar: (d) => prisma.canalMensagem.create({ data: d }), publicar: publicarPusher, evento: EV_MENSAGEM },
+      canal.id, { id: sai, nome: quem?.nome ?? null, avatar: quem?.avatar ?? null }, { removido: true });
+    await publicarPusher(canal.id, EV_REMOVIDO, { userId: sai });
+  }
   const upd = (await prisma.canal.findUnique({ where: { id: canal.id } })) ?? canal;
   // #423: quem foi ADICIONADO agora ganha a linha "fulano entrou no escritório" no chat (best-effort; #466: só se entrou agora)
   const novos = entrou && entra ? [entra] : [];
