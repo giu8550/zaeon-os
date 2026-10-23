@@ -79,12 +79,22 @@ describe("canal/[id] · #423 · aviso 'fulano entrou' quando alguém é ADICIONA
     expect(state.criadas).toHaveLength(0);
   });
 
-  it("remover membro, mudar título ou acesso não gera aviso", async () => {
+  it("mudar título ou acesso não gera aviso", async () => {
     state.canal = { ...turma, membros: [B] };
-    await patch({ removerMembro: B });
     await patch({ titulo: "novo" });
     await patch({ acesso: "aberto" });
     expect(state.criadas).toHaveLength(0);
+  });
+
+  it("#560: remover gera UMA linha 'fulano não está mais no escritório' (mesmo com clique duplo)", async () => {
+    state.canal = { ...turma, membros: [B] };
+    await patch({ removerMembro: B });
+    await patch({ removerMembro: B });
+    expect(state.criadas).toHaveLength(1);
+    expect(state.criadas[0]).toMatchObject({ canalId: CANAL, autorTipo: "sistema", autorId: B, texto: `${B} não está mais no escritório` });
+    // a linha vai antes do aviso que tira a tela da pessoa
+    const eventos = state.publicados.map((p) => p[1]);
+    expect(eventos.indexOf("mensagem")).toBeLessThan(eventos.indexOf("membro-removido"));
   });
 
   it("quem não aceitou convite (409) não entra e não gera aviso", async () => {
