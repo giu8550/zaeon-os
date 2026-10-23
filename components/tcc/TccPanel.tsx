@@ -33,6 +33,7 @@ import { EVT_TCC_MUDOU, ROTULO_OP, ROTULO_ORIGEM, avisarTccMudou, tccApi, type R
 import { chatUnicoOn } from "@/lib/chat/chatUnico";
 import { conteudoSemLatex } from "@/lib/tcc/latexTexto";
 import { useIsMobile } from "@/lib/ui/useIsMobile";
+import ExportarTrabalho, { type OpcoesExport } from "@/components/tcc/ExportarTrabalho";
 
 type Aba = "doc" | "sugestoes" | "historico";
 const CHAT_UNICO = chatUnicoOn();
@@ -161,31 +162,35 @@ export default function TccPanel({ workId, onFechar, onTitulo }: {
     } catch { setErro("Não deu pra restaurar essa versão."); }
   };
 
-  const exportar = async () => {
+  const [exportAberto, setExportAberto] = useState(false);
+  const [erroExport, setErroExport] = useState<string | null>(null);
+  /** Exporta na NORMA escolhida no modal (ABNT, Vancouver, APA) — mesmo pipe de sempre (/api/documents/abnt-export). */
+  const exportar = async (o: OpcoesExport) => {
     if (!tcc) return;
-    setExportando(true); setErro(null);
+    setExportando(true); setErroExport(null);
     try {
-      // Mesmo contrato do export da Sala de Pesquisa (worker ABNT NBR 14724).
+      // fórmulas/reações em texto legível (o motor escreve texto; LaTeX cru sairia no Word): lib/tcc/latexTexto
+      const conteudo = conteudoSemLatex(tcc.content);
       const r = await fetch("/api/documents/abnt-export", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          // fórmulas/reações em texto legível (o motor escreve texto; LaTeX cru sairia no Word): lib/tcc/latexTexto
-          title: tcc.titulo, content: conteudoSemLatex(tcc.content), workType: tipo, citations: [],
-          author: session?.user?.name || "Autor", institution: "", course: (session?.user as any)?.course || "",
-          city: "", year: String(new Date().getFullYear()), format: "docx",
-          parsedSections: parseAbntMarkers(conteudoSemLatex(tcc.content)) ?? undefined, researchWorkId: tcc.id,
+          title: tcc.titulo, content: conteudo, workType: tipo, citations: [], style: o.estilo, format: o.formato,
+          author: o.author || session?.user?.name || "Autor", institution: o.institution, course: o.course || (session?.user as any)?.course || "",
+          advisor: o.advisor || undefined, city: o.city, year: o.year || String(new Date().getFullYear()),
+          parsedSections: parseAbntMarkers(conteudo) ?? undefined, researchWorkId: tcc.id,
         }),
       });
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
-        setErro(r.status === 503 ? "O serviço ABNT está fora do ar agora." : d?.error || "Não consegui exportar.");
+        setErroExport(r.status === 503 ? "O serviço de formatação está fora do ar agora — tente em instantes." : d?.error || "Não consegui exportar.");
         return;
       }
       const url = URL.createObjectURL(await r.blob());
       const a = document.createElement("a");
-      a.href = url; a.download = `${tcc.titulo.replace(/\s+/g, "_").replace(/[^\w-]/g, "") || tipo}_ABNT.docx`; a.click();
+      a.href = url; a.download = `${tcc.titulo.replace(/\s+/g, "_").replace(/[^\w-]/g, "") || tipo}_${o.estilo.toUpperCase()}.${o.formato}`; a.click();
       URL.revokeObjectURL(url);
-    } catch { setErro("Não consegui exportar."); } finally { setExportando(false); }
+      setExportAberto(false);
+    } catch { setErroExport("Não consegui exportar."); } finally { setExportando(false); }
   };
 
   // ── a barra: cada botão reescreve o texto da seção em edição e devolve a seleção ──
@@ -221,7 +226,7 @@ export default function TccPanel({ workId, onFechar, onTitulo }: {
   return (
     <aside
       aria-label={`${tipo} desta conversa`}
-      className="h-full w-full flex flex-col bg-[#e9ebee] dark:bg-[#15171c] text-slate-900 dark:text-white border-l border-slate-300 dark:border-white/10"
+      className="relative h-full w-full flex flex-col bg-[#e9ebee] dark:bg-[#15171c] text-slate-900 dark:text-white border-l border-slate-300 dark:border-white/10"
     >
       {/* ── FAIXA DE ABAS (uma linha só, sem a barra azul): o TIPO do trabalho, as abas, Exportar e fechar ── */}
       <nav className="shrink-0 flex items-center gap-1 px-2 h-10 overflow-x-auto no-scrollbar bg-[#f3f3f3] dark:bg-[#1b1d22] border-b border-slate-300 dark:border-white/10">
@@ -237,7 +242,7 @@ export default function TccPanel({ workId, onFechar, onTitulo }: {
           ))}
         </div>
         <span className="flex-1" />
-        <button type="button" onClick={exportar} disabled={!tcc || exportando} title="Exportar no padrão ABNT (.docx)" aria-label="Exportar no padrão ABNT"
+        <button type="button" onClick={() => setExportAberto(true)} disabled={!tcc || exportando} title="Exportar (ABNT, Vancouver ou APA · Word ou PDF)" aria-label="Exportar trabalho"
           className="shrink-0 h-8 px-3 rounded-md inline-flex items-center gap-1.5 text-[12px] font-semibold text-white bg-[#2b579a] hover:bg-[#244a85] disabled:opacity-40">
           {exportando ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}<span className="hidden sm:inline">Exportar</span>
         </button>
@@ -394,6 +399,10 @@ export default function TccPanel({ workId, onFechar, onTitulo }: {
         <span className="hidden sm:inline">Português (Brasil)</span>
         <span className="ml-auto truncate hidden sm:inline">A4 · ABNT NBR 14724 · margens 3/2 cm · entrelinha 1,5</span>
       </footer>
+      <ExportarTrabalho
+        aberto={exportAberto} autorPadrao={session?.user?.name || ""} exportando={exportando} erro={erroExport}
+        onFechar={() => { if (!exportando) setExportAberto(false); }} onExportar={(o) => void exportar(o)}
+      />
     </aside>
   );
 }

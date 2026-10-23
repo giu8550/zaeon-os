@@ -2,3 +2,4 @@
 # Uso: pip install -r requirements.txt -r requirements-dev.txt && pytest
 -r requirements.txt
 pytest==8.3.3
+httpx  # TestClient do FastAPI (test_styles.py)

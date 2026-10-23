@@ -152,6 +152,15 @@ describe("runChatTurn", () => {
     expect(h.resolve.mock.calls[0][4]).toEqual({ trabalhoNoEditor: true });
     expect(h.tccTurno.mock.calls[0][0]).toMatchObject({ multi: true, abertoId: "w9", surface: "pesquisa" });
   });
+  it("artigo colado: o PEDIDO vai como objetivo (curto), o texto colado vai no contexto, e o título vem do texto", async () => {
+    const artigo = "Fotossíntese C4 e água\n\n" + "As plantas C4 concentram CO2 na bainha do feixe vascular e economizam água. ".repeat(30);
+    await runChatTurn(null, params({ prompt: `Escreva um artigo com base neste aqui:\n${artigo}`, agentContext: { cartolinaScopeId: "t1" } }), () => {});
+    const objetivo = h.traj.mock.calls[0][0];
+    expect(objetivo).toBe("Escreva um artigo com base neste aqui — tema do texto-fonte: Fotossíntese C4 e água");
+    expect(h.onStepOpts.systemContext).toContain("TEXTO-FONTE COLADO PELO ALUNO");
+    expect(h.onStepOpts.systemContext).toContain("economizam água");
+    expect(h.tccTurno.mock.calls[0][0].prompt).toBe("Escreva um artigo com base neste aqui sobre Fotossíntese C4 e água");
+  });
   it("uso: registra o agente (mentor ou aura) pro dono; anônimo não registra", async () => {
     await runChatTurn(null, params(), () => {});
     await runChatTurn(null, params({ mentor: { slug: "farmacia", wing: { kind: "agente", label: "x" } } }), () => {});
