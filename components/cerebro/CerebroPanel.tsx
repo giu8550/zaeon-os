@@ -68,7 +68,7 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.22 }}
-      className="absolute inset-0 z-50 flex flex-col bg-[#060a1a] text-[#dbe8ff]" role="dialog" aria-modal="true" aria-label="Mapa de conhecimento" data-tour="percurso-view"
+      className="absolute inset-0 z-50 flex flex-col bg-[#060a1a] text-[#dbe8ff]" role="dialog" aria-modal="true" aria-label="Mapa de conhecimento" data-tour="percurso-view" data-cerebro-painel
       onMouseDown={(e) => e.stopPropagation()}
     >
       {/* SEM barra, título nem "x" no topo: o botão CIRCULAR que gera/retraça e "mapas anteriores" flutuam por cima

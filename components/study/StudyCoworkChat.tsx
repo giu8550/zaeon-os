@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { DIRETRIZ_ESTUDOS, DIRETRIZ_PESQUISA } from "@/lib/ai/salaPersona";
 import { useIsMobile } from "@/lib/ui/useIsMobile";
+import { cliqueForaDoCerebro } from "@/components/cerebro/cliqueFora";
 import CoworkComposer from "@/components/study/CoworkComposer";
 import ChatMarkdown from "@/components/study/ChatMarkdown";
 import LivrosCartao from "@/components/chat/LivrosCartao";
@@ -39,8 +40,6 @@ import StudioPalette from "@/components/study/StudioPalette";
 import MentorPill from "@/components/study/MentorPill";
 import StudioBlock, { type StudioBlockData } from "@/components/studio/StudioBlock";
 import StructuredAnswerView from "@/components/study/StructuredAnswerView";
-import MagazineAnswerView, { podeVirarRevista } from "@/components/study/MagazineAnswerView";
-import MagazineBoundary from "@/components/study/MagazineBoundary";
 import ConversasSidebar from "@/components/chat/ConversasSidebar";
 import PastasEmpilhadas, { CORPO_DA_PASTA, type Pasta } from "@/components/chat/PastasEmpilhadas";
 import SugestoesConversa from "@/components/chat/SugestoesConversa";
@@ -237,7 +236,10 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   useEffect(() => { setCerebroAberto(false); }, [abaAtiva]);
   useEffect(() => {
     if (!cerebroAberto) return;
-    const fora = (e: MouseEvent) => { if (!(e.target as Element | null)?.closest?.("[data-bolinha-cerebro], [data-tour-cartao]")) setCerebroAberto(false); };
+    // Pelo CAMINHO do evento, não pelo stopPropagation do painel: no app router o React escuta no próprio `document`,
+    // então o "segura o mousedown" do painel não impedia ESTE listener — clicar/arrastar dentro do cérebro fechava o
+    // mapa. composedPath também cobre o rótulo do canvas que é recriado no meio do clique.
+    const fora = (e: MouseEvent) => { if (cliqueForaDoCerebro(e)) setCerebroAberto(false); };
     document.addEventListener("mousedown", fora);
     return () => document.removeEventListener("mousedown", fora);
   }, [cerebroAberto]);
@@ -1388,31 +1390,12 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                       ) : null}
                     </StructuredAnswerView>
                   );
-                  // Sala de ESTUDOS = chat simples, objetivo e 100% legível: a "revista" só entra
-                  // quando há ARTEFATO embutido (a Sala de Pesquisa é que tem o modo editorial).
-                  const revista = !!m.studioBlock && !KINDS_EM_ABA.has(m.studioBlock.studioKind) && podeVirarRevista(m.answer, true);
+                  // SEM a "revista" (o layout editorial com artefato embutido bugava a geração): toda resposta sai no
+                  // formato normal do chat — o artefato vem dentro dela (StructuredAnswerView), como nas outras.
                   return (
                     <div key={m.id} data-msg={m.id} className={`group/msg flex justify-start ${recuo}`}>
                       {pilula}
-                      <div className={revista ? "w-full" : "max-w-[85%] w-full"}>
-                        {revista ? (
-                          <>
-                          <MagazineBoundary fallback={padrao}>
-                            <MagazineAnswerView
-                              answer={m.answer}
-                              streaming={!!m.streaming}
-                              recemChegada={!!m.fresh}
-                              aoAssentar={() => ancorar(m.id)}
-                              artefato={m.studioBlock ?? null}
-                              onNext={(s) => void send(s)}
-                              agente="Aura"
-                            />
-                          </MagazineBoundary>
-                          {m.blocosExtra?.map((b) => <BlocoOuCartao key={b.studioKind} b={b} />)}
-                          {acoesDa(m, i)}
-                          </>
-                        ) : padrao}
-                      </div>
+                      <div className="max-w-[85%] w-full">{padrao}</div>
                     </div>
                   );
                 }
