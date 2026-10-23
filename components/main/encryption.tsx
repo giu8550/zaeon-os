@@ -9,6 +9,7 @@ import ZaeonFlowDiagram from "./ZaeonFlowDiagram";
 import MentoresCarrossel from "./MentoresCarrossel";
 import SolanaPrivacidade from "./SolanaPrivacidade";
 import ChavesApi from "./ChavesApi";
+import BlueprintsShowcase from "./BlueprintsShowcase";
 import { TituloSecao } from "@/components/layout/secao";
 import MolecularText from "@/components/ui/MolecularText";
 
@@ -235,6 +236,9 @@ export default function Encryption() {
                 `sticky` daqui para dentro. */}
             {/* NO LUGAR dos agentes: a Solana cobrindo a digital — privacidade e credenciais (v4) */}
             <SolanaPrivacidade />
+
+            {/* BLUEPRINTS ("Aqui você vale o que você constrói.") ANTES dos agentes — some sozinha sem blueprint publicado */}
+            <BlueprintsShowcase />
 
             <div className="relative z-40 w-full overflow-x-clip flex flex-col items-center justify-center bg-transparent pt-10">
                 <HireAgentsSection />

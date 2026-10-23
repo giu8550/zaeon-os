@@ -13,7 +13,8 @@ import {
     UsersIcon,
     SparklesIcon,
     CpuChipIcon,
-    BookOpenIcon
+    BookOpenIcon,
+    Squares2X2Icon
 } from "@heroicons/react/24/outline";
 
 
@@ -26,6 +27,7 @@ import InviteGroupsModule from "./modules/InviteGroupsModule";
 import AgentsModule from "./modules/AgentsModule";
 import FrotaModule from "./modules/FrotaModule";
 import BaseConhecimentoModule from "./modules/BaseConhecimentoModule";
+import BlueprintsModule from "./modules/BlueprintsModule";
 import { agentsAdmin } from "@/lib/canal/flags";
 import { adminLabelPlugins } from "@/lib/mentores/rota";
 
@@ -66,7 +68,7 @@ const SidebarItem = ({ icon: Icon, label, active, onClick, isOpen }: any) => (
 
 export default function AdminControlRoom() {
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState<"profiles" | "voice" | "invites" | "reports" | "plugins" | "payments" | "agents" | "frota" | "rag">("profiles");
+    const [activeTab, setActiveTab] = useState<"profiles" | "voice" | "invites" | "reports" | "plugins" | "payments" | "agents" | "frota" | "rag" | "blueprints">("profiles");
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [mounted, setMounted] = useState(false);
 
@@ -152,6 +154,14 @@ export default function AdminControlRoom() {
                         onClick={() => setActiveTab('rag')}
                         isOpen={isSidebarOpen}
                     />
+                    {/* a vitrine "Aqui você vale o que você constrói." da landing (só os publicados aparecem) */}
+                    <SidebarItem
+                        icon={Squares2X2Icon}
+                        label="Blueprints"
+                        active={activeTab === 'blueprints'}
+                        onClick={() => setActiveTab('blueprints')}
+                        isOpen={isSidebarOpen}
+                    />
                     <SidebarItem
                         icon={DocumentChartBarIcon}
                         label="Reports"
@@ -197,6 +207,7 @@ export default function AdminControlRoom() {
                         {activeTab === 'agents' && agentsAdmin() && <AgentsModule glassPanel={glassPanel} />}
                         {activeTab === 'frota' && <FrotaModule glassPanel={glassPanel} />}
                         {activeTab === 'rag' && <BaseConhecimentoModule glassPanel={glassPanel} />}
+                        {activeTab === 'blueprints' && <BlueprintsModule glassPanel={glassPanel} />}
 
                         {activeTab === 'payments' && (
                             <div className="flex-1 flex items-center justify-center opacity-30">

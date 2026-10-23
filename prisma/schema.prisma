@@ -1575,3 +1575,23 @@ model CofreOperacao {
   @@index([cofreId, criadoEm])
   @@map("cofre_operacoes")
 }
+
+// --- BLUEPRINTS DA LANDING ---
+// A vitrine "Aqui você vale o que você constrói." da landing: o dono cadastra no admin
+// (/workstation/admin → Blueprints) e só os `published` aparecem (GET /api/blueprints).
+// Não confundir com os blueprints de estudo da pessoa (lib/blueprint), que são outra coisa.
+model Blueprint {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  description String?             // texto curto do card
+  imageUrl    String?             // preview (URL https ou caminho /public)
+  href        String?             // link "ver no game" (opcional)
+  tags        String[] @default([])
+  published   Boolean  @default(false) // só published aparece na landing
+  order       Int      @default(0)     // ordena a grade (menor primeiro)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([published, order])
+  @@map("landing_blueprints")
+}
