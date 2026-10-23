@@ -189,6 +189,7 @@ const ProcessFlowchart = () => {
 
 // --- COMPONENTE PRINCIPAL (PÁGINA) ---
 export default function Encryption() {
+    const { t } = useTranslation();
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -202,7 +203,7 @@ export default function Encryption() {
         <div className="w-full relative">
             <section id="como-funciona" className="relative z-[30] w-full bg-transparent pt-12 md:pt-16 pb-12 scroll-mt-28">
                 <div className="zaeon-borda">
-                    <TituloSecao className="font-display" forte="Transforme seu conhecimento em dinheiro." />
+                    <TituloSecao className="font-display" forte={t("landing.knowledge_title", "Transforme o seu conhecimento em um ativo do mundo real.")} />
 
                     {/* DIAGRAMA VIVO: entrada -> cerebro Zaeon -> saida.
                         O painel nao e enfeite: o ParticleSystem da landing corre

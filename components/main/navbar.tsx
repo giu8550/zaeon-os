@@ -137,16 +137,6 @@ export const Navbar = () => {
     return `transition-all uppercase tracking-[0.2em] text-[10px] font-black ${active ? "text-cyan-500 scale-110" : "text-foreground/50 hover:text-cyan-400"}`;
   };
 
-  // Já na landing: rola até a seção (o roteador troca a URL sem disparar `hashchange`, e o salto nativo não acontece).
-  // Em outra página, o Link navega pra "/#id" e a home rola até lá (app/page.tsx).
-  const irPraSecao = (id: string) => (e: React.MouseEvent) => {
-    if (pathname !== "/") return;
-    const el = document.getElementById(id); if (!el) return;
-    e.preventDefault();
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
-    window.history.replaceState(null, "", `/#${id}`);
-  };
-  const ancora = "transition-all uppercase tracking-[0.2em] text-[10px] font-black text-foreground/50 hover:text-cyan-400";
 
   if (!mounted) return null;
   // /m é o app mobile: tem cabeçalho próprio (coluna única, sem navbar do site).
@@ -177,10 +167,9 @@ export const Navbar = () => {
           </Link>
 
           <nav className="hidden lg:flex items-center gap-7">
-            {/* ordem do dono: Documentação › Sobre nós › Como funciona (a seção da landing; sem rótulo nela: a navbar é o índice) */}
+            {/* ordem do dono: Documentação › Sobre nós ("Como funciona" saiu da navbar a pedido do dono; a seção #como-funciona continua na landing) */}
             <Link href="/docs" className={getLinkClassName("/docs")}>Documentação</Link>
             <Link href="/about" className={getLinkClassName("/about")}>Sobre nós</Link>
-            <Link href="/#como-funciona" className={ancora} onClick={irPraSecao("como-funciona")}>Como funciona</Link>
             {/* acesso direto ao laboratório, pra quem não quiser usar o cyberespaço */}
             <Link href="/research-lab" className={getLinkClassName("/research-lab")}>Laboratório</Link>
             {/* "Assistentes" = a antiga Loja de Plugins (o /plugin-store continua no ar pros links antigos) */}
