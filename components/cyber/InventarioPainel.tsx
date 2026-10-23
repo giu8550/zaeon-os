@@ -12,6 +12,8 @@
  * O MODO DE ENTREGA (`encaixe.ativo`, o Relicário do Saber — lib/cyber/relicario): o cabeçalho vira a faixa dourada, os
  * itens que CABEM (estudos e pesquisas) ganham o ▶ e as armas apagam; a pesquisa ainda local (sem id do servidor) não
  * tem ▶ — "sincronizando…". O ▶ (ou o botão do inspetor) chama `onEntregar`; quem fala com o servidor é o chamador.
+ * A CARTEIRA (components/cyber/CarteiraInventario): a aba das MOEDAS — a AURA e as da Solana, cada uma um item; a
+ * bolsa no cabeçalho mostra a AURA e o total em dólar.
  */
 import { useEffect, useMemo, useState } from "react";
 import { COMBO, danoDoGolpe } from "@/lib/cyber/combate";
@@ -22,6 +24,24 @@ import { VALOR_PESQUISA_SEM_BASE } from "@/lib/cyber/livroHolograma";
 import { paginasDe } from "@/lib/onboarding/tutorialLab";
 import type { PesquisaSalva } from "@/lib/ui/loungeHub";
 import LivroHolograma from "./LivroHolograma";
+import { BolsaCabecalho, GradeCarteira, InspetorMoeda, useCarteira } from "./CarteiraInventario";
+
+/** o acabamento das peças (out/2026, o dono: "o inventário poderia seguir uma estética mais detalhada"): o espaço com
+ *  chanfro, o vidro escuro por dentro, o brilho da raridade (`--c`) subindo do fundo e os cantos marcados; a moeda do
+ *  inspetor gira no eixo */
+const ESTILO = `
+.tile-inv{border-width:2px;border-style:solid;background:
+  radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--c) 26%, transparent), transparent 62%),
+  linear-gradient(180deg, rgba(255,255,255,.07), rgba(0,0,0,.42) 46%, rgba(0,0,0,.6));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), inset 0 -10px 18px -10px color-mix(in srgb, var(--c) 55%, transparent), inset 0 0 0 1px rgba(0,0,0,.6);
+  clip-path: polygon(7px 0, calc(100% - 7px) 0, 100% 7px, 100% calc(100% - 7px), calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px)}
+.tile-inv::before,.tile-inv::after{content:"";position:absolute;width:9px;height:9px;border-color:var(--c);opacity:.85;pointer-events:none}
+.tile-inv::before{left:3px;top:3px;border-left:1.5px solid;border-top:1.5px solid}
+.tile-inv::after{right:3px;bottom:3px;border-right:1.5px solid;border-bottom:1.5px solid}
+.vaga-inv{clip-path: polygon(7px 0, calc(100% - 7px) 0, 100% 7px, 100% calc(100% - 7px), calc(100% - 7px) 100%, 7px 100%, 0 calc(100% - 7px), 0 7px)}
+@keyframes moeda-gira{from{transform:rotateY(0)}to{transform:rotateY(360deg)}}
+.moeda-gira{animation:moeda-gira 7s linear infinite}
+@media (prefers-reduced-motion: reduce){.moeda-gira{animation:none}}`;
 
 const COR_RARIDADE: Record<string, string> = { comum: "#c9d4dc", rara: "#5fb8ff", epica: "#b98cff", lendaria: "#ffc46b" };
 const NOME_RARIDADE: Record<string, string> = { comum: "Comum", rara: "Rara", epica: "Épica", lendaria: "Lendária" };
@@ -68,8 +88,8 @@ type Entrada =
   | { tipo: "arma"; key: string; id: IdItem; cor: string }
   | { tipo: "livro"; key: string; it: ItemEstudo; cor: string }
   | { tipo: "pesquisa"; key: string; it: ItemPesquisa; cor: string; nova: boolean };
-type Aba = "tudo" | "arma" | "livro" | "pesquisa";
-const ABAS: { id: Aba; nome: string }[] = [{ id: "tudo", nome: "Tudo" }, { id: "arma", nome: "Armas" }, { id: "livro", nome: "Livros de estudo" }, { id: "pesquisa", nome: "Pesquisas" }];
+type Aba = "tudo" | "arma" | "livro" | "pesquisa" | "carteira";
+const ABAS: { id: Aba; nome: string }[] = [{ id: "tudo", nome: "Tudo" }, { id: "arma", nome: "Armas" }, { id: "livro", nome: "Livros de estudo" }, { id: "pesquisa", nome: "Pesquisas" }, { id: "carteira", nome: "Carteira" }];
 
 /** a pesquisa do tutorial como item (antes do servidor listar, ou sem id): as páginas pelas palavras */
 const pesquisaLocal = (p: PesquisaSalva): ItemPesquisa => ({ id: p.workId ?? `local:${p.titulo}`, titulo: p.titulo, paginas: paginasDe(p.palavras), palavras: p.palavras, atualizadoEm: null });
@@ -99,7 +119,11 @@ function BotaoEntregar({ it, encaixe }: { it: ItemEncaixe; encaixe: EncaixeInven
 export default function InventarioPainel({ aberto, onFechar, ler, equipar, destaque, encaixe }: { aberto: boolean; onFechar: () => void; ler: () => Inventario | null; equipar: (id: IdItem | null) => Inventario | null; destaque?: PesquisaSalva | null; encaixe?: EncaixeInventario }) {
   const [inv, setInv] = useState<Inventario | null>(null);
   const [livros, setLivros] = useState<ItemEstudo[] | null>(null), [pesquisas, setPesquisas] = useState<ItemPesquisa[] | null>(null);
-  const [aba, setAba] = useState<Aba>("tudo"), [sel, setSel] = useState<string | null>(null);
+  const [aba, setAba] = useState<Aba>("tudo"), [sel, setSel] = useState<string | null>(null), [selMoeda, setSelMoeda] = useState<string | null>(null);
+  const carteira = useCarteira(aberto);
+  const moedas = useMemo(() => [...(carteira.aura ? [carteira.aura] : []), ...carteira.carteiras.flatMap((c) => c.moedas.map((m) => ({ ...m, id: `${c.tipo}:${m.id}` })))], [carteira.aura, carteira.carteiras]);
+  const moedaAtual = moedas.find((m) => m.id === selMoeda) ?? moedas[0] ?? null;
+  const enderecoDa = (id: string) => carteira.carteiras.find((c) => id.startsWith(`${c.tipo}:`))?.endereco ?? null;
   useEffect(() => {
     if (!aberto) return;
     let vivo = true;
@@ -123,7 +147,7 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
     for (const it of livros ?? []) out.push({ tipo: "livro", key: `l:${it.id}`, it, cor: COR_RARIDADE[it.raridade]! });
     return out;
   }, [inv, livros, pesquisas, destaque]);
-  const visiveis = aba === "tudo" ? entradas : entradas.filter((e) => e.tipo === aba);
+  const visiveis = aba === "tudo" ? entradas : aba === "carteira" ? [] : entradas.filter((e) => e.tipo === aba);
   const atual = visiveis.find((e) => e.key === sel) ?? visiveis[0] ?? null;
   useEffect(() => { if (aberto && destaque) { setAba("tudo"); setSel(`p:${pesquisaLocal(destaque).id}`); } }, [aberto, destaque]);
 
@@ -138,6 +162,7 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
     <div role="dialog" aria-label="Inventário" onPointerDown={(e) => e.stopPropagation()}
       className="absolute left-1/2 top-1/2 z-40 flex h-[min(88vh,660px)] w-[min(96vw,1080px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[18px] border-2 text-sky-50"
       style={{ borderColor: "#3b6fb066", background: "linear-gradient(180deg,rgba(9,14,32,.97),rgba(4,6,16,.98))", boxShadow: "0 0 0 1px #000 inset, 0 0 0 5px rgba(127,232,255,.05) inset, 0 30px 90px -20px rgba(0,0,0,.9), 0 0 60px -20px rgba(127,232,255,.45)" }}>
+      <style>{ESTILO}</style>
       {["left-2 top-2", "right-2 top-2", "left-2 bottom-2", "right-2 bottom-2"].map((k) => <span key={k} aria-hidden className={`pointer-events-none absolute ${k} text-[10px] text-[#ffc46b]`}>◆</span>)}
       {/* o título e as abas */}
       <div className="flex items-center gap-4 border-b border-white/10 px-5 py-3" style={{ background: entrega ? `linear-gradient(90deg,${OURO}24,transparent 55%,${OURO}10)` : "linear-gradient(90deg,rgba(127,232,255,.08),transparent 40%,rgba(185,140,255,.08))" }}>
@@ -154,7 +179,7 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
         )}
         <div role="tablist" aria-label="Categorias" className="ml-2 flex flex-wrap gap-1.5">
           {ABAS.map((a) => {
-            const n = a.id === "tudo" ? entradas.length : entradas.filter((e) => e.tipo === a.id).length;
+            const n = a.id === "tudo" ? entradas.length : a.id === "carteira" ? moedas.length : entradas.filter((e) => e.tipo === a.id).length;
             return (
               <button key={a.id} role="tab" aria-selected={aba === a.id} type="button" onClick={() => setAba(a.id)}
                 className={`rounded-md border px-3 py-1 text-[11.5px] font-bold uppercase tracking-wider transition-colors ${aba === a.id ? "border-[#ffc46b]/70 bg-[#ffc46b]/12 text-[#ffe2a8]" : "border-white/10 text-sky-100/60 hover:text-white"}`}>
@@ -163,7 +188,8 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
             );
           })}
         </div>
-        <span className="ml-auto hidden text-[10.5px] text-sky-100/40 sm:block"><kbd className="rounded border border-white/20 px-1.5 font-mono">I</kbd> fecha</span>
+        <div className="ml-auto"><BolsaCabecalho aura={carteira.aura} carteiras={carteira.carteiras} /></div>
+        <span className="hidden text-[10.5px] text-sky-100/40 sm:block"><kbd className="rounded border border-white/20 px-1.5 font-mono">I</kbd> fecha</span>
         <button type="button" onClick={onFechar} aria-label="Fechar o inventário" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 text-white/70 hover:text-white">✕</button>
       </div>
 
@@ -179,7 +205,7 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
             <div className="min-w-0 text-[11px]"><div className="text-white/45 uppercase tracking-wider">Arma</div><div className="truncate font-bold">{armaEquipada?.nome ?? "Nenhuma"}</div></div>
           </div>
           <dl className="mt-auto grid gap-1.5 text-[11.5px]">
-            {[["Pesquisas", nPesq], ["Livros de estudo", nLivros], ["Páginas escritas", paginasTotais]].map(([k, v]) => (
+            {[["AURA", carteira.aura ? Math.round(carteira.aura.quantidade) : "—"], ["Pesquisas", nPesq], ["Livros de estudo", nLivros], ["Páginas escritas", paginasTotais]].map(([k, v]) => (
               <div key={k as string} className="flex justify-between rounded-md bg-black/25 px-2.5 py-1.5"><dt className="text-sky-100/55">{k}</dt><dd className="font-black tabular-nums">{v}</dd></div>
             ))}
           </dl>
@@ -187,11 +213,12 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
 
         {/* a MOCHILA */}
         <div className="min-h-0 overflow-y-auto rounded-xl border border-white/10 bg-black/20 p-3">
+          {aba === "carteira" ? <GradeCarteira est={carteira} sel={moedaAtual?.id ?? null} onSel={setSelMoeda} conectar={carteira.conectar} desconectar={carteira.desconectar} /> : <>
           {livros === null && <p className="mb-2 text-[11px] text-sky-100/40">carregando…</p>}
           <div className="grid grid-cols-5 gap-2">
             {Array.from({ length: vagas }, (_, i) => {
               const e = visiveis[i];
-              if (!e) return <div key={`v${i}`} aria-hidden className="aspect-square rounded-lg border border-white/[0.06] bg-[repeating-linear-gradient(45deg,rgba(255,255,255,.015)_0_6px,transparent_6px_12px)]" />;
+              if (!e) return <div key={`v${i}`} aria-hidden className="vaga-inv aspect-square rounded-lg border border-white/[0.07] bg-[repeating-linear-gradient(45deg,rgba(255,255,255,.018)_0_6px,transparent_6px_12px)] shadow-[inset_0_0_14px_rgba(0,0,0,.6)]" />;
               const on = atual?.key === e.key;
               const nome = e.tipo === "arma" ? ITENS[e.id].nome : e.it.titulo;
               // no modo de entrega: o ▶ nos que cabem (irmão do tile — botão dentro de botão não vale), as armas apagadas
@@ -199,8 +226,8 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
               return (
                 <div key={e.key} className="relative">
                   <button type="button" onClick={() => setSel(e.key)} aria-pressed={on} aria-label={nome}
-                    className={`relative grid aspect-square w-full place-items-center rounded-lg border-2 transition-transform ${on ? "scale-[1.04]" : "hover:scale-[1.03]"} ${apagado ? "pointer-events-none opacity-40" : ""}`}
-                    style={{ borderColor: `${e.cor}${on ? "ee" : "55"}`, background: `radial-gradient(circle at 50% 40%, ${e.cor}22, rgba(0,0,0,.35) 70%)`, boxShadow: on ? `0 0 18px -2px ${e.cor}` : undefined }}>
+                    className={`tile-inv relative grid aspect-square w-full place-items-center rounded-lg transition-transform ${on ? "scale-[1.04]" : "hover:scale-[1.03]"} ${apagado ? "pointer-events-none opacity-40" : ""}`}
+                    style={{ ["--c" as string]: e.cor, borderColor: `${e.cor}${on ? "ee" : "66"}`, boxShadow: on ? `0 0 18px -2px ${e.cor}, inset 0 0 14px -4px ${e.cor}` : undefined }}>
                     {e.tipo === "arma" ? <IconeEspada tam={42} /> : e.tipo === "livro" ? <IconeLivro cor={e.cor} tam={42} /> : <IconePesquisa tam={42} />}
                     {e.tipo === "arma" && inv.equipado === e.id && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_6px_#35ffd0]" title="Equipado" />}
                     {e.tipo === "pesquisa" && <span className="absolute bottom-0.5 right-1 text-[9.5px] font-black tabular-nums text-sky-100/80">{e.it.paginas}p</span>}
@@ -221,11 +248,12 @@ export default function InventarioPainel({ aberto, onFechar, ler, equipar, desta
             })}
           </div>
           {!entradas.length && livros !== null && <p className="mt-3 text-[11.5px] text-sky-100/45">A mochila está vazia. O que você criar no laboratório vira item aqui.</p>}
+          </>}
         </div>
 
         {/* o INSPETOR */}
-        <section className="flex min-h-0 flex-col overflow-y-auto rounded-xl border p-3" style={{ borderColor: atual ? `${atual.cor}44` : "#ffffff1a", background: "linear-gradient(180deg,rgba(255,255,255,.03),rgba(0,0,0,.2))" }}>
-          {!atual ? <p className="text-xs text-white/40">Escolha um item.</p> : atual.tipo === "pesquisa" ? (
+        <section className="flex min-h-0 flex-col overflow-y-auto rounded-xl border p-3" style={{ borderColor: aba === "carteira" ? `${moedaAtual?.cor ?? "#ffffff"}44` : atual ? `${atual.cor}44` : "#ffffff1a", background: "linear-gradient(180deg,rgba(255,255,255,.03),rgba(0,0,0,.2))" }}>
+          {aba === "carteira" ? (moedaAtual ? <InspetorMoeda m={moedaAtual} endereco={enderecoDa(moedaAtual.id)} /> : <p className="text-xs text-white/40">Conecte uma carteira ou estude pra ganhar AURA.</p>) : !atual ? <p className="text-xs text-white/40">Escolha um item.</p> : atual.tipo === "pesquisa" ? (
             <>
               <div className="text-[10px] font-black uppercase tracking-[0.22em]" style={{ color: atual.cor }}>Pesquisa · {NOME_RARIDADE.comum}</div>
               <h3 className="mt-0.5 text-[16px] font-black leading-snug">{atual.it.titulo}</h3>
