@@ -56,7 +56,7 @@ export default function EscritorioRoom({ aoAbrirChat }: { aoAbrirChat?: (slug: s
   return (
     <div className="w-full h-full flex flex-col lg:flex-row gap-4 p-4">
       {/* a sala */}
-      <div className="relative flex-1 min-h-[360px] rounded-[28px] overflow-hidden border border-slate-200 dark:border-white/10 bg-slate-100/50 dark:bg-[#0b1620]">
+      <div data-tour="escritorio-3d" className="relative flex-1 min-h-[360px] rounded-[28px] overflow-hidden border border-slate-200 dark:border-white/10 bg-slate-100/50 dark:bg-[#0b1620]">
         <OfficeScene
           pods={pods}
           estados={estados}
@@ -116,7 +116,7 @@ export default function EscritorioRoom({ aoAbrirChat }: { aoAbrirChat?: (slug: s
         )}
 
         {/* legenda por departamento — e o caminho acessível pro mesmo conteúdo */}
-        <div className="rounded-2xl p-4 border border-slate-200 dark:border-white/10 bg-white/60 dark:bg-white/[0.03] flex flex-col gap-3">
+        <div data-tour="escritorio-departamentos" className="rounded-2xl p-4 border border-slate-200 dark:border-white/10 bg-white/60 dark:bg-white/[0.03] flex flex-col gap-3">
           <p className="text-[10px] uppercase tracking-widest font-bold text-slate-500 dark:text-white/40">Departamentos</p>
           {grupos.map(({ dep, pods: lista }) => (
             <div key={dep.id} className="flex flex-col gap-1">
