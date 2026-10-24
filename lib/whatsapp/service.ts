@@ -175,10 +175,22 @@ export async function handleInbound(msg: InboundMsg, now: Date = new Date()): Pr
     const sent = await reply(userId, msg.phone, "chat", text, "aura", msg.chipId);
     return { action: "plan_required", userId, reply: text, sent };
   }
+  // Zaeon proativa: a rotina dita na mensagem vira lembrete (e comandos "meus lembretes"/"apagar lembretes")
+  let prefixo = "";
+  if (process.env.ZAEON_PROATIVA === "1") {
+    const { tratarRotinaNaMensagem } = await import("./zaeon/lembretes");
+    const rot = await tratarRotinaNaMensagem(userId, intent.text, now).catch(() => ({} as { prefixo?: string; basta?: string }));
+    if (rot.basta) {
+      const sent = await reply(userId, msg.phone, "chat", rot.basta, "aura", msg.chipId);
+      return { action: "replied", userId, reply: rot.basta, sent };
+    }
+    if (rot.prefixo) prefixo = `${rot.prefixo}\n\n`;
+  }
   const { answerOnWhatsApp } = await import("./brain");
   const out = await answerOnWhatsApp({ userId, text: intent.text });
-  const sent = await reply(userId, msg.phone, "chat", out.text, out.mentor ?? "aura", msg.chipId);
-  return { action: "replied", userId, reply: out.text, sent };
+  const texto = prefixo + out.text;
+  const sent = await reply(userId, msg.phone, "chat", texto, out.mentor ?? "aura", msg.chipId);
+  return { action: "replied", userId, reply: texto, sent };
 }
 
 // ───────────────────────────── 3. outbound (disparos) ─────────────────────────────
