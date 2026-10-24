@@ -78,7 +78,8 @@ import {
 import type { StructuredAnswer } from "@/lib/agent/contracts";
 import { parseStructuredStream, STRUCTURED_SENTINEL } from "@/lib/agent/structured-client";
 import { separarProgresso, faseCorrente } from "@/lib/agent/progresso";
-import { typeStep, safeCut } from "@/lib/ui/typewriter";
+import { revelarPorTempo, safeCut } from "@/lib/ui/typewriter";
+import { cronometrarResposta, EVT_TEMPOS, fmtTempos, verTempos, type TemposResposta } from "@/lib/chat/temposResposta";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
 import { esperarTurno } from "@/lib/chat/turnoRetomavel";
 import { pedirAura } from "@/lib/chat/auraClient";
@@ -348,6 +349,13 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const { citations: citacoesSalvas } = useSavedCitations();
   const [libPopover, setLibPopover] = useState<"citations" | "quiz" | null>(null);
   const [libPasta, setLibPasta] = useState(false);
+  // o SELO da medição (lib/chat/temposResposta): só com a flag zaeon.tempos.ver / ?tempos=1
+  const [tempoUlt, setTempoUlt] = useState<TemposResposta | null>(null);
+  useEffect(() => {
+    if (!verTempos()) return;
+    const on = (e: Event) => setTempoUlt((e as CustomEvent<TemposResposta>).detail);
+    window.addEventListener(EVT_TEMPOS, on); return () => window.removeEventListener(EVT_TEMPOS, on);
+  }, []);
   const libInputRef = useRef<HTMLInputElement>(null);
   const conversarSobre = useCallback(async (f: LibraryFile) => {
     const dataUrl = await pdfDaBiblioteca(f);
@@ -915,6 +923,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
 
     const patchAsst = (text: string) =>
       setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, text } : m)));
+    // a MEDIÇÃO desta resposta (lib/chat/temposResposta): servidor × tela
+    const crono = cronometrarResposta();
     let turnoVivo: string | null = null;
     let pararDatilografia = () => {}; // o `finally` garante que o laço de rAF nunca fica girando
 
@@ -947,14 +957,17 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       let shown = 0;         // quantas letras já reveladas
       let ended = false;
       pararDatilografia = () => { ended = true; };
-      // Datilografia (B2): revela em ordem, por frame (rAF), com TETO de letras por
-      // frame — os chunks do stream viram digitação contínua, sem "despejar" blocos.
+      // Datilografia (B2): revela em ordem, POR TEMPO (lib/ui/typewriter revelarPorTempo): o atraso entre o recebido
+      // e o visível se fecha em ~0,5 s em qualquer fps — antes era um teto POR QUADRO (6 letras), que deixava o texto
+      // segundos atrás do que já tinha chegado. A tela é refeita no máximo ~30×/s (cada patch re-renderiza a conversa).
       // ATENÇÃO: todo caminho de saída marca `ended`, senão este laço gira pra sempre.
+      let antes = performance.now(), ultimoPatch = 0;
       const typed = new Promise<void>((resolve) => {
         const tick = () => {
+          const agora = performance.now(), dt = Math.min(0.25, (agora - antes) / 1000); antes = agora;
           if (shown < target.length) {
-            shown = safeCut(target, shown + typeStep(target.length - shown));
-            patchAsst(target.slice(0, shown));
+            shown = safeCut(target, shown + revelarPorTempo(target.length - shown, dt));
+            if (shown >= target.length || agora - ultimoPatch >= 32) { patchAsst(target.slice(0, shown)); ultimoPatch = agora; crono.texto(); }
           } else if (ended) {
             resolve();
             return;
@@ -990,7 +1003,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         modelo: modeloRef.current,           // o servidor só aceita ids do catálogo (lib/chat/modelos)
         ...(lendo ? { fileData: lendo.dataUrl } : {}),
       }, {
-        onModelo: (nome) => setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, modelo: nome } : m))),
+        onModelo: (nome) => { crono.sinal(); setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, modelo: nome } : m))); },
         // CHAT_BG: o turno roda no worker; o id fica na mensagem pra reengatar se o aluno sair.
         // Este send() É o dono do turno enquanto estiver vivo: o reengate não pega o mesmo
         // turno em paralelo (aplicaria o fim duas vezes — transcrição/artefato duplicados).
@@ -999,13 +1012,15 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           turnoVivo = turnId;
           setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, turnId, pendente: true } : m)));
         },
-        onFase: (rotulo) => setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: rotulo } : m))),
+        onFase: (rotulo) => { crono.sinal(); setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: rotulo } : m))); },
         onLimpo: (limpo) => {
+          crono.sinal();
           const cut = [limpo.indexOf(STUDIO_SENTINEL), limpo.indexOf(STRUCTURED_SENTINEL)].filter((i) => i >= 0);
           target = cut.length ? limpo.slice(0, Math.min(...cut)) : limpo;   // datilografa só o visível
         },
       });
 
+      crono.recebido(res.ok ? res.limpo.length : 0);
       if (!res.ok) {
         target = ""; ended = true;
         patchAsst(res.motivo === "rede" ? "Falha de rede ao falar com a Aura." : "Não consegui responder agora. Tente de novo.");
@@ -1020,6 +1035,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       patchAsst("Falha de rede ao falar com a Aura.");
     } finally {
       pararDatilografia();
+      crono.fechar();
       if (turnoVivo) retomando.current.delete(turnoVivo);
       avisarEscritorio(activeMentor, "ocioso");
       setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: undefined, ...(m.streaming ? { streaming: false } : null) } : m)));
@@ -1219,6 +1235,10 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
               onTitulo={abaAtiva ? (t) => guardarTrabalho(abaAtiva, { id: trabalhoAberto, titulo: t.titulo, status: t.status, tipo: t.tipo }) : undefined}
             />
           </div>
+        )}
+
+        {tempoUlt && (
+          <div className="pointer-events-none absolute left-3 bottom-24 z-20 rounded-lg bg-black/70 px-2 py-1 font-mono text-[10px] text-cyan-200">⏱ {fmtTempos(tempoUlt)}</div>
         )}
 
         {/* Seta "ir para o final" — só aparece quando há conversa e não está no fim */}

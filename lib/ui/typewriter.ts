@@ -16,3 +16,14 @@ export function safeCut(text: string, n: number): number {
   const code = text.charCodeAt(n - 1);
   return code >= 0xd800 && code <= 0xdbff ? n + 1 : n;
 }
+
+/** a datilografia POR TEMPO (out/2026, "as respostas estão lentas"): o teto por QUADRO (`typeStep`) fazia o texto
+ *  ficar segundos atrás do que já tinha chegado — 6 letras × 60 fps = 360/s, e menos quando a página perde quadros.
+ *  Aqui o atraso se fecha em ~`alcance` segundos (uma fração do que falta a cada quadro, proporcional ao tempo
+ *  passado), com um piso de `piso` letras/s pra cauda não se arrastar — independente do fps. */
+export const REVELA_ALCANCE = 0.5, REVELA_PISO = 240;
+export function revelarPorTempo(restante: number, dt: number, alcance = REVELA_ALCANCE, piso = REVELA_PISO): number {
+  if (restante <= 0) return 0;
+  const passo = Math.max(restante * Math.min(1, Math.max(0, dt) / alcance), piso * Math.max(0, dt));
+  return Math.min(restante, Math.max(1, Math.ceil(passo)));
+}
