@@ -76,10 +76,14 @@
     "tar|https://github.com/advisories/GHSA-qffp-2rhf-9h96",
     "tar|https://github.com/advisories/GHSA-r292-9mhp-454m",
     "tar|https://github.com/advisories/GHSA-r6q2-hw4h-h46w",
-    "ws|https://github.com/advisories/GHSA-96hv-2xvq-fx4p"
+    "ws|https://github.com/advisories/GHSA-96hv-2xvq-fx4p",
+    "zod|https://github.com/advisories/GHSA-mrhx-c7xc-m3w5"
   ],
   "_revisoes": {
     "basic-ftp + extract-zip (via puppeteer-core@24.43.1 → @puppeteer/browsers@2.13.2)": "Revisado 2026-10-22 (ruling P4). lib/octa/captura.ts sempre passa executablePath (Chromium do sistema): nunca baixa navegador (extract-zip só roda no download), nunca usa FTP nem proxy PAC (basic-ftp só via proxy-agent/pac). Sem override (basic-ftp corrigido só em major). Remover quando o puppeteer-core trouxer versões corrigidas.",
     "next@14.2.15: GHSA-2464-fhr4-w9xw (RCE na otimização de imagem) + GHSA-p3m5-59mp-jv5r (DoS de Server Actions)": "Revisado 2026-10-22. Correção só em next 15.5.28/16.4.1 (sem 14.x). RCE: a falha é no sharp (glibc); workaround oficial = sharp >= 0.35.5, aplicado (dependência direta sharp@^0.35.5, que o next usa). DoS: só App Router COM Server Action; o repo não tem nenhum 'use server'. Remover ao migrar o next pra 15.5.28+."
+  },
+  "_revisadas": {
+    "zod|GHSA-mrhx-c7xc-m3w5": "2026-10-24: zod 3.25 só vem do @colyseus/sdk (cliente) e do chromium-bidi (puppeteer dos testes do Octa); a correção exige puppeteer-core 25 (major). Risco baixo (DoS ao validar coleções gigantes, sem entrada pública nossa). Tirar ao subir o puppeteer."
   }
 }
