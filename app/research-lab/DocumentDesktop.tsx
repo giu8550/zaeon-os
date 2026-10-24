@@ -146,8 +146,14 @@ export default function DocumentDesktop({
       </h3>
       )}
 
-      {/* Content: citações / lixeira / pastas / grid de docs */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      {/* Content: citações / lixeira / pastas / grid de docs. A AVATAR fica sempre montada no mesmo espaço e só se
+          esconde enquanto um ícone (📁 🔖 🗑️) está aberto — clicar de novo a traz de volta sem recarregar o 3D */}
+      <div className="flex-1 overflow-y-auto min-h-0 relative">
+        {comAvatar && (
+          <div className={openPopover === "citations" || showTrash || showFolder ? "hidden" : "h-full"}>
+            <ZaeonDocumentos persona={persona} lendo={!!processingFileId} reagir={reacao} />
+          </div>
+        )}
         {openPopover === "citations" ? (
           <CitationsPanel />
         ) : showTrash ? (
@@ -225,9 +231,7 @@ export default function DocumentDesktop({
               )}
             </div>
           </div>
-        ) : comAvatar ? (
-          <ZaeonDocumentos persona={persona} lendo={!!processingFileId} reagir={reacao} />
-        ) : (
+        ) : comAvatar ? null : (
           <div className="grid grid-cols-2 gap-2.5">
             {files.length === 0 && (
               <p className="col-span-2 text-[10px] text-white/35 italic text-center py-4">
