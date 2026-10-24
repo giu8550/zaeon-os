@@ -389,7 +389,7 @@ describe("agent-turn · #562 memória profunda com privacidade", () => {
   it("conversa só da pessoa: relembra e guarda com ELA (tudo dela, sem filtro de ala) e a lembrança chega no turno", async () => {
     const { prisma } = fakePrisma(sozinha, [msg({ autorId: A, texto: "@aura me explica mitose", mencoes: ["aura"] })]);
     const { memoria, chamadas } = fake();
-    const gerar = vi.fn(async () => "Mitose é a divisão celular…");
+    const gerar = vi.fn(async (_a: any) => "Mitose é a divisão celular…");
     const r = await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A }, { prisma, gerar, publicar: async () => {}, memoria });
     expect(r.ok).toBe(true);
     expect(chamadas.lembrar).toEqual([{ dono: A, ala: null, dica: expect.stringContaining("mitose") }]);
@@ -412,7 +412,7 @@ describe("agent-turn · #562 memória profunda com privacidade", () => {
   ] as const)("%s: só a memória do ESCRITÓRIO — nenhuma memória pessoal lida nem gravada", async (_n, c) => {
     const { prisma } = fakePrisma(c, [msg({ autorId: A, texto: "@aura resume o capítulo", mencoes: ["aura"] })]);
     const { memoria, chamadas } = fake();
-    const gerar = vi.fn(async () => "Resumo…");
+    const gerar = vi.fn(async (_a: any) => "Resumo…");
     await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A }, { prisma, gerar, publicar: async () => {}, memoria });
     await new Promise((ok) => setTimeout(ok, 0));
     expect(chamadas.lembrar).toEqual([{ dono: CANAL, ala: "escritorio", dica: expect.any(String) }]);

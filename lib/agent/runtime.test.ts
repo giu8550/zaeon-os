@@ -157,3 +157,16 @@ describe("runtime · web_search + fallback do literature_search", () => {
     s1.mockRestore(); s2.mockRestore();
   });
 });
+
+describe("runtime · #562 memory_search lê só a memória do turno", () => {
+  it("com memoriaDe (Escritório em grupo), busca na memória do escritório — nunca na de quem mandou", async () => {
+    const { __setMemoryForTest } = await import("./memory-provider");
+    const escopos: unknown[] = [];
+    __setMemoryForTest({ wakeUp: async () => [], write: async () => {}, search: async (_q, scope) => { escopos.push(scope); return []; } });
+    try {
+      await runToolByName("memory_search", { query: "o que combinamos" }, ctx({ userId: "a".repeat(24), memoriaDe: "d".repeat(24) }));
+      await runToolByName("memory_search", { query: "o que combinamos" }, ctx({ userId: "a".repeat(24) }));
+    } finally { __setMemoryForTest(null); }
+    expect(escopos).toEqual([{ userId: "d".repeat(24) }, { userId: "a".repeat(24) }]);
+  });
+});
