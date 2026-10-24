@@ -25,7 +25,8 @@ export async function searchSemanticScholar(query: string, limit = 15): Promise<
     const url = `https://api.semanticscholar.org/graph/v1/paper/search?query=${encodeURIComponent(query)}&limit=${limit}&fields=${fields}`;
     const key = process.env.SEMANTIC_SCHOLAR_API_KEY;
     const headers: Record<string, string> = key ? { "x-api-key": key } : {};
-    const res = await fetchWithRetry(url, { headers }, { retries: 3 });
+    // sem chave, o 429 é a regra (medido em prod): 1 tentativa só — re-tentar custava ~6 s pra nada
+    const res = await fetchWithRetry(url, { headers }, { retries: key ? 3 : 0 });
     if (!res.ok) return { papers: [], status: res.status === 429 ? "rate_limited" : "error" };
     return { papers: parseSemanticScholar(await res.json()), status: "ok" };
   } catch { return { papers: [], status: "error" }; }
