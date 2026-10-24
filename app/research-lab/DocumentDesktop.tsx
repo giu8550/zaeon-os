@@ -8,7 +8,10 @@ import { useTrash } from "@/lib/useTrash";
 import { useEffect, useState, type DragEvent } from "react";
 import dynamic from "next/dynamic";
 
-/** a ZAEON segurando os documentos (components/research/ZaeonDocumentos — three + o VRM: só no computador) */
+import { usePersona } from "@/components/research/usePersona";
+
+/** a AVATAR da IA no lugar dos documentos (components/research/ZaeonDocumentos — three + o VRM: só no computador). Os
+ *  arquivos ficam na PASTA (📁, como sempre); a avatar só reage a um arquivo jogado nela */
 const ZaeonDocumentos = dynamic(() => import("@/components/research/ZaeonDocumentos"), { ssr: false });
 const naoCelular = () => typeof window !== "undefined" && (window.matchMedia?.("(pointer: fine)").matches ?? false) && window.innerWidth >= 768;
 
@@ -67,9 +70,13 @@ export default function DocumentDesktop({
   const { files, save: saveLibraryFile, remove: removeLibraryFile } = useLibraryFiles();
   const { items: trashItems, trash, restore, purge } = useTrash();
   const [showTrash, setShowTrash] = useState(false);
-  // a vista dos documentos: a ZAEON com eles nas mãos (padrão no computador) ou a lista de sempre
-  const [comZaeon, setComZaeon] = useState(false), [lista, setLista] = useState(false);
-  useEffect(() => { setComZaeon(naoCelular()); }, []);
+  // a vista padrão: a AVATAR do agente (no computador; o Octa Code não tem) ou a grade de sempre
+  const persona = usePersona();
+  const [computador, setComputador] = useState(false);
+  useEffect(() => { setComputador(naoCelular()); }, []);
+  const comAvatar = computador && persona !== null;
+  // cada arquivo jogado NA AVATAR: ela reage (lê ou pensa)
+  const [reacao, setReacao] = useState(0);
   const activeFile = processingFileId ? files.find((f) => f.id === processingFileId) : null;
 
   const handleDelete = (f: LibraryFile) => { removeLibraryFile(f.id); trash(registroDuravel(f)); };
@@ -82,6 +89,7 @@ export default function DocumentDesktop({
     setDragOver(false);
     const pdfs = Array.from(e.dataTransfer.files || []).filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
     if (pdfs.length) onDropFiles?.(pdfs);
+    if (comAvatar && !showFolder && !showTrash && openPopover !== "citations" && (pdfs.length || e.dataTransfer.types.length)) setReacao((n) => n + 1);
   };
 
   // Honest two-stage progress: 25% while downloading PDF, 70% while AI analyses, 100% when done.
@@ -117,7 +125,8 @@ export default function DocumentDesktop({
   return (
     <div
       data-tour="docs-panel"
-      onDragOver={(e) => { if (Array.from(e.dataTransfer.types).includes("Files")) { e.preventDefault(); setDragOver(true); } }}
+      // (com a AVATAR à vista, qualquer coisa arrastada pode cair nela — um PDF do computador ou um doc da biblioteca)
+      onDragOver={(e) => { if (Array.from(e.dataTransfer.types).includes("Files") || (comAvatar && !showFolder && !showTrash && openPopover !== "citations")) { e.preventDefault(); setDragOver(true); } }}
       onDragLeave={() => setDragOver(false)}
       onDrop={handleDropPdf}
       className={`rounded-[18px] flex flex-col p-3 overflow-hidden min-h-0 ${flipped ? "order-1" : ""} ${dragOver ? "ring-2 ring-cyan-400/70" : ""}`}
@@ -216,20 +225,10 @@ export default function DocumentDesktop({
               )}
             </div>
           </div>
-        ) : comZaeon && !lista ? (
-          <ZaeonDocumentos
-            lendo={processingFileId}
-            onVerTodos={() => setLista(true)}
-            vazio={<p className="text-[10px] text-white/40 italic">Solte um PDF aqui — a Zaeon guarda pra você.</p>}
-            docs={files.map((f) => ({ id: f.id, node: <DocIcon file={f} onPlay={onPlayFile} processingId={processingFileId} onRelate={onRelate} onDelete={handleDelete} onView={onView} /> }))}
-          />
+        ) : comAvatar ? (
+          <ZaeonDocumentos persona={persona} lendo={!!processingFileId} reagir={reacao} />
         ) : (
           <div className="grid grid-cols-2 gap-2.5">
-            {comZaeon && (
-              <button type="button" onClick={() => setLista(false)} className="col-span-2 rounded-[10px] py-1.5 text-[9.5px] font-black uppercase tracking-[0.14em] text-cyan-300 hover:bg-cyan-400/10" style={{ border: "1px dashed rgba(34,211,238,0.35)" }}>
-                ✦ Voltar pra Zaeon
-              </button>
-            )}
             {files.length === 0 && (
               <p className="col-span-2 text-[10px] text-white/35 italic text-center py-4">
                 Nenhum documento ainda.

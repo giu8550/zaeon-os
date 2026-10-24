@@ -1,6 +1,7 @@
 "use client";
 /**
- * SeletorDeAgente — clicar no ROSTO do agente na aba de conversa abre esta lista: Aura, Octa Code (se adicionado no
+ * SeletorDeAgente — clicar no ROSTO do agente na aba de conversa abre esta lista: Aura, Zenita, Nina (cada uma é o avatar
+ * do painel dos documentos), Octa Code (se adicionado no
  * Marketplace)… Escolher outro dispara a troca (quem chama mostra o loading até a tela do novo agente estar pronta).
  * Vai num portal com posição fixa: a sidebar recorta o que passa da borda dela.
  */
@@ -50,7 +51,7 @@ export default function SeletorDeAgente({ ancora, agentes, atual, icone, onEscol
           {a.id === atual && <span className="text-cyan-500 text-[13px]" aria-hidden>✓</span>}
         </button>
       ))}
-      {agentes.length === 1 && (
+      {!agentes.some((a) => a.id === "octa") && (
         <p className="px-2.5 pt-1 pb-1.5 text-[11px] leading-snug text-slate-500 dark:text-white/45">Mais agentes, como o <b>Octa Code</b>, você adiciona no Marketplace.</p>
       )}
     </div>,

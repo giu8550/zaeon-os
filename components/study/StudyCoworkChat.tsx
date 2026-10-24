@@ -67,7 +67,6 @@ import { AvisoSoltar, ChipAnexo, ChipsLote, EVT_ANEXAR, pdfDaBiblioteca, useAnex
 import { contextoDoLote } from "@/lib/chat/loteAnexos";
 import { BarraBase } from "@/components/chat/MinhaBase";
 import DocumentDesktop from "@/app/research-lab/DocumentDesktop";
-import SeletorPersona from "@/components/chat/SeletorPersona";
 import { EVT_ZAEON_ESCREVENDO } from "@/lib/research/zaeonEventos";
 import { useSavedCitations } from "@/lib/useSavedCitations";
 import type { LibraryFile } from "@/lib/useLibraryFiles";
@@ -1271,8 +1270,6 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           // chat único: o MAPA da conversa mora no canto de cima à ESQUERDA (onde ficava na Sala de Pesquisa)
           antes={CHAT_UNICO ? bolinhaMapa : undefined}
           depois={<>
-            {/* quem aparece no painel dos documentos (Aura · Zenita · Nina) */}
-            {libOpen && <SeletorPersona />}
             {!CHAT_UNICO && bolinhaMapa}
             <ChatZoom escala={zoom.escala} menor={zoom.menor} maior={zoom.maior} />
           </>}
