@@ -9,6 +9,7 @@
  */
 import { apoioDaFase, camadaFeminina, faseDaPassada, velDaAbertura } from "@/lib/cyber/marchaFeminina";
 import * as THREE from "three";
+import { ctx2d, novoCanvas } from "@/lib/cyber/canvas2d";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { VRMLoaderPlugin, VRMUtils, type VRM, type VRMHumanBoneName } from "@pixiv/three-vrm";
 import { MIXAMO_PRO_VRM, ORDEM_VRM, paiExistente } from "@/lib/cyber/vrmMapa";
@@ -103,7 +104,6 @@ export function acabarVrm(vrm: VRM, corpo: Acabamento) {
 }
 
 function recolorirPeca(vrm: VRM, peca: string, hex: string) {
-  if (typeof document === "undefined") return;
   const alvo = new THREE.Color(hex).convertLinearToSRGB(), feitas = new Map<THREE.Texture, THREE.Texture>();
   vrm.scene.traverse((o) => {
     const m = o as THREE.Mesh; if (!m.isMesh) return;
@@ -113,8 +113,8 @@ function recolorirPeca(vrm: VRM, peca: string, hex: string) {
       let nova = feitas.get(mt.map);
       if (!nova) {
         const img = mt.map.image as CanvasImageSource & { width: number; height: number };
-        const cv = document.createElement("canvas"); cv.width = img.width; cv.height = img.height;
-        const ctx = cv.getContext("2d")!; ctx.drawImage(img, 0, 0);
+        const cv = novoCanvas(img.width, img.height);
+        const ctx = ctx2d(cv); ctx.drawImage(img, 0, 0);
         const px = ctx.getImageData(0, 0, cv.width, cv.height), d = px.data;
         for (let i = 0; i < d.length; i += 4) {
           const r = d[i]! / 255, g = d[i + 1]! / 255, b = d[i + 2]! / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b);

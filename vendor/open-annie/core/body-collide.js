@@ -29,10 +29,11 @@ function alphaOf(material) {
   const map = material?.map ?? material?.uniforms?.map?.value;
   const cut = material?.alphaTest > 0 ? material.alphaTest : material?.transparent ? 0.5 : 0;
   const img = map?.image;
-  if (!cut || !img?.width || typeof document === "undefined") return null;
+  if (!cut || !img?.width || (typeof document === "undefined" && typeof OffscreenCanvas === "undefined")) return null;
   let a = alphaCache.get(img);
   if (!a) {
-    const cv = document.createElement("canvas");
+    // (Zaeon) num Web Worker não há document: OffscreenCanvas
+    const cv = typeof document !== "undefined" ? document.createElement("canvas") : new OffscreenCanvas(img.width, img.height);
     cv.width = img.width, cv.height = img.height;
     const ctx = cv.getContext("2d", { willReadFrequently: true });
     ctx.drawImage(img, 0, 0);

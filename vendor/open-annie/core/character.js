@@ -1,4 +1,4 @@
-// Modificado pela Zaeon (out/2026): o gancho `overlay` em update() (uma camada por cima da pose — as mãos que seguram os
+// Modificado pela Zaeon (out/2026; body-collide.js também: OffscreenCanvas no worker): o gancho `overlay` em update() (uma camada por cima da pose — as mãos que seguram os
 // documentos), antes do guarda de colisão e do vrm.update.
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
