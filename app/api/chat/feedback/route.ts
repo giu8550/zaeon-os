@@ -31,5 +31,14 @@ export async function POST(req: Request) {
   };
   if (atual) await db.chatFeedback.update({ where: { id: atual.id }, data: dados });
   else await db.chatFeedback.create({ data: { usuarioHash, msgId: e.msgId, ...dados } });
+  // O CACHE DE RESPOSTAS ouve o voto (lib/rag/cacheRespostas): 👎 bloqueia a resposta guardada daquela pergunta, 👍 aprova.
+  // Fire-and-forget: o voto do aluno nunca espera o banco do RAG.
+  if (e.pergunta) {
+    void import("@/lib/rag/cacheRespostas").then(async (c) => {
+      if (!c.cacheLigado()) return;
+      const { ragPg } = await import("@/lib/rag/pg");
+      await c.votarNoCache(ragPg(), e.pergunta!, e.voto as "up" | "down");
+    }).catch(() => undefined);
+  }
   return NextResponse.json({ ok: true });
 }

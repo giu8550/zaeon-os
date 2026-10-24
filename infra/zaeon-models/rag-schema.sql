@@ -68,6 +68,31 @@ CREATE INDEX IF NOT EXISTS rag_trechos_turma_ids_gin  ON rag_trechos USING gin (
 CREATE INDEX IF NOT EXISTS rag_trechos_dono_ids_gin   ON rag_trechos USING gin (dono_ids);
 CREATE INDEX IF NOT EXISTS rag_trechos_doc_ordem      ON rag_trechos (documento_id, ordem);
 
+-- CACHE DE RESPOSTAS da Aura (lib/rag/cacheRespostas, out/2026): pergunta de conceito já respondida volta em
+-- milissegundos, sem modelo. A chave é o vetor da pergunta (o MESMO embedding do RAG) + o escopo (sala/mentor) + a
+-- versão do harness; o servir exige similaridade alta E as mesmas palavras de conteúdo. 👎 bloqueia, 👍 aprova.
+CREATE TABLE IF NOT EXISTS aura_cache_respostas (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  escopo        text NOT NULL,                 -- "estudos|aura", "pesquisa|medicina"… (sala|mentor)
+  versao        int NOT NULL,                  -- CACHE_VERSAO: subir invalida tudo de uma vez
+  pergunta      text NOT NULL,
+  pergunta_norm text NOT NULL,
+  chaves        text[] NOT NULL DEFAULT '{}',  -- as palavras de conteúdo (a 2ª trava contra "mitose" × "meiose")
+  embedding     vector(1024) NOT NULL,
+  resposta      jsonb NOT NULL,                -- { answer: StructuredAnswer, intent, kind }
+  modelo        text,
+  usos          int NOT NULL DEFAULT 0,
+  votos_pos     int NOT NULL DEFAULT 0,
+  votos_neg     int NOT NULL DEFAULT 0,
+  aprovada      boolean NOT NULL DEFAULT false,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  ultimo_uso    timestamptz,
+  expira_em     timestamptz NOT NULL DEFAULT now() + interval '30 days',
+  UNIQUE (escopo, versao, pergunta_norm)
+);
+CREATE INDEX IF NOT EXISTS aura_cache_respostas_embedding_hnsw ON aura_cache_respostas USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS aura_cache_respostas_norm ON aura_cache_respostas (pergunta_norm);
+
 -- @@PAPEL@@ ---------------------------------------------------------------------------------------------
 -- Papel da aplicação: permissão SÓ nas duas tabelas do RAG. Exige `psql -v senha=...` (ver topo).
 SELECT format('CREATE ROLE rag_app LOGIN PASSWORD %L', :'senha')
@@ -84,4 +109,4 @@ SELECT format('REVOKE CONNECT ON DATABASE %I FROM PUBLIC', datname) FROM pg_data
  WHERE datname IN ('litellm', 'postgres') \gexec
 SELECT format('GRANT CONNECT ON DATABASE %I TO rag_app', current_database()) \gexec
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON rag_documentos, rag_trechos TO rag_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON rag_documentos, rag_trechos, aura_cache_respostas TO rag_app;
