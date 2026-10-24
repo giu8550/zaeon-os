@@ -516,3 +516,29 @@ describe("base de conhecimento (RAG) · entra no prompt e sai citada", () => {
     expect(String(sys)).not.toContain("citacoes_base");
   });
 });
+
+describe("historicoNoOrcamento · começo em blocos (cache implícito do Gemini)", () => {
+  const conversa = (n: number) => Array.from({ length: n }, (_, i) => ({ role: i % 2 ? "model" : "user", text: `mensagem ${i} ${"x".repeat(80)}` }));
+  it("o começo do histórico fica PARADO por alguns turnos em vez de andar a cada um", () => {
+    const inicios = [30, 31, 32, 33].map((n) => historicoNoOrcamento(conversa(n), 2_000)[0]);
+    expect(new Set(inicios).size).toBeLessThan(4);   // antes: 4 começos diferentes (1 por turno)
+  });
+  it("a mensagem mais recente sempre fica, e cabe no orçamento", () => {
+    const l = historicoNoOrcamento(conversa(33), 2_000);
+    expect(l[l.length - 1]).toContain("mensagem 32");
+    expect(l.join("").length).toBeLessThanOrEqual(2_000);
+  });
+});
+
+describe("preâmbulo · ordem pro cache", () => {
+  it("o histórico vem ANTES do contexto do sistema (que muda a cada turno)", async () => {
+    let user = "";
+    const deps = buildHarnessDeps({} as any, {
+      history: [{ role: "user", text: "oi" }, { role: "model", text: "olá" }], systemContext: "MEMÓRIA DO TURNO",
+      genJson: (async (_s: string, u: string) => { user = u; return { reasoning: "r" }; }) as any,
+    });
+    await deps.reason({ objective: "x", mode: "elaborated", academicMode: "flexible", evidence: [] } as any);
+    expect(user.indexOf("Conversa até aqui")).toBeGreaterThanOrEqual(0);
+    expect(user.indexOf("Conversa até aqui")).toBeLessThan(user.indexOf("MEMÓRIA DO TURNO"));
+  });
+});

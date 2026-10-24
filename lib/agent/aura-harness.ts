@@ -146,25 +146,29 @@ export const TETO_POR_TURNO = 4_000;
 export function historicoNoOrcamento(
   history: { role: string; text: string }[],
   orcamento = ORCAMENTO_HISTORICO,
+  bloco = 4,
 ): string[] {
-  const linhas: string[] = [];
-  let gasto = 0;
-  for (let i = history.length - 1; i >= 0; i--) {
-    const h = history[i];
-    const texto = String(h?.text ?? "").trim();
-    if (!texto) continue;
-    const linha = `${h.role === "user" ? "Usuário" : "Aura"}: ${texto.slice(0, TETO_POR_TURNO)}`;
-    if (gasto + linha.length > orcamento) break;
-    gasto += linha.length;
-    linhas.unshift(linha);
+  const linhas = history
+    .map((h) => ({ h, texto: String(h?.text ?? "").trim() }))
+    .filter((x) => x.texto)
+    .map(({ h, texto }) => `${h.role === "user" ? "Usuário" : "Aura"}: ${texto.slice(0, TETO_POR_TURNO)}`);
+  // o menor início que cabe no orçamento (as mais recentes ficam)…
+  let inicio = linhas.length, gasto = 0;
+  while (inicio > 0 && gasto + linhas[inicio - 1]!.length <= orcamento) { inicio--; gasto += linhas[inicio]!.length; }
+  // …arredondado pra cima em BLOCOS: o começo do prompt fica parado por alguns turnos (cache implícito do Gemini)
+  // (só se ainda sobrar pelo menos metade do que cabia — orçamento apertado nunca fica sem a conversa recente)
+  if (inicio > 0) {
+    const alinhado = Math.ceil(inicio / bloco) * bloco;
+    if (linhas.length - alinhado >= Math.max(1, Math.ceil((linhas.length - inicio) / 2))) inicio = alinhado;
   }
-  return linhas;
+  return linhas.slice(inicio);
 }
 
 /** Bloco de contexto (systemContext + histórico) — dá paridade com o caminho legado. */
 function preambleBlock(opts: HarnessOpts): string {
+  // ORDEM pro cache implícito do Gemini: o histórico (só cresce) ANTES do contexto do sistema (muda a cada turno:
+  // memória, bússola, foco) — assim o começo do prompt se repete entre turnos e o cache acerta nas conversas longas.
   const bits: string[] = [];
-  if (opts.systemContext) bits.push(`Contexto do sistema:\n${String(opts.systemContext).slice(0, 4000)}`);
   if (opts.history?.length) {
     const linhas = historicoNoOrcamento(opts.history);
     if (linhas.length) {
@@ -174,6 +178,7 @@ function preambleBlock(opts: HarnessOpts): string {
       );
     }
   }
+  if (opts.systemContext) bits.push(`Contexto do sistema:\n${String(opts.systemContext).slice(0, 4000)}`);
   return bits.length ? bits.join("\n\n") + "\n\n" : "";
 }
 
