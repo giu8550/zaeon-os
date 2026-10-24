@@ -37,3 +37,10 @@ describe("template da Zaeon", () => {
     expect(mensagemPadrao({ tipo: "momento", momento: "noite", chave: "k" }, ctx)).toMatch(/Mitose e meiose/);
   });
 });
+
+describe("formato WhatsApp (visto no dry-run em prod)", () => {
+  it("o **negrito** do markdown vira *negrito* do WhatsApp", async () => {
+    const r = await comporMensagem({ tipo: "momento", momento: "manha", chave: "k" }, ctx, async () => ({ mensagem: "A função **Sigmoid** espreme números.\n### Hoje\n- revisar" }));
+    expect(r.texto).toBe("A função *Sigmoid* espreme números.\n*Hoje*\n• revisar");
+  });
+});
