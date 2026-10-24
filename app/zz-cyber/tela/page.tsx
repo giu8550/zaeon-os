@@ -4,6 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { MensagemChat, Presenca, RecadoQG } from "@/lib/lounge3d/tipos";
 import { adicionarFaixa, controlar, removerFaixa, somVazio, type SomLounge } from "@/lib/lounge3d/musica";
 import { RITUAL_OFF, ritualDesligado, type Ritual } from "@/lib/cyber/ritual";
+import { corrigir, publica, sortearDoBanco, type Pergunta } from "@/lib/cyber/dueloIngles";
+let dueloLocal: Pergunta[] = [];
+const dueloFake = { iniciar: async () => { dueloLocal = sortearDoBanco(Date.now()); return { perguntas: dueloLocal.map(publica) }; }, responder: async (r: (number | null)[]) => corrigir(dueloLocal, r) };
+if (typeof window !== "undefined") (window as unknown as { __duelo: unknown }).__duelo = { gabarito: () => dueloLocal.map((p) => p.certa) };
 const CenaCyber = dynamic(() => import("@/components/cyber/CenaCyber"), { ssr: false });
 const EU = "a".repeat(24), MARINA = "b".repeat(24), TEO = "c".repeat(24);
 export default function Tela() {
@@ -45,5 +49,5 @@ export default function Tela() {
   const definirRitual = async (m: { tempestade?: boolean; droids?: boolean; veu?: boolean; nave?: boolean }) => { setRitual((r) => { const a = r ?? RITUAL_OFF, n = { tempestade: typeof m.tempestade === "boolean" ? (m.tempestade ? (a.tempestade || Date.now()) : 0) : a.tempestade, droids: typeof m.droids === "boolean" ? m.droids : a.droids, veu: typeof m.veu === "boolean" ? (m.veu ? (a.veu || Date.now()) : 0) : a.veu, nave: typeof m.nave === "boolean" ? m.nave : a.nave }; if (n.tempestade <= 0) n.veu = 0; return ritualDesligado(n) ? null : n; }); return { ok: true }; };
   (globalThis as { __som?: unknown }).__som = { setSom, setSomNave, setRitual };
   const enviarChat = async (texto: string) => { setChat((c) => [...c, { id: String(Date.now()), userId: EU, name: "Você", color: "#2f7bff", texto, ts: Date.now() }]); };
-  return <div style={{ position: "fixed", inset: 0, zIndex: 300 }}><CenaCyber modo={typeof window !== "undefined" && location.search.includes("janela") ? "janela" : "tela"} eu={eu} membros={membros} remotos={remotos} chat={chat} enviarChat={enviarChat} tokenConvite="PREVIA" online={3} enviarPos={() => {}} souFundador pedirAcesso={async () => ({ ok: true })} recadoQG={recado} enviarRecado={enviarRecado} somLounge={som} offsetMusica={0} musica={musica} somNave={somNave} musicaNave={musicaNave} ritual={ritual} definirRitual={definirRitual} /></div>;
+  return <div style={{ position: "fixed", inset: 0, zIndex: 300 }}><CenaCyber modo={typeof window !== "undefined" && location.search.includes("janela") ? "janela" : "tela"} eu={eu} membros={membros} remotos={remotos} chat={chat} enviarChat={enviarChat} tokenConvite="PREVIA" online={3} enviarPos={() => {}} souFundador pedirAcesso={async () => ({ ok: true })} recadoQG={recado} enviarRecado={enviarRecado} somLounge={som} offsetMusica={0} musica={musica} somNave={somNave} musicaNave={musicaNave} ritual={ritual} definirRitual={definirRitual} dueloIngles={dueloFake} /></div>;
 }

@@ -205,7 +205,10 @@ export async function classify(objective: string, ctx: CtxRoteador): Promise<Rou
   if (!text) return fallback;
   // O ROTEADOR POR SIMILARIDADE (lib/agent/roteadorKnn): confiante → decide SEM o modelo; "sombra" → só registra.
   const knn = await votoKnn(text).catch(() => null);
-  if (knn?.modo === "on" && knn.decide) return resultadoDe(knn.voto.intent, text, ctx, undefined);
+  if (knn?.modo === "on" && knn.decide) {
+    console.info(`[roteador-knn] on decidiu knn=${knn.voto.intent} c=${knn.voto.confianca.toFixed(2)} m=${knn.voto.margem.toFixed(2)}`);
+    return resultadoDe(knn.voto.intent, text, ctx, undefined);
+  }
   try {
     // import tardio: mantém o router (e o teste da heurística) SEM carregar o Vertex/rede.
     const { geminiJson } = await import("@/lib/scholar/gemini");
@@ -222,9 +225,9 @@ export async function classify(objective: string, ctx: CtxRoteador): Promise<Rou
     // "agora outro sobre Y" com trabalho na conversa manda mais que o palpite (o modelo lê como conversa).
     const outro = pedeOutroTrabalho(nt, ctx);
     const r = resultadoDe(isIntentId(cand) ? cand : fallback.intent, text, ctx, out?.kind);
-    if (knn?.modo === "sombra" && knn.voto) {
-      // só a CONCORDÂNCIA e as intenções (nunca o texto da pergunta) — pra medir em prod antes de virar o kNN
-      console.info(`[roteador-knn] sombra ${knn.voto.intent === r.intent ? "=" : "≠"} knn=${knn.voto.intent} modelo=${r.intent} decidiria=${knn.decide ? "sim" : "nao"} c=${knn.voto.confianca.toFixed(2)} m=${knn.voto.margem.toFixed(2)}`);
+    if (knn?.voto) {
+      // só a CONCORDÂNCIA e as intenções (nunca o texto da pergunta) — pra medir em prod (sombra) e a fatia que ainda vai pro modelo (on)
+      console.info(`[roteador-knn] ${knn.modo} ${knn.voto.intent === r.intent ? "=" : "≠"} knn=${knn.voto.intent} modelo=${r.intent} decidiria=${knn.decide ? "sim" : "nao"} c=${knn.voto.confianca.toFixed(2)} m=${knn.voto.margem.toFixed(2)}`);
     }
     return r;
   } catch {
