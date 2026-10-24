@@ -1,4 +1,4 @@
-import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CHAVES_ENV_CHROMIUM, MAX_BYTES_PROJETO, MINIATURA_MAX_BYTES, capturaDisponivel, capturarComDiagnostico, capturarPagina, decidirPedido, encerrarCaptura,
   matarProcesso, opcoesDeLancamento, tipoPorExtensao, type Diagnostico,
@@ -112,6 +112,12 @@ describe("captura — sempre (sem navegador)", () => {
 });
 
 describe.skipIf(!CHROMIUM)("captura — com Chromium", () => {
+  // AQUECIMENTO: no runner do CI, abrir o Chromium a frio come boa parte dos 15 s da captura e o 1º teste falhava
+  // de vez em quando ("expected false to be true" — um PR em cada dois precisava rodar o CI de novo). O navegador
+  // fica aberto entre capturas (é o desenho do módulo), então abre UMA vez aqui, com folga, e os testes medem a captura.
+  beforeAll(async () => {
+    await capturarPagina({ "index.html": pagina("<p>aquecendo</p>") }, { largura: 320, altura: 240, timeoutMs: 55_000 });
+  }, 60_000);
   afterAll(async () => { await encerrarCaptura(); });
 
   it("página simples → JPEG válido (> 1 KB) no tamanho pedido", async () => {
