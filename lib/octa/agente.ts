@@ -136,20 +136,23 @@ export const FERRAMENTAS_REA: ToolDef[] = [
     name: "octa_rea", runtime: "ts", risk: "read", minPlan: "free",
     schema: schema("octa_rea",
       `Engenharia reversa com o REA (uso LÍCITO: segurança, malware, CTF, interoperabilidade, software próprio/autorizado). Comandos (análise estática do REA, 1:1 — ex.: ${REA_EXEMPLOS.slice(0, 12).join(", ")}…). Captura/observação/trace/debug/adb ficam desligados. Devolve a Evidence do REA.`,
-      { comando: "um comando do REA (ex.: analyze-javascript-application, inspect, decompile, inspect-har)", path: "opcional: arquivo do projeto a analisar (o artefato)", args: "opcional: flags/alvos extras separados por espaço (ex.: --provider ghidra, um endereço, uma URL)" },
+      { comando: "um comando do REA (ex.: analyze, inspect, decompile, analyze-javascript-application, inspect-har)", handle: "opcional: handle de um BINÁRIO que o aluno enviou pra análise (32 hex)", path: "opcional: arquivo de TEXTO do projeto a analisar", args: "opcional: flags/alvos extras separados por espaço (ex.: --provider ghidra, um endereço)" },
       ["comando"]),
     async run(a, ctx) {
       const comando = String(a?.comando ?? "").trim();
       if (!comandoRea(comando)) return err(`comando com efeito colateral ou inválido (desligado nesta fatia): ${comando}`, "bad_args");
       const extra = String(a?.args ?? "").trim();
       const args = extra ? extra.split(/\s+/).slice(0, 24) : [];
+      const handle = String(a?.handle ?? "").trim();
       let artifact: { nome: string; conteudo: string } | undefined;
-      const path = normalizePath(String(a?.path ?? ""));
-      if (path) {
-        if (!(path in ws(ctx))) return err(`arquivo não existe: ${a?.path}`, "not_found");
-        artifact = { nome: path.split("/").pop() || "artifact", conteudo: ws(ctx)[path] };
+      if (!handle) {
+        const path = normalizePath(String(a?.path ?? ""));
+        if (path) {
+          if (!(path in ws(ctx))) return err(`arquivo não existe: ${a?.path}`, "not_found");
+          artifact = { nome: path.split("/").pop() || "artifact", conteudo: ws(ctx)[path] };
+        }
       }
-      const r = await chamarRea({ command: comando, args, artifact });
+      const r = await chamarRea({ command: comando, args, artifact, handle: handle || undefined });
       return r.ok ? ok(resumirRea(r)) : err(resumirRea(r), "rea_error");
     },
   },

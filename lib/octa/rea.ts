@@ -26,7 +26,7 @@ const PRAZO_MS = 12 * 60_000;   // análise nativa (Ghidra) pode demorar
 
 /** chama o motor do REA com um artefato opcional (texto do workspace) + args. IO. */
 export async function chamarRea(
-  o: { command: string; args?: string[]; artifact?: { nome: string; conteudo: string | Buffer } },
+  o: { command: string; args?: string[]; artifact?: { nome: string; conteudo: string | Buffer }; handle?: string },
   env: ReaEnv = process.env,
   f: typeof fetch = fetch,
 ): Promise<RespostaRea> {
@@ -34,7 +34,8 @@ export async function chamarRea(
   if (!comandoRea(o.command)) return { ok: false, erro: `comando com efeito colateral ou inválido (desligado nesta fatia): ${o.command}` };
   const base = env.REA_BRIDGE_URL!.trim().replace(/\/+$/, "");
   const corpo: Record<string, unknown> = { token: env.REA_BRIDGE_TOKEN!.trim(), command: o.command, args: o.args ?? [], json: true };
-  if (o.artifact) {
+  if (o.handle && /^[0-9a-f]{32}$/.test(o.handle)) corpo.handle = o.handle;
+  else if (o.artifact) {
     const buf = Buffer.isBuffer(o.artifact.conteudo) ? o.artifact.conteudo : Buffer.from(o.artifact.conteudo, "utf8");
     corpo.artifactBase64 = buf.toString("base64");
     corpo.artifactName = o.artifact.nome;
@@ -57,4 +58,20 @@ export function resumirRea(r: RespostaRea): string {
     return txt.length > 8000 ? txt.slice(0, 8000) + `\n… (Evidence de ${txt.length} chars; refine o comando/args pra focar)` : txt;
   }
   return (r.stdout ?? "").slice(0, 8000) || "(sem saída)";
+}
+
+export type UploadRea = { ok: boolean; handle?: string; name?: string; bytes?: number; erro?: string };
+/** manda um BINÁRIO (ou qualquer artefato) pro motor e recebe um handle (o binário fica só na Contabo, transitório). */
+export async function uploadRea(o: { nome: string; conteudo: Buffer }, env: ReaEnv = process.env, f: typeof fetch = fetch): Promise<UploadRea> {
+  if (!reaBridgeConfigurado(env)) return { ok: false, erro: "motor do REA não configurado" };
+  const base = env.REA_BRIDGE_URL!.trim().replace(/\/+$/, "");
+  try {
+    const r = await f(`${base}/upload`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token: env.REA_BRIDGE_TOKEN!.trim(), artifactName: o.nome, artifactBase64: o.conteudo.toString("base64") }),
+      signal: AbortSignal.timeout(2 * 60_000),
+    });
+    const j = (await r.json().catch(() => ({}))) as UploadRea;
+    return r.ok ? j : { ok: false, erro: (j as any)?.erro ?? `upload HTTP ${r.status}` };
+  } catch (e) { return { ok: false, erro: `motor do REA fora do ar: ${String((e as Error)?.message ?? e).slice(0, 140)}` }; }
 }

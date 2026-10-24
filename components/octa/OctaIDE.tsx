@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   Play, Plus, X, FileText, Folder, FolderOpen, Trash2, Undo2, Send, Loader2, ShieldCheck, Pencil, ChevronRight, ChevronDown, Square,
-  Github, Rocket, Globe, ExternalLink, Code, Eye, Palette, ChevronsUpDown, Check, LogOut, FolderPlus, HardDrive,
+  Github, Rocket, Globe, ExternalLink, Code, Eye, Palette, ChevronsUpDown, Check, LogOut, FolderPlus, HardDrive, Microscope,
 } from "lucide-react";
 import OctaIcon from "./OctaIcon";
 import { useCodeRunner, type RunOutput } from "@/app/agentic-modules/codelab/useCodeRunner";
@@ -165,6 +165,9 @@ export default function OctaIDE() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [chaveChat, setChaveChat] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  const [reaBusy, setReaBusy] = useState(false);
+  const reaFileRef = useRef<HTMLInputElement>(null);
+  const REA_ON = process.env.NEXT_PUBLIC_OCTA_REA === "1";
   const [modo, setModo] = useState<"review" | "change">("review");
   const [escopo, setEscopo] = useState<"ativo" | "projeto">("ativo");
   const [enviando, setEnviando] = useState(false);
@@ -574,6 +577,21 @@ export default function OctaIDE() {
   };
 
   const enviar = (texto = input) => (projeto ? enviarTurno(texto) : enviarRascunho(texto));
+
+  // REA: envia um binário pro motor (Contabo) e deixa o pedido pronto com o handle
+  const enviarBinarioRea = async (file: File) => {
+    if (!file || reaBusy) return;
+    setReaBusy(true);
+    try {
+      const fd = new FormData(); fd.append("file", file);
+      const r = await fetch("/api/octa/rea/upload", { method: "POST", body: fd });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { setAvisoAgente(j?.error ?? "Não deu pra enviar o binário pro REA."); return; }
+      setMsgs((v) => [...v, { id: uid(), role: "user", content: `🔬 Binário enviado pro REA: ${j.name} (${(j.bytes / 1024).toFixed(0)} KB).` }]);
+      setInput(`Faça engenharia reversa do binário "${j.name}" com o REA (handle: ${j.handle}). Comece com analyze --provider ghidra e me explique, com evidência, o que ele faz.`);
+    } catch { setAvisoAgente("Sem conexão pro upload do REA."); }
+    finally { setReaBusy(false); if (reaFileRef.current) reaFileRef.current.value = ""; }
+  };
   const abrirArquivo = (p: string) => { setVista("codigo"); setIde((e) => (e && p in e.arquivos ? abrir(e, p) : e)); };
   const desfazer = (m: Msg) => {
     const d = m.desfazer!;
@@ -952,6 +970,14 @@ export default function OctaIDE() {
                 <textarea value={input} onChange={(e) => setInput(e.target.value)} rows={2} placeholder={projeto ? (turno ? "Espere o Octa terminar…" : "Peça ao Octa… (ex.: uma landing pra minha confeitaria)") : "Peça ao Octa…"}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void enviar(); } }}
                   className="flex-1 resize-none bg-transparent outline-none text-[13px] placeholder:text-[#5d636f]" style={{ color: Z.texto }} />
+                {REA_ON && (
+                  <>
+                    <input ref={reaFileRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void enviarBinarioRea(f); }} />
+                    <button type="button" onClick={() => reaFileRef.current?.click()} disabled={reaBusy || !!turno || enviando} title="Enviar um binário/APK/firmware pro REA analisar" className="p-1.5 rounded hover:bg-white/10 disabled:opacity-30">
+                      {reaBusy ? <Loader2 className="w-4 h-4 animate-spin" style={{ color: Z.acento }} /> : <Microscope className="w-4 h-4" style={{ color: Z.acento }} />}
+                    </button>
+                  </>
+                )}
                 {!projeto && enviando ? (
                   <button type="button" onClick={() => abortar.current?.abort()} title="Parar" className="p-1.5 rounded hover:bg-white/10"><Square className="w-4 h-4" /></button>
                 ) : (

@@ -3,8 +3,8 @@
 FROM node:22-bookworm
 
 ARG REA_VERSION=6.5.0
-ARG GHIDRA_VERSION=12.2
-ARG GHIDRA_RELEASE=20261016
+ARG GHIDRA_VERSION=12.1.4
+ARG GHIDRA_RELEASE=20260921
 
 ENV DEBIAN_FRONTEND=noninteractive
 # JDK 21 (Temurin), unzip, binwalk/unblob e deps nativas de firmware; python p/ unblob
