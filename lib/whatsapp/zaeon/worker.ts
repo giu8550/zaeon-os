@@ -24,9 +24,11 @@ export async function runZaeon(agora: Date = new Date(), o: { seco?: boolean; us
   const horarios = horariosDoEnv(process.env.ZAEON_HORARIOS);
   const cada = Math.max(15, Number(process.env.ZAEON_SEM_ROTINA_MIN) || SEM_ROTINA_A_CADA_MIN);
 
-  const links = o.userId
+  let links = o.userId
     ? await prisma.whatsAppLink.findMany({ where: { userId: o.userId } })
     : await prisma.whatsAppLink.findMany({ where: { verified: true, optIn: true, phone: { not: null } }, take: 500 });
+  // o seco serve pra ver a mensagem ANTES da pessoa vincular o WhatsApp (o dono testando o template)
+  if (o.seco && o.userId && !links.length) links = [{ userId: o.userId, quietHours: null } as (typeof links)[number]];
   const r: ResumoZaeon = { pessoas: links.length, enviadas: 0, puladas: 0, erros: 0, detalhes: [] };
   const desde = new Date(agora.getTime() - 2 * 86_400_000);
 

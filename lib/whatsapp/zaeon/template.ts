@@ -5,6 +5,7 @@
  */
 import type { Acao } from "./rotina";
 import { contextoEmTexto, type Contexto } from "./contexto";
+import { toWhatsAppText } from "../format";
 
 /** As instruções do harness da Zaeon no WhatsApp (o "jeito" dela). */
 export const INSTRUCOES_ZAEON = [
@@ -65,7 +66,8 @@ export async function comporMensagem(acao: Acao, c: Contexto, gerar?: Gerar): Pr
       user: `OBJETIVO DESTA MENSAGEM:\n${objetivoDa(acao)}\n\nRETRATO DA PESSOA:\n${contextoEmTexto(c)}`,
     });
     const t = String(out?.mensagem ?? "").trim();
-    if (t.length >= 20) return { texto: t.slice(0, 1200), doModelo: true };
+    // o modelo escreve markdown (**negrito**, ###): o WhatsApp só entende *negrito* — visto no dry-run em prod (24/10)
+    if (t.length >= 20) return { texto: toWhatsAppText(t, 1200), doModelo: true };
   } catch { /* cai no padrão */ }
   return { texto: mensagemPadrao(acao, c), doModelo: false };
 }
