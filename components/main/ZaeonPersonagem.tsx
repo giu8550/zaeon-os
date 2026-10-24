@@ -5,7 +5,7 @@
  * como personagem"). O mesmo corpo da capela do cyberespaço (o VRM da Zaeon — lib/cyber/estiloAvatar CORPOS_VRM.zaeon),
  * na vitrine em MODO PERSONAGEM (components/cyber/VitrinePersonagem, sem girar): de frente pra quem chega, respirando,
  * a CABEÇA e os OLHOS seguindo o cursor, piscando. Clicar nela: ela SAÚDA — a voz dela (public/avatars/zaeon/voz) com a
- * boca acompanhando o som — e o balão de fala troca de frase.
+ * boca acompanhando o som.
  * Leve com a página: o VRM (12 MB) só baixa no computador (ponteiro fino, tela larga), depois da intro, e só renderiza
  * visível; quem pede menos movimento a vê parada.
  */
@@ -18,12 +18,6 @@ import type { QuadroVitrine } from "@/components/cyber/VitrinePersonagem";
 const VitrinePersonagem = dynamic(() => import("@/components/cyber/VitrinePersonagem"), { ssr: false });
 
 const CIANO = "#7fe8ff";
-const FALAS = [
-  "Oi! Eu sou a Zaeon.",
-  "Aqui você estuda, constrói e entrega — e eu te acompanho em cada passo.",
-  "Lá dentro tem um cyberespaço inteiro esperando por você.",
-  "Clica em começar e a gente se encontra lá.",
-] as const;
 const VOZES = ["/avatars/zaeon/voz/saudacao-01.wav", "/avatars/zaeon/voz/saudacao-02.wav", "/avatars/zaeon/voz/saudacao-03.wav"] as const;
 
 /** dá pra mostrar ela aqui? (computador — mouse e tela a partir de 768 px: o VRM é pesado pro celular) */
@@ -33,7 +27,7 @@ function podeMostrar() {
 }
 
 export default function ZaeonPersonagem({ className = "", forcar = false }: { className?: string; /** mostra em qualquer tela (a página de prévia) */ forcar?: boolean }) {
-  const [ok, setOk] = useState(false), [fala, setFala] = useState(0), [falando, setFalando] = useState(false);
+  const [ok, setOk] = useState(false), [falando, setFalando] = useState(false);
   const mouse = useRef({ x: 0, y: 0 }), boca = useRef(0), alvo = useRef(new THREE.Object3D());
   const audio = useRef<{ ctx: AudioContext; an: AnalyserNode; buf: Uint8Array } | null>(null);
   const qCabeca = useRef(new THREE.Quaternion()), eCabeca = useRef(new THREE.Euler());
@@ -67,7 +61,6 @@ export default function ZaeonPersonagem({ className = "", forcar = false }: { cl
   }, [falando]);
 
   const saudar = useCallback(async () => {
-    setFala((f) => (f + 1) % FALAS.length);
     if (falando) return;
     try {
       const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
@@ -85,12 +78,6 @@ export default function ZaeonPersonagem({ className = "", forcar = false }: { cl
     <div className={`pointer-events-none ${/\b(absolute|fixed)\b/.test(className) ? "" : "relative "}${className}`}>
       {/* o brilho de holograma por trás */}
       <div aria-hidden className="absolute inset-x-[12%] bottom-[6%] top-[14%] rounded-full blur-3xl" style={{ background: `radial-gradient(ellipse at 50% 60%, ${CIANO}33, transparent 70%)` }} />
-      {/* o BALÃO de fala */}
-      <div className="absolute left-1/2 top-[3%] z-10 max-w-[260px] -translate-x-1/2 rounded-2xl border px-4 py-2.5 text-center text-[13.5px] leading-snug text-slate-900 shadow-lg backdrop-blur dark:text-white"
-        style={{ borderColor: `${CIANO}66`, background: "rgba(10,20,40,.08)", boxShadow: `0 0 26px -10px ${CIANO}` }} aria-live="polite">
-        {FALAS[fala]}
-        <span aria-hidden className="absolute -bottom-1.5 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border-b border-r" style={{ borderColor: `${CIANO}66`, background: "inherit" }} />
-      </div>
       <button type="button" onClick={() => void saudar()} aria-label="Falar com a Zaeon" className="pointer-events-auto absolute inset-x-[18%] bottom-[4%] top-[18%] z-[5] cursor-pointer rounded-full" />
       <VitrinePersonagem fundador={false} cor={CIANO} corpo={CORPOS_VRM.zaeon} giro={false} aoQuadro={aoQuadro} rotulo="Zaeon, a guia da plataforma" className="h-full w-full" />
       <p className="pointer-events-none absolute bottom-0 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10.5px] font-bold uppercase tracking-[0.28em] text-cyan-700/70 dark:text-cyan-200/60">clique pra falar comigo</p>
