@@ -73,7 +73,7 @@ import type { LibraryFile } from "@/lib/useLibraryFiles";
 import {
   carregarThreads, salvarThreads, criarThread, criarSubThread, fecharThread, renomearThread, tocarThread,
   carregarMensagens, salvarMensagens, threadAtiva, marcarAtiva, tituloAPartirDe,
-  TITULO_PADRAO, type Thread,
+  TITULO_PADRAO, CHAVE_INDICE, type Thread,
 } from "@/lib/chat/threads";
 import type { StructuredAnswer } from "@/lib/agent/contracts";
 import { parseStructuredStream, STRUCTURED_SENTINEL } from "@/lib/agent/structured-client";
@@ -435,6 +435,10 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     // memória de conversa: L0 (localStorage, rápido) primeiro; se vazio (device novo /
     // cache limpo), cai no L1 durável (DB) via /api/ai/transcript. docs/MEMORY_AND_PERSISTENCE.md.
     let hadLocal = false;
+    // Device REALMENTE novo? (o índice de conversas nunca existiu). Apagar a última conversa deixa um índice
+    // com uma aba nova vazia — NÃO é device novo, então o L1 durável não deve ressuscitar a conversa apagada.
+    let deviceNovo = false;
+    try { deviceNovo = localStorage.getItem(CHAVE_INDICE) == null; } catch { /* ignore */ }
     try {
       const lista = carregarThreads(localStorage);
       const ativa = threadAtiva(localStorage, lista);
@@ -447,7 +451,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         if (guardadas.length) { setMessages(guardadas); hadLocal = true; }
       }
     } catch { /* ignore */ }
-    if (!hadLocal) {
+    if (!hadLocal && deviceNovo) {
       (async () => {
         const wire = await hydrateTranscript("estudos", null);
         if (wire.length) {
@@ -862,13 +866,17 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   // saiu da sala no meio — volta a ser acompanhado e, quando termina, entra na MESMA bolha
   // pelo mesmo `aplicarFinal`. Uma vez por turno (o ref segura); para se trocar de conversa.
   const retomando = useRef<Set<string>>(new Set());
+  // Turnos cuja resposta JÁ foi aplicada (por qualquer caminho): nunca aplica de novo — era a origem da
+  // "resposta gerada duas vezes" (appendTranscript + runStudioAction em dobro) quando o reengate corria com
+  // o `pendente` ainda não commitado mas o `retomando` já limpo. Ref = síncrono, fecha a janela.
+  const aplicados = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!abaAtiva) return;
     const aba = abaAtiva;
     let vivo = true;
     const lista = msgsRef.current;
     lista.forEach((m, i) => {
-      if (!m.pendente || !m.turnId || m.role !== "assistant" || retomando.current.has(m.turnId)) return;
+      if (!m.pendente || !m.turnId || m.role !== "assistant" || retomando.current.has(m.turnId) || aplicados.current.has(m.turnId)) return;
       const turnId = m.turnId;
       retomando.current.add(turnId);
       const prompt = [...lista.slice(0, i)].reverse().find((x) => x.role === "user")?.text ?? "";
@@ -882,6 +890,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       }).then((res) => {
         retomando.current.delete(turnId);
         if (res.tipo === "cancelado") return; // volta a ser retomado na próxima abertura
+        aplicados.current.add(turnId);
         const fim = (patch: Partial<Msg>) => setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, fase: undefined, streaming: false, ...patch } : x)));
         if (res.tipo === "pronto") { aplicarFinal(m.id, separarProgresso(res.acumulado).limpo, prompt); fim({}); }
         else if (res.tipo === "erro") fim({ text: res.mensagem, pendente: false });
@@ -1033,6 +1042,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         // Ação/estrutura não datilografa; texto simples deixa a digitação alcançar o fim.
         if (parseStructuredStream(limpo) || limpo.includes(STUDIO_SENTINEL)) { target = ""; ended = true; }
         else { target = limpo; ended = true; await typed; }
+        if (turnoVivo) aplicados.current.add(turnoVivo);   // trava: o reengate nunca reaplica este turno
         aplicarFinal(asstId, limpo, prompt, abaDoTurno);
       }
     } catch {
