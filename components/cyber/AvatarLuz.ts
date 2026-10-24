@@ -8,6 +8,7 @@
  * Convenção do modelo de referência (Soldier.glb): encara -Z em rotation 0 → o grupo gira para `facing + π`
  * (anti-moonwalk); `facing` aqui é `atan2(dx, dz)` da direção de movimento.
  */
+import { criarTabletLounge, voltaPraFora } from "@/components/cyber/TabletLounge";
 import * as THREE from "three";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { amostrarPose, duracaoClipe, envelopePouso, misturar, type Dir3, type Pose } from "@/lib/cyber/poses";
@@ -313,26 +314,10 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   const PERNA = 0.95;   // comprimento da perna do avatar (m) — escala a altura do quadril das poses capturadas
   const DUR_POUSO = duracaoClipe("Jump_Land") * 0.8;
 
-  // o TABLET (modo estudo): corpo fino escuro, tela acesa com o laboratório, halo; materializa de PARTÍCULAS que
-  //  espiralam pra mão (lib/cyber/descanso `TABLET`). Fica no grupo: a cada quadro vai pro meio das mãos, virado pro rosto
-  const tablet = new THREE.Group(); tablet.visible = false; grupo.add(tablet);
-  const texTela = new THREE.CanvasTexture((() => {
-    const c = document.createElement("canvas"); c.width = 256; c.height = 176; const g = c.getContext("2d")!;
-    const gr = g.createLinearGradient(0, 0, 0, 176); gr.addColorStop(0, "#0a1f3d"); gr.addColorStop(1, "#04101f"); g.fillStyle = gr; g.fillRect(0, 0, 256, 176);
-    g.fillStyle = "#66e6ff"; g.fillRect(0, 0, 256, 22); g.fillStyle = "#04101f"; g.font = "bold 13px system-ui, sans-serif"; g.fillText("ZAEON · LABORATÓRIO", 10, 15);
-    g.fillStyle = "rgba(143,232,255,.85)"; for (let i = 0; i < 7; i++) g.fillRect(12, 38 + i * 17, 70 + ((i * 47) % 90), 6);
-    g.strokeStyle = "#9fe8ff"; g.lineWidth = 3; g.beginPath(); g.arc(205, 92, 30, 0, Math.PI * 2); g.stroke(); g.beginPath(); g.arc(205, 92, 14, 0, Math.PI * 2); g.stroke();
-    return c; })());
-  texTela.colorSpace = THREE.SRGBColorSpace;
-  const matTabCorpo = anime ? materialToonSimples(0x1a2238, armadura.clone().multiplyScalar(0.25)) : new THREE.MeshStandardMaterial({ color: 0x141a2c, roughness: 0.3, metalness: 0.7, emissive: armadura.clone().multiplyScalar(0.25), emissiveIntensity: 0.6 });
-  const matTabTela = new THREE.MeshBasicMaterial({ map: texTela, transparent: true, opacity: 0 });
-  const matTabHalo = new THREE.MeshBasicMaterial({ color: luz, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-  tablet.add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.21, 0.014), matTabCorpo));
-  const telaTab = new THREE.Mesh(new THREE.PlaneGeometry(0.272, 0.186), matTabTela); telaTab.position.z = 0.0075; tablet.add(telaTab);
-  const haloTab = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.48), matTabHalo); haloTab.position.z = -0.012; tablet.add(haloTab);
-  const NPT = low ? 18 : 36, ptPos = new Float32Array(NPT * 3), ptGeo = new THREE.BufferGeometry(); ptGeo.setAttribute("position", new THREE.BufferAttribute(ptPos, 3));
-  const matPtTab = new THREE.PointsMaterial({ size: 0.07, map: starTex, color: luz, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
-  const particulasTab = new THREE.Points(ptGeo, matPtTab); particulasTab.frustumCulled = false; particulasTab.visible = false; grupo.add(particulasTab);
+  // o TABLET (modo estudo): o do lounge, compartilhado (components/cyber/TabletLounge). Fica no grupo: a cada quadro vai
+  //  pro meio das mãos, virado pro rosto
+  const tab = criarTabletLounge({ luz, estrela: starTex, low, corpo: anime ? materialToonSimples(0x1a2238, armadura.clone().multiplyScalar(0.25)) : new THREE.MeshStandardMaterial({ color: 0x141a2c, roughness: 0.3, metalness: 0.7, emissive: armadura.clone().multiplyScalar(0.25), emissiveIntensity: 0.6 }) });
+  const tablet = tab.tablet; grupo.add(tablet, tab.particulas);
   // a ALÇA do fio de energia: uma barra de luz nas mãos + o gancho subindo até o cabo (no grupo; posta nas mãos a cada quadro)
   const alca = new THREE.Group(); alca.visible = false; grupo.add(alca);
   const matAlca = new THREE.MeshBasicMaterial({ color: luz, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
@@ -342,7 +327,6 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
   /** a altura do cabo acima dos pés de quem está pendurado (a mesma conta de lib/cyber/ceu: alturaFio − pes) */
   const CABO_ACIMA_DOS_PES = FIO.alturaFio - FIO.pes;
   const pTab = new THREE.Vector3(), pCab = new THREE.Vector3(), pMaoE = new THREE.Vector3(), pMaoD = new THREE.Vector3(), qC2 = new THREE.Quaternion(), fC = new THREE.Vector3(), uC = new THREE.Vector3(), lC = new THREE.Vector3();
-  const voltaPraFora = (x: number) => { const c1 = 1.70158, c3 = c1 + 1, u = x - 1; return 1 + c3 * u * u * u + c1 * u * u; };   // ease-out-back (o tablet "estala" no lugar)
 
   // (os NEURÔNIOS — as partículas de luz em volta do corpo — saíram em out/2026: o dono achou que não combinavam mais)
   // as ASAS só no VOO (out/2026): no chão somem; decolando, se abrem com um ESTOURO CÓSMICO (poeira de estrelas violeta
@@ -1066,23 +1050,15 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       }
       // o TABLET: no meio das mãos, um pouco rumo ao rosto, com a tela virada pra cabeça; materializando: as partículas
       // espiralam até ele, o halo acende e a tela liga
-      tablet.visible = wTab > 0.01; particulasTab.visible = wTab > 0.01 && wTab < 0.985;
-      if (tablet.visible) {
+      if (wTab > 0.01) {
         grupo.updateMatrixWorld(true);
         if (ossos.length >= 2 && cabeca) {
           ossos[0]!.mao.getWorldPosition(pMaoE); ossos[1]!.mao.getWorldPosition(pMaoD); cabeca.getWorldPosition(pCab);
           pTab.copy(pMaoE).add(pMaoD).multiplyScalar(0.5); pTab.addScaledVector(vA.copy(pCab).sub(pTab), 0.14);
           tablet.position.copy(grupo.worldToLocal(pTab.clone())); tablet.lookAt(pCab);
         } else { tablet.position.set(0, 1.15, -0.38); tablet.rotation.set(-0.7, Math.PI, 0); }
-        const e = voltaPraFora(Math.min(1, wTab)); tablet.scale.setScalar(Math.max(0.001, e));
-        matTabTela.opacity = Math.max(0, Math.min(1, (wTab - 0.55) / 0.4)) * (wTab < 0.98 && !parado ? 0.75 + 0.25 * Math.sin(t * 40) : 1);
-        matTabHalo.opacity = 0.55 * Math.sin(Math.PI * Math.min(1, wTab)) + 0.12 * wTab;
-        if (particulasTab.visible) {
-          const pl = tablet.position, abre = 1 - wTab;
-          for (let i = 0; i < NPT; i++) { const a = i * 2.39996 + t * 5, r = 0.06 + abre * (0.45 + 0.25 * ((i * 7) % 5) / 5), y = (((i * 13) % 11) / 11 - 0.5) * abre * 0.9; ptPos[i * 3] = pl.x + Math.cos(a) * r; ptPos[i * 3 + 1] = pl.y + y; ptPos[i * 3 + 2] = pl.z + Math.sin(a) * r; }
-          ptGeo.attributes.position!.needsUpdate = true; matPtTab.opacity = 0.9 * Math.min(1, abre * 3);
-        }
       }
+      tab.animar(wTab, t, parado);
       // o RIFLE nas mãos. A ARMA vem primeiro, presa ao corpo: em DESCANSO, baixa e na diagonal na frente do peito (o cano
       // pra baixo e pra esquerda); MIRANDO, a coronha no ombro direito e o cano pra mira (a MIRA LIVRE — o tronco ainda
       // inclina pra cima/baixo com ela). Depois as MÃOS vão até ela por IK: a direita no punho, a esquerda embaixo do
@@ -1239,7 +1215,7 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
       prancha.traverse((o) => { const m = o as THREE.Mesh; m.geometry?.dispose(); if (m.material && m.material !== matPrancha && m.material !== matLuzPrancha) (m.material as THREE.Material).dispose(); }); matPrancha.dispose(); matLuzPrancha.dispose();
       rGeo.dispose(); (faiscas.material as THREE.Material).dispose();
       alca.traverse((o) => { (o as THREE.Mesh).geometry?.dispose(); }); matAlca.dispose();
-      tablet.traverse((o) => { (o as THREE.Mesh).geometry?.dispose(); }); matTabCorpo.dispose(); matTabTela.dispose(); matTabHalo.dispose(); texTela.dispose(); ptGeo.dispose(); matPtTab.dispose();
+      tab.dispose();
       grupo.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && m.geometry && !gltf) m.geometry.dispose(); });
       grupo.removeFromParent();
     },

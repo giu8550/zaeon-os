@@ -11,6 +11,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { EVT_ZAEON_ESCREVENDO } from "@/lib/research/zaeonEventos";
 import CoworkComposer from "@/components/study/CoworkComposer";
 import AuraThinking from "@/components/study/AuraThinking";
 import AgentePilula, { RECUO_ROSTO } from "@/components/agents/avatar/AgentePilula";
@@ -153,6 +154,8 @@ export default function ResearchChat({
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  // a ZAEON do painel de documentos (components/research/ZaeonDocumentos) escreve no tablet enquanto a resposta sai
+  useEffect(() => { window.dispatchEvent(new CustomEvent(EVT_ZAEON_ESCREVENDO, { detail: sending })); }, [sending]);
   // o friso da pasta "Conversa" (PastasEmpilhadas, na sala) varre enquanto gera; ao desmontar, apaga
   useEffect(() => { onGerando?.(sending); }, [sending, onGerando]);
   useEffect(() => () => onGerando?.(false), [onGerando]);

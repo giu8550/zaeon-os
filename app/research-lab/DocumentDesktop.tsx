@@ -5,7 +5,12 @@ import CitationsPanel from "./CitationsPanel";
 import DraggableDock from "./DraggableDock";
 import type { DockItem } from "./DraggableDock";
 import { useTrash } from "@/lib/useTrash";
-import { useState, type DragEvent } from "react";
+import { useEffect, useState, type DragEvent } from "react";
+import dynamic from "next/dynamic";
+
+/** a ZAEON segurando os documentos (components/research/ZaeonDocumentos — three + o VRM: só no computador) */
+const ZaeonDocumentos = dynamic(() => import("@/components/research/ZaeonDocumentos"), { ssr: false });
+const naoCelular = () => typeof window !== "undefined" && (window.matchMedia?.("(pointer: fine)").matches ?? false) && window.innerWidth >= 768;
 
 interface DocumentDesktopProps {
   processingFileId: string | null;
@@ -62,6 +67,9 @@ export default function DocumentDesktop({
   const { files, save: saveLibraryFile, remove: removeLibraryFile } = useLibraryFiles();
   const { items: trashItems, trash, restore, purge } = useTrash();
   const [showTrash, setShowTrash] = useState(false);
+  // a vista dos documentos: a ZAEON com eles nas mãos (padrão no computador) ou a lista de sempre
+  const [comZaeon, setComZaeon] = useState(false), [lista, setLista] = useState(false);
+  useEffect(() => { setComZaeon(naoCelular()); }, []);
   const activeFile = processingFileId ? files.find((f) => f.id === processingFileId) : null;
 
   const handleDelete = (f: LibraryFile) => { removeLibraryFile(f.id); trash(registroDuravel(f)); };
@@ -208,8 +216,20 @@ export default function DocumentDesktop({
               )}
             </div>
           </div>
+        ) : comZaeon && !lista ? (
+          <ZaeonDocumentos
+            lendo={processingFileId}
+            onVerTodos={() => setLista(true)}
+            vazio={<p className="text-[10px] text-white/40 italic">Solte um PDF aqui — a Zaeon guarda pra você.</p>}
+            docs={files.map((f) => ({ id: f.id, node: <DocIcon file={f} onPlay={onPlayFile} processingId={processingFileId} onRelate={onRelate} onDelete={handleDelete} onView={onView} /> }))}
+          />
         ) : (
           <div className="grid grid-cols-2 gap-2.5">
+            {comZaeon && (
+              <button type="button" onClick={() => setLista(false)} className="col-span-2 rounded-[10px] py-1.5 text-[9.5px] font-black uppercase tracking-[0.14em] text-cyan-300 hover:bg-cyan-400/10" style={{ border: "1px dashed rgba(34,211,238,0.35)" }}>
+                ✦ Voltar pra Zaeon
+              </button>
+            )}
             {files.length === 0 && (
               <p className="col-span-2 text-[10px] text-white/35 italic text-center py-4">
                 Nenhum documento ainda.
