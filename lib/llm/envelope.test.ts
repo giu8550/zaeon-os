@@ -1,5 +1,8 @@
-import { describe, it, expect, vi } from "vitest";
-import { gerar, gerarJson, ErroLlm, PoolEsgotadoError, type Deps, type GerarReq } from "./envelope";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { gerar, gerarJson, ErroLlm, PoolEsgotadoError, _zerarDisjuntorVertex, type Deps, type GerarReq } from "./envelope";
+
+// o disjuntor do Vertex é estado do módulo: cada teste começa com ele fechado
+beforeEach(() => _zerarDisjuntorVertex());
 import { USAGE_VAZIO } from "./usage";
 
 const ctx = { agentKey: "aura", surface: "canal" as const };
