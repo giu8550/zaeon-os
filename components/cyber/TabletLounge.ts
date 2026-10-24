@@ -7,6 +7,7 @@
  * dele, posiciona o tablet a cada quadro (no meio das mãos, virado pro rosto) e chama `animar`.
  */
 import * as THREE from "three";
+import { ctx2d, novoCanvas, type Canvas2D } from "@/lib/cyber/canvas2d";
 
 /** ease-out-back (o tablet "estala" no lugar) */
 export const voltaPraFora = (x: number) => { const c1 = 1.70158, c3 = c1 + 1, u = x - 1; return 1 + c3 * u * u * u + c1 * u * u; };
@@ -15,7 +16,7 @@ export type TabletLounge = {
   tablet: THREE.Group;
   particulas: THREE.Points;
   /** o canvas da tela (quem quiser desenhar por cima chama `telaMudou()` depois) */
-  tela: HTMLCanvasElement;
+  tela: Canvas2D;
   telaMudou: () => void;
   /** `w` = 0..1 (materializando → aceso); com o tablet já posicionado no quadro */
   animar: (w: number, t: number, parado?: boolean) => void;
@@ -23,8 +24,8 @@ export type TabletLounge = {
 };
 
 /** a tela do laboratório (a de sempre) */
-export function desenharTelaLab(c: HTMLCanvasElement) {
-  const g = c.getContext("2d")!;
+export function desenharTelaLab(c: Canvas2D) {
+  const g = ctx2d(c);
   const gr = g.createLinearGradient(0, 0, 0, 176); gr.addColorStop(0, "#0a1f3d"); gr.addColorStop(1, "#04101f"); g.fillStyle = gr; g.fillRect(0, 0, 256, 176);
   g.fillStyle = "#66e6ff"; g.fillRect(0, 0, 256, 22); g.fillStyle = "#04101f"; g.font = "bold 13px system-ui, sans-serif"; g.fillText("ZAEON · LABORATÓRIO", 10, 15);
   g.fillStyle = "rgba(143,232,255,.85)"; for (let i = 0; i < 7; i++) g.fillRect(12, 38 + i * 17, 70 + ((i * 47) % 90), 6);
@@ -32,8 +33,8 @@ export function desenharTelaLab(c: HTMLCanvasElement) {
 }
 
 /** a TELA HOLOGRÁFICA (sem nada escrito): luz ciano, borda acesa, linhas de varredura bem leves */
-export function desenharTelaHolograma(c: HTMLCanvasElement) {
-  const g = c.getContext("2d")!; g.clearRect(0, 0, 256, 176);
+export function desenharTelaHolograma(c: Canvas2D) {
+  const g = ctx2d(c); g.clearRect(0, 0, 256, 176);
   const gr = g.createLinearGradient(0, 0, 0, 176); gr.addColorStop(0, "rgba(20,150,210,.55)"); gr.addColorStop(1, "rgba(10,90,160,.32)"); g.fillStyle = gr; g.fillRect(0, 0, 256, 176);
   g.fillStyle = "rgba(160,240,255,.16)"; for (let y = 2; y < 176; y += 4) g.fillRect(0, y, 256, 1);
   g.strokeStyle = "rgba(150,240,255,1)"; g.lineWidth = 4; g.strokeRect(2, 2, 252, 172);
@@ -42,14 +43,14 @@ export function desenharTelaHolograma(c: HTMLCanvasElement) {
 
 /** um brilho redondo (o halo do holograma — sem a borda quadrada do plano) */
 function brilhoRedondo(): THREE.CanvasTexture {
-  const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d")!, gr = g.createRadialGradient(64, 64, 6, 64, 64, 64);
+  const c = novoCanvas(128, 128); const g = ctx2d(c), gr = g.createRadialGradient(64, 64, 6, 64, 64, 64);
   gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(0.45, "rgba(255,255,255,.35)"); gr.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
-  return new THREE.CanvasTexture(c);
+  return new THREE.CanvasTexture(c as HTMLCanvasElement);
 }
 
 export function criarTabletLounge(o: { luz: THREE.ColorRepresentation; corpo: THREE.Material; estrela: THREE.Texture; low?: boolean; /** a versão HOLOGRÁFICA (tela de luz sem nada escrito, sem o corpo opaco) — o painel dos documentos */ holograma?: boolean }): TabletLounge {
   const tablet = new THREE.Group(); tablet.visible = false;
-  const tela = document.createElement("canvas"); tela.width = 256; tela.height = 176; (o.holograma ? desenharTelaHolograma : desenharTelaLab)(tela);
+  const tela = novoCanvas(256, 176); (o.holograma ? desenharTelaHolograma : desenharTelaLab)(tela);
   const texTela = new THREE.CanvasTexture(tela); texTela.colorSpace = THREE.SRGBColorSpace;
   const matTabTela = new THREE.MeshBasicMaterial({ map: texTela, transparent: true, opacity: 0, ...(o.holograma ? { depthWrite: false, side: THREE.DoubleSide, toneMapped: false } : {}) });
   const brilho = o.holograma ? brilhoRedondo() : null;

@@ -8,13 +8,14 @@
  * Dois passes: o fundo (nebulosa) numa cena ortográfica, depois a cena 3D por cima.
  */
 import * as THREE from "three";
+import { ctx2d, novoCanvas } from "@/lib/cyber/canvas2d";
 import { BURACO_NEGRO } from "@/lib/cyber/ceu";
 
 export function glowTex(c0: string, c1: string): THREE.CanvasTexture {
-  const s = 128, cs = document.createElement("canvas"); cs.width = cs.height = s;
-  const g = cs.getContext("2d")!; const gr = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+  const s = 128, cs = novoCanvas(s, s);
+  const g = ctx2d(cs); const gr = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
   gr.addColorStop(0, c0); gr.addColorStop(0.4, c1); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(0, 0, s, s);
-  return new THREE.CanvasTexture(cs);
+  return new THREE.CanvasTexture(cs as HTMLCanvasElement)   // (no worker é um OffscreenCanvas — o three aceita os dois);
 }
 
 const NEB_VERT = `varying vec2 vUv; void main(){vUv=uv; gl_Position=vec4(position.xy,0.,1.);}`;

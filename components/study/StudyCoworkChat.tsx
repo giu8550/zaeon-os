@@ -67,7 +67,7 @@ import { AvisoSoltar, ChipAnexo, ChipsLote, EVT_ANEXAR, pdfDaBiblioteca, useAnex
 import { contextoDoLote } from "@/lib/chat/loteAnexos";
 import { BarraBase } from "@/components/chat/MinhaBase";
 import DocumentDesktop from "@/app/research-lab/DocumentDesktop";
-import { EVT_ZAEON_ESCREVENDO } from "@/lib/research/zaeonEventos";
+import { avisarEscrevendo } from "@/lib/research/zaeonEventos";
 import { useSavedCitations } from "@/lib/useSavedCitations";
 import type { LibraryFile } from "@/lib/useLibraryFiles";
 import {
@@ -285,7 +285,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   // a avatar do painel dos documentos escreve no tablet enquanto a resposta sai (components/research/ZaeonDocumentos)
-  useEffect(() => { window.dispatchEvent(new CustomEvent(EVT_ZAEON_ESCREVENDO, { detail: sending })); }, [sending]);
+  useEffect(() => { avisarEscrevendo(sending); }, [sending]);
   const [libOpen, setLibOpen] = useState(true);
   // celular: a biblioteca começa RECOLHIDA (empilhada embaixo, ela roubava metade da tela da conversa)
   const celular = useIsMobile();
