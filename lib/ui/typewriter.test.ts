@@ -11,3 +11,16 @@ describe("typewriter", () => {
     expect(safeCut(s, 1)).toBe(1);
   });
 });
+
+import { revelarPorTempo } from "./typewriter";
+describe("datilografia por tempo", () => {
+  it("nada a revelar → 0; sempre ao menos 1 letra", () => { expect(revelarPorTempo(0, 0.016)).toBe(0); expect(revelarPorTempo(3, 0)).toBe(1); });
+  it("um atraso grande se fecha em ~0,5 s, com qualquer fps", () => {
+    for (const fps of [60, 30, 12]) {
+      let resta = 3000, t = 0; const dt = 1 / fps;
+      while (resta > 0 && t < 5) { resta -= revelarPorTempo(resta, dt); t += dt; }
+      expect(t).toBeLessThan(2.2);   // (sem o teto por quadro: a 12 fps antes eram ~42 s)
+    }
+  });
+  it("nunca revela mais do que falta", () => expect(revelarPorTempo(10, 5)).toBe(10));
+});

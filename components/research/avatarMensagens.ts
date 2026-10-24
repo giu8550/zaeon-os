@@ -11,8 +11,10 @@ export type ParaCena =
   | { tipo: "gesto" }
   /** (dev) quanto a cena gasta por quadro */
   | { tipo: "diag" }
+  /** (dev) pula o roteiro da geração pra `t` s */
+  | { tipo: "saltar"; t: number }
   | { tipo: "fim" };
 
 export type DaCena =
   | { tipo: "estado"; estado: "carregando" | "pronto" | "erro" }
-  | { tipo: "diag"; quadros: number; msPorQuadro: number; fps: number };
+  | { tipo: "diag"; quadros: number; msPorQuadro: number; fps: number; sequencias?: Record<string, unknown> };
