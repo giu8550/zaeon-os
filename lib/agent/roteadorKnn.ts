@@ -59,9 +59,12 @@ export const EXEMPLOS: Readonly<Record<IntentId, readonly string[]>> = {
 export type VotoKnn = { intent: IntentId; confianca: number; margem: number; vizinhos: { intent: IntentId; sim: number }[] };
 export type IndiceKnn = { versao: string; itens: { intent: IntentId; vetor: number[] }[] };
 
-/** quando o kNN decide sozinho. Calibrado (out/2026, 41 perguntas rotuladas, embedding real): 0.7/0.34 → decide
- *  sozinho em 54% com 100% de acerto (0.8 → só 20%). Ajuste fino em prod: ROTEADOR_KNN_CONFIANCA / ROTEADOR_KNN_MARGEM. */
-export const LIMIAR_CONFIANCA = 0.7, LIMIAR_MARGEM = 0.34, K = 5;
+/** quando o kNN decide sozinho. Calibrado em prod (out/2026, 48 perguntas rotuladas, embedding real): com o voto
+ *  exponencial, 0.65/0.25 → decide sozinho em ~77% com 100% de acerto (0.6/0.2 → 85%; os erros brutos têm margem ≤ 0,09).
+ *  Ajuste fino em prod: ROTEADOR_KNN_CONFIANCA / ROTEADOR_KNN_MARGEM. */
+export const LIMIAR_CONFIANCA = 0.65, LIMIAR_MARGEM = 0.25, K = 5;
+/** a "temperatura" do voto: cada vizinho pesa exp((sim − sim do mais perto)/T) — o quase-idêntico manda */
+export const TEMPERATURA = 0.1;
 const numEnv = (v: string | undefined, padrao: number) => { const n = Number(v); return v && Number.isFinite(n) && n > 0 && n < 1 ? n : padrao; };
 
 export const versaoDosExemplos = (): string => {
@@ -76,12 +79,17 @@ const cosseno = (a: number[], b: number[]) => {
   return na && nb ? d / Math.sqrt(na * nb) : 0;
 };
 
-/** o voto dos K vizinhos mais parecidos, ponderado pela similaridade. `margem` = a fatia do voto do 1º menos a do 2º. */
+/**
+ * O voto dos K vizinhos mais parecidos. Peso EXPONENCIAL relativo ao mais perto (exp((sim − top)/T)): na soma simples,
+ * a pergunta idêntica a um exemplo (sim 1,0) perdia pra três exemplos medianos de outra intenção ("o que é mitose?" →
+ * gerar_artefato por causa de "gera um fluxograma da mitose", medido em prod). `margem` = a fatia do 1º menos a do 2º.
+ */
 export function votar(vetor: number[], indice: IndiceKnn, k = K): VotoKnn | null {
   if (!indice.itens.length) return null;
   const viz = indice.itens.map((x) => ({ intent: x.intent, sim: cosseno(vetor, x.vetor) })).sort((a, b) => b.sim - a.sim).slice(0, k);
+  const topo = viz[0]!.sim;
   const peso = new Map<IntentId, number>(); let total = 0;
-  for (const v of viz) { const p = Math.max(0, v.sim); peso.set(v.intent, (peso.get(v.intent) ?? 0) + p); total += p; }
+  for (const v of viz) { const p = Math.exp((v.sim - topo) / TEMPERATURA); peso.set(v.intent, (peso.get(v.intent) ?? 0) + p); total += p; }
   const rank = [...peso].sort((a, b) => b[1] - a[1]);
   if (!rank.length || !total) return null;
   const [intent, p1] = rank[0]!, p2 = rank[1]?.[1] ?? 0;

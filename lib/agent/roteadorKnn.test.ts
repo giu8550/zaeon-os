@@ -57,3 +57,14 @@ describe("confiante — limiares por env", () => {
     expect(confiante(v, { ROTEADOR_KNN_CONFIANCA: "abc" })).toBe(true);
   });
 });
+
+describe("votar — o quase-idêntico manda (regressão medida em prod)", () => {
+  it("1 exemplo idêntico vence 3 medianos de outra intenção (\"o que é mitose?\" × \"gera um fluxograma da mitose\")", () => {
+    const ind: IndiceKnn = { versao: "t", itens: [
+      { intent: "explicar_conceito", vetor: [1, 0] }, { intent: "explicar_conceito", vetor: [0.6, 0.8] },
+      { intent: "gerar_artefato", vetor: [0.78, 0.626] }, { intent: "gerar_artefato", vetor: [0.78, 0.626] }, { intent: "gerar_artefato", vetor: [0.78, 0.626] },
+    ] };
+    const v = votar([1, 0], ind, 5)!;
+    expect(v.intent).toBe("explicar_conceito"); expect(v.confianca).toBeCloseTo(1, 5); expect(confiante(v, {})).toBe(true);
+  });
+});
