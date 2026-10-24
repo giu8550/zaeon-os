@@ -24,6 +24,14 @@ export type Progresso = { fase: string; rotulo: string };
 export const FASE_MODELO = "modelo";
 
 /**
+ * Evento ESPECIAL: a PRÉVIA da resposta (out/2026, "as respostas estão lentas" — o texto só aparecia no fim do turno
+ * inteiro). Enquanto o rascunho é gerado, o servidor manda o texto do `nucleo` em PEDAÇOS (cada evento = o trecho
+ * novo); o chat concatena e mostra como texto sendo escrito. A resposta estruturada do fim substitui a prévia.
+ * Não é fase — `faseCorrente` o ignora; o rótulo NÃO é aparado (os espaços entre pedaços são texto).
+ */
+export const FASE_PREVIA = "previa";
+
+/**
  * As sentinelas que encerram o progresso. Depois de qualquer uma delas vem o payload
  * final, e lá dentro `@@PROGRESS@@` é CONTEÚDO, não protocolo — o aluno pode ter escrito
  * isso na pergunta, e a resposta pode citá-lo de volta.
@@ -38,7 +46,7 @@ export const TERMINAIS = ["@@STRUCTURED@@", "@@STUDIO_ACTION@@", "@@RESEARCH_ACT
  * O recado não se perde: ele continua chegando, com o rótulo certo da fase.
  */
 const FASES = new Set([
-  "acordar", "memoria", "route", "plan", "gather", "reason", "draft", "critique", "finalize", FASE_MODELO,
+  "acordar", "memoria", "route", "plan", "gather", "reason", "draft", "critique", "finalize", FASE_MODELO, FASE_PREVIA,
 ]);
 
 /** Lado servidor: um evento pronto pro fio. */
@@ -50,6 +58,7 @@ export function serializarProgresso(p: Progresso): string {
 function lerEvento(cru: string): Progresso | null {
   try {
     const o = JSON.parse(cru);
+    if (o?.fase === FASE_PREVIA) return typeof o?.rotulo === "string" && o.rotulo ? { fase: FASE_PREVIA, rotulo: o.rotulo } : null;
     const rotulo = typeof o?.rotulo === "string" ? o.rotulo.trim() : "";
     if (!rotulo) return null;
     return { fase: typeof o?.fase === "string" ? o.fase : "", rotulo };
@@ -108,10 +117,22 @@ export function separarProgresso(
   return { limpo: limpo + cauda, eventos };
 }
 
-/** A fase corrente é a última que chegou (o evento de modelo não conta). Sem evento nenhum, não há fase. */
+/** A fase corrente é a última que chegou (os eventos de modelo e de prévia não contam). Sem evento nenhum, não há fase. */
 export function faseCorrente(eventos: readonly Progresso[]): Progresso | null {
-  for (let i = eventos.length - 1; i >= 0; i--) if (eventos[i].fase !== FASE_MODELO) return eventos[i];
+  for (let i = eventos.length - 1; i >= 0; i--) if (eventos[i].fase !== FASE_MODELO && eventos[i].fase !== FASE_PREVIA) return eventos[i];
   return null;
+}
+
+/** Lado servidor: um PEDAÇO novo da prévia pro fio. */
+export function serializarPrevia(pedaco: string): string {
+  return PROGRESS_SENTINEL + JSON.stringify({ fase: FASE_PREVIA, rotulo: pedaco }) + "\n";
+}
+
+/** Lado cliente: a prévia inteira até agora (os pedaços, em ordem), ou "" se não veio nenhum. */
+export function previaDoTurno(eventos: readonly Progresso[]): string {
+  let s = "";
+  for (const e of eventos) if (e.fase === FASE_PREVIA) s += e.rotulo;
+  return s;
 }
 
 /** Lado servidor: "quem respondeu" pro fio (nome pra tela, já resolvido por lib/chat/modelos). */

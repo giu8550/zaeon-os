@@ -6,7 +6,7 @@
  * (parseStructuredStream / sentinelas). A UI decide como mostrar: o desktop datilografa,
  * o mobile só pinta.
  */
-import { separarProgresso, faseCorrente, modeloDoTurno } from "@/lib/agent/progresso";
+import { separarProgresso, faseCorrente, modeloDoTurno, previaDoTurno } from "@/lib/agent/progresso";
 import { parseStructuredStream } from "@/lib/agent/structured-client";
 import { STUDIO_SENTINEL } from "@/lib/agent/chat-turn-wire";
 import { esperarTurno, TURNO_HEADER } from "@/lib/chat/turnoRetomavel";
@@ -22,6 +22,8 @@ export type AuraCallbacks = {
   onLimpo?: (limpo: string) => void;
   /** Quem respondeu DE VERDADE (o servidor manda no fim; nome pronto pra tela). */
   onModelo?: (nome: string) => void;
+  /** A PRÉVIA da resposta enquanto o rascunho é gerado (o texto acumulado); a resposta final a substitui. */
+  onPrevia?: (texto: string) => void;
   signal?: AbortSignal;
   /** Injetáveis pra teste. */
   fetch?: typeof fetch;
@@ -38,13 +40,14 @@ export const temPayload = (limpo: string): boolean =>
   !!parseStructuredStream(limpo) || limpo.includes(STUDIO_SENTINEL) || !!limpo.trim();
 
 /** Lê o corpo do stream separando progresso de conteúdo. */
-export async function lerStreamAura(body: ReadableStream<Uint8Array>, cb: Pick<AuraCallbacks, "onFase" | "onLimpo" | "onModelo"> = {}): Promise<string> {
+export async function lerStreamAura(body: ReadableStream<Uint8Array>, cb: Pick<AuraCallbacks, "onFase" | "onLimpo" | "onModelo" | "onPrevia"> = {}): Promise<string> {
   const reader = body.getReader();
   const dec = new TextDecoder();
   let acc = "";
   let limpo = "";
   let faseVista = "";
   let modeloVisto = "";
+  let previaVista = "";
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -57,6 +60,8 @@ export async function lerStreamAura(body: ReadableStream<Uint8Array>, cb: Pick<A
     const quem = modeloDoTurno(eventos);
     if (quem && quem !== modeloVisto) { modeloVisto = quem; cb.onModelo?.(quem); }
     cb.onLimpo?.(limpo);
+    const pv = previaDoTurno(eventos);
+    if (pv && pv !== previaVista) { previaVista = pv; cb.onPrevia?.(pv); }
   }
   return limpo;
 }
@@ -91,7 +96,11 @@ export async function pedirAura(pedido: AuraPedido, cb: AuraCallbacks = {}): Pro
   if (turnId && !temPayload(limpo)) {
     const res = await (cb.esperar ?? esperarTurno)(turnId, {
       cancelado: () => !!cb.signal?.aborted,
-      onParcial: (p) => { const fa = faseCorrente(separarProgresso(p).eventos); if (fa) cb.onFase?.(fa.rotulo); },
+      onParcial: (p) => {
+        const { eventos } = separarProgresso(p), fa = faseCorrente(eventos);
+        if (fa) cb.onFase?.(fa.rotulo);
+        const pv = previaDoTurno(eventos); if (pv) cb.onPrevia?.(pv);
+      },
     });
     if (res.tipo === "pronto") {
       const sep = separarProgresso(res.acumulado);

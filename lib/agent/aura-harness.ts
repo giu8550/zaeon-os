@@ -15,6 +15,7 @@
 import { diretrizDaSala, salaDoModo } from "@/lib/ai/salaPersona";
 import { GEMINI_MODEL_FLASH, GEMINI_MODEL_PRO } from "@/lib/ai/model";
 import { classify } from "@/lib/agent/router";
+import { previaDoRascunho } from "@/lib/agent/previa";
 import { STUDIO_KINDS } from "@/lib/agent/tools";
 import { runToolByName, type ToolContext, type ApproveFn } from "@/lib/agent/runtime";
 import { critiqueForState } from "@/lib/agent/examiner";
@@ -29,7 +30,7 @@ import { DIRETRIZ_MATEMATICA } from "@/lib/agent/matematica";
 import { diretrizLivros, markdownDosLivros, type LivroAchado } from "@/lib/livros/busca";
 import { anexarFontesBase, blocoDaBase } from "@/lib/rag/citar";
 
-type GenJson = <T>(system: string, user: string, opts?: { temperature?: number; model?: string; timeoutMs?: number; phase?: string }) => Promise<T>;
+type GenJson = <T>(system: string, user: string, opts?: { temperature?: number; model?: string; timeoutMs?: number; phase?: string; /** em stream: o JSON acumulado a cada pedaço */ onTexto?: (acumulado: string) => void }) => Promise<T>;
 
 export type HarnessOpts = {
   deepThink?: boolean;
@@ -52,6 +53,9 @@ export type HarnessOpts = {
   modelo?: string;
   /** Quem serviu cada chamada (o envelope pode cair na reserva): o turno mostra o da resposta no selo. */
   onModelo?: (m: { modelo: string; alvo?: string; phase?: string }) => void;
+  /** a PRÉVIA da resposta (out/2026): o texto do rascunho JÁ escrito, enquanto o modelo ainda gera (lib/agent/previa)
+   *  — com ele, o rascunho vai em stream. Acumulado, não pedaço. */
+  onPrevia?: (texto: string) => void;
 };
 
 type Observation = { tool: string; code?: string; error?: string };
@@ -66,13 +70,14 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 /** genJson default = envelope C5 com ledger + phase; acumula usage.total em `medido` (reconciliação do orçamento). */
 function envelopeGenJson(opts: HarnessOpts, medido: { total: number }): GenJson {
   return async (system, user, o) => {
-    const { gerarJsonRes } = await import("@/lib/llm/envelope");
+    const envelope = await import("@/lib/llm/envelope");
     const ledger = opts.ledger ?? { agentKey: "aura", surface: "estudos" as const };
-    const { valor, res } = await gerarJsonRes<any>({
+    const req = {
       system: opts.transformarSystem ? opts.transformarSystem(system) : system, user, json: true,
-      model: o?.model, temperature: o?.temperature, timeoutMs: o?.timeoutMs, rota: opts.rota ?? "vertex",
+      model: o?.model, temperature: o?.temperature, timeoutMs: o?.timeoutMs, rota: opts.rota ?? "vertex" as const,
       ctx: { ...ledger, phase: o?.phase ?? ledger.phase ?? null },
-    });
+    };
+    const { valor, res } = o?.onTexto ? await envelope.gerarJsonStreamRes<any>(req, o.onTexto) : await envelope.gerarJsonRes<any>(req);
     medido.total += res.usage.totalTokens;
     try { opts.onModelo?.({ modelo: res.modelo, alvo: res.alvo, phase: o?.phase }); } catch { /* selo é enfeite */ }
     return valor;
@@ -369,7 +374,9 @@ export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): Harn
         // trabalho completo (artigo/TCC inteiro em `work.sections`, às vezes a partir de um texto colado) não sai em 30 s:
         // o rascunho estourava o prazo e a Aura respondia "não consegui" — 90 s só pra criar_trabalho
         const prazo = st.intent === "criar_trabalho" ? 90_000 : 30_000;
-        const out = await genJson<Partial<StructuredAnswer>>(sys, user, { temperature: 0.4, model: modelFor(true), timeoutMs: prazo, phase: "draft" });
+        // a PRÉVIA: com quem a escute (o chat), o rascunho vai em stream e o texto do `nucleo` sai enquanto nasce
+        const onTexto = opts.onPrevia ? (acc: string) => { const t = previaDoRascunho(acc); if (t) opts.onPrevia!(t); } : undefined;
+        const out = await genJson<Partial<StructuredAnswer>>(sys, user, { temperature: 0.4, model: modelFor(true), timeoutMs: prazo, phase: "draft", onTexto });
         // fontes da base: o rodapé sai do código, só com trechos que a busca devolveu (o modelo só aponta os números)
         const comBase = anexarFontesBase(normalizeAnswer(out, st), opts.baseConhecimento, (out as any)?.citacoes_base);
         return anexarLivros(comBase, livrosAchados);

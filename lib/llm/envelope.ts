@@ -93,7 +93,9 @@ export function retryAfterDoPool(e: unknown, tentativa = 0): number {
 // ───────────────────────────── transportes (injetáveis p/ teste) ─────────────────────────────
 export type RespostaBruta = { texto: string; usage: Usage; finishReason?: string; modelo: string; modelId?: string | null };
 export type TransporteVertex = (req: GerarReq, modelo: string) => Promise<RespostaBruta>;
-export type Deps = { vertex?: TransporteVertex; fetchImpl?: typeof fetch; env?: Record<string, string | undefined>; registrar?: typeof registrarTokens; agora?: () => number };
+/** Transporte de STREAM do Vertex: chama `onTexto(acumulado)` a cada pedaço e devolve a resposta bruta final. */
+export type TransporteVertexStream = (req: GerarReq, modelo: string, onTexto: (acumulado: string) => void) => Promise<RespostaBruta>;
+export type Deps = { vertex?: TransporteVertex; vertexStream?: TransporteVertexStream; fetchImpl?: typeof fetch; env?: Record<string, string | undefined>; registrar?: typeof registrarTokens; agora?: () => number };
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.SCHOLAR_GEMINI_TIMEOUT_MS || 30_000);
 
@@ -117,6 +119,33 @@ const vertexReal: TransporteVertex = async (req, modelo) => {
     finishReason: result?.response?.candidates?.[0]?.finishReason,
     modelo,
   };
+};
+
+/** Vertex direto EM STREAM (o rascunho do chat — a prévia da resposta): mesmas opções do vertexReal; as partes de
+ *  "pensamento" do modelo ficam de fora (como no extractText). */
+const vertexStreamReal: TransporteVertexStream = async (req, modelo, onTexto) => {
+  const { makeVertex, withTimeout } = await import("@/lib/scholar/gemini");
+  const model = makeVertex().getGenerativeModel({
+    model: modelo,
+    generationConfig: {
+      temperature: req.temperature ?? (req.json ? 0.2 : 0.5),
+      ...(req.json ? { responseMimeType: "application/json" } : {}),
+      ...(req.maxOutputTokens ? { maxOutputTokens: req.maxOutputTokens } : {}),
+    },
+    ...(req.system ? { systemInstruction: { role: "system", parts: [{ text: req.system }] } } : {}),
+  });
+  const contents = contentsDe(req).map((m) => ({ role: m.role, parts: [{ text: m.text }] }));
+  const prazo = req.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const r: any = await withTimeout(model.generateContentStream({ contents }), prazo, "Gemini");
+  let acc = "";
+  await withTimeout((async () => {
+    for await (const ch of r.stream) {
+      const t = (ch?.candidates?.[0]?.content?.parts ?? []).filter((p: any) => p && !p.thought).map((p: any) => (typeof p.text === "string" ? p.text : "")).join("");
+      if (t) { acc += t; onTexto(acc); }
+    }
+  })(), prazo, "Gemini (stream)");
+  const final: any = await r.response;
+  return { texto: acc.trim(), usage: usageDoVertex(final?.usageMetadata), finishReason: final?.candidates?.[0]?.finishReason, modelo };
 };
 
 async function viaGateway(req: GerarReq, modelo: string, url: string, key: string, f: typeof fetch): Promise<RespostaBruta> {
@@ -273,7 +302,35 @@ export async function gerar(req: GerarReq, deps: Deps = {}): Promise<GerarRes> {
 
 /** = gerar({json:true}) + parse, devolvendo TAMBÉM a resposta bruta (usage) — para quem reconcilia orçamento. */
 export async function gerarJsonRes<T>(req: GerarReq, deps: Deps = {}): Promise<{ valor: T; res: GerarRes }> {
-  const res = await gerar({ ...req, json: true }, deps);
+  return parsearJsonRes<T>(await gerar({ ...req, json: true }, deps));
+}
+
+/**
+ * = gerarJsonRes, mas EM STREAM (out/2026, "as respostas estão lentas"): `onTexto(acumulado)` recebe o JSON ainda
+ * incompleto a cada pedaço — o rascunho do chat tira dali a PRÉVIA da resposta (lib/agent/previa). Só no Vertex
+ * direto (o caminho do chat); gateway/pool/Contabo seguem pela chamada normal. O stream falhou (antes ou no meio) ou
+ * voltou vazio → a chamada normal responde, COM a reserva HF de sempre (a prévia já mostrada fica até o final
+ * substituí-la). O ledger grava igual ao gerar.
+ */
+export async function gerarJsonStreamRes<T>(req: GerarReq, onTexto: (acumulado: string) => void, deps: Deps = {}): Promise<{ valor: T; res: GerarRes }> {
+  const env = deps.env ?? process.env;
+  const modelo = req.model || GEMINI_MODEL_FLASH;
+  if ((req.rota === "gateway" && gatewayLigado(env)) || ehModeloPool(modelo) || ehModeloLocal(modelo)) return gerarJsonRes<T>(req, deps);
+  const agora = deps.agora ?? Date.now, registrar = deps.registrar ?? registrarTokens, ini = agora();
+  let r: RespostaBruta;
+  try {
+    r = await (deps.vertexStream ?? vertexStreamReal)({ ...req, json: true }, modelo, (acc) => { try { onTexto(acc); } catch { /* a prévia é enfeite */ } });
+  } catch (e) {
+    void registrar({ ...req.ctx, model: modelo, provedor: "vertex", rota: "vertex", usage: USAGE_VAZIO, ms: agora() - ini, ok: false, erro: classificarErroLlm(e), alvo: "vertex", jsonValido: null }).catch(() => undefined);
+    return gerarJsonRes<T>(req, deps);
+  }
+  if (!r.texto.trim()) return gerarJsonRes<T>(req, deps);   // vazio (safety/MAX_TOKENS): a chamada normal tenta a reserva
+  const jv = textoJsonValido(r.texto);
+  void registrar({ ...req.ctx, model: r.modelo, provedor: "vertex", rota: "vertex", usage: r.usage, ms: agora() - ini, ok: true, erro: null, alvo: "vertex", jsonValido: jv }).catch(() => undefined);
+  return parsearJsonRes<T>({ texto: r.texto, usage: r.usage, modelo: r.modelo, provedor: "vertex", rota: "vertex", finishReason: r.finishReason, ms: agora() - ini, alvo: "vertex", jsonValido: jv });
+}
+
+function parsearJsonRes<T>(res: GerarRes): { valor: T; res: GerarRes } {
   const cleaned = res.texto.replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
   if (!cleaned) throw new ErroLlm("outro", res.provedor, new Error(`Gemini retornou resposta vazia (finishReason=${res.finishReason ?? "?"})`));
   // LaTeX com UMA barra dentro do JSON ("$\frac{a}{b}$", "$\rightarrow$") viraria form feed/retorno de carro no

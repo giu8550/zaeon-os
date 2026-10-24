@@ -954,6 +954,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
 
     try {
       let target = "";       // parte VISÍVEL alvo (sem a sentinela)
+      let previa = "";       // a prévia do rascunho (lib/agent/previa) — o texto enquanto o turno ainda roda
       let shown = 0;         // quantas letras já reveladas
       let ended = false;
       pararDatilografia = () => { ended = true; };
@@ -1017,7 +1018,10 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           crono.sinal();
           const cut = [limpo.indexOf(STUDIO_SENTINEL), limpo.indexOf(STRUCTURED_SENTINEL)].filter((i) => i >= 0);
           target = cut.length ? limpo.slice(0, Math.min(...cut)) : limpo;   // datilografa só o visível
+          if (!target && previa) target = previa;   // (o turno do harness não manda texto solto: a prévia segue na tela)
         },
+        // a PRÉVIA da resposta (o rascunho enquanto nasce): datilografa na bolha; a resposta estruturada do fim a substitui
+        onPrevia: (texto) => { crono.sinal(); previa = texto; target = texto; },
       });
 
       crono.recebido(res.ok ? res.limpo.length : 0);
