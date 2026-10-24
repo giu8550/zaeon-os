@@ -31,7 +31,7 @@ import { DIRETRIZ_MATEMATICA } from "@/lib/agent/matematica";
 import { diretrizLivros, markdownDosLivros, type LivroAchado } from "@/lib/livros/busca";
 import { anexarFontesBase, blocoDaBase } from "@/lib/rag/citar";
 
-type GenJson = <T>(system: string, user: string, opts?: { temperature?: number; model?: string; timeoutMs?: number; phase?: string; /** em stream: o JSON acumulado a cada pedaço */ onTexto?: (acumulado: string) => void; /** o pensar desta fase (lib/llm/pensar) */ pensar?: NivelPensar }) => Promise<T>;
+type GenJson = <T>(system: string, user: string, opts?: { temperature?: number; model?: string; timeoutMs?: number; phase?: string; /** em stream: o JSON acumulado a cada pedaço */ onTexto?: (acumulado: string) => void; /** o pensar desta fase (lib/llm/pensar) */ pensar?: NivelPensar; /** stream: sem o 1º pedaço nesse prazo → reserva */ prazoPrimeiroMs?: number }) => Promise<T>;
 
 export type HarnessOpts = {
   deepThink?: boolean;
@@ -75,7 +75,7 @@ function envelopeGenJson(opts: HarnessOpts, medido: { total: number }): GenJson 
     const ledger = opts.ledger ?? { agentKey: "aura", surface: "estudos" as const };
     const req = {
       system: opts.transformarSystem ? opts.transformarSystem(system) : system, user, json: true,
-      model: o?.model, temperature: o?.temperature, timeoutMs: o?.timeoutMs, rota: opts.rota ?? "vertex" as const, pensar: o?.pensar,
+      model: o?.model, temperature: o?.temperature, timeoutMs: o?.timeoutMs, rota: opts.rota ?? "vertex" as const, pensar: o?.pensar, prazoPrimeiroMs: o?.prazoPrimeiroMs,
       ctx: { ...ledger, phase: o?.phase ?? ledger.phase ?? null },
     };
     const { valor, res } = o?.onTexto ? await envelope.gerarJsonStreamRes<any>(req, o.onTexto) : await envelope.gerarJsonRes<any>(req);
@@ -265,6 +265,18 @@ export function normalizeAnswer(out: Partial<StructuredAnswer> | null | undefine
   return answer;
 }
 
+/**
+ * Prazo até a 1ª palavra do rascunho (só no stream): passou disso sem texto, a reserva assume — antes a falha custava o
+ * prazo inteiro (30 s; 9% dos rascunhos em 7 dias). Medido em prod: 1ª palavra 0,86–1,2 s (minimal) e ~4,1 s (low).
+ * Env: PRAZO_1A_PALAVRA_RAPIDO_MS · PRAZO_1A_PALAVRA_MS · PRAZO_1A_PALAVRA_TRABALHO_MS.
+ */
+export function prazoPrimeiraPalavra(st: { mode: string; intent: string }, env: Record<string, string | undefined> = process.env): number {
+  const n = (v: string | undefined, p: number) => { const x = Number(v); return Number.isFinite(x) && x > 0 ? x : p; };
+  if (st.mode === "quick") return n(env.PRAZO_1A_PALAVRA_RAPIDO_MS, 5_000);
+  if (st.intent === "criar_trabalho") return n(env.PRAZO_1A_PALAVRA_TRABALHO_MS, 20_000);
+  return n(env.PRAZO_1A_PALAVRA_MS, 12_000);
+}
+
 // ───────────────────────────── o adaptador ─────────────────────────────
 export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): HarnessDeps {
   const medido = { total: 0 }; // C5: tokens REAIS somados neste turno (HarnessDeps.usoMedido)
@@ -377,7 +389,7 @@ export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): Harn
         const prazo = st.intent === "criar_trabalho" ? 90_000 : 30_000;
         // a PRÉVIA: com quem a escute (o chat), o rascunho vai em stream e o texto do `nucleo` sai enquanto nasce
         const onTexto = opts.onPrevia ? (acc: string) => { const t = previaDoRascunho(acc); if (t) opts.onPrevia!(t); } : undefined;
-        const out = await genJson<Partial<StructuredAnswer>>(sys, user, { temperature: 0.4, model: modelFor(true), timeoutMs: prazo, phase: "draft", onTexto, pensar: pensarDa(st.mode === "quick" ? "draft_rapido" : "draft") });
+        const out = await genJson<Partial<StructuredAnswer>>(sys, user, { temperature: 0.4, model: modelFor(true), timeoutMs: prazo, phase: "draft", onTexto, pensar: pensarDa(st.mode === "quick" ? "draft_rapido" : "draft"), prazoPrimeiroMs: prazoPrimeiraPalavra(st) });
         // fontes da base: o rodapé sai do código, só com trechos que a busca devolveu (o modelo só aponta os números)
         const comBase = anexarFontesBase(normalizeAnswer(out, st), opts.baseConhecimento, (out as any)?.citacoes_base);
         return anexarLivros(comBase, livrosAchados);

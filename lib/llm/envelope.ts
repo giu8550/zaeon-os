@@ -33,6 +33,9 @@ export type GerarReq = {
   rota?: Rota;
   /** Quantas vezes a fila já tentou este job (0 = primeira). Só entra no backoff do PoolEsgotadoError. */
   tentativa?: number;
+  /** Só no stream do Vertex: sem o 1º pedaço de texto nesse prazo, desiste (e a reserva assume) — o prazo TOTAL
+   *  (timeoutMs) continua valendo depois. Medido em prod: falha de rascunho custava o prazo inteiro (30 s). */
+  prazoPrimeiroMs?: number;
   /** O "pensar" do modelo nesta chamada (lib/llm/pensar). Ausente = o padrão do modelo. Só no Vertex direto. */
   pensar?: import("@/lib/llm/pensar").NivelPensar;
   /** Só na rota gateway: campos a mais no corpo OpenAI (ex.: reasoning_effort dos modelos da Contabo). */
@@ -97,7 +100,30 @@ export type RespostaBruta = { texto: string; usage: Usage; finishReason?: string
 export type TransporteVertex = (req: GerarReq, modelo: string) => Promise<RespostaBruta>;
 /** Transporte de STREAM do Vertex: chama `onTexto(acumulado)` a cada pedaço e devolve a resposta bruta final. */
 export type TransporteVertexStream = (req: GerarReq, modelo: string, onTexto: (acumulado: string) => void) => Promise<RespostaBruta>;
-export type Deps = { vertex?: TransporteVertex; vertexStream?: TransporteVertexStream; fetchImpl?: typeof fetch; env?: Record<string, string | undefined>; registrar?: typeof registrarTokens; agora?: () => number };
+export type Deps = { vertex?: TransporteVertex; vertexStream?: TransporteVertexStream; fetchImpl?: typeof fetch; env?: Record<string, string | undefined>; registrar?: typeof registrarTokens; agora?: () => number;
+  /** o Vertex ACABOU de falhar neste mesmo pedido (o stream): tenta a reserva antes de chamá-lo de novo */
+  pularVertex?: boolean };
+
+// ───────────────────────────── disjuntor do Vertex ─────────────────────────────
+// Medido em prod (out/2026, 7 dias): 9% dos rascunhos falharam, cada falha custando o prazo inteiro (30 s) ANTES de a
+// reserva começar. Várias falhas seguidas = o Vertex está engasgado: os próximos pedidos vão direto pra reserva por um
+// tempo, sem pagar o prazo de novo. Só pula o Vertex se a reserva estiver ligada e responder.
+const FALHAS_QUE_CONTAM = new Set<ClasseErroLlm>(["timeout", "rate_limit", "cota_esgotada", "provedor_fora"]);
+const numEnv = (v: string | undefined, padrao: number) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : padrao; };
+const disjuntorVertex = { falhas: [] as number[], abertoAte: 0 };
+function falhaNoVertex(classe: ClasseErroLlm, agora: number, env: Record<string, string | undefined>): void {
+  if (!FALHAS_QUE_CONTAM.has(classe)) return;
+  const janela = numEnv(env.VERTEX_DISJUNTOR_JANELA_MS, 60_000);
+  disjuntorVertex.falhas = [...disjuntorVertex.falhas.filter((t) => agora - t < janela), agora];
+  if (disjuntorVertex.falhas.length >= numEnv(env.VERTEX_DISJUNTOR_FALHAS, 3)) {
+    disjuntorVertex.abertoAte = agora + numEnv(env.VERTEX_DISJUNTOR_PAUSA_MS, 30_000);
+    disjuntorVertex.falhas = [];
+    console.warn("[llm] disjuntor do Vertex ABERTO — reserva direto por um tempo");
+  }
+}
+export const vertexEngasgado = (agora: number = Date.now()) => agora < disjuntorVertex.abertoAte;
+/** (testes) fecha o disjuntor */
+export const _zerarDisjuntorVertex = () => { disjuntorVertex.falhas = []; disjuntorVertex.abertoAte = 0; };
 
 const DEFAULT_TIMEOUT_MS = Number(process.env.SCHOLAR_GEMINI_TIMEOUT_MS || 30_000);
 
@@ -125,6 +151,37 @@ const vertexReal: TransporteVertex = async (req, modelo) => {
   };
 };
 
+/**
+ * Lê o stream do Gemini com DOIS prazos: até o 1º pedaço de texto (`prazoPrimeiroMs`, opcional) e o total. As partes
+ * de "pensamento" ficam de fora. Estourou: lança "timeout" (e o stream abandonado não vira unhandled rejection).
+ */
+export async function lerStreamComPrazos(
+  abrir: () => Promise<{ stream: AsyncIterable<any>; response?: Promise<any> }>,
+  onTexto: (acumulado: string) => void, prazoPrimeiroMs: number | undefined, prazoMs: number,
+): Promise<{ r: any; acc: string }> {
+  const withTimeout = <T,>(p: Promise<T>, ms: number, label: string) => new Promise<T>((ok, erro) => {
+    const t = setTimeout(() => erro(new Error(`${label} timeout (${ms}ms)`)), ms);
+    p.then((v) => { clearTimeout(t); ok(v); }, (e) => { clearTimeout(t); erro(e); });
+  });
+  let acc = "";
+  let tPrimeiro: ReturnType<typeof setTimeout> | undefined;
+  const semPrimeiro = prazoPrimeiroMs
+    ? new Promise<never>((_, rej) => { tPrimeiro = setTimeout(() => rej(new Error(`Gemini timeout: sem o 1º pedaço em ${prazoPrimeiroMs}ms`)), prazoPrimeiroMs); })
+    : null;
+  semPrimeiro?.catch(() => undefined);
+  const consumir = (async () => {
+    const r = await abrir();
+    for await (const ch of r.stream) {
+      const t = (ch?.candidates?.[0]?.content?.parts ?? []).filter((p: any) => p && !p.thought).map((p: any) => (typeof p.text === "string" ? p.text : "")).join("");
+      if (t) { if (tPrimeiro) { clearTimeout(tPrimeiro); tPrimeiro = undefined; } acc += t; onTexto(acc); }
+    }
+    return r;
+  })();
+  consumir.catch(() => undefined);   // abandonado no prazo: o erro tardio não vira unhandled rejection
+  try { return { r: await withTimeout(semPrimeiro ? Promise.race([consumir, semPrimeiro]) : consumir, prazoMs, "Gemini (stream)"), acc }; }
+  finally { if (tPrimeiro) clearTimeout(tPrimeiro); }
+}
+
 /** Vertex direto EM STREAM (o rascunho do chat — a prévia da resposta): mesmas opções do vertexReal; as partes de
  *  "pensamento" do modelo ficam de fora (como no extractText). */
 const vertexStreamReal: TransporteVertexStream = async (req, modelo, onTexto) => {
@@ -142,14 +199,7 @@ const vertexStreamReal: TransporteVertexStream = async (req, modelo, onTexto) =>
   });
   const contents = contentsDe(req).map((m) => ({ role: m.role, parts: [{ text: m.text }] }));
   const prazo = req.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const r: any = await withTimeout(model.generateContentStream({ contents }), prazo, "Gemini");
-  let acc = "";
-  await withTimeout((async () => {
-    for await (const ch of r.stream) {
-      const t = (ch?.candidates?.[0]?.content?.parts ?? []).filter((p: any) => p && !p.thought).map((p: any) => (typeof p.text === "string" ? p.text : "")).join("");
-      if (t) { acc += t; onTexto(acc); }
-    }
-  })(), prazo, "Gemini (stream)");
+  const { r, acc } = await lerStreamComPrazos(() => model.generateContentStream({ contents }), onTexto, req.prazoPrimeiroMs, prazo);
   const final: any = await r.response;
   return { texto: acc.trim(), usage: usageDoVertex(final?.usageMetadata), finishReason: final?.candidates?.[0]?.finishReason, modelo };
 };
@@ -290,6 +340,9 @@ export async function gerar(req: GerarReq, deps: Deps = {}): Promise<GerarRes> {
     return null;
   };
 
+  // o Vertex acabou de falhar neste pedido (stream) ou está engasgado: a reserva vai primeiro (se responder, pronto)
+  if (deps.pularVertex || vertexEngasgado(agora())) { const hf = await reservaHf(); if (hf) return hf; }
+
   try {
     const r = await (deps.vertex ?? vertexReal)(req, modelo);
     const jv = jsonValido(r.texto);
@@ -301,6 +354,7 @@ export async function gerar(req: GerarReq, deps: Deps = {}): Promise<GerarRes> {
   } catch (e) {
     const classe = classificarErroLlm(e);
     gravar("vertex", rota, USAGE_VAZIO, false, classe, modelo, "vertex");
+    falhaNoVertex(classe, agora(), env);
     if (erroPedeReserva(classe)) { const hf = await reservaHf(); if (hf) return hf; }
     throw new ErroLlm(classe, "vertex", e);
   }
@@ -327,8 +381,11 @@ export async function gerarJsonStreamRes<T>(req: GerarReq, onTexto: (acumulado: 
   try {
     r = await (deps.vertexStream ?? vertexStreamReal)({ ...req, json: true }, modelo, (acc) => { try { onTexto(acc); } catch { /* a prévia é enfeite */ } });
   } catch (e) {
-    void registrar({ ...req.ctx, model: modelo, provedor: "vertex", rota: "vertex", usage: USAGE_VAZIO, ms: agora() - ini, ok: false, erro: classificarErroLlm(e), alvo: "vertex", jsonValido: null }).catch(() => undefined);
-    return gerarJsonRes<T>(req, deps);
+    const classe = classificarErroLlm(e);
+    void registrar({ ...req.ctx, model: modelo, provedor: "vertex", rota: "vertex", usage: USAGE_VAZIO, ms: agora() - ini, ok: false, erro: classe, alvo: "vertex", jsonValido: null }).catch(() => undefined);
+    falhaNoVertex(classe, agora(), env);
+    // antes: chamava o Vertex DE NOVO (sem stream, mais um prazo inteiro) e só então a reserva — medido: ~31 s
+    return gerarJsonRes<T>(req, erroPedeReserva(classe) ? { ...deps, pularVertex: true } : deps);
   }
   if (!r.texto.trim()) return gerarJsonRes<T>(req, deps);   // vazio (safety/MAX_TOKENS): a chamada normal tenta a reserva
   const jv = textoJsonValido(r.texto);
