@@ -20,6 +20,7 @@ import RostoDaAba from "@/components/agents/avatar/RostoDaAba";
 import SeletorDeAgente from "@/components/agents/SeletorDeAgente";
 import OctaIcon from "@/components/octa/OctaIcon";
 import { agenteChat, agentesDisponiveis, agenteValido, type AgenteChatId } from "@/lib/agents/chatAgentes";
+import { avisarPersona } from "@/lib/research/zaeonEventos";
 import { usePluginsChat } from "@/lib/plugins/chatPlugins";
 import { usePresenca } from "@/components/agents/avatar/hooks";
 import { EVT_ESTUDOS_ABA, abaEstudosAtual, irPraAbaEstudos, type AbaEstudos } from "@/lib/chat/conversasNav";
@@ -838,7 +839,8 @@ export default function HomeworkPage({
   useEffect(() => {
     let salvo: string | null = null;
     try { salvo = localStorage.getItem("zaeon.lab.agente"); } catch { /* storage bloqueado: fica a Aura */ }
-    setAgenteId(agenteValido(salvo, agentesPlugados));
+    const valido = agenteValido(salvo, agentesPlugados);
+    setAgenteId(valido); avisarPersona(valido);   // o avatar do painel dos documentos é o do agente (o Octa: nenhum)
   }, [agentesPlugados]);
   const agente = agenteChat(agenteId);
   // "octa" não passa pelo setActiveTab (que só aceita as abas de link/restauração): a IDE só abre por aqui.
@@ -852,6 +854,7 @@ export default function HomeworkPage({
     await new Promise((r) => setTimeout(r, Math.max(0, 450 - (Date.now() - t0))));
     setAgenteId(id);
     try { localStorage.setItem("zaeon.lab.agente", id); } catch { /* */ }
+    avisarPersona(id);
     abrirAgente(agenteChat(id));
     setTrocandoPara(null);
   };
@@ -2712,7 +2715,7 @@ export default function HomeworkPage({
             <button
               data-tour="estudos"
               onClick={() => abrirAgente()}
-              title={trocandoPara ? `Trocando para ${agenteChat(trocandoPara).nome}…` : agente.id === "aura" && agenteProcessando ? `${agente.nome} está respondendo…` : `Conversar com ${agente.nome}`}
+              title={trocandoPara ? `Trocando para ${agenteChat(trocandoPara).nome}…` : agente.tela === "chat" && agenteProcessando ? `${agente.nome} está respondendo…` : `Conversar com ${agente.nome}`}
               className={`${navItem(agente.tela === "ide" ? activeTab === "octa" : activeTab === "sala-de-estudos" && abaEstudos === "meus-estudos", "blue")} ${pill(sidebarAberta)} !p-[7px]`}
             >
               {/* o ROSTO: clicar nele abre o seletor de agente (o resto da pill abre a conversa do agente atual) */}
@@ -2725,12 +2728,15 @@ export default function HomeworkPage({
                 title="Trocar de agente"
                 onClick={(e) => { e.stopPropagation(); setSeletorAgente(seletorAgente ? null : e.currentTarget.getBoundingClientRect()); }}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); setSeletorAgente(e.currentTarget.getBoundingClientRect()); } }}
-                className={`relative grid place-items-center shrink-0 w-[22px] h-[22px] rounded-full cursor-pointer hover:ring-2 hover:ring-cyan-300/70 ${agente.id === "aura" && agenteProcessando && !trocandoPara ? "ring-2 ring-cyan-300/80 shadow-[0_0_14px_rgba(34,211,238,0.85)] motion-safe:animate-pulse" : ""}`}
+                className={`relative grid place-items-center shrink-0 w-[22px] h-[22px] rounded-full cursor-pointer hover:ring-2 hover:ring-cyan-300/70 ${agente.tela === "chat" && agenteProcessando && !trocandoPara ? "ring-2 ring-cyan-300/80 shadow-[0_0_14px_rgba(34,211,238,0.85)] motion-safe:animate-pulse" : ""}`}
               >
                 {trocandoPara ? (
                   <Loader2 className="w-[18px] h-[18px] animate-spin text-cyan-500 dark:text-cyan-300" aria-label="Trocando de agente" />
                 ) : agente.id === "octa" ? (
                   <OctaIcon size={22} className="text-cyan-700 dark:text-cyan-200" />
+                ) : agente.id !== "aura" ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={`/avatars/${agente.id}/idle.sm.webp`} alt="" width={22} height={22} className="h-[22px] w-[22px] rounded-full object-cover object-top" />
                 ) : (
                   <RostoDaAba agentId={AGENTE_CHAT.id} nome={AGENTE_CHAT.nome} ativa={activeTab === "sala-de-estudos" && abaEstudos === "meus-estudos"} size={22}>
                     <span className="text-[13px] leading-none text-cyan-500 dark:text-cyan-300">⟁</span>
@@ -2738,7 +2744,7 @@ export default function HomeworkPage({
                 )}
               </span>
               <Rotulo v={sidebarAberta}>
-                <span className={agente.id === "aura" && agenteProcessando ? "nome-agente-brilhando" : "normal-case text-[12px] tracking-wide"}>{trocandoPara ? agenteChat(trocandoPara).nome : agente.nome}</span>
+                <span className={agente.tela === "chat" && agenteProcessando ? "nome-agente-brilhando" : "normal-case text-[12px] tracking-wide"}>{trocandoPara ? agenteChat(trocandoPara).nome : agente.nome}</span>
               </Rotulo>
             </button>
             {seletorAgente && (
@@ -2746,7 +2752,8 @@ export default function HomeworkPage({
                 ancora={seletorAgente}
                 agentes={agentesDisponiveis(agentesPlugados)}
                 atual={agente.id}
-                icone={(id) => (id === "octa" ? <OctaIcon size={20} /> : <span className="text-[14px] leading-none">⟁</span>)}
+                // eslint-disable-next-line @next/next/no-img-element
+                icone={(id) => (id === "octa" ? <OctaIcon size={20} /> : <img src={`/avatars/${id}/idle.sm.webp`} alt="" width={32} height={32} className="h-8 w-8 rounded-full object-cover object-top" />)}
                 onEscolher={(id) => void trocarAgente(id)}
                 onFechar={() => setSeletorAgente(null)}
               />

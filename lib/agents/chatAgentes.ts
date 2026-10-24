@@ -1,11 +1,12 @@
 /**
  * lib/agents/chatAgentes.ts — os agentes que ocupam a aba de conversa do lab (o rosto na sidebar). Clicar no rosto
- * abre o seletor; cada agente tem a SUA tela: a Aura é o chat da Sala de Estudos, o Octa Code é a IDE dele.
+ * abre o seletor; cada agente tem a SUA tela: a Aura, a Zenita e a Nina são o chat da Sala de Estudos (cada uma com o
+ * seu AVATAR no painel dos documentos — lib/research/zaeonEventos), o Octa Code é a IDE dele (sem avatar).
  * Agente de vitrine (Marketplace) só aparece no seletor depois de adicionado lá. PURO.
  */
 import type { PluginChat } from "@/lib/plugins/chatPlugins";
 
-export type AgenteChatId = "aura" | "octa";
+export type AgenteChatId = "aura" | "zenita" | "nina" | "octa";
 export type AgenteChat = {
   id: AgenteChatId;
   nome: string;
@@ -18,6 +19,8 @@ export type AgenteChat = {
 
 export const AGENTES_CHAT: readonly AgenteChat[] = [
   { id: "aura", nome: "Aura", papel: "Estudos, pesquisa e conversa", tela: "chat" },
+  { id: "zenita", nome: "Zenita", papel: "Agenda, aulas e provas", tela: "chat" },
+  { id: "nina", nome: "Nina", papel: "Caderno, resumos e plano de estudo", tela: "chat" },
   { id: "octa", nome: "Octa Code", papel: "Agente de código · IDE", tela: "ide", plugin: "octa-code" },
 ];
 
