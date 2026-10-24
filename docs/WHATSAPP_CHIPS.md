@@ -14,7 +14,7 @@ mensagem que chega: wa-adapter ──▶ wa:evt:0 (message_inbound / connection_
 
 | Onde | O quê |
 |---|---|
-| `wa-adapter`, `wa-db` (docker-compose.beta.yml, perfil `whatsapp`) | O adapter da ChipFlow e o Postgres das sessões whatsmeow |
+| `wa-adapter`, `wa-db` (docker-compose.beta.yml, perfil `chips`) | O adapter da ChipFlow e o Postgres das sessões whatsmeow |
 | `lib/chipflow/operador.ts` | Cliente do operador: create, QR (PNG), status, logout, delete, **perfil** |
 | `lib/chipflow/bridge.ts` | `wa:cmd`/`wa:evt` (`executarNoBridge`, `sendTextViaBridge`, `presencaViaBridge`) |
 | `lib/whatsapp/chips.ts` | `WaChip`: criar, conectar (QR → conectado), editar perfil, rodízio, contadores |

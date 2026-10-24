@@ -271,11 +271,12 @@ services:
   #   (CEO), mandam/recebem pelo bridge Redis (wa:cmd/wa:evt no `redis`, db 5) e o operador HTTP (create/QR/
   #   status/perfil) fica só na rede interna. Sessões whatsmeow no Postgres próprio (wa-db).
   #   Imagem construída na VPS a partir do repo do adapter (o GHCR dele é privado): ver o runbook.
-  #   Sobe com WHATSAPP_CHIPS=1 no .env (o deploy nomeia os dois serviços → o compose habilita o perfil).
+  #   Sobe com WHATSAPP_CHIPS=1 no .env. Perfil PRÓPRIO ("chips"), não o "whatsapp" (que tem o Evolution v1.8.2 e o
+  #   agent-bridge antigos, que NÃO devem subir): o deploy nomeia os dois serviços ou liga COMPOSE_PROFILES=chips.
   wa-db:
     image: postgres:16-alpine
     container_name: zaeon_wa_db
-    profiles: ["whatsapp"]
+    profiles: ["chips"]
     environment:
       POSTGRES_USER: wa
       POSTGRES_PASSWORD: ${WA_DB_PASSWORD:-troque-no-env}
@@ -296,7 +297,7 @@ services:
   wa-adapter:
     image: ${WA_ADAPTER_IMAGE:-zaeon-wa-adapter:local}
     container_name: zaeon_wa_adapter
-    profiles: ["whatsapp"]
+    profiles: ["chips"]
     environment:
       DRIVER_KIND: whatsmeow
       ROUTING_MODE: redis_bridge
