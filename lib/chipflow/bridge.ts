@@ -41,6 +41,11 @@ export function bridgeConfigurado(env: Env = process.env): boolean {
  * background — um zumbi por tentativa, batendo no Redis da ChipFlow) e esquece a entrada.
  */
 const conexoes = new Map<string, Promise<BridgeRedis>>();
+/** a conexão compartilhada do bridge (o consumidor de inbound usa a mesma) */
+export function conexaoDoBridge(env: Env = process.env): Promise<BridgeRedis> | null {
+  const url = resolveBridgeRedisUrl(env);
+  return url ? redisPara(url) : null;
+}
 function redisPara(url: string): Promise<BridgeRedis> {
   const existente = conexoes.get(url);
   if (existente) return existente;
@@ -76,13 +81,34 @@ export async function sendTextViaBridge(input: {
   env?: Env;
   redis?: BridgeRedis;
 }): Promise<BridgeResult> {
+  return executarNoBridge({ ...input, operation: "send_text", payload: sendTextPayload(input.phone, input.text) });
+}
+
+/** "digitando…" (send_presence) antes da mensagem — o realismo dos disparos do FlowShot. */
+export async function presencaViaBridge(input: { instanceId: number; phone: string; presence?: "composing" | "paused" | "available"; timeoutMs?: number; env?: Env; redis?: BridgeRedis }): Promise<BridgeResult> {
+  return executarNoBridge({
+    instanceId: input.instanceId, operation: "send_presence", timeoutMs: input.timeoutMs ?? 5_000, env: input.env, redis: input.redis,
+    payload: { jid: sendTextPayload(input.phone, "").jid, presence: input.presence ?? "composing" },
+  });
+}
+
+/** Qualquer operação do contrato (wa:cmd → espera o evento terminal em wa:evt). */
+export async function executarNoBridge(input: {
+  instanceId: number;
+  operation: string;
+  payload: Record<string, unknown>;
+  idemKey?: string;
+  timeoutMs?: number;
+  env?: Env;
+  redis?: BridgeRedis;
+}): Promise<BridgeResult> {
   const env = input.env ?? process.env;
   const n = numShards(env);
   const commandId = randomUUID();
   const cmd = buildCommand({
     instanceId: input.instanceId,
-    operation: "send_text",
-    payload: sendTextPayload(input.phone, input.text),
+    operation: input.operation,
+    payload: input.payload,
     idempotencyKey: input.idemKey || idemKeyPadrao(input.instanceId, commandId),
     commandId,
   });

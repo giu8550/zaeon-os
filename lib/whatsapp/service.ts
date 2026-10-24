@@ -24,6 +24,16 @@ export function platformPhone(env: Record<string, string | undefined> = process.
   return toE164(env.WHATSAPP_PLATFORM_PHONE ?? "");
 }
 
+/** o número que o aluno chama: o CHIP da Zaeon conectado (lib/whatsapp/chips); sem chip, o env de antes */
+export async function numeroPlataforma(): Promise<string | null> {
+  try {
+    const { numeroDaZaeon } = await import("./chips");
+    const n = await numeroDaZaeon();
+    if (n) return toE164(n.startsWith("+") ? n : `+${n}`);
+  } catch { /* sem a tabela de chips (antes do db push): cai no env */ }
+  return platformPhone();
+}
+
 async function planOf(userId: string): Promise<PlanState | null> {
   const u = await prisma.user.findUnique({ where: { id: userId }, select: { plan: true, plusUntil: true, trialGranted: true } });
   if (!u) return null;
@@ -39,9 +49,9 @@ async function mentorOf(userId: string): Promise<{ context: string; name: string
   return m ? { context: m.context, name: m.name, slug: m.slug } : null;
 }
 
-async function log(userId: string, dir: "in" | "out", kind: string, text: string, dedupeKey?: string | null) {
+async function log(userId: string, dir: "in" | "out", kind: string, text: string, dedupeKey?: string | null, extra: { chipId?: string; waMsgId?: string } = {}) {
   try {
-    await prisma.whatsAppMessage.create({ data: { userId, dir, kind, text: text.slice(0, 4000), dedupeKey: dedupeKey ?? null } });
+    await prisma.whatsAppMessage.create({ data: { userId, dir, kind, text: text.slice(0, 4000), dedupeKey: dedupeKey ?? null, chipId: extra.chipId ?? null, waMsgId: extra.waMsgId ?? null } });
   } catch (e) { console.warn("[whatsapp] log falhou:", (e as any)?.message ?? e); }
 }
 
@@ -51,7 +61,7 @@ export type StartLinkResult =
   | { ok: false; error: "not_configured" | "plan_required" | "no_user" };
 
 export async function startLink(userId: string): Promise<StartLinkResult> {
-  const platform = platformPhone();
+  const platform = await numeroPlataforma();
   if (!platform) return { ok: false, error: "not_configured" };
   const plan = await planOf(userId);
   if (!plan) return { ok: false, error: "no_user" };
@@ -75,8 +85,9 @@ export type LinkStatus = { configured: boolean; allowed: boolean; linked: boolea
 export async function getLinkStatus(userId: string): Promise<LinkStatus> {
   const [link, plan] = await Promise.all([prisma.whatsAppLink.findUnique({ where: { userId } }), planOf(userId)]);
   const masked = link?.phone ? link.phone.replace(/^(\+\d{2})\d+(\d{4})$/, "$1 ••••• $2") : null;
+  const plataforma = await numeroPlataforma();
   return {
-    configured: !!platformPhone(),
+    configured: !!plataforma,
     allowed: plan ? whatsappAllowed(plan) : false,
     linked: !!link?.verified,
     verified: !!link?.verified,
@@ -101,9 +112,9 @@ export async function setQuietHours(userId: string, q: unknown): Promise<void> {
 export type InboundAction = "connected" | "invalid_code" | "stopped" | "resumed" | "replied" | "unknown_phone" | "plan_required";
 export type InboundResult = { action: InboundAction; userId?: string; reply?: string; sent?: boolean };
 
-async function reply(userId: string, phone: string, kind: string, text: string, agentKey = "aura"): Promise<boolean> {
-  const r = await sendWhatsAppText(phone, text, process.env, { agentKey, idemKey: `reply:${userId}:${kind}:${Date.now()}` });
-  await log(userId, "out", kind, text);
+async function reply(userId: string, phone: string, kind: string, text: string, agentKey = "aura", chipId?: string): Promise<boolean> {
+  const r = await sendWhatsAppText(phone, text, process.env, { agentKey, chipId, idemKey: `reply:${userId}:${kind}:${Date.now()}` });
+  await log(userId, "out", kind, text, null, { chipId });
   await prisma.whatsAppLink.updateMany({ where: { userId }, data: { lastMsgAt: new Date() } });
   if (!r.ok) console.warn("[whatsapp] envio falhou:", r);
   return r.ok;
@@ -119,7 +130,7 @@ export async function handleInbound(msg: InboundMsg, now: Date = new Date()): Pr
     if (!link || !fresh) {
       // só responde a quem mandou um código no formato certo (evita falar com estranhos)
       const text = "Esse código não vale mais. Gera um QR novo no seu perfil da Zaeon e escaneia de novo. 🙂";
-      await sendWhatsAppText(msg.phone, text);
+      await sendWhatsAppText(msg.phone, text, process.env, { chipId: msg.chipId });
       return { action: "invalid_code", reply: text };
     }
     await prisma.whatsAppLink.update({
@@ -129,10 +140,10 @@ export async function handleInbound(msg: InboundMsg, now: Date = new Date()): Pr
     // solta o número de um vínculo antigo de OUTRO usuário (troca de dono do chip)
     await prisma.whatsAppLink.updateMany({ where: { phone: msg.phone, userId: { not: link.userId } }, data: { verified: false, optIn: false } });
     try { await prisma.user.updateMany({ where: { id: link.userId, phone: null }, data: { phone: msg.phone } }); } catch { /* opcional */ }
-    await log(link.userId, "in", "connect", msg.text);
+    await log(link.userId, "in", "connect", msg.text, null, { chipId: msg.chipId, waMsgId: msg.messageId });
     const [mentor, u] = await Promise.all([mentorOf(link.userId), prisma.user.findUnique({ where: { id: link.userId }, select: { name: true } })]);
     const text = await inMentorVoice({ kind: "welcome", facts: "O aluno acabou de conectar o WhatsApp.", mentorContext: mentor?.context, mentorName: mentor?.name, studentName: u?.name });
-    const sent = await reply(link.userId, msg.phone, "welcome", text, mentor?.slug ?? "aura");
+    const sent = await reply(link.userId, msg.phone, "welcome", text, mentor?.slug ?? "aura", msg.chipId);
     return { action: "connected", userId: link.userId, reply: text, sent };
   }
 
@@ -145,28 +156,28 @@ export async function handleInbound(msg: InboundMsg, now: Date = new Date()): Pr
     await prisma.whatsAppLink.update({ where: { id: link.id }, data: { optIn: false } });
     await log(userId, "in", "stop", msg.text);
     const text = "Combinado, parei de mandar mensagens. Quando quiser retomar, é só responder VOLTAR.";
-    const sent = await reply(userId, msg.phone, "stop", text);
+    const sent = await reply(userId, msg.phone, "stop", text, "aura", msg.chipId);
     return { action: "stopped", userId, reply: text, sent };
   }
   if (intent.kind === "resume") {
     await prisma.whatsAppLink.update({ where: { id: link.id }, data: { optIn: true } });
     await log(userId, "in", "resume", msg.text);
     const text = "Voltei! Vou retomar sua agenda, lembretes e revisões por aqui. 🙂";
-    const sent = await reply(userId, msg.phone, "resume", text);
+    const sent = await reply(userId, msg.phone, "resume", text, "aura", msg.chipId);
     return { action: "resumed", userId, reply: text, sent };
   }
 
   // conversa → o mentor responde (harness + memória). Gate de plano vale também aqui.
-  await log(userId, "in", "chat", intent.text);
+  await log(userId, "in", "chat", intent.text, null, { chipId: msg.chipId, waMsgId: msg.messageId });
   const plan = await planOf(userId);
   if (plan && !whatsappAllowed(plan)) {
     const text = "O mentor no WhatsApp faz parte do plano Plus. Ative na Zaeon (estudante com e-mail acadêmico ganha 30 dias) e a gente continua por aqui.";
-    const sent = await reply(userId, msg.phone, "chat", text);
+    const sent = await reply(userId, msg.phone, "chat", text, "aura", msg.chipId);
     return { action: "plan_required", userId, reply: text, sent };
   }
   const { answerOnWhatsApp } = await import("./brain");
   const out = await answerOnWhatsApp({ userId, text: intent.text });
-  const sent = await reply(userId, msg.phone, "chat", out.text, out.mentor ?? "aura");
+  const sent = await reply(userId, msg.phone, "chat", out.text, out.mentor ?? "aura", msg.chipId);
   return { action: "replied", userId, reply: out.text, sent };
 }
 

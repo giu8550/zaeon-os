@@ -16,7 +16,7 @@ const handle = app.getRequestHandler();
 // houver token interno + um provider de envio configurado. WHATSAPP_DISPATCH=0 desliga.
 function startWhatsAppScheduler(port) {
     const token = process.env.WHATSAPP_INTERNAL_TOKEN;
-    const hasProvider = !!(process.env.WHATSAPP_PROVIDER || process.env.EVOLUTION_URL || process.env.DISPAROS_URL);
+    const hasProvider = !!(process.env.WHATSAPP_PROVIDER || process.env.EVOLUTION_URL || process.env.DISPAROS_URL || process.env.WA_OPERATOR_URL);
     if (!token || !hasProvider || process.env.WHATSAPP_DISPATCH === "0") return;
     const everyMin = Math.max(1, Number(process.env.WHATSAPP_DISPATCH_EVERY_MIN) || 15);
     const tick = async () => {
@@ -29,6 +29,28 @@ function startWhatsAppScheduler(port) {
     setTimeout(tick, 90_000); // deixa o app aquecer
     setInterval(tick, everyMin * 60_000);
     console.log(`> WhatsApp scheduler ligado (a cada ${everyMin} min)`);
+}
+
+// ── Chips da Zaeon: o OUVIDO (mensagens que chegam nos chips + estado de conexão), pelo bridge Redis ──
+// Um tick curto por vez (POST /api/whatsapp/chips/eventos) — sem processo novo pra manter vivo. Liga com o
+// adapter configurado (WA_OPERATOR_URL) + token interno. WA_EVENTOS=0 desliga.
+function startChipsListener(port) {
+    const token = process.env.WHATSAPP_INTERNAL_TOKEN;
+    if (!token || !process.env.WA_OPERATOR_URL || process.env.WA_EVENTOS === "0") return;
+    const everyS = Math.max(1, Number(process.env.WA_EVENTOS_A_CADA_S) || 3);
+    let rodando = false;   // um tick por vez (responder pode levar alguns segundos)
+    const tick = async () => {
+        if (rodando) return;
+        rodando = true;
+        try {
+            const res = await fetch(`http://localhost:${port}/api/whatsapp/chips/eventos`, { method: "POST", headers: { "x-internal-token": token } });
+            const b = await res.json().catch(() => ({}));
+            if (b && (b.respondidos || b.estados)) console.log(`[chips] lidos=${b.lidos} respondidos=${b.respondidos} estados=${b.estados}`);
+        } catch (e) { console.warn("[chips] tick falhou:", e?.message || e); }
+        finally { rodando = false; }
+    };
+    setTimeout(() => setInterval(tick, everyS * 1000), 60_000);
+    console.log(`> Chips de WhatsApp ouvindo (a cada ${everyS} s)`);
 }
 
 app.prepare().then(() => {
@@ -71,5 +93,6 @@ app.prepare().then(() => {
     httpServer.listen(port, () => {
         console.log(`> Servidor Zaeon OS pronto e a escutar em http://${hostname}:${port}`);
         startWhatsAppScheduler(port);
+        startChipsListener(port);
     });
 });

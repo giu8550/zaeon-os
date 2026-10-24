@@ -8,7 +8,8 @@
  */
 import { phoneFromJid, toE164 } from "./phone";
 
-export type InboundMsg = { phone: string; text: string; messageId?: string };
+/** `chipId`: chegou por um chip da Zaeon (bridge) — a resposta sai pelo MESMO chip. */
+export type InboundMsg = { phone: string; text: string; messageId?: string; chipId?: string };
 
 const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 
