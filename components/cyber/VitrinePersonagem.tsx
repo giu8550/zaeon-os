@@ -26,8 +26,14 @@ const QUADRO = {
 } as const;
 const FOV = 28, GIRO = 0.32;   // graus; rad/s do giro de vitrine
 
-/** `corpo` = um PERSONAGEM com corpo VRM próprio (lib/cyber/estiloAvatar CORPOS_VRM — ex.: a Nina), sem asas */
-export default function VitrinePersonagem({ fundador, cor, corpo, className = "" }: { fundador: boolean; cor: string; corpo?: CorpoVrm; className?: string }) {
+/** o que o MODO PERSONAGEM recebe a cada quadro (a landing — components/main/ZaeonPersonagem: o olhar no cursor, a
+ *  piscada, a boca na fala): o VRM (quando já chegou), o tempo e a câmera */
+export type QuadroVitrine = { vrm: VRM | null; dt: number; t: number; cam: THREE.PerspectiveCamera; el: HTMLDivElement };
+/** `corpo` = um PERSONAGEM com corpo VRM próprio (lib/cyber/estiloAvatar CORPOS_VRM — ex.: a Nina), sem asas.
+ *  `giro` = a vitrine gira sozinha (o Perfil); sem giro, de frente (um personagem que olha pra quem chega).
+ *  `aoQuadro` = um gancho depois da animação de cada quadro (mexer no rosto/olhar do VRM) */
+export default function VitrinePersonagem({ fundador, cor, corpo, className = "", giro = true, aoQuadro, rotulo }: { fundador: boolean; cor: string; corpo?: CorpoVrm; className?: string; giro?: boolean; aoQuadro?: (q: QuadroVitrine) => void; rotulo?: string }) {
+  const ganchoRef = useRef(aoQuadro); ganchoRef.current = aoQuadro;
   const caixa = useRef<HTMLDivElement>(null);
   const [estado, setEstado] = useState<"carregando" | "pronto" | "erro">("carregando");
 
@@ -83,9 +89,11 @@ export default function VitrinePersonagem({ fundador, cor, corpo, className = ""
     const quadro = () => {
       raf = 0; if (!vivo || !visivel || document.hidden) return;
       const dt = Math.min(0.05, relogio.getDelta()); t += dt;
-      if (!arrastando && !parado) pivo.rotation.y += dt * GIRO;
+      if (!arrastando && !parado && giro) pivo.rotation.y += dt * GIRO;
+      if (!giro && !arrastando) pivo.rotation.y *= 1 - Math.min(1, dt * 2.5);   // (de frente: depois de arrastar, volta)
       pivo.rotation.y += girar; girar = 0;
       av?.animar({ andando: false, dt, t });
+      ganchoRef.current?.({ vrm: corpoVrm, dt, t, cam, el });
       R.render(cena, cam);
       raf = requestAnimationFrame(quadro);
     };
@@ -129,10 +137,10 @@ export default function VitrinePersonagem({ fundador, cor, corpo, className = ""
       disco.geometry.dispose(); (disco.material as THREE.Material).dispose(); discoTex.dispose(); starTex.dispose();
       R.dispose(); R.forceContextLoss(); R.domElement.remove();
     };
-  }, [fundador, cor, corpo]);
+  }, [fundador, cor, corpo, giro]);
 
   return (
-    <div ref={caixa} className={`relative ${className}`} aria-label={fundador ? "Seu personagem (corpo de fundador, com asas)" : "Seu personagem"} role="img">
+    <div ref={caixa} className={`relative ${className}`} aria-label={rotulo ?? (fundador ? "Seu personagem (corpo de fundador, com asas)" : "Seu personagem")} role="img">
       {estado !== "pronto" && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <span className="text-[10px] uppercase tracking-widest font-bold text-slate-400 dark:text-white/35">
