@@ -1,6 +1,12 @@
 /** os sinais pra AVATAR do painel dos documentos (components/research/ZaeonDocumentos), sem acoplar os componentes:
  *  `detail` = true quando a resposta da IA começa a sair (ela escreve no holograma), false quando acaba */
 export const EVT_ZAEON_ESCREVENDO = "zaeon:escrevendo";
+/** avisa que a resposta começou/acabou — e deixa o estado num global, pra quem montar no meio de uma resposta saber */
+export function avisarEscrevendo(v: boolean) {
+  (globalThis as { __zaeonGerando?: boolean }).__zaeonGerando = v;
+  window.dispatchEvent(new CustomEvent(EVT_ZAEON_ESCREVENDO, { detail: v }));
+}
+export const gerandoAgora = () => !!(globalThis as { __zaeonGerando?: boolean }).__zaeonGerando;
 
 /** QUEM aparece no painel dos documentos (out/2026, o dono: "a troca de avatares deve ser feita mediante o padrão lá no
  *  topo superior esquerdo") — é o AGENTE do chat escolhido no seletor da sidebar (lib/agents/chatAgentes): Aura, Zenita
