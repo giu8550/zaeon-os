@@ -16,8 +16,8 @@
  *      cabeça; o ícone sobe das mãos pro leque;
  *    · ler — um documento aberto/em análise: ela o ergue à frente do rosto, a cabeça baixa e os olhos varrendo as linhas;
  *    · escrever — a resposta da IA saindo (lib/research/zaeonEventos): o TABLET do lounge (components/cyber/AvatarLuz —
- *      o dono: "a mesma animação que já usamos no lounge") se materializa nas mãos — partículas espiralando, o halo
- *      acendendo, a tela ligando — e ela o segura com as duas mãos, olhando pra tela (que vai enchendo de linhas);
+ *      o dono: "o tablet é o mesmo que temos no lounge cósmico") se materializa nas mãos — partículas espiralando, o
+ *      halo acendendo, a tela ligando — e ela o segura com as duas mãos, olhando pra tela;
  *  - clicar NELA: um gesto do pacote (aceno, risada, palmas, pensar, reverência…).
  * Enquadrada da cintura pra cima. Só no computador (o VRM tem 12 MB); renderiza só visível.
  */
@@ -29,6 +29,10 @@ import { ClipSampler, fetchPack } from "@/vendor/open-annie/core/motion.js";
 import { tuneSprings } from "@/vendor/open-annie/core/cloth.js";
 import { acabarVrm, carregarVrm, tingirVrm } from "@/components/cyber/AvatarVrm";
 import { CORPOS_VRM } from "@/lib/cyber/estiloAvatar";
+import { TABLET } from "@/lib/cyber/descanso";
+import { COR_LUZ } from "@/lib/cyber/cores";
+import { criarTabletLounge } from "@/components/cyber/TabletLounge";
+import { glowTex } from "@/components/cyber/CenaCosmica";
 import { EVT_ZAEON_ESCREVENDO, nomeDaPersona, type PersonaId } from "@/lib/research/zaeonEventos";
 import { usePersona } from "@/components/chat/SeletorPersona";
 
@@ -48,10 +52,6 @@ export const POSES = {
   ler: { esq: [0.12, 0.02, 0.3], dir: [-0.12, 0.02, 0.3], cabeca: 16 },
   escrever: { esq: [0.12, -0.1, 0.26], dir: [-0.12, -0.1, 0.26], cabeca: 22 },
 };
-/** o TABLET se materializando / sumindo (s) — o mesmo tempo do lounge (lib/cyber/descanso TABLET) */
-const TABLET = { materializa: 0.9, some: 0.6 } as const;
-/** ease-out-back (o tablet "estala" no lugar) — o mesmo do lounge */
-const voltaPraFora = (x: number) => { const c1 = 1.70158, c3 = c1 + 1, u = x - 1; return 1 + c3 * u * u * u + c1 * u * u; };
 /** onde o cotovelo aponta (pra fora e pra baixo) */
 const POLO = new THREE.Vector3(0.35, -0.6, -0.15);
 /** os gestos de quando a clicam (clipes do pacote — todos existem nele) */
@@ -119,38 +119,11 @@ export default function ZaeonDocumentos({ docs, onVerTodos, vazio, lendo, escrev
     };
     enquadrar(); const ro = new ResizeObserver(enquadrar); ro.observe(el);
 
-    // o TABLET do lounge (components/cyber/AvatarLuz): corpo fino escuro, a tela acesa, o halo atrás; materializa de
-    // PARTÍCULAS que espiralam pras mãos. A tela é a do laboratório, enchendo de linhas enquanto a resposta sai
-    const tcv = document.createElement("canvas"); tcv.width = 256; tcv.height = 176;
-    const tg = tcv.getContext("2d")!, ttex = new THREE.CanvasTexture(tcv); ttex.colorSpace = THREE.SRGBColorSpace;
-    const tablet = new THREE.Group(); tablet.visible = false; cena.add(tablet);
-    const matTabCorpo = new THREE.MeshStandardMaterial({ color: 0x141a2c, roughness: 0.3, metalness: 0.7, emissive: 0x1a3a44, emissiveIntensity: 0.6 });
-    const matTabTela = new THREE.MeshBasicMaterial({ map: ttex, transparent: true, opacity: 0, toneMapped: false });
-    // (aqui a câmera fica NA FRENTE dela — no lounge, atrás): o halo é um brilho redondo do lado da tela, vazando pelas
-    // bordas, e as costas do tablet têm a marca acesa
-    const brilho = (() => { const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d")!, gr = g.createRadialGradient(64, 64, 8, 64, 64, 64); gr.addColorStop(0, "rgba(127,232,255,.9)"); gr.addColorStop(0.45, "rgba(127,232,255,.35)"); gr.addColorStop(1, "rgba(127,232,255,0)"); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); })();
-    const costas = (() => { const c = document.createElement("canvas"); c.width = 256; c.height = 176; const g = c.getContext("2d")!; const gr = g.createLinearGradient(0, 0, 256, 176); gr.addColorStop(0, "#1a2340"); gr.addColorStop(1, "#0b1020"); g.fillStyle = gr; g.fillRect(0, 0, 256, 176); g.strokeStyle = "rgba(127,232,255,.75)"; g.lineWidth = 3; g.strokeRect(4, 4, 248, 168); g.fillStyle = "rgba(127,232,255,.9)"; g.font = "bold 22px system-ui, sans-serif"; g.textAlign = "center"; g.fillText("⟁ ZAEON", 128, 96); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
-    const matTabHalo = new THREE.MeshBasicMaterial({ map: brilho, color: CIANO, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-    const matTabCostas = new THREE.MeshBasicMaterial({ map: costas, transparent: true, opacity: 0, toneMapped: false });
-    const geoTab = [new THREE.BoxGeometry(0.3, 0.21, 0.014), new THREE.PlaneGeometry(0.272, 0.186), new THREE.PlaneGeometry(0.62, 0.48), new THREE.PlaneGeometry(0.296, 0.206)] as const;
-    tablet.add(new THREE.Mesh(geoTab[0], matTabCorpo));
-    const telaTab = new THREE.Mesh(geoTab[1], matTabTela); telaTab.position.z = 0.0075; tablet.add(telaTab);
-    const haloTab = new THREE.Mesh(geoTab[2], matTabHalo); haloTab.position.z = 0.03; tablet.add(haloTab);
-    const costasTab = new THREE.Mesh(geoTab[3], matTabCostas); costasTab.position.z = -0.0075; costasTab.rotation.y = Math.PI; tablet.add(costasTab);
-    const estrela = (() => { const c = document.createElement("canvas"); c.width = c.height = 32; const g = c.getContext("2d")!, gr = g.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, "#fff"); gr.addColorStop(0.35, "rgba(160,240,255,.8)"); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(c); })();
-    const NPT = 36, ptPos = new Float32Array(NPT * 3), ptGeo = new THREE.BufferGeometry(); ptGeo.setAttribute("position", new THREE.BufferAttribute(ptPos, 3));
-    const matPtTab = new THREE.PointsMaterial({ size: 0.05, map: estrela, color: CIANO, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
-    const particulasTab = new THREE.Points(ptGeo, matPtTab); particulasTab.frustumCulled = false; particulasTab.visible = false; cena.add(particulasTab);
-    let linhasTab = 0, wTab = 0;
-    const desenharTela = (t: number) => {
-      const gr = tg.createLinearGradient(0, 0, 0, 176); gr.addColorStop(0, "#0a1f3d"); gr.addColorStop(1, "#04101f"); tg.fillStyle = gr; tg.fillRect(0, 0, 256, 176);
-      tg.fillStyle = "#66e6ff"; tg.fillRect(0, 0, 256, 22); tg.fillStyle = "#04101f"; tg.font = "bold 13px system-ui, sans-serif"; tg.fillText("ZAEON · LABORATÓRIO", 10, 15);
-      const n = Math.floor(linhasTab);
-      tg.fillStyle = "rgba(143,232,255,.85)";
-      for (let i = 0; i < Math.min(n, 8); i++) { const w = 70 + ((i * 47) % 150); tg.fillRect(12, 36 + i * 17, i === n - 1 ? w * (linhasTab - n + 0.2) : w, 6); }
-      if (Math.floor(t * 2) % 2) { tg.fillStyle = "#e8fbff"; tg.fillRect(14 + (70 + ((Math.max(0, n - 1) * 47) % 150)) * Math.min(1, linhasTab - n + 0.2), 33 + Math.max(0, Math.min(n, 8) - 1) * 17, 2, 11); }
-      ttex.needsUpdate = true;
-    };
+    // o TABLET: O MESMO do lounge cósmico (components/cyber/TabletLounge — a mesma malha, tela, halo, partículas e tempo)
+    const estrela = glowTex("rgba(255,255,255,1)", "rgba(190,215,255,0.5)");
+    const tab = criarTabletLounge({ luz: COR_LUZ, estrela, corpo: new THREE.MeshStandardMaterial({ color: 0x141a2c, roughness: 0.3, metalness: 0.7, emissive: new THREE.Color(COR_LUZ).multiplyScalar(0.25), emissiveIntensity: 0.6 }) });
+    cena.add(tab.tablet, tab.particulas);
+    let wTab = 0;
 
     // os MODOS da camada das mãos
     let oferecer: ClipSampler | null = null, durReceber = 2;
@@ -266,27 +239,17 @@ export default function ZaeonDocumentos({ docs, onVerTodos, vazio, lendo, escrev
         const h = vrm.humanoid, s = sinais.current;
         // o ROSTO do modo (de vez em quando: o envelope das expressões cuida da transição)
         if (agora > rostoEm && (s.lendo || s.escrevendo)) { c.setFace(s.escrevendo ? "thinking" : "curious", 0.7); rostoEm = agora + 3; }
-        // o TABLET (como no lounge): no meio das mãos, um pouco rumo ao rosto, a tela virada pra cabeça; materializando,
-        // as partículas espiralam até ele, o halo acende e a tela liga (piscando até firmar)
+        // o TABLET (como no lounge): no meio das mãos, um pouco rumo ao rosto. A tela vira pra QUEM ESTÁ VENDO (no lounge
+        // a câmera fica atrás dela e vê a tela por cima do ombro; aqui fica na frente — assim a tela e o halo aparecem iguais)
         wTab = Math.max(0, Math.min(1, wTab + (s.escrevendo ? dt / TABLET.materializa : -dt / TABLET.some)));
         const pTab = peso.escrever;
-        tablet.visible = wTab > 0.01; particulasTab.visible = wTab > 0.01 && wTab < 0.985;
         const hE = h.getRawBoneNode("leftHand"), hD = h.getRawBoneNode("rightHand"), cab = h.getRawBoneNode("head");
-        if (tablet.visible && hE && hD && cab) {
+        if (wTab > 0.01 && hE && hD && cab) {
           hE.getWorldPosition(mL); hD.getWorldPosition(mR); cab.getWorldPosition(pPeito);
           meio.addVectors(mL, mR).multiplyScalar(0.5); meio.addScaledVector(qx2.copy(pPeito).sub(meio), 0.14);
-          tablet.position.copy(meio); tablet.lookAt(pPeito);
-          tablet.scale.setScalar(Math.max(0.001, voltaPraFora(wTab)));
-          matTabTela.opacity = Math.max(0, Math.min(1, (wTab - 0.55) / 0.4)) * (wTab < 0.98 ? 0.75 + 0.25 * Math.sin(agora * 40) : 1);
-          matTabHalo.opacity = 0.55 * Math.sin(Math.PI * wTab) + 0.12 * wTab; matTabCostas.opacity = matTabTela.opacity;
-          if (particulasTab.visible) {
-            const abre = 1 - wTab;
-            for (let i = 0; i < NPT; i++) { const a = i * 2.39996 + agora * 5, r = 0.04 + abre * (0.3 + 0.18 * ((i * 7) % 5) / 5), y = (((i * 13) % 11) / 11 - 0.5) * abre * 0.6; ptPos[i * 3] = meio.x + Math.cos(a) * r; ptPos[i * 3 + 1] = meio.y + y; ptPos[i * 3 + 2] = meio.z + Math.sin(a) * r; }
-            ptGeo.attributes.position!.needsUpdate = true; matPtTab.opacity = 0.9 * Math.min(1, abre * 3);
-          }
-          if (s.escrevendo) linhasTab = Math.min(8.9, linhasTab + dt * 1.6); else if (wTab < 0.1) linhasTab = 0;
-          desenharTela(agora);
+          tab.tablet.position.copy(meio); tab.tablet.lookAt(cam.position);
         }
+        tab.animar(wTab, agora);
         // o LEQUE segue o meio das mãos (um pouco acima); escrevendo, some (o tablet ocupa as mãos)
         const hl = h.getRawBoneNode("leftHand"), hr = h.getRawBoneNode("rightHand");
         if (hl && hr) {
@@ -305,7 +268,7 @@ export default function ZaeonDocumentos({ docs, onVerTodos, vazio, lendo, escrev
     return () => {
       vivo = false; cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); document.removeEventListener("visibilitychange", aba);
       trocarCorpo.current = null; soltarCorpo();
-      for (const g of geoTab) g.dispose(); matTabCorpo.dispose(); matTabTela.dispose(); matTabHalo.dispose(); matTabCostas.dispose(); brilho.dispose(); costas.dispose(); ttex.dispose(); ptGeo.dispose(); matPtTab.dispose(); estrela.dispose();
+      tab.dispose(); estrela.dispose();
       R.dispose(); R.forceContextLoss(); R.domElement.remove();
     };
   }, []);
