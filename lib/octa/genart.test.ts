@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { gerarPeca, verificarDeterminismo, ehPedidoDeArte } from "./genart";
-import { carregarSkill, skillsDoOcta, OCTA_SKILLS } from "./skills";
+import { carregarSkill, skillsDoOcta, octaSkills, OCTA_SKILLS } from "./skills";
 
 describe("octa · genart (§7)", () => {
   it("mesma seed reproduz a peça byte a byte", () => {
@@ -37,5 +37,19 @@ describe("octa · skills vendorizadas (§7/§8)", () => {
     expect(prompt).not.toContain("## The Prime Directive");
     const r = await activate.run({ name: "appllama-app-design-skill" }, {} as any);
     expect(r.ok).toBe(true);
+  });
+  it("REA (engenharia reversa) só entra com OCTA_REA=1 — portão do dono", async () => {
+    expect(octaSkills({})).not.toContain("reverse-engineer-anything");
+    expect(octaSkills({ OCTA_REA: "1" })).toContain("reverse-engineer-anything");
+    const off = await skillsDoOcta({});
+    expect(off.prompt).not.toContain("reverse-engineer-anything");
+    const on = await skillsDoOcta({ OCTA_REA: "1" });
+    expect(on.prompt).toContain("reverse-engineer-anything");
+    // o corpo (metodologia) só sai via activate_skill, nunca o MCP junto
+    const r = await on.activate.run({ name: "reverse-engineer-anything" }, {} as any);
+    expect(r.ok).toBe(true);
+    // o corpo (metodologia do REA) existe e menciona a análise de evidências; o MCP NÃO vem junto
+    const corpo = (await carregarSkill("reverse-engineer-anything")).corpo;
+    expect(corpo).toMatch(/Evidence|reverse/i);
   });
 });

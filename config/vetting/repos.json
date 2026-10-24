@@ -1,12 +1,68 @@
 {
   "_nota": "Registro de vetting de repos de terceiros (Pack Octa §0/§1). Indicado pelo dono também passa por aqui. 'sha' = commit revisado; atualizar exige nova revisão.",
   "repos": [
-    { "repo": "omaekumiko2-create/kru", "licenca": "MIT", "veredito": "referencia", "uso": "só o conceito (plaintext nunca vai ao modelo) em lib/octa/secrets.ts", "motivo": "app desktop local de segredos, autor novo; não vira dependência de produção" },
-    { "repo": "lennney/stop-that-shit", "licenca": "MIT", "veredito": "padrao", "uso": "taxonomia SHIT + guard deny-by-default reimplementados em lib/octa/guard.ts e lib/octa/shit.ts", "motivo": "plugin do Codex; portamos só o conceito" },
-    { "repo": "davidcarliez/trustmebro", "licenca": "MIT", "veredito": "rejeitado", "uso": "nenhum", "motivo": "ferramenta de jailbreak: injeta saída de tool fabricada pra burlar guardrails. Substituto: lib/octa/evals (detecção, não deception)" },
-    { "repo": "uw-syfi/vibesys", "licenca": "MIT", "veredito": "padrao", "uso": "juiz independente read-only + execução isolada reimplementados em lib/octa/evals e lib/octa/fortify.ts", "motivo": "framework de pesquisa pesado; só o padrão" },
-    { "repo": "liguobao/ds-harness-remote", "licenca": "MIT", "veredito": "referencia", "uso": "padrão de transporte (host só-outbound, E2E) em lib/octa/mobile; NUNCA o relay deles (dsh.r2049.cn)", "motivo": "harness de outro produto + relay hospedado de terceiro" },
-    { "repo": "camilleroux/genart-skill", "licenca": "MIT", "veredito": "vendorizado", "sha": "cd0219d441352aa6bc8f56d70ae6bdc11d085cbd", "caminho": "vendor/skills/genart", "uso": "skill de arte generativa do chat Octa", "revisao": "só markdown (SKILL.md + references/); scripts/ do repo NÃO vendorizados; sem rede/exec/segredos" },
-    { "repo": "Appllama/appllama-skills", "licenca": "MIT", "veredito": "vendorizado", "sha": "dd5caaec3d5d50ad7fc0324da238119c6b7c3707", "caminho": "vendor/skills/appllama-app-design-skill", "uso": "skill de design mobile nativo", "revisao": "só markdown; o .mcp.json (MCP pago em mcp.appllama.io) NÃO vendorizado — portão do dono; nome/logo são marca deles, não reusar" }
+    {
+      "repo": "omaekumiko2-create/kru",
+      "licenca": "MIT",
+      "veredito": "referencia",
+      "uso": "só o conceito (plaintext nunca vai ao modelo) em lib/octa/secrets.ts",
+      "motivo": "app desktop local de segredos, autor novo; não vira dependência de produção"
+    },
+    {
+      "repo": "lennney/stop-that-shit",
+      "licenca": "MIT",
+      "veredito": "padrao",
+      "uso": "taxonomia SHIT + guard deny-by-default reimplementados em lib/octa/guard.ts e lib/octa/shit.ts",
+      "motivo": "plugin do Codex; portamos só o conceito"
+    },
+    {
+      "repo": "davidcarliez/trustmebro",
+      "licenca": "MIT",
+      "veredito": "rejeitado",
+      "uso": "nenhum",
+      "motivo": "ferramenta de jailbreak: injeta saída de tool fabricada pra burlar guardrails. Substituto: lib/octa/evals (detecção, não deception)"
+    },
+    {
+      "repo": "uw-syfi/vibesys",
+      "licenca": "MIT",
+      "veredito": "padrao",
+      "uso": "juiz independente read-only + execução isolada reimplementados em lib/octa/evals e lib/octa/fortify.ts",
+      "motivo": "framework de pesquisa pesado; só o padrão"
+    },
+    {
+      "repo": "liguobao/ds-harness-remote",
+      "licenca": "MIT",
+      "veredito": "referencia",
+      "uso": "padrão de transporte (host só-outbound, E2E) em lib/octa/mobile; NUNCA o relay deles (dsh.r2049.cn)",
+      "motivo": "harness de outro produto + relay hospedado de terceiro"
+    },
+    {
+      "repo": "camilleroux/genart-skill",
+      "licenca": "MIT",
+      "veredito": "vendorizado",
+      "sha": "cd0219d441352aa6bc8f56d70ae6bdc11d085cbd",
+      "caminho": "vendor/skills/genart",
+      "uso": "skill de arte generativa do chat Octa",
+      "revisao": "só markdown (SKILL.md + references/); scripts/ do repo NÃO vendorizados; sem rede/exec/segredos"
+    },
+    {
+      "repo": "Appllama/appllama-skills",
+      "licenca": "MIT",
+      "veredito": "vendorizado",
+      "sha": "dd5caaec3d5d50ad7fc0324da238119c6b7c3707",
+      "caminho": "vendor/skills/appllama-app-design-skill",
+      "uso": "skill de design mobile nativo",
+      "revisao": "só markdown; o .mcp.json (MCP pago em mcp.appllama.io) NÃO vendorizado — portão do dono; nome/logo são marca deles, não reusar"
+    },
+    {
+      "repo": "morluto/rea",
+      "licenca": "MIT",
+      "veredito": "vendorizado",
+      "sha": "3b79af28e80785afce9f5998d8f03289402a1847",
+      "versao": "rea-agents-6.5.0",
+      "caminho": "vendor/skills/reverse-engineer-anything",
+      "uso": "skill de engenharia reversa (REA) no Octa, atrás de OCTA_REA=1",
+      "revisao": "SÓ markdown (SKILL.md + references/ + DISCLAIMER + LICENSE); scripts/native/install.sh NÃO vendorizados; o MCP rea-agents (Ghidra/Hopper/binwalk/PTY) é portão do dono, como o Appllama. DISCLAIMER do REA preservado: uso lícito (pesquisa de segurança, malware, CTF, interoperabilidade, software próprio/autorizado); NÃO burla DRM/anti-cheat/auth nem copia software proprietário. Marca 'REA'/'morluto' não reusada."
+    }
   ]
 }
