@@ -34,7 +34,8 @@ export const POSE = { holograma: [0, 0.02, 0.32] as const, cabecaLer: 14 };
 /** o gesto e o rosto de quando cada sequência começa */
 const NA_SEQUENCIA: Record<Sequencia, { clipe: string; rosto: string }> = {
   pensar: { clipe: "think", rosto: "thinking" },
-  buscar: { clipe: "g_open_both", rosto: "curious" },
+  raspar: { clipe: "g_open_both", rosto: "curious" },
+  energia: { clipe: "g_sweep_both", rosto: "proud" },
   arvore: { clipe: "g_offer_both", rosto: "happy" },
   cerebro: { clipe: "g_frame_both", rosto: "proud" },
 };
@@ -127,12 +128,6 @@ export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: 
     lo.getWorldPosition(E); mao.getWorldPosition(W);
     girarPara(lo, aux.copy(W).sub(E).normalize(), T.add(S).sub(E).normalize(), peso);
   };
-  /** a pose de LEVITAÇÃO (graus, por cima do clipe): as pernas recolhidas, assimétricas, as pontas dos pés esticadas */
-  const LEVITA: [string, number, number, number][] = [
-    ["leftUpperLeg", -48, 0, 8], ["leftLowerLeg", 118, 0, 0], ["leftFoot", 48, 0, 0],
-    ["rightUpperLeg", -14, 0, -5], ["rightLowerLeg", 92, 0, 0], ["rightFoot", 52, 0, 0],
-    ["spine", 5, 0, 0], ["hips", -6, 0, 0],
-  ];
   const D2R = Math.PI / 180;
 
   // o que o chat diz que ela está fazendo
@@ -162,9 +157,8 @@ export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: 
     const cabeca = v.humanoid.getRawBoneNode("head"); if (cabeca) { v.scene.updateMatrixWorld(true); alturaTopo = cabeca.getWorldPosition(new THREE.Vector3()).y + 0.24; enquadrar(); }
     const ch = new Character(v, cam, 7, { pack, talk: pack }); c = ch;
     ch.overlay = (_, now, dt) => {
-      // GERANDO: levitando (as pernas recolhidas), digitando no teclado holográfico e olhando as telas
+      // GERANDO: de pé, digitando no teclado holográfico e olhando as telas
       const r = seqUlt, hu = v.humanoid;
-      if (r && r.levitar > 0.01) for (const [b, x, y, z] of LEVITA) hu.getNormalizedBoneNode(b as never)?.quaternion.multiply(qx.setFromEuler(eul.set(x * D2R * r.levitar, y * D2R * r.levitar, z * D2R * r.levitar)));
       if (r && r.digitar > 0.01) {
         v.scene.updateMatrixWorld(true);
         ik(hu, "left", r.maos.esq, r.digitar * 0.92); ik(hu, "right", r.maos.dir, r.digitar * 0.92);
@@ -213,10 +207,8 @@ export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: 
       // GERANDO: as 3 sequências (o gesto e o rosto de cada uma no começo dela; ela flutua; a câmera abre)
       const r = seqs.atualizar({ agora, dt, gerandoHa: gerandoDesde === null ? null : agora - gerandoDesde, vrm, cam }); seqUlt = r;
       if (r.nova && r.seq) { const n = NA_SEQUENCIA[r.seq]; c.playClip(n.clipe); c.setFace(n.rosto, 0.85); st.rostoEm = agora + 2.5; }
-      // ela SOBE (levitando, balançando no ar) e a câmera acompanha
-      vrm.scene.position.y = r.levitar * (0.24 + Math.sin(agora * 1.3) * 0.022);
-      vrm.scene.rotation.z = r.levitar * Math.sin(agora * 0.9) * 0.025;
-      const subirAgora = r.levitar * 0.2;
+      // a câmera abre e fica em três-quartos (ela fica de pé: o ângulo é que mostra a cena)
+      const subirAgora = 0;
       if (Math.abs(r.abrir - abrir) > 0.001 || Math.abs(r.orbita - orbita) > 0.001 || Math.abs(subirAgora - subir) > 0.001) { abrir = r.abrir; orbita = r.orbita; subir = subirAgora; enquadrar(); }
       // o ROSTO do modo (de vez em quando: o envelope das expressões cuida da transição)
       if (agora > st.rostoEm && ocupada) { c.setFace(r.seq ? NA_SEQUENCIA[r.seq].rosto : "curious", 0.7); st.rostoEm = agora + 3; }

@@ -6,14 +6,20 @@
  * sobe e fica digitando num teclado virtual enquanto olha as telas; bem cyberpunk e detalhado, com efeitos como blur,
  * ainda leve" e "a cena fica melhor se ela estiver LEVITANDO, não só em pé".
  *  - OLHOS: dois brilhos nos ossos dos olhos (por cima do cabelo), pulsando;
- *  - REDE (a busca): ela levita (pose de flutuação: o corpo é da cena, aqui só os números) e DIGITA num TECLADO
- *    holográfico, olhando as telas; a câmera se afasta e orbita devagar. As telas, em CAMADAS de profundidade:
+ *  Depois: "a chuva é feia, tire; níveis de evento — rápido: a aranha passeando em cima da tela e se ALIMENTANDO
+ *  das telas; mais de 5 s: a aranha vira ENERGIA e RAIOS aparecem; ela pode ficar de pé — o ângulo da câmera é que
+ *  tem que ser bacana pra mostrar mais da cena".
+ *  - REDE (raspar/energia): ela fica DE PÉ e DIGITA num TECLADO holográfico, olhando as telas; a câmera se afasta e
+ *    fica em três-quartos, derivando devagar. As telas, em CAMADAS de profundidade:
  *    · a TELA PRINCIPAL atrás dela — a página que a ARANHA (procedural, à moda do cyohei9907/web-crawlers — código
- *      nosso) raspa: cada pata que pousa abre um anel de glitch na página e às vezes solta um PACOTE até a cabeça dela;
+ *      nosso) raspa: cada pata que pousa abre um anel de glitch na página; parada, ela SE ALIMENTA de uma tela do arco
+ *      (a tela é drenada num fluxo de partículas até ela, e a aranha brilha mais a cada refeição);
+ *    · ENERGIA (passou de 5 s): a aranha vira uma esfera de energia que sobe por trás dela, e RAIOS em ziguezague
+ *      saltam da esfera pras telas (cada raio que acerta dá glitch na tela);
  *    · um ARCO de telas em volta dela (código, gráficos, matriz, radar, ondas…), cada uma um shader: o conteúdo rola,
  *      uma faixa de varredura passa, piscam, dão glitch com aberração cromática; halos atrás (o "bloom" barato);
  *    · telas LONGE desfocadas e telas PERTO da câmera fora de foco (o blur é pré-calculado na textura: custo zero);
- *    · CHUVA de dados, FEIXES do teclado às telas, ANÉIS girando sob ela;
+ *    · FEIXES do teclado às telas, ANÉIS girando no chão sob ela;
  *  - ÁRVORE: uma árvore de habilidades holográfica cresce à frente do peito, nó por nó;
  *  - CÉREBRO: partículas que se juntam num cérebro girando, com sinapses piscando.
  */
@@ -109,8 +115,6 @@ type Tela = { mesh: THREE.Mesh; u: Record<string, THREE.IUniform>; base: THREE.V
 type Perna = { lado: number; k: number; pe: THREE.Vector3; de: THREE.Vector3; para: THREE.Vector3; passo: number };
 
 export type ResultadoSeq = {
-  /** 0..1: a pose de levitação (a cena dobra as pernas e sobe o corpo) */
-  levitar: number;
   /** 0..1: a câmera se afasta; `orbita` = o ângulo (rad) que ela gira em volta */
   abrir: number; orbita: number;
   /** 0..1: digitando no teclado holográfico; as mãos vão até `maos` (mundo) */
@@ -176,13 +180,6 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
   const pertoOff = [[-0.21, 0.13, 0.55], [0.23, -0.16, 0.6], [0.2, 0.2, 0.75]] as const;
   pertoOff.forEach((_, i) => novaTela("perto", 0, 0, 0, 0.16, 0.1, texBorrada[(i + 2) % 6]!, i % 2 ? CIANO : MAGENTA, { aditiva: true, nitida: 0.2, olhar: false }));
 
-  // a CHUVA de dados (riscos caindo num cilindro em volta dela)
-  const NCHUVA = 140, chuvaPos = new Float32Array(NCHUVA * 6), chuvaCor = new Float32Array(NCHUVA * 6), chuva = Array.from({ length: NCHUVA }, () => ({ x: 0, y: 0, z: 0, v: 0, l: 0 }));
-  const novaGota = (g: (typeof chuva)[number], topo = false) => { const a = aleat(0, Math.PI * 2), r = aleat(0.35, 1.5); g.x = Math.sin(a) * r; g.z = -Math.abs(Math.cos(a)) * r * aleat(0.4, 1); g.y = topo ? aleat(0.6, 0.9) : aleat(-0.7, 0.9); g.v = aleat(0.25, 0.8); g.l = aleat(0.03, 0.14); };
-  chuva.forEach((g, i) => { novaGota(g); const c = Math.random() < 0.7 ? CIANO : MAGENTA; for (let k = 0; k < 2; k++) c.toArray(chuvaCor, i * 6 + k * 3); });
-  const chuvaGeo = guarda(new THREE.BufferGeometry()); chuvaGeo.setAttribute("position", new THREE.BufferAttribute(chuvaPos, 3)); chuvaGeo.setAttribute("color", new THREE.BufferAttribute(chuvaCor, 3));
-  const chuvaMat = guarda(new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-  const chuvaLinhas = new THREE.LineSegments(chuvaGeo, chuvaMat); chuvaLinhas.frustumCulled = false; rede.add(chuvaLinhas);
 
   // os ANÉIS sob ela (girando em sentidos opostos)
   const anelTex = (() => {
@@ -257,6 +254,38 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
   const soltarPacote = (de: THREE.Vector3, para: THREE.Vector3, dur = 0.7, arco = 0.25) => { const q = pac.find((x) => !x.vivo); if (q) { q.vivo = true; q.t = 0; q.dur = dur; q.arco = arco; q.de.copy(de); q.para.copy(para); } };
   const cabeca = new THREE.Vector3(0, 1.45, 0);
 
+  // ── a ENERGIA (a aranha transformada) e os RAIOS ──
+  const esfera = new THREE.Group(); raiz.add(esfera);
+  const esferaCamadas = ([[MAGENTA, 0.7], [CIANO, 0.36], [new THREE.Color("#ffffff"), 0.14]] as const).map(([cor, tam]) => { const sp = new THREE.Sprite(brilhoMat(cor as THREE.Color)); sp.scale.setScalar(tam); sp.renderOrder = 8; esfera.add(sp); return { sp, tam }; });
+  const NORB = 36, orbPos = new Float32Array(NORB * 3), orbGeo = guarda(new THREE.BufferGeometry()); orbGeo.setAttribute("position", new THREE.BufferAttribute(orbPos, 3));
+  const orbMat = guarda(new THREE.PointsMaterial({ size: 0.02, map: estrela, color: CIANO, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const orbitas = new THREE.Points(orbGeo, orbMat); orbitas.frustumCulled = false; esfera.add(orbitas);
+  const NRAIO = 6, SEG = 12, raioPos = new Float32Array(NRAIO * SEG * 6), raioGeo = guarda(new THREE.BufferGeometry()); raioGeo.setAttribute("position", new THREE.BufferAttribute(raioPos, 3));
+  const raioMat = guarda(new THREE.LineBasicMaterial({ color: new THREE.Color("#c9f9ff"), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const raios = new THREE.LineSegments(raioGeo, raioMat); raios.frustumCulled = false; raios.renderOrder = 8; raiz.add(raios);
+  // a 2ª linha de cada raio (deslocada um tiquinho, magenta): o raio fica "grosso" com 1 px de WebGL
+  const raio2Geo = guarda(new THREE.BufferGeometry()); raio2Geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(NRAIO * SEG * 6), 3));
+  const raio2Mat = guarda(new THREE.LineBasicMaterial({ color: MAGENTA, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const raios2 = new THREE.LineSegments(raio2Geo, raio2Mat); raios2.frustumCulled = false; raiz.add(raios2);
+  const pontas = Array.from({ length: NRAIO }, () => { const sp = new THREE.Sprite(brilhoMat(CIANO)); sp.scale.setScalar(0.09); raiz.add(sp); return sp; });
+  const en = { pos: new THREE.Vector3(), de: new THREE.Vector3(), desde: 0, proxRaio: 0, ativa: false };
+  const pontaRaio = new THREE.Vector3(), meioRaio = new THREE.Vector3();
+  /** um raio em ziguezague de `a` a `b` (deslocamento do meio, maior no centro) */
+  const desenharRaio = (i: number, a: THREE.Vector3, b: THREE.Vector3) => {
+    const arr = raioPos, arr2 = raio2Geo.attributes.position!.array as Float32Array; let px = a.x, py = a.y, pz = a.z;
+    for (let k = 1; k <= SEG; k++) {
+      const u = k / SEG, amp = Math.sin(u * Math.PI) * 0.06;
+      meioRaio.lerpVectors(a, b, u); if (k < SEG) meioRaio.add(pontaRaio.set(aleat(-amp, amp), aleat(-amp, amp), aleat(-amp, amp)));
+      const o = (i * SEG + k - 1) * 6;
+      arr.set([px, py, pz, meioRaio.x, meioRaio.y, meioRaio.z], o);
+      arr2.set([px + 0.006, py + 0.005, pz, meioRaio.x + 0.006, meioRaio.y + 0.005, meioRaio.z], o);
+      px = meioRaio.x; py = meioRaio.y; pz = meioRaio.z;
+    }
+  };
+  // a ARANHA se alimentando: qual tela ela está drenando, e o quanto já comeu
+  const ali = { tela: -1, ate: 0, proxGota: 0, fome: 0 };
+  const drenada = new Map<number, number>();
+
   // o CAMPO de projeção atrás da árvore e do cérebro (sem ele, a luz somada some em cima da roupa clara)
   const campoTex = (() => {
     const c = novoCanvas(256, 256), g = ctx2d(c), gr = g.createRadialGradient(128, 128, 10, 128, 128, 126);
@@ -325,12 +354,12 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
   novasSinapses();
 
   // ── o estado (zerado a cada troca de avatar) ──
-  const w = { olhos: 0, rede: 0, arvore: 0, cerebro: 0, levitar: 0, abrir: 0, digitar: 0 };
-  let ultimaSeq: Sequencia | null = null, ultimoCiclo = -1, proxSinapse = 0, inicioRede = 0;
+  const w = { olhos: 0, rede: 0, aranha: 0, energia: 0, arvore: 0, cerebro: 0, abrir: 0, digitar: 0 };
+  let ultimaSeq: Sequencia | null = null, ultimoCiclo = -1, proxSinapse = 0, inicioGeracao = 0, lado = 1;
   const peito = new THREE.Vector3(), quadrilV = new THREE.Vector3(), pOlho = new THREE.Vector3(), paraCam = new THREE.Vector3(), camDir = new THREE.Vector3(), camDireita = new THREE.Vector3(), camCima = new THREE.Vector3();
   const zerar = () => {
     for (const k of Object.keys(w) as (keyof typeof w)[]) w[k] = 0;
-    ultimaSeq = null; ultimoCiclo = -1; ar.iniciada = false;
+    ultimaSeq = null; ultimoCiclo = -1; ar.iniciada = false; en.ativa = false; ali.tela = -1; ali.fome = 0; drenada.clear();
     for (const p of pac) p.vivo = false;
     for (const t of telas) { t.glitch = 0; for (const v of t.u.toques!.value as THREE.Vector4[]) v.set(0, 0, 0, 0); }
     raiz.visible = false;
@@ -344,20 +373,23 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
     const env = s ? envelope(s.u, s.seq === "pensar" ? 0.25 : 0.1, 0.1) : 0;
     const nova = !!s && (s.seq !== ultimaSeq || s.ciclo !== ultimoCiclo);
     if (s) { ultimaSeq = s.seq; ultimoCiclo = s.ciclo; } else { ultimaSeq = null; ultimoCiclo = -1; }
-    if (nova && s?.seq === "buscar") inicioRede = agora;
+    if (nova && s?.seq === "pensar") { inicioGeracao = agora; lado = Math.random() < 0.5 ? -1 : 1; }   // cada resposta, um lado da câmera
     // os pesos de cada parte (os olhos ficam acesos a geração toda, mais fortes pensando; ela levita depois do pensar)
     w.olhos = chegar(w.olhos, s ? (s.seq === "pensar" ? 1 : 0.55) : 0, dt, 5);
-    w.rede = chegar(w.rede, s?.seq === "buscar" ? env : 0, dt, 4);
+    const naRede = s?.seq === "raspar" || s?.seq === "energia";
+    w.rede = chegar(w.rede, naRede ? 1 : 0, dt, 3.5);
+    w.aranha = chegar(w.aranha, s?.seq === "raspar" ? 1 : 0, dt, 3);
+    w.energia = chegar(w.energia, s?.seq === "energia" ? env : 0, dt, 4);
     w.arvore = chegar(w.arvore, s?.seq === "arvore" ? env : 0, dt, 4);
     w.cerebro = chegar(w.cerebro, s?.seq === "cerebro" ? env : 0, dt, 4);
-    w.levitar = chegar(w.levitar, s && s.seq !== "pensar" ? 1 : 0, dt, 1.8);
-    w.abrir = chegar(w.abrir, s?.seq === "buscar" ? 1 : s && s.seq !== "pensar" ? 0.45 : 0, dt, 1.3);
-    w.digitar = chegar(w.digitar, s?.seq === "buscar" && s.u > 0.08 && s.u < 0.94 ? 1 : 0, dt, 4);
-    const orbita = Math.sin((agora - inicioRede) * 0.32) * 0.38 * w.abrir;
+    w.abrir = chegar(w.abrir, naRede ? 1 : s && s.seq !== "pensar" ? 0.55 : 0, dt, 1.3);
+    w.digitar = chegar(w.digitar, naRede ? 1 : 0, dt, 4);
+    // a câmera em TRÊS-QUARTOS (cada resposta de um lado), derivando devagar
+    const orbita = (lado * 0.5 + Math.sin((agora - inicioGeracao) * 0.22) * 0.12) * w.abrir;
     const olhar = Math.sin(agora * 0.55) * 0.32 + Math.sin(agora * 1.7) * 0.06;
-    const algo = w.olhos + w.rede + w.arvore + w.cerebro + w.levitar > 0.005;
+    const algo = w.olhos + w.rede + w.arvore + w.cerebro + w.energia > 0.005;
     raiz.visible = algo;
-    const res: ResultadoSeq = { levitar: w.levitar, abrir: w.abrir, orbita, digitar: w.digitar, maos, olhar, seq: s?.seq ?? null, nova };
+    const res: ResultadoSeq = { abrir: w.abrir, orbita, digitar: w.digitar, maos, olhar, seq: s?.seq ?? null, nova };
     if (!algo || !vrm) return res;
 
     const h = vrm.humanoid;
@@ -381,11 +413,11 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
 
     // os ANÉIS sob ela (a levitação toda)
     aneis.forEach((m, i) => {
-      m.position.set(0, quadrilV.y - 0.95 - i * 0.05, 0.02);   // (bem abaixo dos pés: o vão mostra que ela flutua) m.rotation.z = agora * (i ? -0.5 : 0.32);
-      (m.material as THREE.MeshBasicMaterial).opacity = w.levitar * (i ? 0.5 : 0.75) * (0.85 + 0.15 * Math.sin(agora * 3 + i));
+      m.position.set(0, 0.01 + i * 0.004, 0.02); m.rotation.z = agora * (i ? -0.5 : 0.32);   // (no chão, sob os pés dela)
+      (m.material as THREE.MeshBasicMaterial).opacity = w.rede * (i ? 0.5 : 0.75) * (0.85 + 0.15 * Math.sin(agora * 3 + i));
     });
 
-    // REDE: as telas, a chuva, o teclado, os feixes e a aranha
+    // REDE: as telas, o teclado, os feixes, a aranha (se alimentando) e a energia
     rede.visible = w.rede > 0.005;
     teclado.visible = w.digitar > 0.01 || w.rede > 0.01;
     feixes.visible = rede.visible;
@@ -396,7 +428,8 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
         t.glitch = Math.max(0, t.glitch - dt);
         if (t.camada !== "principal" && Math.random() < dt * 0.35) t.glitch = aleat(0.08, 0.25);   // um glitch de vez em quando
         t.u.tempo!.value = agora; t.u.glitch!.value = t.glitch > 0 ? 1 : 0;
-        t.u.opac!.value = e * (t.camada === "longe" ? 0.45 : t.camada === "perto" ? 0.32 : 0.92);
+        const dr = drenada.get(telas.indexOf(t)) ?? 0;   // a aranha comeu essa tela: ela apaga e encolhe, e volta devagar
+        t.u.opac!.value = e * (t.camada === "longe" ? 0.45 : t.camada === "perto" ? 0.32 : 0.92) * (1 - 0.8 * dr);
         for (const v of t.u.toques!.value as THREE.Vector4[]) v.z = Math.max(0, v.z - dt * 1.6);
         if (t.camada === "perto") {
           const o = pertoOff[telas.indexOf(t) - (telas.length - pertoOff.length)]!;
@@ -406,20 +439,27 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
           t.mesh.position.set(t.base.x, t.base.y + Math.sin(agora * 0.9 + t.atraso * 30) * 0.008, t.base.z);
           if (t.olhar) t.mesh.lookAt(aux.set(0, peito.y + 0.02, 0));
         }
-        t.mesh.scale.set(t.w * (0.2 + 0.8 * e), t.h * e, 1);
+        t.mesh.scale.set(t.w * (0.2 + 0.8 * e) * (1 - 0.35 * dr), t.h * e * (1 - 0.35 * dr), 1);
         if (t.halo) { t.halo.position.copy(t.mesh.position).addScaledVector(aux2.copy(t.mesh.position).setY(0).normalize(), 0.02); (t.halo.material as THREE.SpriteMaterial).opacity = e * 0.28; }
       }
-      // a CHUVA de dados
-      chuva.forEach((g, i) => {
-        g.y -= g.v * dt; if (g.y < -0.75) novaGota(g, true);
-        chuvaPos.set([g.x, g.y, g.z, g.x, g.y + g.l, g.z], i * 6);
-      });
-      chuvaGeo.attributes.position!.needsUpdate = true; chuvaMat.opacity = 0.75 * w.rede;
 
       // a ARANHA anda pela página
       if (!ar.iniciada) { ar.pos.set(aleat(-0.3, 0.3), -0.2, PAREDE_Z); aranha.scale.setScalar(ESCALA); ar.alvo.copy(ar.pos); ar.iniciada = true; for (const p of pernas) { ideal(p, p.pe); p.passo = 1; } }
       ar.pausa -= dt;
-      if (ar.pos.distanceTo(ar.alvo) < 0.02 && ar.pausa <= 0) { ar.alvo.set((Math.random() < 0.5 ? -1 : 1) * aleat(0.15, 0.42), aleat(-0.24, 0.32), ar.pos.z); ar.pausa = aleat(0.1, 0.45); }
+      if (ar.pos.distanceTo(ar.alvo) < 0.02 && ar.pausa <= 0) {
+        ar.alvo.set((Math.random() < 0.5 ? -1 : 1) * aleat(0.15, 0.42), aleat(-0.24, 0.32), ar.pos.z);
+        // parou: SE ALIMENTA de uma tela do arco (ela é drenada num fluxo até a aranha)
+        if (w.aranha > 0.5 && Math.random() < 0.65) { ali.tela = 1 + Math.floor(Math.random() * 16); ali.ate = agora + aleat(0.9, 1.4); ar.pausa = ali.ate - agora; telas[ali.tela]!.glitch = 0.3; }
+        else ar.pausa = aleat(0.1, 0.4);
+      }
+      if (ali.tela >= 0) {
+        if (agora > ali.ate) { ali.tela = -1; ali.fome = Math.min(1, ali.fome + 0.25); }
+        else {
+          drenada.set(ali.tela, Math.min(1, (drenada.get(ali.tela) ?? 0) + dt * 0.9));
+          if (agora > ali.proxGota) { const tl = telas[ali.tela]!; soltarPacote(aux.copy(tl.mesh.position).add(rede.position).add(aux2.set(aleat(-0.05, 0.05), aleat(-0.03, 0.03), 0)), aux2.copy(ar.pos).add(rede.position), 0.42, 0.04); ali.proxGota = agora + 0.035; }
+        }
+      }
+      for (const [k, v] of drenada) { const nv = k === ali.tela ? v : v - dt * 0.3; if (nv <= 0) drenada.delete(k); else drenada.set(k, nv); }
       if (ar.pausa <= 0) {
         aux.copy(ar.alvo).sub(ar.pos); const d = aux.length();
         if (d > 1e-4) {
@@ -443,7 +483,7 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
             p.pe.z = ar.pos.z;
             const toques = principal.u.toques!.value as THREE.Vector4[];
             toques[ar.toque++ % 4]!.set((p.pe.x - principal.base.x) / PRINC.w + 0.5, (p.pe.y - principal.base.y) / PRINC.h + 0.5, 1, 0);
-            if (Math.random() < 0.3) soltarPacote(aux.copy(p.pe).add(rede.position), cabeca, 0.75, 0.25);
+            if (Math.random() < 0.12) soltarPacote(aux.copy(p.pe).add(rede.position), cabeca, 0.75, 0.25);
           }
         }
       }
@@ -457,9 +497,10 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
         pernasPos.set([aux.x, aux.y, aux.z, joelho.x, joelho.y, joelho.z, joelho.x, joelho.y, joelho.z, p.pe.x, p.pe.y, p.pe.z], i * 12);
       });
       pernasGeo.attributes.position!.needsUpdate = true;
-      const vis = sstep((w.rede - 0.3) / 0.5);
+      const vis = sstep((Math.min(w.rede, w.aranha) - 0.2) / 0.5);
       pernasMat.opacity = vis; juntasMat.opacity = vis; corpoMat.opacity = vis * 0.95;
       (brilhoAranha.material as THREE.SpriteMaterial).opacity = vis * (0.6 + 0.4 * Math.sin(agora * 7));
+      brilhoAranha.scale.setScalar(0.07 + 0.07 * ali.fome + (ali.tela >= 0 ? 0.03 * Math.sin(agora * 30) : 0));   // (cresce a cada refeição)
       for (const o of olhosAranha) (o.material as THREE.SpriteMaterial).opacity = vis;
     }
 
@@ -505,6 +546,32 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
       pacGeo.attributes.position!.needsUpdate = true;
     }
 
+    // ENERGIA: a aranha vira uma esfera que sobe por trás dela; RAIOS em ziguezague saltam pras telas
+    const vEn = w.energia, comEnergia = vEn > 0.01;
+    esfera.visible = raios.visible = raios2.visible = comEnergia; for (const p of pontas) p.visible = comEnergia;
+    if (comEnergia) {
+      if (!en.ativa) { en.ativa = true; en.desde = agora; en.de.copy(ar.iniciada ? aux.copy(ar.pos).add(rede.position) : aux.set(0, peito.y, -0.5)); en.proxRaio = 0; }
+      const u = sstep((agora - en.desde) / 1.4);
+      en.pos.lerpVectors(en.de, aux.set(-lado * 0.28, peito.y + 0.42, -0.22), u);   // (por cima, do lado oposto à câmera: não some atrás da cabeça) en.pos.y += Math.sin(agora * 1.7) * 0.015;
+      esfera.position.copy(en.pos);
+      const pul = 0.85 + 0.15 * Math.sin(agora * 12) + (Math.random() < 0.08 ? 0.3 : 0);
+      esferaCamadas.forEach(({ sp, tam }, i) => { (sp.material as THREE.SpriteMaterial).opacity = vEn * (i === 2 ? 1 : 0.85) * Math.min(1, pul); sp.scale.setScalar(tam * (0.5 + 0.5 * u) * pul); });
+      for (let i = 0; i < NORB; i++) { const ang = agora * (1.6 + (i % 3) * 0.7) + i * 2.4, r = 0.07 + 0.035 * Math.sin(i * 1.3 + agora); orbPos.set([Math.cos(ang) * r, Math.sin(agora * 2.6 + i) * 0.05, Math.sin(ang) * r], i * 3); }
+      orbGeo.attributes.position!.needsUpdate = true; orbMat.opacity = vEn;
+      if (agora > en.proxRaio && u > 0.3) {
+        en.proxRaio = agora + aleat(0.05, 0.11);
+        for (let i = 0; i < NRAIO; i++) {
+          if (i < 4) { const k = 1 + Math.floor(Math.random() * 16), tl = telas[k]!; aux2.copy(tl.mesh.position).add(rede.position); tl.glitch = Math.max(tl.glitch, 0.15); }
+          else if (i === 4) aux2.copy(teclado.position);
+          else aux2.set(principal.base.x + aleat(-0.4, 0.4), principal.base.y + aleat(-0.25, 0.25), principal.base.z).add(rede.position);
+          desenharRaio(i, en.pos, aux2); pontas[i]!.position.copy(aux2);
+        }
+        raioGeo.attributes.position!.needsUpdate = true; raio2Geo.attributes.position!.needsUpdate = true;
+      }
+      raioMat.opacity = u * vEn * (0.8 + 0.2 * Math.random()); raio2Mat.opacity = u * vEn * 0.8;
+      for (const p of pontas) (p.material as THREE.SpriteMaterial).opacity = u * vEn * aleat(0.4, 1);
+    } else en.ativa = false;
+
     // ÁRVORE: cresce do peito pra cima, nível por nível
     arvore.visible = w.arvore > 0.005;
     if (arvore.visible) {
@@ -541,7 +608,7 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
 
   return {
     atualizar, zerar,
-    estado: () => ({ ...w, seq: ultimaSeq, visivel: raiz.visible, rede: rede.visible, telas: telas.length, aranha: ar.pos.toArray().map((x) => +x.toFixed(2)) }),
+    estado: () => ({ ...w, comendo: ali.tela, fome: ali.fome, seq: ultimaSeq, visivel: raiz.visible, rede: rede.visible, telas: telas.length, aranha: ar.pos.toArray().map((x) => +x.toFixed(2)) }),
     dispose: () => { cena.remove(raiz); for (const d of descartaveis) d.dispose(); },
   };
 }
