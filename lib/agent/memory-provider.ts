@@ -88,14 +88,16 @@ export async function writeTurnMemory(input: TurnMemoryInput): Promise<void> {
  * Recall no início do turno → um bloco de systemContext pronto pra injetar. Inclui o "perfil"
  * pinado (se houver) + os drawers relevantes. Best-effort: erro/vazio → "". SEM LLM no hot path.
  */
-export async function wakeUpContext(args: { userId: string; surface: string; hint?: string; wingLabel?: string }): Promise<string> {
+export async function wakeUpContext(args: { userId: string; surface: string; hint?: string; wingLabel?: string | null }): Promise<string> {
   if (!args.userId || !isMemoryConfigured()) return "";
   const scope: MemoryScope = { userId: args.userId };
+  // wingLabel explícito (Mentores: "<slug>/<userId>") estreita o recall ao andar do mentor; ausente = o da superfície.
+  // #562: null = TUDO do dono, sem filtro de andar (o Escritório, na conversa só da pessoa, lembra do chat também).
+  const ala = args.wingLabel === null ? undefined : (args.wingLabel ?? args.surface);
   try {
     const [profile, recalled] = await Promise.all([
       getMemory().search("", { userId: args.userId, room: "perfil" }, 1).catch(() => [] as RecallHit[]),
-      // wingLabel explícito (Mentores: "<slug>/<userId>") estreita o recall ao andar do mentor.
-      getMemory().wakeUp({ ...scope, wingLabel: args.wingLabel ?? args.surface }, args.hint, 6).catch(() => [] as RecallHit[]),
+      getMemory().wakeUp(ala ? { ...scope, wingLabel: ala } : scope, args.hint, 6).catch(() => [] as RecallHit[]),
     ]);
     const lines: string[] = [];
     if (profile[0]?.text) lines.push(`Perfil do usuário: ${profile[0].text}`);

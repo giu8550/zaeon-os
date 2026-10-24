@@ -20,6 +20,8 @@ import { estadoDeFase, PULSO_AGENTE_MS, type EstadoAgente } from "@/lib/canal/es
 import { proximoDaCadeia, podePassar } from "@/lib/canal/encadear";
 import { estaForaDaConversa } from "@/lib/canal/alvo";
 import { agentesDasSalas } from "@/lib/canal/agentesSalas";
+import { escopoDaMemoria, SUPERFICIE_ESCRITORIO } from "@/lib/canal/memoria";
+import type { StructuredAnswer } from "@/lib/agent/contracts";
 
 export const N_CONTEXTO = 30;
 
@@ -43,7 +45,7 @@ export type TurnoInput = {
 export type MsgRow = {
   id: string; canalId: string; autorTipo: string; autorId: string; texto: string; mencoes: string[]; createdAt: Date;
 };
-export type CanalRow = { id: string; ownerId: string; titulo: string; acesso: string; membros: string[]; agentes: string[] };
+export type CanalRow = { id: string; ownerId: string; titulo: string; acesso: string; membros: string[]; agentes: string[]; dmCom?: string | null };
 
 export type TurnoPrisma = {
   canal: { findUnique(a: { where: { id: string } }): Promise<CanalRow | null> };
@@ -65,8 +67,32 @@ export type GerarArgs = {
   userId: string;
   /** a cada fase do harness (route, plan, gather, …): vira o estado mostrado na tela ("pesquisando"). */
   onFase?: (fase: string) => void;
+  /** #562: o que a memória profunda relembrou pra este turno ("" = nada) — entra no contexto do sistema. */
+  memoria?: string;
+  /** #562: de quem é a memória deste turno (a pessoa, ou o id do escritório) — a busca no meio da resposta usa isto. */
+  memoriaDe?: string;
 };
 export type Gerar = (args: GerarArgs) => Promise<string>;
+
+/**
+ * #562: a memória profunda (L3) no Escritório — relembra no começo, guarda no fim. Injetável (os testes passam a
+ * deles); o padrão é a do chat (lib/agent/memory-provider). De quem é a memória: lib/canal/memoria.
+ */
+export type MemoriaDoTurno = {
+  lembrar(a: { dono: string; ala: string | null; dica: string }): Promise<string>;
+  guardar(a: { dono: string; alaEscrita?: { kind: "agente"; label: string }; scopeId: string; prompt: string; resposta: string }): Promise<void>;
+};
+
+const memoriaReal: MemoriaDoTurno = {
+  async lembrar({ dono, ala, dica }) {
+    const { wakeUpContext } = await import("@/lib/agent/memory-provider");
+    return wakeUpContext({ userId: dono, surface: SUPERFICIE_ESCRITORIO, hint: dica, wingLabel: ala });
+  },
+  async guardar({ dono, alaEscrita, scopeId, prompt, resposta }) {
+    const { writeTurnMemory } = await import("@/lib/agent/memory-provider");
+    await writeTurnMemory({ userId: dono, surface: SUPERFICIE_ESCRITORIO, scopeId, prompt, answer: { nucleo: resposta } as StructuredAnswer, wing: alaEscrita });
+  },
+};
 
 export type TurnoDeps = {
   prisma: TurnoPrisma;
@@ -74,6 +100,8 @@ export type TurnoDeps = {
   publicar?: Publicar;    // default = Pusher
   /** #468: de quanto em quanto tempo repete "ainda escrevendo" (padrão PULSO_AGENTE_MS; os testes encurtam). */
   pulsoMs?: number;
+  /** #562: a memória profunda (padrão = a do chat). */
+  memoria?: MemoriaDoTurno;
   /** #396 (B): dispara o turno do próximo agente da cadeia (a fila injeta; sem isto, não encadeia). */
   encadear?: (job: TurnoInput & { mensagemId: string }) => Promise<unknown> | unknown;
 };
@@ -141,7 +169,7 @@ export function blocoCanal(
 
 // ───────────────────────────── gerar (default = harness) ─────────────────────────────
 
-const gerarComHarness: Gerar = async ({ agente, objective, history, canal, userId, onFase }) => {
+const gerarComHarness: Gerar = async ({ agente, objective, history, canal, userId, onFase, memoria, memoriaDe }) => {
   const [{ buildHarnessDeps, renderStructuredAnswer }, { runTrajectory }, { gatewayLigado }] = await Promise.all([
     import("@/lib/agent/aura-harness"),
     import("@/lib/agent/trajectory"),
@@ -160,7 +188,8 @@ const gerarComHarness: Gerar = async ({ agente, objective, history, canal, userI
     const { PERSONAS, buildPersona } = await import("@/lib/ai/personas");
     identidade = PERSONAS[agente.agentKey] ? buildPersona(agente.agentKey) : `Você é ${agente.nome}. ${agente.bio}`;
   }
-  const systemContext = [identidade, (agente as any).__blocoCanal ?? ""].filter(Boolean).join("\n\n");
+  // #562: o que a memória profunda relembrou (só a de quem pode: lib/canal/memoria) entra depois do bloco do canal
+  const systemContext = [identidade, (agente as any).__blocoCanal ?? "", memoria ?? ""].filter(Boolean).join("\n\n");
   // O harness foi escrito "em Aura"; aqui a voz é do agente convocado. Troca a identidade nos
   // prompts de geração SEM tocar no harness (regra: o harness só muda no incremento de uso).
   const assinatura = `\nIDENTIDADE DESTE TURNO: você é ${agente.nome} (não a Aura). Mantenha a voz e o nome de ${agente.nome} em toda a resposta.`;
@@ -174,6 +203,8 @@ const gerarComHarness: Gerar = async ({ agente, objective, history, canal, userI
     mentor: agente.tipo === "mentor" ? agente.agentKey : undefined,
     wing,
     canalId: canal.id,
+    // #562: a busca na memória no meio da resposta (memory_search) olha SÓ esta memória — em grupo, a do escritório
+    memoriaDe,
   };
   // C5/C6: o turno do canal é o ÚNICO opt-in ao gateway nesta fatia (e só com GATEWAY_URL); o ledger
   // leva agentKey/surface/scopeId e cada fase (plan/reason/draft) grava sua linha.
@@ -270,11 +301,18 @@ export async function executarTurno(input: TurnoInput, deps: TurnoDeps): Promise
   const pulso = setInterval(() => {
     void Promise.resolve(publicar(canal.id, EV_DIGITANDO, { agentKey: agente.agentKey, estado: atual })).catch(() => undefined);
   }, deps.pulsoMs ?? PULSO_AGENTE_MS);
+  // #562: de quem é a memória deste turno — a pessoa (conversa só dela) ou o escritório (qualquer outro caso)
+  const memoria = deps.memoria ?? memoriaReal;
+  const escopo = escopoDaMemoria(canal, input.userId, agente.tipo === "mentor" ? `${agente.agentKey}/${input.userId}` : null);
   try {
+    // relembra no começo (best-effort: memória fora ou erro = "", o turno segue)
+    const lembranca = await memoria.lembrar({ dono: escopo.dono, ala: escopo.alaLeitura, dica: objective }).catch(() => "");
     // G6 (Fatia 7): nunca persistir imagem remota/HTML vindo do modelo (texto limpo sai idêntico).
-    const texto = limparSaidaAgente((await gerar({ agente: agenteComCanal, objective, history, canal, userId: input.userId, onFase })).trim());
+    const texto = limparSaidaAgente((await gerar({ agente: agenteComCanal, objective, history, canal, userId: input.userId, onFase, memoria: lembranca, memoriaDe: escopo.dono })).trim());
     if (!texto) throw new Error("resposta vazia");
     const row = await prisma.canalMensagem.create({ data: { canalId: canal.id, autorTipo: "agente", autorId: agente.agentKey, texto, mencoes: [] } });
+    // guarda o turno no fim (fire-and-forget: nunca segura nem derruba a resposta)
+    void memoria.guardar({ dono: escopo.dono, alaEscrita: escopo.alaEscrita, scopeId: canal.id, prompt: objective, resposta: texto }).catch(() => undefined);
     const wire: MensagemWire = {
       id: row.id, canalId: row.canalId, autorTipo: "agente", autorId: agente.agentKey, texto: row.texto, mencoes: [],
       createdAt: new Date(row.createdAt).toISOString(), autorNome: agente.nome, autorAvatar: agente.avatarUrl,
