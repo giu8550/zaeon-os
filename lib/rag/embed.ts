@@ -22,6 +22,27 @@ export const embedVertex: EmbedRag = (textos, tipo) =>
   embedGemini(textos, { dim: RAG_EMBED_DIM, taskType: tipo === "pergunta" ? "RETRIEVAL_QUERY" : "RETRIEVAL_DOCUMENT" });
 
 /**
+ * O vetor da PERGUNTA do turno, COMPARTILHADO (out/2026): o RAG da turma (lib/rag/turno) e o cache de respostas
+ * (lib/rag/cacheRespostas) precisam do mesmo vetor — uma chamada ao Vertex só. Memo por texto por 60 s (a mesma
+ * promessa serve os dois, mesmo pedidos ao mesmo tempo); falhou → sai do memo (a próxima tenta de novo).
+ */
+const memoPergunta = new Map<string, { em: number; p: Promise<number[]> }>();
+export function embedPerguntaCompartilhado(texto: string, embed: EmbedRag = embedVertex, agora: () => number = Date.now): Promise<number[]> {
+  const t = agora();
+  for (const [k, v] of memoPergunta) if (t - v.em > 60_000) memoPergunta.delete(k);
+  const achado = memoPergunta.get(texto);
+  if (achado) return achado.p;
+  const p = embed([texto], "pergunta").then((vs) => { if (!vs[0]) throw new Error("embed_vazio"); return vs[0]; });
+  p.catch(() => memoPergunta.delete(texto));
+  memoPergunta.set(texto, { em: t, p });
+  if (memoPergunta.size > 300) memoPergunta.delete(memoPergunta.keys().next().value as string);
+  return p;
+}
+/** o embedVertex com a PERGUNTA vindo do memo compartilhado (o que o RAG do turno usa) */
+export const embedVertexCompartilhado: EmbedRag = (textos, tipo) =>
+  tipo === "pergunta" && textos.length === 1 ? embedPerguntaCompartilhado(textos[0]!).then((v) => [v]) : embedVertex(textos, tipo);
+
+/**
  * gemini-embedding-001 no Vertex com a dimensão pedida. Também serve a memória L3 (1536, sem task_type:
  * o mesmo vetor serve pra gravar e pra buscar). Lotes de LOTE_EMBED; erro HTTP/timeout lança.
  */

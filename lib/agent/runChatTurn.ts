@@ -27,7 +27,7 @@ import * as mem from "@/lib/agent/memory-provider";
 import { serializarProgresso, serializarModelo, serializarPrevia } from "@/lib/agent/progresso";
 import { criarEmissorPrevia } from "@/lib/agent/previa";
 import { blocoFonteColada, objetivoComFonte, pedidoParaTitulo, separarFonteColada } from "@/lib/agent/fonteColada";
-import { modeloDoId, nomeDoModeloServido } from "@/lib/chat/modelos";
+import { MODELO_PADRAO, modeloDoId, nomeDoModeloServido } from "@/lib/chat/modelos";
 import { markRunning, saveDone, saveError } from "@/lib/agent/chat-turn-store";
 import type { Wing } from "@/lib/agent/memory";
 
@@ -115,6 +115,18 @@ export async function runChatTurn(
         narrar(serializarProgresso({ fase: "draft", rotulo: "Servidor local ocupado — respondendo pelo Google" }));
       }
     }
+    // O CACHE DE RESPOSTAS (lib/rag/cacheRespostas, CACHE_RESPOSTAS=1): pergunta de conceito já respondida volta sem
+    // modelo. Consulta EM PARALELO com o preparo abaixo, com o mesmo vetor da pergunta que o RAG da turma usa. Só no
+    // modelo padrão (quem escolheu outro no composer quer aquele modelo), sem texto colado, pergunta autocontida e
+    // impessoal. Qualquer falha = "não achou": o turno segue normal.
+    const cache = await import("@/lib/rag/cacheRespostas");
+    const escopoCache = cache.escopoDoCache(surfaceLedger(surface ?? hctx.activeTab), mentor?.slug);
+    const usaCache = cache.cacheLigado() && !colada.fonte && (!escolhido || escolhido.id === MODELO_PADRAO) && cache.perguntaCacheavel(prompt);
+    const cacheP = usaCache
+      ? Promise.all([import("@/lib/rag/pg"), import("@/lib/rag/embed")])
+        .then(async ([{ ragPg }, { embedPerguntaCompartilhado }]) => cache.consultarCache(ragPg(), { pergunta: prompt, vetor: await embedPerguntaCompartilhado(objetivo), escopo: escopoCache }))
+        .catch(() => null)
+      : Promise.resolve(null);
     // Só anuncia quando é verdade: sem dono do turno não há memória pra reler.
     if (userId) narrar(serializarProgresso({ fase: "memoria", rotulo: "Retomando a conversa" }));
     // O PREPARO do turno, em PARALELO (out/2026, "as respostas estão lentas"): memória L3, bússola da cartolina,
@@ -166,7 +178,21 @@ export async function runChatTurn(
         narrar(serializarProgresso({ fase: String(step.detail ?? ""), rotulo }));
       },
     });
-    const { answer, state } = await runTrajectoryTraced(objetivo, hctx, deps);
+    // ACHOU no cache: a resposta guardada entra no lugar do motor (e segue pelo mesmo pós-processamento: memória,
+    // cartolina, uso…). Não achou: o motor de sempre — e a resposta boa vai pro cache depois (fire-and-forget).
+    const doCache = await cacheP;
+    if (doCache) narrar(serializarProgresso({ fase: "finalize", rotulo: "Já respondi isso antes" }));
+    const { answer, state } = doCache
+      ? { answer: doCache.answer as any, state: { intent: doCache.intent, kind: doCache.kind, artifacts: [], degraded: false } as any }
+      : await runTrajectoryTraced(objetivo, hctx, deps);
+    if (!doCache && usaCache && cache.respostaGuardavel(answer as any, state.intent, !!state.degraded)) {
+      void Promise.all([import("@/lib/rag/pg"), import("@/lib/rag/embed")])
+        .then(async ([{ ragPg }, { embedPerguntaCompartilhado }]) => cache.guardarNoCache(ragPg(), {
+          pergunta: prompt, vetor: await embedPerguntaCompartilhado(objetivo), escopo: escopoCache,
+          answer: answer as any, intent: state.intent, kind: state.kind, modelo: (servido as { modelo: string } | null)?.modelo ?? null,
+        }))
+        .catch((e) => console.error("[cache] guardar falhou:", String((e as Error)?.message ?? e).slice(0, 160)));
+    }
     const out = resolveHarnessOutput(state, answer, surface, objetivo, { trabalhoNoEditor: multi });
     // TCC cross-sala: "crie um TCC sobre X" cria o TCC da conversa; nos turnos seguintes
     // `work.sections` vira operação por seção. AGUARDADO (é só banco, sem modelo) porque o cliente
@@ -224,7 +250,8 @@ export async function runChatTurn(
         .catch(() => null);
     }
     const quem = servido as { modelo: string; alvo?: string } | null;
-    if (quem) narrar(serializarModelo(nomeDoModeloServido(quem.modelo, quem.alvo)));
+    if (doCache) narrar(serializarModelo("Aura · resposta guardada"));
+    else if (quem) narrar(serializarModelo(nomeDoModeloServido(quem.modelo, quem.alvo)));
     if (turnId) await saveDone(turnId, out, narrado);
     return out;
   } catch (e: any) {

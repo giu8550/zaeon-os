@@ -18,7 +18,7 @@
  * override `RAG_CORTE_SIMILARIDADE`) — vizinho vetorial sem relação não vira "fonte" no prompt.
  */
 import { buscar, type BuscaDeps, type TrechoAchado } from "./busca";
-import { embedVertex } from "./embed";
+import { embedVertexCompartilhado } from "./embed";
 import { ehBancoIndisponivel, ragPg } from "./pg";
 import type { EscopoRag } from "./permissao";
 import { contarBase } from "./store";
@@ -91,7 +91,7 @@ async function prismaReal(): Promise<PrismaTurmas> {
 }
 
 function buscaReal(): BuscaDeps {
-  return { db: ragPg(), embed: embedVertex, contar: (e) => contarBase(ragPg(), e) };
+  return { db: ragPg(), embed: embedVertexCompartilhado, contar: (e) => contarBase(ragPg(), e) };   // (o vetor da pergunta é o mesmo do cache de respostas)
 }
 
 const msgDe = (e: unknown) => (e as Error)?.message ?? String(e);
