@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { runTrajectoryTraced, harnessEnabled, type HarnessDeps } from "./trajectory";
+import { runTrajectoryTraced, harnessEnabled, rotuloDasFontes, type HarnessDeps } from "./trajectory";
 import type { ExaminerVerdict, StructuredAnswer } from "./contracts";
 import type { RouterResult } from "./router";
 import type { AgentContext } from "./context";
@@ -136,5 +136,30 @@ describe("trajectory · harnessEnabled (flag)", () => {
     expect(harnessEnabled()).toBe(true);
     process.env.AURA_HARNESS = "0";
     expect(harnessEnabled()).toBe(false);
+  });
+});
+
+describe("trajectory · as fontes antes do texto", () => {
+  it("depois da coleta, o progresso diz quantas fontes e de que tipo", async () => {
+    const labels: string[] = [];
+    const { deps } = makeDeps({
+      runTool: async () => ({ ok: true, findings: [
+        { claim: "a", source: { title: "Paper A" }, confidence: "alta" }, { claim: "b", source: { title: "Paper B" }, confidence: "média" },
+        { claim: "c", source: { title: "Site", url: "https://x" }, confidence: "baixa" },
+      ], provenance: {} }),
+      emit: (s) => labels.push(String(s.label ?? "")),
+    });
+    await runTrajectoryTraced("explique entropia", ctx, deps);
+    expect(labels).toContain("Li 3 fontes · 2 artigos acadêmicos, 1 da web — escrevendo");
+  });
+  it("coleta vazia: não anuncia fonte nenhuma", async () => {
+    const labels: string[] = [];
+    const { deps } = makeDeps({ runTool: async () => ({ ok: true, findings: [], provenance: {} }), emit: (s) => labels.push(String(s.label ?? "")) });
+    await runTrajectoryTraced("explique entropia", ctx, deps);
+    expect(labels.some((l) => l.startsWith("Li "))).toBe(false);
+  });
+  it("rotuloDasFontes: singular e só web", () => {
+    expect(rotuloDasFontes([{ source: { title: "x" }, confidence: "baixa" }])).toBe("Li 1 fonte · 1 da web — escrevendo");
+    expect(rotuloDasFontes([{ source: { title: "x" }, confidence: "alta" }])).toBe("Li 1 fonte · 1 artigo acadêmico — escrevendo");
   });
 });
