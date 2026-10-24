@@ -165,6 +165,36 @@ const SYSTEM = [
   '"kind" só quando intent="criar_trabalho"; senão null.',
 ].join("\n");
 
+/** a intenção candidata (do modelo ou do kNN) → o resultado, com as regras determinísticas mandando em cima dela */
+function resultadoDe(cand: IntentId, text: string, ctx: CtxRoteador, kindDoModelo: unknown): RouterResult {
+  // Pedido explícito de aula manda mais que o palpite (que às vezes lê "aula" como trabalho escrito).
+  // Gráfico de função/geometria manda mais que o palpite (que lê "gráfico" como artefato de imagem).
+  const nt = norm(text);
+  // "agora outro sobre Y" com trabalho na conversa manda mais que o palpite (que lê como conversa).
+  const outro = pedeOutroTrabalho(nt, ctx);
+  const intent: IntentId = pedeAula(nt) ? "gerar_artefato" : pedeLivro(text) ? "buscar_livro" : pedeGraficoMatematico(text) ? "explicar_conceito" : outro ? "criar_trabalho" : cand;
+  const kind =
+    intent === "criar_trabalho"
+      ? normalizeKind(typeof kindDoModelo === "string" ? kindDoModelo : undefined) ?? workKindFrom(nt) ?? (outro ? ctx.trabalhos?.kind : undefined) ?? "artigo"
+      : undefined;
+  const academicMode = academicModeForSurface(ctx.activeTab);
+  return { intent, mode: modeFor(intent, nt, academicMode), academicMode, kind };
+}
+
+/** o voto do kNN (só com ROTEADOR_KNN ligado e o índice pronto; o vetor da pergunta é o compartilhado com o RAG/cache) */
+async function votoKnn(text: string): Promise<{ modo: "sombra" | "on"; voto: import("./roteadorKnn").VotoKnn; decide: boolean } | null> {
+  const k = await import("./roteadorKnn");
+  const modo = k.modoKnn();
+  if (modo === "off") return null;
+  const { embedVertex, embedPerguntaCompartilhado } = await import("@/lib/rag/embed");
+  const indice = k.indiceSePronto(embedVertex);
+  if (!indice) return null;
+  const vetor = await Promise.race([embedPerguntaCompartilhado(text), new Promise<null>((r) => setTimeout(() => r(null), 2500))]);
+  if (!vetor) return null;
+  const voto = k.votar(vetor, indice);
+  return voto ? { modo, voto, decide: k.confiante(voto) } : null;
+}
+
 /**
  * classify (§11.2): 1 chamada Flash barata (JSON forçado) com heurística de fallback.
  * `academicMode` vem SEMPRE da sala (§8.8), nunca do modelo.
@@ -173,6 +203,9 @@ export async function classify(objective: string, ctx: CtxRoteador): Promise<Rou
   const fallback = classifyHeuristic(objective, ctx);
   const text = (objective || "").trim();
   if (!text) return fallback;
+  // O ROTEADOR POR SIMILARIDADE (lib/agent/roteadorKnn): confiante → decide SEM o modelo; "sombra" → só registra.
+  const knn = await votoKnn(text).catch(() => null);
+  if (knn?.modo === "on" && knn.decide) return resultadoDe(knn.voto.intent, text, ctx, undefined);
   try {
     // import tardio: mantém o router (e o teste da heurística) SEM carregar o Vertex/rede.
     const { geminiJson } = await import("@/lib/scholar/gemini");
@@ -188,13 +221,12 @@ export async function classify(objective: string, ctx: CtxRoteador): Promise<Rou
     const nt = norm(text);
     // "agora outro sobre Y" com trabalho na conversa manda mais que o palpite (o modelo lê como conversa).
     const outro = pedeOutroTrabalho(nt, ctx);
-    const intent: IntentId = pedeAula(norm(text)) ? "gerar_artefato" : pedeLivro(text) ? "buscar_livro" : pedeGraficoMatematico(text) ? "explicar_conceito" : outro ? "criar_trabalho" : isIntentId(cand) ? cand : fallback.intent;
-    const kind =
-      intent === "criar_trabalho"
-        ? normalizeKind(out?.kind) ?? workKindFrom(nt) ?? (outro ? ctx.trabalhos?.kind : undefined) ?? "artigo"
-        : undefined;
-    const academicMode = academicModeForSurface(ctx.activeTab);
-    return { intent, mode: modeFor(intent, nt, academicMode), academicMode, kind };
+    const r = resultadoDe(isIntentId(cand) ? cand : fallback.intent, text, ctx, out?.kind);
+    if (knn?.modo === "sombra" && knn.voto) {
+      // só a CONCORDÂNCIA e as intenções (nunca o texto da pergunta) — pra medir em prod antes de virar o kNN
+      console.info(`[roteador-knn] sombra ${knn.voto.intent === r.intent ? "=" : "≠"} knn=${knn.voto.intent} modelo=${r.intent} decidiria=${knn.decide ? "sim" : "nao"} c=${knn.voto.confianca.toFixed(2)} m=${knn.voto.margem.toFixed(2)}`);
+    }
+    return r;
   } catch {
     return fallback; // rede/credencial/timeout → heurística (nunca derruba o laço)
   }
