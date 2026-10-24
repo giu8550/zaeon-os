@@ -129,6 +129,9 @@ export type Sequencias = {
   zerar: () => void;
   /** (dev) os pesos e a sequência agora */
   estado: () => Record<string, unknown>;
+  /** o REBAIXAMENTO (a cena passou do orçamento por quadro): 1 = sem as telas longe/perto e os halos; 2 = metade do
+   *  arco e sem os feixes */
+  qualidade: (q: 0 | 1 | 2) => void;
   dispose: () => void;
 };
 
@@ -608,6 +611,13 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
 
   return {
     atualizar, zerar,
+    qualidade: (q) => {
+      telas.forEach((t, i) => {
+        const fora = (q >= 1 && (t.camada === "longe" || t.camada === "perto")) || (q >= 2 && t.camada === "arco" && i % 2 === 0);
+        t.mesh.visible = !fora; if (t.halo) t.halo.visible = q < 1 && !fora;
+      });
+      feixeMat.visible = q < 2;
+    },
     estado: () => ({ ...w, comendo: ali.tela, fome: ali.fome, seq: ultimaSeq, visivel: raiz.visible, rede: rede.visible, telas: telas.length, aranha: ar.pos.toArray().map((x) => +x.toFixed(2)) }),
     dispose: () => { cena.remove(raiz); for (const d of descartaveis) d.dispose(); },
   };

@@ -70,7 +70,8 @@ export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: 
   try { R = new THREE.WebGLRenderer({ canvas: canvas as HTMLCanvasElement, antialias: true, alpha: true, powerPreference: "low-power" }); }
   catch { o.aoEstado("erro"); return null; }
   let vivo = true, raf = 0, visivel = true, c: Character | null = null, vrm: VRM | null = null, larg = o.largura, alt = o.altura;
-  R.setPixelRatio(Math.min(o.dpr || 1, 1.5)); R.outputColorSpace = THREE.SRGBColorSpace; R.setClearColor(0x000000, 0);
+  let dprBase = Math.min(o.dpr || 1, 1.5);
+  R.setPixelRatio(dprBase); R.outputColorSpace = THREE.SRGBColorSpace; R.setClearColor(0x000000, 0);
   const cena = new THREE.Scene(), cam = new THREE.PerspectiveCamera(22, 1, 0.1, 40);
   cena.add(new THREE.HemisphereLight(0xe6f2ff, 0x241c3a, 2.1));
   const sol = new THREE.DirectionalLight(0xffffff, 2.1); sol.position.set(-1.2, 2.6, 3.5); cena.add(sol);
@@ -144,7 +145,7 @@ export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: 
     if (vrm) { cena.remove(vrm.scene); descartar(vrm); }
     vrm = null; c = null; acoes = null; zerar();
   };
-  let pedido = 0, carregado: PersonaId | null = null;
+  let pedido = 0, carregado: PersonaId | null = null, pendente: PersonaId | null = null;
   const carregar = async (id: PersonaId) => {
     if (id === carregado) return;
     const meu = ++pedido; carregado = id;
@@ -187,14 +188,24 @@ export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: 
     zerar();
     o.aoEstado("pronto"); tocar();
   };
-  const trocar = (id: PersonaId) => { void carregar(id).catch((e) => { console.warn("[avatar] não carregou:", e); carregado = null; if (vivo) o.aoEstado("erro"); }); };
+  const trocar = (id: PersonaId) => {
+    // REGRA: nada de baixar um corpo (~12 MB) enquanto uma resposta está chegando — a anterior sai na hora e a nova
+    // espera a resposta acabar (sinais → escrevendo false)
+    if (sinais.escrevendo && id !== carregado) { pedido++; soltarCorpo(); carregado = null; pendente = id; o.aoEstado("carregando"); return; }
+    pendente = null;
+    void carregar(id).catch((e) => { console.warn("[avatar] não carregou:", e); carregado = null; if (vivo) o.aoEstado("erro"); }); };
 
   // o laço (com a medida do custo por quadro — o diag)
   const relogio = new THREE.Clock();
   let medQuadros = 0, medMs = 0, medDesde = performance.now();
+  // REGRA: o REBAIXAMENTO automático — a média do custo por quadro passou de ORCAMENTO_MS por 2 s: um nível a menos
+  const ORCAMENTO_MS = 12;
+  let qualidade: 0 | 1 | 2 = 0, mediaMs = 0, acimaDesde = 0, ultimoQuadro = 0;
   const passo = () => {
     raf = 0; if (!vivo || !visivel) return;
     const t0 = performance.now();
+    if (sinais.escrevendo && t0 - ultimoQuadro < 1000 / 31) { raf = pedirQuadro(passo); return; }   // 30 fps gerando
+    ultimoQuadro = t0;
     const dt = Math.min(0.05, relogio.getDelta()), agora = t0 / 1000;
     if (c && vrm) {
       const lendoAgora = !sinais.escrevendo && (sinais.lendo || agora < st.lerAte), ocupada = sinais.escrevendo || lendoAgora;
@@ -224,7 +235,13 @@ export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: 
       tab.tablet.scale.multiplyScalar(0.78);   // (um pouco menor que o do lounge: aqui a câmera está perto)
     }
     R.render(cena, cam);
-    medQuadros++; medMs += performance.now() - t0;
+    const custo = performance.now() - t0;
+    medQuadros++; medMs += custo;
+    mediaMs += (custo - mediaMs) * 0.05;
+    if (mediaMs > ORCAMENTO_MS && qualidade < 2) {
+      if (!acimaDesde) acimaDesde = t0;
+      else if (t0 - acimaDesde > 2000) { qualidade = (qualidade + 1) as 1 | 2; seqs.qualidade(qualidade); dprBase = 1; R.setPixelRatio(1); tamanhoMudou = true; enquadrar(); acimaDesde = 0; mediaMs = ORCAMENTO_MS * 0.7; }
+    } else acimaDesde = 0;
     raf = pedirQuadro(passo);
   };
   function tocar() { if (!raf && vivo && visivel) { relogio.getDelta(); raf = pedirQuadro(passo); } }
@@ -234,16 +251,20 @@ export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: 
   return {
     persona: trocar,
     sinais: (lendo, escrevendo) => {
+      const mudou = escrevendo !== sinais.escrevendo;
       if (escrevendo && !sinais.escrevendo) gerandoDesde = performance.now() / 1000;   // a resposta começou: o roteiro
       if (!escrevendo) gerandoDesde = null;
       sinais.lendo = lendo; sinais.escrevendo = escrevendo;
+      // REGRA: gerando, a cena desenha a 30 fps e com 1 pixel por pixel (o GPU é dividido com a página)
+      if (mudou) { R.setPixelRatio(escrevendo ? 1 : dprBase); tamanhoMudou = true; enquadrar(); }
+      if (!escrevendo && pendente) trocar(pendente);   // a troca que esperou a resposta acabar
     },
     reagir: () => acoes?.reagir(),
     gesto: () => acoes?.gesto(),
     tamanho: (w, h) => { larg = w; alt = h; tamanhoMudou = true; enquadrar(); },
     visivel: (v) => { visivel = v; if (v) tocar(); else if (raf) { cancelarQuadro(raf); raf = 0; } },
     diag: () => {
-      const s = (performance.now() - medDesde) / 1000, r: DaCena = { tipo: "diag", quadros: medQuadros, msPorQuadro: medQuadros ? +(medMs / medQuadros).toFixed(2) : 0, fps: +(medQuadros / Math.max(0.001, s)).toFixed(1), sequencias: { ...seqs.estado(), gerandoHa: gerandoDesde === null ? null : +(performance.now() / 1000 - gerandoDesde).toFixed(1) } };
+      const s = (performance.now() - medDesde) / 1000, r: DaCena = { tipo: "diag", quadros: medQuadros, msPorQuadro: medQuadros ? +(medMs / medQuadros).toFixed(2) : 0, fps: +(medQuadros / Math.max(0.001, s)).toFixed(1), sequencias: { ...seqs.estado(), qualidade, mediaMs: +mediaMs.toFixed(2), gerandoHa: gerandoDesde === null ? null : +(performance.now() / 1000 - gerandoDesde).toFixed(1) } };
       medQuadros = 0; medMs = 0; medDesde = performance.now(); return r;
     },
     saltar: (t) => { if (gerandoDesde !== null) gerandoDesde = performance.now() / 1000 - t; },

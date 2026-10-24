@@ -10,7 +10,7 @@
  * Sem OffscreenCanvas com WebGL (navegador antigo), o retrato estático dela — nunca o 3D na thread principal.
  */
 import { useEffect, useRef, useState } from "react";
-import { EVT_ZAEON_ESCREVENDO, nomeDaPersona, type PersonaId } from "@/lib/research/zaeonEventos";
+import { EVT_ZAEON_ESCREVENDO, gerandoAgora, nomeDaPersona, type PersonaId } from "@/lib/research/zaeonEventos";
 import type { DaCena, ParaCena } from "./avatarMensagens";
 
 const CIANO = "#7fe8ff";
@@ -33,11 +33,32 @@ export default function ZaeonDocumentos({ persona, lendo = false, reagir = 0 }: 
   const [escrevendo, setEscrevendo] = useState(false);
   const worker = useRef<Worker | null>(null);
   const enviar = (m: ParaCena, transferir?: Transferable[]) => worker.current?.postMessage(m, transferir ?? []);
-  const personaRef = useRef(persona);
-
-  // o WORKER: nasce com o canvas transferido e morre com o painel
+  const personaRef = useRef(persona), lendoRef = useRef(lendo);
+  lendoRef.current = lendo;
+  // REGRA: o 3D (o worker + ~19 MB de VRM e movimento) só começa com a página OCIOSA e nenhuma resposta chegando —
+  // o download não disputa a rede nem a CPU com a geração do texto. Até lá, o retrato estático.
+  const [podeIniciar, setPodeIniciar] = useState(false);
+  const gerandoRef = useRef(false);
+  if (typeof window !== "undefined" && !podeIniciar) gerandoRef.current = gerandoRef.current || gerandoAgora();   // (montou no meio de uma resposta)
   useEffect(() => {
-    const el = caixa.current; if (!el) return;
+    if (podeIniciar) return;
+    let cancelado = false, id = 0;
+    const tentar = () => {
+      gerandoRef.current = gerandoAgora() || gerandoRef.current;
+      if (cancelado || gerandoRef.current) return;   // (volta a tentar quando a resposta acabar — o listener abaixo)
+      const ric = (window as unknown as { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+      const ok = () => { if (!cancelado && !gerandoRef.current && !gerandoAgora()) setPodeIniciar(true); };
+      id = ric ? ric(ok, { timeout: 2500 }) : window.setTimeout(ok, 1200);
+    };
+    const fim = (e: Event) => { gerandoRef.current = !!(e as CustomEvent).detail; if (!gerandoRef.current) tentar(); };
+    window.addEventListener(EVT_ZAEON_ESCREVENDO, fim);
+    tentar();
+    return () => { cancelado = true; window.removeEventListener(EVT_ZAEON_ESCREVENDO, fim); const cic = (window as unknown as { cancelIdleCallback?: (n: number) => void }).cancelIdleCallback; if (cic) cic(id); else clearTimeout(id); };
+  }, [podeIniciar]);
+
+  // o WORKER: nasce com o canvas transferido (quando pode) e morre com o painel
+  useEffect(() => {
+    const el = caixa.current; if (!el || !podeIniciar) return;
     if (!temOffscreen()) { setEstado("estatico"); return; }
     // o canvas nasce AQUI (um por montagem: um canvas só se transfere uma vez)
     const cv = document.createElement("canvas"); cv.className = "absolute inset-0 block h-full w-full"; el.prepend(cv);
@@ -51,6 +72,7 @@ export default function ZaeonDocumentos({ persona, lendo = false, reagir = 0 }: 
     w.onerror = (ev) => { console.warn("[avatar] o worker caiu:", ev.message); setEstado("erro"); };
     const off = cv.transferControlToOffscreen();
     w.postMessage({ tipo: "iniciar", canvas: off, largura: el.clientWidth, altura: el.clientHeight, dpr: window.devicePixelRatio || 1, persona: personaRef.current } satisfies ParaCena, [off]);
+    w.postMessage({ tipo: "sinais", lendo: lendoRef.current, escrevendo: gerandoRef.current } satisfies ParaCena);
     // o TAMANHO e a VISIBILIDADE (fora da tela ou aba escondida: a cena para de desenhar)
     const ro = new ResizeObserver(() => w.postMessage({ tipo: "tamanho", largura: el.clientWidth, altura: el.clientHeight } satisfies ParaCena));
     ro.observe(el);
@@ -63,14 +85,14 @@ export default function ZaeonDocumentos({ persona, lendo = false, reagir = 0 }: 
       ro.disconnect(); io.disconnect(); document.removeEventListener("visibilitychange", avisar);
       w.postMessage({ tipo: "fim" } satisfies ParaCena); setTimeout(() => w.terminate(), 500); worker.current = null; cv.remove();
     };
-  }, []);
+  }, [podeIniciar]);
 
   // QUEM está no painel (a troca: o worker solta o corpo anterior na hora)
   useEffect(() => { personaRef.current = persona; enviar({ tipo: "persona", persona }); }, [persona]);
   // o que ela está fazendo
   useEffect(() => { enviar({ tipo: "sinais", lendo, escrevendo }); }, [lendo, escrevendo]);
   useEffect(() => {
-    const ev = (e: Event) => setEscrevendo(!!(e as CustomEvent).detail);
+    const ev = (e: Event) => { gerandoRef.current = !!(e as CustomEvent).detail; setEscrevendo(gerandoRef.current); };
     window.addEventListener(EVT_ZAEON_ESCREVENDO, ev); return () => window.removeEventListener(EVT_ZAEON_ESCREVENDO, ev);
   }, []);
   const reagiu = useRef(reagir);
@@ -78,13 +100,13 @@ export default function ZaeonDocumentos({ persona, lendo = false, reagir = 0 }: 
 
   return (
     <div ref={caixa} className="relative h-full min-h-[320px] w-full overflow-hidden" style={{ background: `radial-gradient(ellipse 80% 60% at 50% 45%, ${CIANO}14, transparent 70%)` }}>
-      {estado === "estatico" && (
+      {(estado === "estatico" || !podeIniciar) && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={`/avatars/${persona}/idle.webp`} alt={nome} className="absolute inset-x-0 bottom-0 mx-auto h-[88%] w-auto object-contain object-bottom" />
       )}
       <button type="button" aria-label={`Falar com a ${nome}`} title={nome} onClick={() => enviar({ tipo: "gesto" })} className="absolute inset-x-[18%] bottom-[20%] top-[2%] z-[1] cursor-pointer rounded-full" />
       {escrevendo && <p className="pointer-events-none absolute inset-x-0 bottom-3 z-[2] text-center text-[9px] font-black uppercase tracking-[0.2em] text-cyan-200/70">a {nome} está escrevendo…</p>}
-      {(estado === "carregando" || estado === "erro") && <p className="pointer-events-none absolute inset-x-0 bottom-3 z-[2] text-center text-[9px] font-black uppercase tracking-[0.2em] text-white/35">{estado === "erro" ? `a ${nome} não carregou` : `a ${nome} está chegando…`}</p>}
+      {podeIniciar && (estado === "carregando" || estado === "erro") && <p className="pointer-events-none absolute inset-x-0 bottom-3 z-[2] text-center text-[9px] font-black uppercase tracking-[0.2em] text-white/35">{estado === "erro" ? `a ${nome} não carregou` : `a ${nome} está chegando…`}</p>}
     </div>
   );
 }
