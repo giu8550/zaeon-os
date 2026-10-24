@@ -92,11 +92,35 @@ describe("router · classifyHeuristic (sem rede)", () => {
       expect(isIntentId(r.intent)).toBe(true);
       expect(["quick", "elaborated", "research"]).toContain(r.mode);
       expect(["enforced", "flexible"]).toContain(r.academicMode);
-      // sem sinal de "a fundo", o modo é exatamente o da tabela INTENTS
+      // sem sinal de "a fundo", o modo é exatamente o da tabela INTENTS — exceto a EXPLICAÇÃO SIMPLES, que vai no quick
       if (!/a fundo|aprofund|detalhad|minucios|exaustiv|passo a passo/.test(s)) {
-        expect(r.mode).toBe(INTENTS[r.intent].mode);
+        expect(r.mode).toBe(r.intent === "explicar_conceito" ? "quick" : INTENTS[r.intent].mode);
       }
     }
+  });
+
+  describe("caminho rápido: explicação simples vai no quick (1 chamada, com a base da turma)", () => {
+    it("pergunta curta de conceito → explicar_conceito QUICK", () => {
+      for (const q of ["o que é mitose?", "explique a fotossíntese", "defina entropia", "como funciona a vacina de mRNA?", "qual a diferença entre vírus e bactéria?"]) {
+        const r = classifyHeuristic(q, ctx("estudos"));
+        expect(r.intent, q).toBe("explicar_conceito");
+        expect(r.mode, q).toBe("quick");
+      }
+    });
+    it("pedido de profundidade continua subindo (research)", () => {
+      expect(classifyHeuristic("me explique a fundo a relatividade", ctx("estudos")).mode).toBe("research");
+      expect(classifyHeuristic("explique detalhadamente a mitose", ctx("estudos")).mode).toBe("research");
+    });
+    it("pergunta longa continua no pipeline completo", () => {
+      const longa = "explique por que a inflação sobe quando o banco central reduz os juros e como isso afeta o câmbio e o emprego no Brasil";
+      expect(classifyHeuristic(longa, ctx("estudos")).mode).toBe("elaborated");
+    });
+    it("no Modo Pesquisa (exige fonte) não encurta", () => {
+      expect(classifyHeuristic("o que é mitose?", ctx("pesquisa")).mode).toBe("elaborated");
+    });
+    it("engenharia reversa não encurta", () => {
+      expect(classifyHeuristic("faça a engenharia reversa do motor", ctx("estudos")).mode).not.toBe("quick");
+    });
   });
 });
 

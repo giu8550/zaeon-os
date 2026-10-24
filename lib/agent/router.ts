@@ -82,12 +82,26 @@ export function isQuickPrompt(objective: string): boolean {
 }
 
 /** modo base da intenção; o usuário pode FORÇAR mais fundo (§8) — bump quick→elaborated→research. */
-function modeFor(intent: IntentId, t: string): Mode {
+/**
+ * O CAMINHO RÁPIDO pra explicação simples (out/2026, "perguntas simples poderiam ser respondidas com mais
+ * simplicidade ou até consultadas no nosso dataset"): "o que é mitose?" virava explicar_conceito ELABORATED — plano,
+ * 3 buscas (memória, literatura, web), raciocínio e rascunho (~33 s de mediana em prod). Curta (até 12 palavras),
+ * sem pedido de profundidade e fora do Modo Pesquisa (que exige fonte), ela vai no QUICK: 1 chamada, com a base da
+ * turma (RAG, lib/rag/turno) e a memória no contexto do rascunho — o dataset responde primeiro.
+ */
+export const MAX_PALAVRAS_SIMPLES = 12;
+export function explicacaoSimples(t: string, academicMode: AcademicMode): boolean {
+  if (academicMode === "enforced" || DEEP_SIGNALS.test(t) || /engenharia reversa/.test(t)) return false;
+  return t.split(/\s+/).filter(Boolean).length <= MAX_PALAVRAS_SIMPLES;
+}
+
+function modeFor(intent: IntentId, t: string, academicMode: AcademicMode = "flexible"): Mode {
   const base = INTENTS[intent].mode;
   if (DEEP_SIGNALS.test(t)) {
     if (base === "quick") return "elaborated";
     if (base === "elaborated") return "research";
   }
+  if (intent === "explicar_conceito" && explicacaoSimples(t, academicMode)) return "quick";
   return base;
 }
 
@@ -102,7 +116,7 @@ export function classifyHeuristic(objective: string, ctx: CtxRoteador): RouterRe
 
   const decide = (intent: IntentId, kind?: WorkKind): RouterResult => ({
     intent,
-    mode: modeFor(intent, t),
+    mode: modeFor(intent, t, academicMode),
     academicMode,
     kind,
   });
@@ -178,7 +192,8 @@ export async function classify(objective: string, ctx: CtxRoteador): Promise<Rou
       intent === "criar_trabalho"
         ? normalizeKind(out?.kind) ?? workKindFrom(nt) ?? (outro ? ctx.trabalhos?.kind : undefined) ?? "artigo"
         : undefined;
-    return { intent, mode: modeFor(intent, nt), academicMode: academicModeForSurface(ctx.activeTab), kind };
+    const academicMode = academicModeForSurface(ctx.activeTab);
+    return { intent, mode: modeFor(intent, nt, academicMode), academicMode, kind };
   } catch {
     return fallback; // rede/credencial/timeout → heurística (nunca derruba o laço)
   }
