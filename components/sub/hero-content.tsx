@@ -15,6 +15,7 @@ import MolecularText from "@/components/ui/MolecularText";
 import { LAB_ROTA, copyEntrada } from "@/lib/ui/loungeHub";
 import GlitchTexto from "@/components/ui/GlitchTexto";
 import { precarregarCyber } from "@/lib/cyber/precarga";
+import ZaeonPersonagem from "@/components/main/ZaeonPersonagem";
 
 /** o botão do cyberespaço (lá embaixo, em cima do módulo) pede o login daqui quando a pessoa está deslogada */
 export const EVENTO_ABRIR_LOGIN = "zaeon:abrir-login";
@@ -113,6 +114,9 @@ export default function HeroPage() {
         <StarBackground />
       </div>
 
+      {/* a ZAEON em 3D (components/main/ZaeonPersonagem): à direita do texto, de frente pra quem chega — só no computador */}
+      <ZaeonPersonagem className="absolute bottom-0 right-[1%] top-[6%] z-[5] hidden w-[min(32vw,460px)] md:block xl:right-[3%]" />
+
       {/* ========================================= */}
       {/* HERO v2 — TODAS AS IAS, FEITO PRA CIÊNCIA */}
       {/* ========================================= */}
@@ -123,7 +127,7 @@ export default function HeroPage() {
           opacity: 1,
         }}
         transition={{ type: "spring", stiffness: 90, damping: 20 }}
-        className="flex flex-col items-start text-left max-w-4xl self-start z-10 w-full origin-center"
+        className="flex flex-col items-start text-left max-w-4xl self-start z-10 w-full origin-center md:max-w-[64%] xl:max-w-[62%]"
       >
         <motion.div
           initial={{ opacity: 0, y: 10 }}
