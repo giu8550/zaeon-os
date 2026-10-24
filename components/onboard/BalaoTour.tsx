@@ -68,8 +68,16 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
   const [pg, setPg] = useState(0);
   const [ms, setMs] = useState(0);
   const [completo, setCompleto] = useState(false);
-  const [calmo] = useState(reduzirMovimento);
+  const [calmo, setCalmo] = useState(reduzirMovimento);
   const [escondida, setEscondida] = useState(false);
+  // "reduzir movimento" ligado com o cartão aberto: o texto completa na hora (o CSS já para sozinho)
+  useEffect(() => {
+    let mq: MediaQueryList | null = null;
+    try { mq = window.matchMedia("(prefers-reduced-motion: reduce)"); } catch { return; }
+    const mudou = () => setCalmo(!!mq?.matches);
+    mq?.addEventListener?.("change", mudou);
+    return () => mq?.removeEventListener?.("change", mudou);
+  }, []);
   useEffect(() => { setPg(0); }, [chave]);
   useEffect(() => { setMs(0); setCompleto(false); }, [chave, pg]);
   const texto = paginas[Math.min(pg, paginas.length - 1)] ?? "";

@@ -38,4 +38,9 @@ describe("cartaoTour · letra por letra", () => {
   it("nunca corta um emoji ao meio", () => {
     expect(letrasVisiveis("oi 💜!", 400, 10)).toBe("oi 💜");
   });
+  it("emoji composto (tom de pele, ZWJ, bandeira) conta como uma letra só e nunca aparece pela metade", () => {
+    expect(letrasVisiveis("a👍🏽b", 200, 10)).toBe("a👍🏽");
+    expect(letrasVisiveis("a👩‍💻b", 200, 10)).toBe("a👩‍💻");
+    expect(letrasVisiveis("a🇧🇷b", 200, 10)).toBe("a🇧🇷");
+  });
 });

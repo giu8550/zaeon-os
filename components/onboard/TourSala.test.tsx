@@ -117,6 +117,18 @@ describe("#605 · o cartão novo (diálogo com a Aura)", () => {
     abrir(<TourSala noTutorial={false} />);
     expect(visivel()).toMatch(/Que bom te ver aqui\. 💜/);
   });
+  it("'reduzir movimento' ligado com o cartão aberto: o texto completa na hora", () => {
+    let ouvinte: (() => void) | null = null;
+    const mq = { matches: false, addEventListener: (_: string, f: () => void) => { ouvinte = f; }, removeEventListener() {} };
+    vi.stubGlobal("matchMedia", () => mq);
+    abrir(<TourSala noTutorial={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(visivel()).not.toMatch(/qualquer coisa/);
+    mq.matches = true;
+    act(() => { ouvinte?.(); });
+    expect(visivel()).toMatch(/qualquer coisa\./);
+  });
   it("tem o retrato da Aura e a etiqueta AURA; o Escritório é ciano", () => {
     abrir(<TourSala noTutorial={false} />);
     expect(cartao()!.querySelector('img[src*="/avatars/aura/"]')).not.toBeNull();

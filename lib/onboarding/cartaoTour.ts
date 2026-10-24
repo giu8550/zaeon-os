@@ -31,9 +31,18 @@ export function paginasDaFala(fala: string, max = MAX_PAGINA): string[] {
   return out.length ? out : [""];
 }
 
-/** Quantas letras da página já apareceram depois de `ms` (nunca corta um emoji ao meio). */
+/**
+ * As "letras" como a pessoa vê: um emoji composto (👍🏽, 👩‍💻, 🇧🇷) conta como uma só. Sem `Intl.Segmenter`
+ * (navegador antigo), cai nos pontos de código.
+ */
+function letrasDe(texto: string): string[] {
+  const Seg = (Intl as unknown as { Segmenter?: new (l?: string, o?: { granularity: "grapheme" }) => { segment(t: string): Iterable<{ segment: string }> } }).Segmenter;
+  return Seg ? Array.from(new Seg("pt-BR", { granularity: "grapheme" }).segment(texto), (s) => s.segment) : Array.from(texto);
+}
+
+/** Quantas letras da página já apareceram depois de `ms` (nunca corta um emoji ao meio, nem um composto). */
 export function letrasVisiveis(texto: string, ms: number, lps = LETRAS_POR_SEGUNDO): string {
-  const letras = Array.from(texto);
+  const letras = letrasDe(texto);
   const n = Math.max(0, Math.min(letras.length, Math.floor((ms / 1000) * lps)));
   return letras.slice(0, n).join("");
 }
