@@ -247,6 +247,9 @@ export function papersToFindings(papers: Array<{ title: string; authors?: string
   });
 }
 
+/** prazo por fonte acadêmica no chat (env LITERATURA_PRAZO_FONTE_MS) — openalex/arxiv/crossref/pubmed: 0,15–0,96 s em prod */
+const PRAZO_FONTE_CHAT_MS = Number(process.env.LITERATURA_PRAZO_FONTE_MS || 2500);
+
 export const literatureSearchDef: ToolDef = {
   name: "literature_search",
   runtime: "ts",
@@ -271,7 +274,8 @@ export const literatureSearchDef: ToolDef = {
     const domain = typeof args?.domain === "string" ? args.domain : undefined;
     try {
       const { retrievePapers } = await import("@/lib/scholar/retrieve");
-      const r = await retrievePapers(query, { domain, minResults: 6 });
+      // prazo curto por fonte: no chat a resposta não espera fonte lenta (as boas respondem em < 1 s, medido em prod)
+      const r = await retrievePapers(query, { domain, minResults: 6, prazoFonteMs: PRAZO_FONTE_CHAT_MS });
       if (!r.papers.length) {
         // Bases acadêmicas vazias NÃO é beco: tenta a internet (se houver provedor). Os achados vêm como
         // fonte web — o draft deve dizer (1 linha) que não são fontes acadêmicas indexadas.

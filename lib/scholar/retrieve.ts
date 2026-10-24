@@ -8,7 +8,9 @@ export const MIN_RESULTS = 12;
 export interface RetrieveOptions {
   domain?: string;
   minResults?: number;
-  search?: (query: string, sources: SourceName[]) => Promise<SourceResult[]>;
+  search?: (query: string, sources: SourceName[], opts?: { prazoMs?: number }) => Promise<SourceResult[]>;
+  /** prazo por fonte (o chat passa curto: a resposta não espera fonte lenta) */
+  prazoFonteMs?: number;
   onSource?: (r: SourceResult) => void;
 }
 
@@ -29,7 +31,7 @@ export async function retrievePapers(queries: string | string[], opts: RetrieveO
   const pool: Paper[] = [];
 
   const run = async (query: string, sources: SourceName[]) => {
-    const results = await search(query, sources);
+    const results = await search(query, sources, opts.prazoFonteMs ? { prazoMs: opts.prazoFonteMs } : undefined);
     for (const r of results) {
       opts.onSource?.(r);
       perSource.push({ source: r.source, count: r.papers.length, status: r.status });
