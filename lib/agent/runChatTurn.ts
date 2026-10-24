@@ -116,29 +116,34 @@ export async function runChatTurn(
     }
     // Só anuncia quando é verdade: sem dono do turno não há memória pra reler.
     if (userId) narrar(serializarProgresso({ fase: "memoria", rotulo: "Retomando a conversa" }));
-    // wakeUp (L3, A8): recall + perfil pinado → systemContext. Best-effort; "" se o L3 não ligou.
-    const memBlock = userId
-      ? await mem.wakeUpContext({ userId, surface: hctx.activeTab, hint: prompt, wingLabel: mentor?.wing.label }).catch(() => "")
-      : "";
-    // Memória do estudo → agente (a "bússola"): o que já foi estudado nesta conversa e o que está
-    // em aberto. Com MAP_HARNESS o grafo (cérebro) é a fonte; senão a cartolina. "" sem nada.
-    const cartolina = await import("@/lib/map/memoria-turno");
-    const cartolinaBlock = await cartolina.bussolaParaTurno(userId, ac.cartolinaScopeId, objetivo);
-    // TCC cross-sala: se a conversa já tem TCC, a Aura sabe (e edita por seção). "" com TCC_CROSS
-    // off / sem TCC. O scope é o mesmo da cartolina (a aba do chat).
-    const tccMod = await import("@/lib/tcc/turno");
+    // O PREPARO do turno, em PARALELO (out/2026, "as respostas estão lentas"): memória L3, bússola da cartolina,
+    // trabalhos/TCC e árvore de habilidades não dependem um do outro — antes eram 4 awaits em fila e o turno pagava a
+    // SOMA; agora paga o mais lento. Cada um continua best-effort do jeito que era.
     // CHAT ÚNICO (o cliente manda `chatUnico`): a conversa pode ter VÁRIOS trabalhos — a Aura vê todos, com o
     // aberto no editor marcado, e o roteador sabe que "agora outro sobre Y" é pedido de trabalho.
     const multi = ac.chatUnico === true;
-    const trabalhos = multi ? await tccMod.trabalhosParaTurno(userId, ac.cartolinaScopeId, ac.trabalhoAbertoId) : null;
-    if (trabalhos?.total) hctx.trabalhos = { total: trabalhos.total, kind: trabalhos.kind };
-    const tccBlock = multi ? trabalhos!.bloco : await tccMod.tccContextoParaTurno(userId, ac.cartolinaScopeId);
     // Árvore de habilidades: posição do aluno no tópico + guardrail pedagógico. Best-effort.
     const skillTopic = typeof ac.skillTopic === "string" && ac.skillTopic.trim() ? String(ac.skillTopic).trim() : null;
     const skillNodeId = typeof ac.skillNodeId === "string" && ac.skillNodeId.trim() ? String(ac.skillNodeId).trim() : null;
-    const skillBlock = userId && skillTopic
-      ? await import("@/lib/skilltree/progress").then((m) => m.treeContextBlock(userId, skillTopic, skillNodeId)).catch(() => "")
-      : "";
+    const tccModP = import("@/lib/tcc/turno"), cartolinaP = import("@/lib/map/memoria-turno");
+    const [memBlock, cartolinaBlock, tccMod, cartolina, trabalhos, tccBlocoUnico, skillBlock] = await Promise.all([
+      // wakeUp (L3, A8): recall + perfil pinado → systemContext. Best-effort; "" se o L3 não ligou.
+      userId ? mem.wakeUpContext({ userId, surface: hctx.activeTab, hint: prompt, wingLabel: mentor?.wing.label }).catch(() => "") : Promise.resolve(""),
+      // Memória do estudo → agente (a "bússola"): o que já foi estudado nesta conversa e o que está
+      // em aberto. Com MAP_HARNESS o grafo (cérebro) é a fonte; senão a cartolina. "" sem nada.
+      cartolinaP.then((m) => m.bussolaParaTurno(userId, ac.cartolinaScopeId, objetivo)),
+      // TCC cross-sala: se a conversa já tem TCC, a Aura sabe (e edita por seção). "" com TCC_CROSS
+      // off / sem TCC. O scope é o mesmo da cartolina (a aba do chat).
+      tccModP,
+      cartolinaP,
+      multi ? tccModP.then((m) => m.trabalhosParaTurno(userId, ac.cartolinaScopeId, ac.trabalhoAbertoId)) : Promise.resolve(null),
+      multi ? Promise.resolve("") : tccModP.then((m) => m.tccContextoParaTurno(userId, ac.cartolinaScopeId)),
+      userId && skillTopic
+        ? import("@/lib/skilltree/progress").then((m) => m.treeContextBlock(userId, skillTopic, skillNodeId)).catch(() => "")
+        : Promise.resolve(""),
+    ]);
+    if (trabalhos?.total) hctx.trabalhos = { total: trabalhos.total, kind: trabalhos.kind };
+    const tccBlock = multi ? trabalhos!.bloco : tccBlocoUnico;
     // Quem serviu (o envelope pode cair na reserva): fica o da resposta (draft) se houver, senão o último.
     let servido: { modelo: string; alvo?: string; phase?: string } | null = null;
     const deps = buildHarnessDeps(hctx, {
