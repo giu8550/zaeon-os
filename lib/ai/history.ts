@@ -34,5 +34,17 @@ export function sanitizeHistory(raw: any, maxTurns = 20): ChatTurn[] {
     else alt.push(m);
   }
 
-  return alt.slice(-maxTurns); // teto de turnos p/ controlar tokens
+  return janelaEmBlocos(alt, maxTurns); // teto de turnos p/ controlar tokens
+}
+
+/**
+ * O teto de turnos, mas com o INÍCIO andando em blocos (out/2026, cache implícito do Gemini): `slice(-max)` mudava o
+ * começo do histórico a CADA turno — e o cache do Gemini só acerta com o começo do prompt idêntico (≥ 4.096 tokens).
+ * Em blocos de `bloco` mensagens, o começo fica parado por ~5 trocas; a janela tem entre max−bloco+1 e max mensagens.
+ * `bloco` par: o início continua numa mensagem do usuário (a alternância começa em 'user').
+ */
+export function janelaEmBlocos<T>(msgs: T[], max: number, bloco = 10): T[] {
+  if (msgs.length <= max) return msgs;
+  const inicio = Math.ceil((msgs.length - max) / bloco) * bloco;
+  return msgs.slice(inicio);
 }
