@@ -199,8 +199,11 @@ jobs:
 
             # Chips de WhatsApp (docs/WHATSAPP_CHIPS.md): WHATSAPP_CHIPS=1 no .env do VPS sobe o adapter + o banco dele
             # (nomeados, o compose habilita o perfil "whatsapp"). A imagem do adapter é construída na VPS (runbook).
-            if [ -n "$SERVICES" ] && grep -Eq "^WHATSAPP_CHIPS=\"?1" .env 2>/dev/null; then
-              SERVICES="$SERVICES wa-db wa-adapter"
+            # Dois modos: lista nomeada (enxuto) → acrescenta os serviços; lista VAZIA (WITH_VOICE=true = "todos sem
+            # perfil") → liga só o perfil "chips" (24/10: no modo vazio o bloco antigo não fazia nada e o adapter não subiu).
+            if grep -Eq "^WHATSAPP_CHIPS=\"?1" .env 2>/dev/null; then
+              if [ -n "$SERVICES" ]; then SERVICES="$SERVICES wa-db wa-adapter"
+              else export COMPOSE_PROFILES="${COMPOSE_PROFILES:+$COMPOSE_PROFILES,}chips"; fi
               echo "→ WHATSAPP_CHIPS=1: wa-db + wa-adapter entram no deploy"
             fi
 
