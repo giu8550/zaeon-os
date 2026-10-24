@@ -140,9 +140,12 @@ litellm_settings:
 router_settings:
   redis_host: redis
   redis_port: 6379
-  # Só o pool tem fallback, e só para a RESERVA GOOGLE (flash-lite pago, barato e no ledger) —
-  # nunca zaeon-flash/zaeon-pro, que são o orçamento do chat. Era cf → groq até 2026-10-20 (decisão do dono).
-  fallbacks: [{"zaeon-pool-lite": ["zaeon-pool-cerebras", "zaeon-reserva-google"]}, {"zaeon-pool-cerebras": ["zaeon-reserva-google"]}]
+  # O POOL cai na Cerebras grátis e depois na RESERVA GOOGLE (flash-lite pago, barato e no ledger) — o pool
+  # nunca cai em zaeon-flash/zaeon-pro, que são o orçamento do chat. Era cf → groq até 2026-10-20 (decisão do dono).
+  # O CHAT (2026-10-24, decisão do dono): o 3.5-flash dava 429 "Resource exhausted" no global SEM reserva — o turno
+  # falhava ou re-tentava parado. Agora zaeon-flash → a reserva Google (Vertex pago: o conteúdo do chat nunca vai pro
+  # pool grátis, que treina com o que recebe) e zaeon-pro → zaeon-flash.
+  fallbacks: [{"zaeon-pool-lite": ["zaeon-pool-cerebras", "zaeon-reserva-google"]}, {"zaeon-pool-cerebras": ["zaeon-reserva-google"]}, {"zaeon-flash": ["zaeon-reserva-google"]}, {"zaeon-pro": ["zaeon-flash", "zaeon-reserva-google"]}]
   allowed_fails: 2
   cooldown_time: 60
   num_retries: 1
