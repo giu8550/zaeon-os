@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { chamarRea, comandoRea, reaBridgeConfigurado, resumirRea } from "./rea";
+import { chamarRea, comandoRea, reaBridgeConfigurado, resumirRea, uploadRea } from "./rea";
 import { ferramentasGateway } from "./agente";
 
 const env = { OCTA_REA: "1", REA_BRIDGE_URL: "http://100.113.137.74:8799/", REA_BRIDGE_TOKEN: "tk" };
@@ -40,5 +40,18 @@ describe("octa · REA bridge (fatia 2)", () => {
     const r = await chamarRea({ command: "capabilities" }, env, (async () => { throw new Error("ECONNREFUSED"); }) as any);
     expect(r.ok).toBe(false);
     expect(resumirRea(r)).toMatch(/fora do ar|REA falhou/);
+  });
+
+  it("upload: manda o binário (base64) e recebe handle; depois analisa pelo handle", async () => {
+    const up = vi.fn(async () => new Response(JSON.stringify({ ok: true, handle: "a".repeat(32), name: "alvo.bin", bytes: 4 }), { status: 200 }));
+    const r = await uploadRea({ nome: "alvo.bin", conteudo: Buffer.from([1, 2, 3, 4]) }, env, up as any);
+    expect(r).toMatchObject({ ok: true, handle: "a".repeat(32) });
+    expect((up.mock.calls[0] as any)[0]).toBe("http://100.113.137.74:8799/upload");
+    // analisar pelo handle: vai `handle`, não artifactBase64
+    const an = vi.fn(async () => new Response(JSON.stringify({ ok: true, evidence: { entry: "0x1000" } }), { status: 200 }));
+    await chamarRea({ command: "analyze", args: ["--provider", "ghidra"], handle: "a".repeat(32) }, env, an as any);
+    const body = JSON.parse((an.mock.calls[0] as any)[1].body);
+    expect(body.handle).toBe("a".repeat(32));
+    expect(body.artifactBase64).toBeUndefined();
   });
 });

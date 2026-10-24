@@ -23,6 +23,9 @@ O REA (e, portanto, o Octa com a skill) **não** ajuda a: burlar DRM/verificaç�
 `lib/octa/rea.ts` (cliente) + tool `octa_rea` em `lib/octa/agente.ts`. Só aparece com os **dois** portões: `OCTA_REA=1` **e** `REA_BRIDGE_URL`+`REA_BRIDGE_TOKEN`. Mesmo deny-por-família do bridge (defesa em profundidade); o guard do Octa fica por cima. A tool lê um arquivo do projeto como artefato (texto) e devolve a Evidence do REA.
 - Envs no `.env` da VPS: `OCTA_REA=1`, `REA_BRIDGE_URL=http://100.113.137.74:8799`, `REA_BRIDGE_TOKEN=…` (o mesmo da Contabo).
 
+## Upload de binário (feito)
+- Botão 🔬 na IDE do Octa (atrás de `NEXT_PUBLIC_OCTA_REA=1`) → `POST /api/octa/rea/upload` → o binário vai DIRETO pro motor na Contabo (nunca fica na Zaeon nem no Mongo), que devolve um **handle** (`/upload` da ponte, cache transitório, TTL 2 h). O agente analisa com `octa_rea` passando o handle. Provado em prod: `analyze --provider ghidra` pelo handle = ok, decompilação nativa com Ghidra 12.1.4.
+- Envs da UI: `NEXT_PUBLIC_OCTA_REA=1` (flag de build). Runtime: `OCTA_REA=1` + `REA_BRIDGE_URL`/`TOKEN`.
+
 ## O que falta (futuro)
-- Upload de BINÁRIO pelo Octa (hoje o workspace é texto; binário/APK/firmware precisam de um caminho de upload).
 - As famílias com efeito colateral (capture/observe/trace/debug/adb) — pedem autorização por-ação.

@@ -10,7 +10,8 @@
  */
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, stat } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -18,6 +19,10 @@ const PORT = Number(process.env.REA_BRIDGE_PORT || 8799);
 const TOKEN = process.env.REA_BRIDGE_TOKEN || "";
 const MAX_BYTES = Number(process.env.REA_MAX_ARTIFACT_BYTES || 256 * 1024 * 1024); // 256 MB
 const TIMEOUT_MS = Number(process.env.REA_CMD_TIMEOUT_MS || 10 * 60_000);
+const CACHE_DIR = "/work/cache";               // binários enviados ficam aqui, por handle
+const CACHE_TTL_MS = Number(process.env.REA_CACHE_TTL_MS || 2 * 3600_000);
+const handleOk = (h) => /^[0-9a-f]{32}$/.test(String(h || ""));
+const nomeSeguro = (n) => (String(n || "artifact").replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 120) || "artifact");
 
 // A superfície: o REA tem ~155 comandos. Esta fatia libera a ANÁLISE ESTÁTICA/leitura (1:1 com o catálogo do REA)
 // e NEGA as famílias com efeito colateral — rodar/observar/tracejar programas, controlar device (adb), debug
@@ -62,7 +67,18 @@ const server = createServer(async (req, res) => {
       const r = await rodarRea(["--version"], "/work");
       return responder(200, { ok: r.code === 0, rea: r.stdout.trim(), ghidra: !!process.env.GHIDRA_INSTALL_DIR });
     }
-    if (req.method !== "POST" || req.url !== "/rea") return responder(404, { ok: false, erro: "use POST /rea ou GET /health" });
+    if (req.method === "POST" && req.url === "/upload") {
+      const corpo = JSON.parse((await lerCorpo(req)).toString("utf8") || "{}");
+      if (!TOKEN || corpo.token !== TOKEN) return responder(401, { ok: false, erro: "token" });
+      const bytes = Buffer.from(String(corpo.artifactBase64 || ""), "base64");
+      if (bytes.length < 1 || bytes.length > MAX_BYTES) return responder(413, { ok: false, erro: "artefato vazio ou grande demais" });
+      const handle = randomBytes(16).toString("hex");
+      const dir = join(CACHE_DIR, handle);
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, nomeSeguro(corpo.artifactName)), bytes);
+      return responder(200, { ok: true, handle, name: nomeSeguro(corpo.artifactName), bytes: bytes.length });
+    }
+    if (req.method !== "POST" || req.url !== "/rea") return responder(404, { ok: false, erro: "use POST /rea, POST /upload ou GET /health" });
     const corpo = JSON.parse((await lerCorpo(req)).toString("utf8") || "{}");
     if (!TOKEN || corpo.token !== TOKEN) return responder(401, { ok: false, erro: "token" });
     const command = String(corpo.command || "");
@@ -71,7 +87,13 @@ const server = createServer(async (req, res) => {
     const dir = await mkdtemp(join(tmpdir(), "rea-"));
     try {
       let alvo = [];
-      if (corpo.artifactBase64) {
+      if (handleOk(corpo.handle)) {
+        const base = join(CACHE_DIR, corpo.handle);
+        const { readdir } = await import("node:fs/promises");
+        const arquivos = await readdir(base).catch(() => []);
+        if (!arquivos.length) return responder(404, { ok: false, erro: "handle não existe (expirou?)" });
+        alvo = [join(base, arquivos[0])];
+      } else if (corpo.artifactBase64) {
         const bytes = Buffer.from(corpo.artifactBase64, "base64");
         if (bytes.length > MAX_BYTES) return responder(413, { ok: false, erro: "artefato grande demais" });
         const nome = String(corpo.artifactName || "artifact").replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 120) || "artifact";
@@ -86,5 +108,16 @@ const server = createServer(async (req, res) => {
     } finally { await rm(dir, { recursive: true, force: true }).catch(() => {}); }
   } catch (e) { return responder(500, { ok: false, erro: String(e?.message ?? e).slice(0, 300) }); }
 });
+await mkdir(CACHE_DIR, { recursive: true }).catch(() => {});
+async function limparCacheVelho() {
+  try {
+    const { readdir } = await import("node:fs/promises");
+    for (const h of await readdir(CACHE_DIR).catch(() => [])) {
+      const st = await stat(join(CACHE_DIR, h)).catch(() => null);
+      if (st && Date.now() - st.mtimeMs > CACHE_TTL_MS) await rm(join(CACHE_DIR, h), { recursive: true, force: true }).catch(() => {});
+    }
+  } catch { /* nada */ }
+}
+setInterval(limparCacheVelho, 30 * 60_000).unref();
 await carregarCatalogo();
 server.listen(PORT, "0.0.0.0", () => console.log(`[rea-bridge] ouvindo :${PORT} (token ${TOKEN ? "ON" : "AUSENTE!"}, ghidra ${process.env.GHIDRA_INSTALL_DIR ? "ON" : "off"}, ${CATALOGO.size} comandos no catálogo)`));
