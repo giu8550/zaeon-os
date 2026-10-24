@@ -40,6 +40,7 @@ export default function TourEscritorio({ naAba, noTutorial }: { naAba: boolean; 
       total={passos.length}
       acao={{ rotulo: passo.cta, onClick: ultimo ? sair : () => setI(i + 1) }}
       onPular={sair}
+      tom="ciano"
     />
   );
 }

@@ -19,6 +19,11 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
 const abrir = (el: React.ReactElement) => { render(el); act(() => { vi.advanceTimersByTime(1600); }); };
+/** #605: a fala vem em caixas curtas — "Continuar" até o botão do passo aparecer */
+const ateBotao = (nome: string | RegExp) => {
+  for (let k = 0; k < 6 && !screen.queryByRole("button", { name: nome }); k++) fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+  return screen.getByRole("button", { name: nome });
+};
 
 describe("TourSala — o tour do laboratório", () => {
   it("anda pela AÇÃO: pedir estudo → (Bora) → diagrama → percurso → Boa jornada marca como visto", () => {
@@ -29,7 +34,7 @@ describe("TourSala — o tour do laboratório", () => {
     expect(screen.queryByRole("button", { name: "Bora" })).toBeNull();
     disparar(EVT_PERGUNTA_CHAT, { prompt: "Quero estudar sobre: fotossíntese" });
     expect(cartao()?.textContent).toMatch(/caderno vivo/);
-    fireEvent.click(screen.getByRole("button", { name: "Bora" }));
+    fireEvent.click(ateBotao("Bora"));
     expect(cartao()?.textContent).toMatch(/diagrama interativo/);
     disparar(EVT_ABRIR_DOC, { studioKind: "aula" });           // uma aula não conta
     expect(cartao()?.textContent).toMatch(/diagrama interativo/);
@@ -37,7 +42,7 @@ describe("TourSala — o tour do laboratório", () => {
     expect(cartao()?.textContent).toMatch(/percurso/);
     disparar(EVT_PERCURSO_ABERTO);
     expect(screen.getByText("5 / 5")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /Boa jornada/ }));
+    fireEvent.click(ateBotao(/Boa jornada/));
     expect(cartao()).toBeNull();
     expect(localStorage.getItem("zaeon.tour.sala.v2")).toBe("1");
     expect(fetch).toHaveBeenCalledWith("/api/onboard/tour", { method: "POST" });
@@ -74,9 +79,51 @@ describe("TourEscritorio", () => {
     act(() => { vi.advanceTimersByTime(1500); });
     expect(cartao()).not.toBeNull();
     // (sem a flag do coworking, é o roteiro do 3D: 2 passos)
-    fireEvent.click(screen.getByRole("button", { name: "Próximo" }));
-    fireEvent.click(screen.getByRole("button", { name: /Bora trabalhar/ }));
+    fireEvent.click(ateBotao("Próximo"));
+    fireEvent.click(ateBotao(/Bora trabalhar/));
     expect(cartao()).toBeNull();
     expect(localStorage.getItem("zaeon.tour.escritorio.v1")).toBe("1");
+  });
+});
+
+describe("#605 · o cartão novo (diálogo com a Aura)", () => {
+  const visivel = () => cartao()?.querySelector("p[aria-hidden]")?.textContent ?? "";
+  it("a fala longa vem em caixas: só a 1ª aparece; Continuar mostra a próxima", () => {
+    abrir(<TourSala noTutorial={false} />);
+    act(() => { vi.advanceTimersByTime(10_000); });
+    expect(visivel()).toMatch(/Que bom te ver aqui/);
+    expect(visivel()).not.toMatch(/Bora começar/);
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    act(() => { vi.advanceTimersByTime(10_000); });
+    expect(visivel()).toMatch(/Bora começar/);
+  });
+  it("o texto aparece letra por letra; clicar no cartão completa na hora", () => {
+    abrir(<TourSala noTutorial={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    act(() => { vi.advanceTimersByTime(300); });
+    const parcial = visivel();
+    expect(parcial.length).toBeGreaterThan(0);
+    expect(parcial).not.toMatch(/qualquer coisa/);
+    fireEvent.click(cartao()!);
+    expect(visivel()).toMatch(/qualquer coisa\./);
+  });
+  it("o leitor de tela recebe a fala inteira, não letra por letra", () => {
+    abrir(<TourSala noTutorial={false} />);
+    const live = cartao()!.querySelector("[aria-live]")!;
+    expect(live.textContent).toMatch(/Que bom te ver aqui.*Pode mandar!/s);
+  });
+  it("com 'reduzir movimento', o texto vem inteiro na hora", () => {
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: q.includes("reduce"), addEventListener() {}, removeEventListener() {} }));
+    abrir(<TourSala noTutorial={false} />);
+    expect(visivel()).toMatch(/Que bom te ver aqui\. 💜/);
+  });
+  it("tem o retrato da Aura e a etiqueta AURA; o Escritório é ciano", () => {
+    abrir(<TourSala noTutorial={false} />);
+    expect(cartao()!.querySelector('img[src*="/avatars/aura/"]')).not.toBeNull();
+    expect(cartao()!.textContent).toMatch(/AURA/);
+    cleanup();
+    render(<TourEscritorio naAba noTutorial={false} />);
+    act(() => { vi.advanceTimersByTime(1500); });
+    expect(document.body.innerHTML).toMatch(/34,211,238/);
   });
 });
