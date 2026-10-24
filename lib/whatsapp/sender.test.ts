@@ -81,3 +81,12 @@ describe("whatsapp · sender bridge (chip da ChipFlow)", () => {
     expect(mb.registrar).not.toHaveBeenCalled();
   });
 });
+
+describe("provider chips (os chips da própria Zaeon)", () => {
+  it("WA_OPERATOR_URL sem provider explícito → chips; explícito manda", async () => {
+    const { resolveProvider } = await import("./sender");
+    expect(resolveProvider({ WA_OPERATOR_URL: "http://wa-adapter:9091" })).toBe("chips");
+    expect(resolveProvider({ WHATSAPP_PROVIDER: "chips" })).toBe("chips");
+    expect(resolveProvider({ WA_OPERATOR_URL: "x", WHATSAPP_PROVIDER: "log" })).toBe("log");
+  });
+});

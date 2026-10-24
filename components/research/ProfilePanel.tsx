@@ -11,6 +11,7 @@ import { useSession } from 'next-auth/react';
 import GenderDNA from '@/components/sub/GenderDNA';
 import NetworkMural from '@/app/workstation/profiles/NetworkMural';
 import WhatsAppConnectCard from '@/components/whatsapp/WhatsAppConnectCard';
+import ChipsCeoCard from '@/components/whatsapp/ChipsCeoCard';
 import AchievementsMural from '@/components/research/AchievementsMural';
 
 // chave de data local (YYYY-MM-DD), sem fuso atrapalhar
@@ -337,6 +338,7 @@ function ProfilePanel({ className }: { className?: string }) {
                 <FullWidthChart />
                 <PresenceGraph />
                 <WhatsAppConnectCard />
+                <ChipsCeoCard />
                 <AchievementsMural />
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
                     <div className="lg:col-span-2 h-full"><HabitMatrix weekData={weekData} monthName={monthName} /></div>

@@ -197,6 +197,13 @@ jobs:
               echo "→ CHORES_QUEUE=1: leitor-proxy entra no deploy"
             fi
 
+            # Chips de WhatsApp (docs/WHATSAPP_CHIPS.md): WHATSAPP_CHIPS=1 no .env do VPS sobe o adapter + o banco dele
+            # (nomeados, o compose habilita o perfil "whatsapp"). A imagem do adapter é construída na VPS (runbook).
+            if [ -n "$SERVICES" ] && grep -Eq "^WHATSAPP_CHIPS=\"?1" .env 2>/dev/null; then
+              SERVICES="$SERVICES wa-db wa-adapter"
+              echo "→ WHATSAPP_CHIPS=1: wa-db + wa-adapter entram no deploy"
+            fi
+
             # O Caddy quebra com "a,b" e aceita "a, b". Normaliza o que vier da
             # Variable pra que um esquecimento de espaço não derrube o HTTPS.
             BETA_DOMAIN="$(printf '%s' "$BETA_DOMAIN" | sed 's/[[:space:]]*,[[:space:]]*/, /g')"

@@ -5,6 +5,7 @@
  *               (ou BRIDGE_INSTANCE_ID) define a instância. Handoff v3 §1.2.
  *   evolution → instância única da plataforma no Evolution API (POST /message/sendText/{instance})
  *   disparos  → legado (repo de disparos); rota não confirmada — remoção prevista no PR-W2 (§8).
+ *   chips     → os CHIPS da própria Zaeon (whatsapp-adapter na VPS, lib/whatsapp/chips): rodízio + "digitando…".
  *   log       → sem provider configurado: só loga (dev/CI). Nunca derruba a rota.
  *
  * `buildSendRequest` é puro (testável) pros providers HTTP; `sendWhatsAppText` faz o IO.
@@ -13,16 +14,17 @@
 import { jidNumber } from "./phone";
 import { resolveBridgeRedisUrl } from "@/lib/chipflow/bridge-request";
 
-export type Provider = "evolution" | "disparos" | "log" | "bridge";
+export type Provider = "evolution" | "disparos" | "log" | "bridge" | "chips";
 export type SenderEnv = Record<string, string | undefined>;
 export type SendRequest = { url: string; init: RequestInit };
-export type SendOpts = { agentKey?: string; idemKey?: string };
+export type SendOpts = { agentKey?: string; idemKey?: string; chipId?: string };
 
 const trimSlash = (u: string) => u.replace(/\/+$/, "");
 
 export function resolveProvider(env: SenderEnv = process.env): Provider {
   const p = (env.WHATSAPP_PROVIDER ?? "").toLowerCase();
-  if (p === "evolution" || p === "disparos" || p === "log" || p === "bridge") return p;
+  if (p === "evolution" || p === "disparos" || p === "log" || p === "bridge" || p === "chips") return p;
+  if (env.WA_OPERATOR_URL) return "chips";   // os chips da própria Zaeon (lib/whatsapp/chips) — out/2026
   if (env.EVOLUTION_URL) return "evolution";
   if (resolveBridgeRedisUrl(env)) return "bridge";
   if (env.DISPAROS_URL) return "disparos";
@@ -82,6 +84,11 @@ async function sendViaBridge(phone: string, text: string, env: SenderEnv, opts: 
 export async function sendWhatsAppText(phone: string, text: string, env: SenderEnv = process.env, opts: SendOpts = {}): Promise<SendResult> {
   const provider = resolveProvider(env);
   if (provider === "bridge") return sendViaBridge(phone, text, env, opts);
+  if (provider === "chips") {
+    const { enviarPorChip } = await import("./envio-chip");
+    const r = await enviarPorChip({ phone, text, agentKey: opts.agentKey, chipId: opts.chipId, idemKey: opts.idemKey });
+    return { ok: r.ok, provider, error: r.error, commandId: r.chipId };
+  }
 
   const req = buildSendRequest(provider, env, phone, text);
   if (!req) {

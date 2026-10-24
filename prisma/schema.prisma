@@ -968,11 +968,71 @@ model WhatsAppMessage {
   kind      String   // chat | connect | stop | resume | agenda | review | deadline | tree | credential | test
   text      String
   dedupeKey String?
+  chipId    String?  @db.ObjectId   // por qual chip (WaChip) saiu/entrou — null = provider antigo
+  waMsgId   String?                 // id da mensagem no WhatsApp (inbound: dedupe de reentrega)
   at        DateTime @default(now())
 
   @@index([userId, at])
   @@index([userId, dedupeKey])
+  @@index([waMsgId])
   @@map("whatsapp_messages")
+}
+
+// ─── CHIPS DE WHATSAPP (out/2026) — a estrutura da ChipFlow dentro da Zaeon ───
+// Um chip = um número de WhatsApp conectado por QR no whatsapp-adapter (whatsmeow) da própria Zaeon
+// (docker-compose: wa-adapter). `instanceId` é o id NUMÉRICO do adapter: o mesmo das rotas de operador
+// (/instance/{id}/…) e do shard do bridge Redis (wa:cmd:{id % NUM_SHARDS}). `token` = o token da sessão
+// no adapter (create idempotente por token). Papel: "zaeon" (a agente que manda as mensagens do dia),
+// "agente" (o chip de um agente/mentor, `agentKey`) ou "pessoal" (o número do admin). Ver docs/WHATSAPP_CHIPS.md.
+model WaChip {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  instanceId    Int       @unique
+  token         String    @unique
+  nome          String                     // rótulo interno ("Zaeon 1", "Chip do Martinez")
+  papel         String    @default("zaeon") // zaeon | agente | pessoal
+  agentKey      String?                    // papel=agente: slug do mentor/agente que fala por este chip
+  ativo         Boolean   @default(true)   // entra no rodízio de envio
+  estado        String    @default("novo") // novo | qr | conectado | desconectado | erro
+  numero        String?                    // E.164 sem "+", depois de conectar
+  jid           String?
+  perfilNome    String?
+  perfilRecado  String?
+  fotoUrl       String?                    // data-URI JPEG pequena (a mesma que vai pro WhatsApp)
+  limiteDia     Int       @default(1000)
+  enviadosHoje  Int       @default(0)
+  diaContagem   String?                    // YYYY-MM-DD (America/Sao_Paulo) do contador acima
+  totalEnviados Int       @default(0)
+  ultimoEnvioEm DateTime?
+  ultimoErro    String?
+  conectadoEm   DateTime?
+  criadoPor     String?   @db.ObjectId
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([papel, ativo, estado])
+  @@map("wa_chips")
+}
+
+// ─── LEMBRETES / ROTINA (out/2026) — o que faz a Zaeon "entender a rotina" do aluno ───
+// Sem lembrete nenhum (e sem agenda), a Zaeon não sabe quando a pessoa estuda: puxa conversa a cada 45 min
+// (no horário acordado) até descobrir. Com rotina, fala 3× ao dia + na hora de cada lembrete.
+// `minutos` = minuto do dia (0..1439) no fuso do aluno; `dias` = 0 (dom)..6 (sáb), vazio = todo dia;
+// `data` preenchida = lembrete de UMA vez (YYYY-MM-DD). Origem: "whatsapp" (lido da resposta) | "app".
+model ZaeonLembrete {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String    @db.ObjectId
+  texto         String
+  minutos       Int
+  dias          Int[]
+  data          String?
+  ativo         Boolean   @default(true)
+  origem        String    @default("whatsapp")
+  ultimoEnvioEm DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([userId, ativo])
+  @@map("zaeon_lembretes")
 }
 // ─── Credenciais soulbound (Solana) — toda conquista vira prova verificável do aluno ───
 // Emitidas via Crossmint (wallet custodial por e-mail, gasless) como cNFT soulbound (Bubblegum V2)

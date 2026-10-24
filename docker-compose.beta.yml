@@ -266,6 +266,57 @@ services:
       resources:
         limits: { memory: 768m }
 
+  # ── CHIPS DE WHATSAPP (out/2026, docs/WHATSAPP_CHIPS.md) ──────────────────────────────────────────
+  #   O whatsapp-adapter (whatsmeow) da ChipFlow rodando DA ZAEON: os chips conectam por QR no "Meu perfil"
+  #   (CEO), mandam/recebem pelo bridge Redis (wa:cmd/wa:evt no `redis`, db 5) e o operador HTTP (create/QR/
+  #   status/perfil) fica só na rede interna. Sessões whatsmeow no Postgres próprio (wa-db).
+  #   Imagem construída na VPS a partir do repo do adapter (o GHCR dele é privado): ver o runbook.
+  #   Sobe com WHATSAPP_CHIPS=1 no .env (o deploy nomeia os dois serviços → o compose habilita o perfil).
+  wa-db:
+    image: postgres:16-alpine
+    container_name: zaeon_wa_db
+    profiles: ["whatsapp"]
+    environment:
+      POSTGRES_USER: wa
+      POSTGRES_PASSWORD: ${WA_DB_PASSWORD:-troque-no-env}
+      POSTGRES_DB: wa
+    volumes:
+      - wa_db:/var/lib/postgresql/data
+    expose: ["5432"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wa -d wa"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    deploy:
+      resources:
+        limits: { memory: 256m }
+
+  wa-adapter:
+    image: ${WA_ADAPTER_IMAGE:-zaeon-wa-adapter:local}
+    container_name: zaeon_wa_adapter
+    profiles: ["whatsapp"]
+    environment:
+      DRIVER_KIND: whatsmeow
+      ROUTING_MODE: redis_bridge
+      DATABASE_URL: postgres://wa:${WA_DB_PASSWORD:-troque-no-env}@wa-db:5432/wa?sslmode=disable
+      WHATSMEOW_DSN: postgres://wa:${WA_DB_PASSWORD:-troque-no-env}@wa-db:5432/wa?sslmode=disable
+      REDIS_URL: redis://redis:6379/5
+      NUM_SHARDS: "1"
+      ADAPTER_SHARD: "0"
+      OPERATOR_ADDR: ":9091"
+      OPERATOR_TOKEN: ${WA_OPERATOR_TOKEN:-}
+      METRICS_PORT: "9090"
+    depends_on:
+      wa-db: { condition: service_healthy }
+      redis: { condition: service_started }
+    expose: ["9091"]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 512m }
+
   # ── LEITOR (Fatia 7, G6) — o ÚNICO que sai para a internet a serviço de chore ──
   #    SEM env_file, SEM volume do app, SEM credencial: comprometido, consegue… ler a web.
   #    Allowlist default-deny (LEITOR_ALLOW). Interno (expose). Teste: lib/leitor/compose.test.ts pina isto.
@@ -395,6 +446,7 @@ services:
         limits: { memory: 256m }
 
 volumes:
+  wa_db:
   redis_data:
   evolution_instances:   # sessão da instância única do WhatsApp (perfil whatsapp)
   evolution_store:
