@@ -50,7 +50,8 @@ describe("a trajetória narra e o cliente escuta", () => {
     await runTrajectoryTraced("por que o café tira o sono?", ctx, f.deps);
     const { eventos } = separarProgresso(f.fim());
     expect(eventos.map((e) => e.fase)).toEqual(
-      ["route", "plan", "gather", "reason", "draft", "critique", "finalize"],
+      // o 2º "gather" é o anúncio das fontes achadas ("Li 1 fonte · …") — as fontes antes do texto
+      ["route", "plan", "gather", "gather", "reason", "draft", "critique", "finalize"],
     );
   });
 
@@ -116,6 +117,6 @@ describe("a trajetória narra e o cliente escuta", () => {
       if (atual && vistas[vistas.length - 1] !== atual.rotulo) vistas.push(atual.rotulo);
     }
     expect(vistas).toEqual(["Entendendo o pedido", "Planejando a resposta", "Reunindo evidências",
-                            "Raciocinando", "Redigindo", "Revisando criticamente", "Finalizando"]);
+                            "Li 1 fonte · 1 artigo acadêmico — escrevendo", "Raciocinando", "Redigindo", "Revisando criticamente", "Finalizando"]);
   });
 });

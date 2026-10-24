@@ -113,6 +113,16 @@ export function harnessEnabled(): boolean {
 }
 
 // ───────────────────────────── helpers puros ─────────────────────────────
+/** "Li 8 fontes · 6 artigos acadêmicos, 2 da web" — o rótulo do progresso depois da coleta */
+export function rotuloDasFontes(ev: { source?: { url?: string; title?: string } | null; confidence?: string }[]): string {
+  const comFonte = ev.filter((f) => f.source);
+  const n = comFonte.length || ev.length;
+  const web = comFonte.filter((f) => f.confidence === "baixa").length;   // achado web = confiança "baixa" (lib/agent/runtime)
+  const acad = comFonte.length - web;
+  const partes = [acad ? `${acad} ${acad === 1 ? "artigo acadêmico" : "artigos acadêmicos"}` : "", web ? `${web} da web` : ""].filter(Boolean);
+  return `Li ${n} ${n === 1 ? "fonte" : "fontes"}${partes.length ? ` · ${partes.join(", ")}` : ""} — escrevendo`;
+}
+
 function emit(d: HarnessDeps, st: TrajectoryState, phase: Phase, detail?: string): void {
   st.phase = phase;
   d.emit({ kind: "say", label: PHASE_LABEL[phase], detail: detail ?? phase });
@@ -253,6 +263,8 @@ export async function runTrajectoryTraced(
         if (res.artifact) st.artifacts.push(res.artifact);
       }
       charge(st, "gather", steps.length, d);
+      // AS FONTES ANTES DO TEXTO: o aluno vê o que foi achado (~2 s) enquanto a resposta é escrita
+      if (st.evidence.length) d.emit({ kind: "say", label: rotuloDasFontes(st.evidence), detail: "gather" });
       // A3 · degradado ≠ sucesso silencioso: gather vazio quando se esperava evidência.
       if (needsEvidence(st) && st.evidence.length === 0) {
         st.degraded = true;
