@@ -1,31 +1,51 @@
 "use client";
 /**
- * BalaoTour — o cartão dos TOURS DO LABORATÓRIO (o da sala, TourSala, e o do Escritório, TourEscritorio): vidro escuro
- * discreto, hairline no acento da Aura (ciano/roxo), um anel fino com brilho suave no alvo e um scrim leve — no lugar do
- * balão dourado do Droid (que segue só na 1ª missão do tablet, components/onboard/BalaoDroid).
+ * BalaoTour — o cartão dos TOURS DO LABORATÓRIO (o da sala, TourSala, e o do Escritório, TourEscritorio).
+ * #605: "diálogo de jogo" com a Aura — o retrato dela num círculo (com uma faixa de holograma passando pelo rosto),
+ * a etiqueta "AURA" inclinada, a fala em caixas curtas (lib/onboarding/cartaoTour) aparecendo letra por letra (clicar
+ * completa), o triângulo ⟁ dela piscando no fim da fala e girando no botão, e o progresso em losangos. Roxo na Sala
+ * de Estudos, ciano no Escritório. No lugar do vidro escuro genérico (e, antes dele, do balão dourado do Droid, que
+ * segue só na 1ª missão do tablet, components/onboard/BalaoDroid).
  * Reusa o destaque (useDestaque) e a conta de posição (posicaoDoBalao) do Droid: o cartão nunca cobre o que a pessoa
- * precisa clicar. Esc = pular. O foco vai pro botão principal a cada passo; a fala é aria-live.
+ * precisa clicar. Esc = pular. O foco vai pro botão principal a cada passo. O leitor de tela recebe a fala INTEIRA
+ * (aria-live), não letra por letra. Com "reduzir movimento": sem animação e o texto vem inteiro. Só CSS (sem 3D, sem
+ * desfoque de fundo); as animações param com a aba escondida.
  */
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { posicaoDoBalao, type Caixa } from "@/lib/onboarding/tutorialLab";
+import { COR_DO_TOM, letrasVisiveis, paginasDaFala, type TomCartao } from "@/lib/onboarding/cartaoTour";
 
 export { useDestaque } from "@/components/onboard/BalaoDroid";
 
-const CIANO = "34,211,238";
-const ROXO = "167,139,250";
-const LARGURA = 340;
+/** largura do cartão (com a sobra do retrato, que sai pra fora da caixa) */
+const LARGURA = 420;
+/** quanto o retrato sai pra fora (em cima e à esquerda) e o tamanho dele */
+const SAI = 26, RETRATO = 80;
+/** a "datilografia" anda de tanto em tanto (ms) */
+const PASSO_MS = 30;
+const AURA = { nome: "AURA", falando: "/avatars/aura/talk.sm.webp", parada: "/avatars/aura/smile.sm.webp" };
 
 const CSS = `
-@keyframes bt-anel { 0%,100% { box-shadow: 0 0 0 1.5px rgba(${CIANO},.85), 0 0 14px 2px rgba(${CIANO},.28) } 50% { box-shadow: 0 0 0 1.5px rgba(${ROXO},.9), 0 0 22px 4px rgba(${ROXO},.32) } }
+@keyframes bt-anel { 0%,100% { box-shadow: 0 0 0 1.5px rgba(var(--bt-cor),.85), 0 0 14px 2px rgba(var(--bt-cor),.28) } 50% { box-shadow: 0 0 0 1.5px rgba(var(--bt-cor),.95), 0 0 22px 4px rgba(var(--bt-cor),.34) } }
+@keyframes bt-scan { 0% { transform: translateY(-120%) } 55%,100% { transform: translateY(520%) } }
+@keyframes bt-gira { 0%,70% { transform: rotate(0) } 100% { transform: rotate(120deg) } }
+@keyframes bt-pisca { 0%,49% { opacity: 1 } 50%,100% { opacity: .25 } }
 .bt-anel { animation: bt-anel 2.8s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { .bt-anel { animation: none; } }
+.bt-retrato::before { content: ""; position: absolute; inset: 0; z-index: 2; border-radius: 50%; background: repeating-linear-gradient(0deg, rgba(103,232,249,.08) 0 1px, transparent 1px 3px); }
+.bt-retrato::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 22%; z-index: 3; background: linear-gradient(180deg, transparent, rgba(103,232,249,.45), transparent); animation: bt-scan 3.2s ease-in-out infinite; }
+.bt-gira { display: inline-block; animation: bt-gira 2.4s ease-in-out infinite; }
+.bt-pisca { animation: bt-pisca 1.1s steps(1) infinite; }
+.bt-parado .bt-anel, .bt-parado .bt-retrato::after, .bt-parado .bt-gira, .bt-parado .bt-pisca { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) { .bt-anel, .bt-retrato::after, .bt-gira, .bt-pisca { animation: none; } }
 `;
 
-export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onPular, chave }: {
+const reduzirMovimento = () => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; } };
+
+export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onPular, chave, tom = "roxo" }: {
   alvo: Caixa | null;
   evita: Caixa | null;
-  /** a dica curta (1 linha, com emoji) */
+  /** a dica curta (1 linha) — vira o nome do cartão pro leitor de tela */
   titulo: string;
   fala: string;
   /** 0-based */
@@ -36,24 +56,63 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
   onPular?: () => void;
   /** muda a cada passo (reposiciona e devolve o foco) */
   chave: string;
+  /** #605: roxo na Sala de Estudos, ciano no Escritório */
+  tom?: TomCartao;
 }) {
   const card = useRef<HTMLDivElement>(null);
   const principal = useRef<HTMLButtonElement>(null);
-  const [alt, setAlt] = useState(180);
+  const cor = COR_DO_TOM[tom];
+  const [alt, setAlt] = useState(200);
+  // a fala em caixas curtas: uma ideia por caixa
+  const paginas = useMemo(() => paginasDaFala(fala), [fala]);
+  const [pg, setPg] = useState(0);
+  const [ms, setMs] = useState(0);
+  const [completo, setCompleto] = useState(false);
+  const [calmo, setCalmo] = useState(reduzirMovimento);
+  const [escondida, setEscondida] = useState(false);
+  // "reduzir movimento" ligado com o cartão aberto: o texto completa na hora (o CSS já para sozinho)
+  useEffect(() => {
+    let mq: MediaQueryList | null = null;
+    try { mq = window.matchMedia("(prefers-reduced-motion: reduce)"); } catch { return; }
+    const mudou = () => setCalmo(!!mq?.matches);
+    mq?.addEventListener?.("change", mudou);
+    return () => mq?.removeEventListener?.("change", mudou);
+  }, []);
+  useEffect(() => { setPg(0); }, [chave]);
+  useEffect(() => { setMs(0); setCompleto(false); }, [chave, pg]);
+  const texto = paginas[Math.min(pg, paginas.length - 1)] ?? "";
+  const ultimaPagina = pg >= paginas.length - 1;
+  const visivel = calmo || completo ? texto : letrasVisiveis(texto, ms);
+  const digitando = visivel.length < texto.length;
+  // letra por letra (para com a aba escondida)
+  useEffect(() => {
+    if (!digitando || escondida) return;
+    const t = setInterval(() => setMs((m) => m + PASSO_MS), PASSO_MS);
+    return () => clearInterval(t);
+  }, [digitando, escondida]);
+  useEffect(() => {
+    const ver = () => setEscondida(document.hidden);
+    document.addEventListener("visibilitychange", ver);
+    return () => document.removeEventListener("visibilitychange", ver);
+  }, []);
+
   const W = window.innerWidth, H = window.innerHeight, larg = Math.min(W - 24, LARGURA);
   const pos = posicaoDoBalao(evita ?? alvo, W, H, { w: larg, h: alt });
-  useLayoutEffect(() => { const el = card.current; if (!el) return; const h = el.offsetHeight; if (h && Math.abs(h - alt) > 2) setAlt(h); }, [fala, titulo, pos.w, alt]);
+  useLayoutEffect(() => { const el = card.current; if (!el) return; const h = el.offsetHeight; if (h && Math.abs(h - alt) > 2) setAlt(h); }, [visivel, titulo, pos.w, alt]);
   // o foco vai pro botão do passo (ou pro Pular), sem rolar a página
-  useEffect(() => { (principal.current ?? card.current)?.focus({ preventScroll: true }); }, [chave]);
+  useEffect(() => { (principal.current ?? card.current)?.focus({ preventScroll: true }); }, [chave, ultimaPagina]);
   useEffect(() => {
     if (!onPular) return;
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onPular(); };
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
   }, [onPular]);
+
   const P = 6;
+  const botao = "inline-flex items-center gap-2 rounded-full border px-3.5 py-1 text-[12px] font-semibold transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-1";
+  const triangulo = <span aria-hidden className="bt-gira" style={{ color: `rgb(${cor.rgb})` }}>⟁</span>;
   return createPortal(
-    <div className="pointer-events-none fixed inset-0 z-[1300]">
+    <div className={`pointer-events-none fixed inset-0 z-[1300] ${escondida ? "bt-parado" : ""}`} style={{ ["--bt-cor" as string]: cor.rgb }}>
       <style>{CSS}</style>
       {alvo ? (
         <div data-tour-anel className="bt-anel absolute rounded-xl transition-all duration-300 ease-out motion-reduce:transition-none"
@@ -67,39 +126,57 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
         tabIndex={-1}
         // o cartão segura o próprio mousedown: clicar nele não conta como "clique fora" de um painel aberto (o mapa)
         onMouseDown={(e) => e.stopPropagation()}
-        className="pointer-events-auto absolute rounded-2xl border px-4 pb-3 pt-3.5 outline-none backdrop-blur-xl transition-[left,top] duration-300 ease-out motion-reduce:transition-none"
-        style={{
-          width: pos.w, left: pos.left, top: pos.top,
-          background: "rgba(8,12,28,.86)",
-          borderColor: `rgba(${CIANO},.22)`,
-          boxShadow: `0 16px 40px -18px rgba(0,0,0,.75), 0 0 0 1px rgba(${ROXO},.06) inset`,
-        }}
+        // clicar no cartão completa o texto na hora
+        onClick={() => { if (digitando) setCompleto(true); }}
+        className="pointer-events-auto absolute outline-none transition-[left,top] duration-300 ease-out motion-reduce:transition-none"
+        style={{ width: pos.w, left: pos.left, top: pos.top, paddingTop: SAI, paddingLeft: SAI }}
       >
-        <div className="flex items-center gap-2">
-          <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: `linear-gradient(135deg, rgb(${CIANO}), rgb(${ROXO}))` }} />
-          <p className="min-w-0 flex-1 truncate text-[11px] font-semibold tracking-wide text-cyan-200/90">{titulo}</p>
-          <span className="shrink-0 text-[10px] font-medium tabular-nums text-white/35" aria-label={`Passo ${passo + 1} de ${total}`}>{passo + 1} / {total}</span>
-        </div>
-        <p aria-live="polite" className="mt-1.5 text-[13px] leading-relaxed text-white/85">{fala}</p>
-        <div className="mt-3 flex items-center gap-2">
-          <span aria-hidden className="mr-auto flex items-center gap-1">
-            {Array.from({ length: total }, (_, k) => (
-              <span key={k} className={`h-1 rounded-full transition-all ${k === passo ? "w-3.5 bg-cyan-300/80" : k < passo ? "w-1 bg-white/35" : "w-1 bg-white/15"}`} />
-            ))}
+        <div className="relative rounded-[4px_16px_16px_16px] border pb-3 pr-4 pt-[18px]"
+          style={{ paddingLeft: RETRATO - SAI + 16, background: "rgba(12,10,34,.96)", borderColor: `rgba(${cor.rgb},.45)`, boxShadow: "0 16px 40px -18px rgba(0,0,0,.75)" }}>
+          {/* o retrato: falando enquanto o texto aparece, sorrindo quando para */}
+          <div aria-hidden className="absolute rounded-full p-[3px]" style={{ left: -SAI, top: -SAI, width: RETRATO, height: RETRATO, border: `3px solid rgb(${cor.rgb})`, background: "#070a18" }}>
+            <div className="bt-retrato relative h-full w-full overflow-hidden rounded-full">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={AURA.parada} alt="" className="absolute inset-0 h-full w-full scale-[1.18] object-cover object-[50%_22%]" style={{ opacity: digitando ? 0 : 1 }} />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={AURA.falando} alt="" className="absolute inset-0 h-full w-full scale-[1.18] object-cover object-[50%_22%]" style={{ opacity: digitando ? 1 : 0 }} />
+            </div>
+          </div>
+          <span aria-hidden className="absolute -top-3 px-3 py-0.5 text-[11px] font-bold tracking-wide" style={{ left: RETRATO - SAI + 12, background: `rgb(${cor.rgb})`, color: cor.tinta, transform: "skewX(-14deg)" }}>
+            <span className="inline-block" style={{ transform: "skewX(14deg)" }}>{AURA.nome}</span>
           </span>
-          {onPular && (
-            <button type="button" onClick={onPular} ref={acao ? undefined : principal}
-              className="rounded-full px-2.5 py-1 text-[11px] font-medium text-white/50 transition-colors hover:text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-cyan-300/60">
-              Pular
-            </button>
-          )}
-          {acao && (
-            <button type="button" ref={principal} onClick={acao.onClick}
-              className="rounded-full border px-3.5 py-1 text-[12px] font-semibold text-white transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-1 focus-visible:outline-cyan-300/70"
-              style={{ borderColor: `rgba(${CIANO},.45)`, background: `linear-gradient(135deg, rgba(${CIANO},.16), rgba(${ROXO},.16))` }}>
-              {acao.rotulo}
-            </button>
-          )}
+          {/* o leitor de tela recebe a fala inteira, de uma vez */}
+          <p aria-live="polite" className="sr-only">{fala}</p>
+          <span className="sr-only" aria-label={`Passo ${passo + 1} de ${total}`}>{passo + 1} / {total}</span>
+          <p aria-hidden className="min-h-[3em] text-[15px] leading-relaxed text-[#e6ebff]">
+            {visivel}
+            {!digitando && <span className="bt-pisca ml-1 text-[13px]" style={{ color: `rgb(${cor.rgb})` }}>⟁</span>}
+          </p>
+          <div className="mt-3 flex items-center gap-2.5">
+            <span aria-hidden className="mr-auto flex items-center gap-1">
+              {Array.from({ length: total }, (_, k) => (
+                <span key={k} className="h-1.5 w-1.5 rotate-45"
+                  style={k === passo ? { background: `rgb(${cor.rgb})` } : k < passo ? { background: `rgba(${cor.rgb},.45)` } : { border: `1px solid rgba(${cor.rgb},.55)` }} />
+              ))}
+            </span>
+            {onPular && (
+              <button type="button" onClick={onPular} ref={acao || !ultimaPagina ? undefined : principal}
+                className="rounded-full px-2.5 py-1 text-[12px] font-medium text-[#c3cbea] transition-colors hover:text-white focus-visible:outline focus-visible:outline-1">
+                Pular
+              </button>
+            )}
+            {!ultimaPagina ? (
+              <button type="button" ref={principal} onClick={(e) => { e.stopPropagation(); setPg((k) => k + 1); }}
+                className={`${botao} text-[#f1edff]`} style={{ borderColor: `rgb(${cor.rgb})` }}>
+                Continuar {triangulo}
+              </button>
+            ) : acao && (
+              <button type="button" ref={principal} onClick={(e) => { e.stopPropagation(); acao.onClick(); }}
+                className={`${botao} text-[#f1edff]`} style={{ borderColor: `rgb(${cor.rgb})` }}>
+                {acao.rotulo} {triangulo}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>,
