@@ -84,12 +84,26 @@ describe("infra/litellm.config.yaml — pool grátis", () => {
     for (const d of pool) expect(d.linhas.join("\n"), d.nome).toMatch(new RegExp(`model_info:\\s*\\{\\s*id:\\s*${esperado[d.nome]}\\s*\\}`));
   });
 
-  it("fallback do pool = Cerebras grátis e depois a reserva Google (Groq fora, decisão do dono); nunca zaeon-flash/zaeon-pro", () => {
-    const linha = ativas.find((l) => /^\s*fallbacks:/.test(l));
-    expect(linha).toBeTruthy();
-    expect(linha).not.toMatch(/zaeon-flash|zaeon-pro/);
-    expect(linha).toMatch(/"zaeon-pool-lite":\s*\["zaeon-pool-cerebras",\s*"zaeon-reserva-google"\]/);
-    expect(linha).not.toMatch(/zaeon-pool-groq|zaeon-pool-cf/);
+  // as cadeias de fallback: { origem: [destinos] }
+  const cadeias = (): Record<string, string[]> => {
+    const linha = ativas.find((l) => /^\s*fallbacks:/.test(l))!;
+    return Object.assign({}, ...JSON.parse(linha.replace(/^\s*fallbacks:\s*/, "")));
+  };
+
+  it("fallback do pool = Cerebras grátis e depois a reserva Google (Groq fora, decisão do dono); o pool NUNCA cai em zaeon-flash/zaeon-pro", () => {
+    const c = cadeias();
+    expect(c["zaeon-pool-lite"]).toEqual(["zaeon-pool-cerebras", "zaeon-reserva-google"]);
+    for (const [origem, destinos] of Object.entries(c)) if (origem.startsWith("zaeon-pool-")) {
+      expect(destinos.join(" "), origem).not.toMatch(/zaeon-flash|zaeon-pro/);
+      expect(destinos.join(" "), origem).not.toMatch(/zaeon-pool-groq|zaeon-pool-cf/);
+    }
+  });
+
+  it("o CHAT tem reserva (429 do 3.5-flash): zaeon-flash → reserva Google; zaeon-pro → flash; nunca o pool grátis nem a Contabo", () => {
+    const c = cadeias();
+    expect(c["zaeon-flash"]).toEqual(["zaeon-reserva-google"]);
+    expect(c["zaeon-pro"]?.[0]).toBe("zaeon-flash");
+    for (const o of ["zaeon-flash", "zaeon-pro"]) expect((c[o] ?? []).join(" "), o).not.toMatch(/zaeon-pool-|zaeon-local-/);
   });
 
   it("reserva Google = Vertex flash-lite (o mais barato), com alvo vertex pro ledger contar o custo", () => {
