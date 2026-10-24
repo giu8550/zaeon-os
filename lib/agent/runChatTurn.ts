@@ -24,7 +24,8 @@ import { buildHarnessDeps, resolveHarnessOutput, type HarnessOutput } from "@/li
 import { surfaceLedger } from "@/lib/llm/ledger";
 import { runTrajectoryTraced } from "@/lib/agent/trajectory";
 import * as mem from "@/lib/agent/memory-provider";
-import { serializarProgresso, serializarModelo } from "@/lib/agent/progresso";
+import { serializarProgresso, serializarModelo, serializarPrevia } from "@/lib/agent/progresso";
+import { criarEmissorPrevia } from "@/lib/agent/previa";
 import { blocoFonteColada, objetivoComFonte, pedidoParaTitulo, separarFonteColada } from "@/lib/agent/fonteColada";
 import { modeloDoId, nomeDoModeloServido } from "@/lib/chat/modelos";
 import { markRunning, saveDone, saveError } from "@/lib/agent/chat-turn-store";
@@ -149,6 +150,8 @@ export async function runChatTurn(
     const deps = buildHarnessDeps(hctx, {
       modelo: escolhido?.provedor === "google" ? escolhido.vertex : undefined,
       onModelo(m) { if (!servido || servido.phase !== "draft" || m.phase === "draft") servido = m; },
+      // a PRÉVIA da resposta: o texto do rascunho enquanto nasce, em PEDAÇOS (lib/agent/previa criarEmissorPrevia)
+      onPrevia: criarEmissorPrevia((pedaco) => narrar(serializarPrevia(pedaco))),
       systemContext: [params.systemContext, memBlock, cartolinaBlock, tccBlock, skillBlock, colada.fonte ? blocoFonteColada(colada.fonte) : ""].filter(Boolean).join("\n\n") || undefined,
       history: params.history,
       baseConhecimento: await basePromise,
