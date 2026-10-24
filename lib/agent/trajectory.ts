@@ -67,6 +67,8 @@ export interface HarnessDeps {
   plan(st: TrajectoryState): Promise<Step[]>;
   runTool(name: string, args: any, ctx: AgentContext): Promise<ToolResult>;
   reason(st: TrajectoryState): Promise<string>;
+  /** opcional: este estado dispensa o raciocínio separado (sem anunciar a fase nem cobrar o orçamento) */
+  pulaRaciocinio?(st: TrajectoryState): boolean;
   draft(st: TrajectoryState): Promise<StructuredAnswer>;
   critique(st: TrajectoryState): Promise<ExaminerVerdict>;
   emit(step: AgentStep): void;
@@ -272,9 +274,13 @@ export async function runTrajectoryTraced(
       }
     }
 
-    emit(d, st, "reason");
-    st.reasoning = await d.reason(st);
-    charge(st, "reason", 1, d);
+    // (o adaptador pode pular o raciocínio — caminho elaborado: devolve "" sem chamar modelo; aí nem anuncia a fase)
+    if (d.pulaRaciocinio?.(st)) st.reasoning = "";
+    else {
+      emit(d, st, "reason");
+      st.reasoning = await d.reason(st);
+      charge(st, "reason", 1, d);
+    }
 
     emit(d, st, "draft");
     st.draft = await d.draft(st);

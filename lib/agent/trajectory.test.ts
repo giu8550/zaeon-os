@@ -163,3 +163,14 @@ describe("trajectory · as fontes antes do texto", () => {
     expect(rotuloDasFontes([{ source: { title: "x" }, confidence: "alta" }])).toBe("Li 1 fonte · 1 artigo acadêmico — escrevendo");
   });
 });
+
+describe("trajectory · raciocínio dispensado pelo adaptador", () => {
+  it("pulaRaciocinio → nem anuncia a fase reason nem chama o reason", async () => {
+    const reason = vi.fn(async () => "x");
+    const { deps, steps } = makeDeps({ reason, pulaRaciocinio: () => true });
+    await runTrajectoryTraced("explique entropia", ctx, deps);
+    expect(reason).not.toHaveBeenCalled();
+    expect(steps).not.toContain("reason");
+    expect(steps).toContain("draft");
+  });
+});

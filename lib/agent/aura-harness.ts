@@ -335,6 +335,10 @@ export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): Harn
     },
 
     async reason(st) {
+      // caminho ELABORADO: sem raciocínio separado — o rascunho já recebe a evidência inteira; a chamada a mais custava
+      // ~1,7 s antes da 1ª palavra e não melhorava a resposta (eval em prod, 24/out). Modo Pesquisa (trabalho, revisão)
+      // mantém. Volta com RACIOCINIO_ELABORADO=1.
+      if (st.mode === "elaborated" && process.env.RACIOCINIO_ELABORADO !== "1") return "";
       const sys = "Você é a Aura raciocinando ANTES de redigir. Conecte a evidência ao objetivo em 2–4 frases. Se faltou evidência, seja honesto — NUNCA invente fontes. Responda JSON {\"reasoning\":\"...\"}.";
       const user = `${preamble}${base}Objetivo: ${st.objective}\nModo: ${st.mode} · Acadêmico: ${st.academicMode}\nEvidência:\n${evidenceBlock(st)}${obsBlock(observations)}`;
       try {
@@ -387,14 +391,14 @@ export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): Harn
         academic + a5,
         ...(st.intent === "buscar_livro" ? [diretrizLivros(livrosAchados)] : []),
       ].join("\n");
-      const user = `${preamble}${base}Objetivo: ${st.objective}\nRaciocínio: ${st.reasoning ?? ""}\nEvidência:\n${evidenceBlock(st)}${obsBlock(observations)}`;
+      const user = `${preamble}${base}Objetivo: ${st.objective}\n${st.reasoning ? `Raciocínio: ${st.reasoning}\n` : ""}Evidência:\n${evidenceBlock(st)}${obsBlock(observations)}`;
       try {
         // trabalho completo (artigo/TCC inteiro em `work.sections`, às vezes a partir de um texto colado) não sai em 30 s:
         // o rascunho estourava o prazo e a Aura respondia "não consegui" — 90 s só pra criar_trabalho
         const prazo = st.intent === "criar_trabalho" ? 90_000 : 30_000;
         // a PRÉVIA: com quem a escute (o chat), o rascunho vai em stream e o texto do `nucleo` sai enquanto nasce
         const onTexto = opts.onPrevia ? (acc: string) => { const t = previaDoRascunho(acc); if (t) opts.onPrevia!(t); } : undefined;
-        const out = await genJson<Partial<StructuredAnswer>>(sys, user, { temperature: 0.4, model: modelFor(true), timeoutMs: prazo, phase: "draft", onTexto, pensar: pensarDa(st.mode === "quick" ? "draft_rapido" : "draft"), prazoPrimeiroMs: prazoPrimeiraPalavra(st) });
+        const out = await genJson<Partial<StructuredAnswer>>(sys, user, { temperature: 0.4, model: modelFor(true), timeoutMs: prazo, phase: "draft", onTexto, pensar: pensarDa(st.mode === "quick" ? "draft_rapido" : st.mode === "elaborated" ? "draft_elaborado" : "draft"), prazoPrimeiroMs: prazoPrimeiraPalavra(st) });
         // fontes da base: o rodapé sai do código, só com trechos que a busca devolveu (o modelo só aponta os números)
         const comBase = anexarFontesBase(normalizeAnswer(out, st), opts.baseConhecimento, (out as any)?.citacoes_base);
         return anexarLivros(comBase, livrosAchados);
@@ -404,6 +408,8 @@ export function buildHarnessDeps(ctx: ToolContext, opts: HarnessOpts = {}): Harn
         return anexarLivros({ nucleo: messageForError(classifyError(String(e?.message ?? e))) }, livrosAchados);
       }
     },
+
+    pulaRaciocinio: (st) => st.mode === "elaborated" && process.env.RACIOCINIO_ELABORADO !== "1",
 
     critique: (st) => Promise.resolve(critiqueForState(st)),
 

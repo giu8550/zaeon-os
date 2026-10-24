@@ -471,10 +471,10 @@ describe("base de conhecimento (RAG) · entra no prompt e sai citada", () => {
     expect(String(sys)).toContain("citacoes_base");
   });
 
-  it("ok: o reason também enxerga a base", async () => {
+  it("ok: o reason também enxerga a base (Modo Pesquisa — o elaborado não tem raciocínio separado)", async () => {
     const genJson = smartGen();
     const deps = buildHarnessDeps(ctx, { genJson, baseConhecimento: baseOk });
-    await deps.reason(stFor());
+    await deps.reason(stFor({ mode: "research", intent: "criar_trabalho", spec: INTENTS.criar_trabalho }));
     const reasonCall = genJson.mock.calls.find((c) => /reasoning/i.test(String(c[0])))!;
     expect(String(reasonCall[1])).toContain("[B1]");
   });
@@ -537,8 +537,35 @@ describe("preâmbulo · ordem pro cache", () => {
       history: [{ role: "user", text: "oi" }, { role: "model", text: "olá" }], systemContext: "MEMÓRIA DO TURNO",
       genJson: (async (_s: string, u: string) => { user = u; return { reasoning: "r" }; }) as any,
     });
-    await deps.reason({ objective: "x", mode: "elaborated", academicMode: "flexible", evidence: [] } as any);
+    await deps.reason({ objective: "x", mode: "research", academicMode: "flexible", evidence: [] } as any);   // (elaborado não raciocina)
     expect(user.indexOf("Conversa até aqui")).toBeGreaterThanOrEqual(0);
     expect(user.indexOf("Conversa até aqui")).toBeLessThan(user.indexOf("MEMÓRIA DO TURNO"));
+  });
+});
+
+describe("caminho elaborado: rascunho direto (eval em prod 24/out: 1ª palavra 2,7 s → 0,99 s, venceu 9 de 12)", () => {
+  it("elaborado: sem chamada de raciocínio, rascunho com pensar minimal e sem a linha 'Raciocínio:'", async () => {
+    const genJson = vi.fn(async (_s: string, _u: string, _o?: any): Promise<any> => ({ nucleo: "n", desenvolvimento: "d", conceitos: ["c"], proximos_passos: ["p"] }));
+    const deps = buildHarnessDeps(ctx, { genJson });
+    expect(deps.pulaRaciocinio?.(stFor())).toBe(true);
+    expect(await deps.reason(stFor())).toBe("");
+    await deps.draft(stFor());
+    expect(genJson).toHaveBeenCalledTimes(1);
+    expect(genJson.mock.calls[0]![2]?.pensar).toBe("minimal");
+    expect(String(genJson.mock.calls[0]![1])).not.toContain("Raciocínio:");
+  });
+  it("Modo Pesquisa (trabalho completo): mantém o raciocínio e o pensar low", async () => {
+    const genJson = vi.fn(async (_s: string, _u: string, _o?: any): Promise<any> => ({ reasoning: "r", nucleo: "n", work: { kind: "artigo", sections: [] }, evidencia: [], proximos_passos: [] }));
+    const deps = buildHarnessDeps(ctx, { genJson });
+    const st = stFor({ mode: "research", intent: "criar_trabalho", spec: INTENTS.criar_trabalho });
+    expect(deps.pulaRaciocinio?.(st)).toBe(false);
+    expect(await deps.reason(st)).toBe("r");
+    await deps.draft({ ...st, reasoning: "r" });
+    expect(genJson.mock.calls[1]![2]?.pensar).toBe("low");
+  });
+  it("RACIOCINIO_ELABORADO=1 volta o raciocínio no elaborado", async () => {
+    vi.stubEnv("RACIOCINIO_ELABORADO", "1");
+    try { expect(buildHarnessDeps(ctx, { genJson: vi.fn() as any }).pulaRaciocinio?.(stFor())).toBe(false); }
+    finally { vi.unstubAllEnvs(); }
   });
 });

@@ -4,13 +4,16 @@
  * low 4,3 / 5,4 · minimal 1,4 / 3,0. A classificação (um JSON de uma palavra, com prazo de 8 s) e o raciocínio
  * (2–4 frases) não precisam pensar; o rascunho do pipeline completo pensa pouco. Ideia do google-research/harness2
  * (esforço de raciocínio por papel). Ajustável por env SEM deploy de código: PENSAR_ROUTE, PENSAR_REASON,
- * PENSAR_DRAFT, PENSAR_DRAFT_RAPIDO, PENSAR_PLAN = minimal | low | medium | high | padrao (padrao = não mandar nada).
+ * PENSAR_DRAFT, PENSAR_DRAFT_RAPIDO, PENSAR_DRAFT_ELABORADO, PENSAR_PLAN = minimal | low | medium | high | padrao (padrao = não mandar nada).
  */
 export type NivelPensar = "minimal" | "low" | "medium" | "high";
-export type FasePensar = "route" | "reason" | "draft" | "draft_rapido" | "plan";
+export type FasePensar = "route" | "reason" | "draft" | "draft_rapido" | "draft_elaborado" | "plan";
 
 export const PENSAR_PADRAO: Record<FasePensar, NivelPensar | undefined> = {
-  route: "minimal", reason: "minimal", draft_rapido: "minimal", draft: "low", plan: undefined,
+  // draft_elaborado (explicar a fundo, fontes, artefato): minimal — eval em prod (24/out, 12 perguntas, juiz cego por
+  // pares): sem raciocínio separado + minimal = 1ª palavra 0,99 s (era 2,7 s) e venceu a atual em 9 de 12.
+  // draft (Modo Pesquisa: trabalho completo, revisão) continua low.
+  route: "minimal", reason: "minimal", draft_rapido: "minimal", draft_elaborado: "minimal", draft: "low", plan: undefined,
 };
 const NIVEIS = new Set<NivelPensar>(["minimal", "low", "medium", "high"]);
 
