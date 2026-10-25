@@ -52,6 +52,7 @@ describe("TourSala — o tour do laboratório", () => {
     abrir(<TourSala noTutorial={false} />);
     expect(cartao()).not.toBeNull();
     fireEvent.keyDown(window, { key: "Escape" });
+    act(() => { vi.advanceTimersByTime(1); });
     expect(cartao()?.textContent).toMatch(/Pular o tutorial\?/);
     fireEvent.click(screen.getByRole("button", { name: "Sim, pular" }));
     expect(cartao()).toBeNull();
@@ -65,6 +66,7 @@ describe("TourSala — o tour do laboratório", () => {
     const campo = document.createElement("textarea");
     document.body.appendChild(campo);
     fireEvent.keyDown(campo, { key: "Escape" });
+    act(() => { vi.advanceTimersByTime(1); });
     expect(cartao()?.textContent).not.toMatch(/Pular o tutorial\?/);
     expect(localStorage.getItem("zaeon.tour.sala.v2")).toBeNull();
     campo.remove();
@@ -275,5 +277,32 @@ describe("#613 · rever o tutorial sem console", () => {
     expect(localStorage.getItem("zaeon.tour.sala.v2")).toBeNull();
     expect(localStorage.getItem("zaeon.tour.escritorio.v1")).toBeNull();
     expect(screen.getByText("Passo 1 de 5")).toBeTruthy();
+  });
+});
+
+describe("#613 · revisão (Sourcery)", () => {
+  it("o Esc que fechou o mapa (preventDefault) não abre o \"Pular o tutorial?\"", () => {
+    abrir(<TourSala noTutorial={false} />);
+    const mapa = (e: KeyboardEvent) => { if (e.key === "Escape") e.preventDefault(); };
+    window.addEventListener("keydown", mapa);
+    fireEvent.keyDown(window, { key: "Escape" });
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(cartao()?.textContent).not.toMatch(/Pular o tutorial\?/);
+    window.removeEventListener("keydown", mapa);
+  });
+  it("um tour começado antes do \"Rever tutorial\" (noutra aba) não marca como visto de novo", async () => {
+    const { marcarTourSalaVisto } = await import("@/lib/onboarding/tourSala");
+    const { marcarTourEscritorioVisto } = await import("@/lib/onboarding/tourEscritorio");
+    const { geracaoDosTours } = await import("@/lib/onboarding/geracaoTour");
+    const { reverToursDoLab } = await import("@/lib/onboarding/reverTours");
+    const antes = geracaoDosTours();
+    vi.setSystemTime(new Date(2026, 9, 25, 12));
+    reverToursDoLab();
+    marcarTourSalaVisto(antes);
+    marcarTourEscritorioVisto(antes);
+    expect(localStorage.getItem("zaeon.tour.sala.v2")).toBeNull();
+    expect(localStorage.getItem("zaeon.tour.escritorio.v1")).toBeNull();
+    marcarTourSalaVisto(geracaoDosTours());
+    expect(localStorage.getItem("zaeon.tour.sala.v2")).toBe("1");
   });
 });

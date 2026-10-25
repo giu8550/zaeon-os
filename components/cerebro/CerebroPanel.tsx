@@ -58,7 +58,7 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
   const membros = useMemo(() => (mapa && ficha ? mapa.nos.filter((n) => n.id !== ficha.id && n.regiao === ficha.id && (n.drawers?.length ?? 0) > 0) : []), [mapa, ficha]);
   const aoRegiao = (r: RegiaoVisual) => setFichaId((cur) => (cur === r.id ? null : r.id));
   // Esc fecha (o clique fora e a bolinha são tratados por quem monta o painel — o mapa é modal, sem "x").
-  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") { if (fichaId) setFichaId(null); else onFechar(); } }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [fichaId, onFechar]);
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); if (fichaId) setFichaId(null); else onFechar(); } }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [fichaId, onFechar]);
   const gerar = onGerar ?? (() => void st.gerar());
   // o tour do laboratório (lib/onboarding/tourSala) anda quando o mapa do percurso abre PRONTO
   const temMapa = !!mapa;

@@ -9,6 +9,7 @@
 import type { AbaEstudos } from "@/lib/chat/conversasNav";
 import { EVT_ABRIR_DOC, KINDS_EM_ABA } from "@/lib/chat/documentos";
 import type { EstadoBolinha } from "@/lib/map/bolinha";
+import { geracaoValida } from "@/lib/onboarding/geracaoTour";
 
 /** o chat da Sala de Estudos mandou uma pergunta (components/study/StudyCoworkChat) */
 export const EVT_PERGUNTA_CHAT = "zaeon:chat:pergunta";
@@ -99,7 +100,9 @@ const CHAVE = "zaeon.tour.sala.v2";
 /** #613: "Rever tutorial do laboratório" (Configurações) */
 export const esquecerTourSala = () => { try { localStorage.removeItem(CHAVE); } catch { /* ignore */ } };
 export const tourSalaVisto = (): boolean => { try { return localStorage.getItem(CHAVE) === "1"; } catch { return true; } };
-export const marcarTourSalaVisto = () => {
+/** `geracao`: a do começo do tour — se a pessoa pediu "Rever tutorial" depois (noutra aba), não marca */
+export const marcarTourSalaVisto = (geracao?: string) => {
+  if (!geracaoValida(geracao)) return;
   try { localStorage.setItem(CHAVE, "1"); } catch { /* ignore */ }
   try { void fetch("/api/onboard/tour", { method: "POST" }).catch(() => {}); } catch { /* sem rede */ }
 };

@@ -4,6 +4,7 @@
  * sala (components/onboard/BalaoTour). Só explicação: cada passo anda no botão; Pular/Esc encerra. Dois roteiros: o
  * do Escritório-canal (coworking, NEXT_PUBLIC_ESCRITORIO_COWORK) e o do 3D antigo. Uma vez por navegador.
  */
+import { geracaoValida } from "@/lib/onboarding/geracaoTour";
 export type PassoEscritorio = { id: string; dica: string; fala: string; alvos: string[]; cta: string };
 
 export const PASSOS_ESCRITORIO: PassoEscritorio[] = [
@@ -37,7 +38,7 @@ const CHAVE = "zaeon.tour.escritorio.v1";
 /** #613: "Rever tutorial do laboratório" (Configurações) */
 export const esquecerTourEscritorio = () => { try { localStorage.removeItem(CHAVE); } catch { /* ignore */ } };
 export const tourEscritorioVisto = (): boolean => { try { return localStorage.getItem(CHAVE) === "1"; } catch { return true; } };
-export const marcarTourEscritorioVisto = () => { try { localStorage.setItem(CHAVE, "1"); } catch { /* ignore */ } };
+export const marcarTourEscritorioVisto = (geracao?: string) => { if (!geracaoValida(geracao)) return; try { localStorage.setItem(CHAVE, "1"); } catch { /* ignore */ } };
 /** mostra? Só com a aba Escritório na tela, uma vez, fora do tutorial, sem outro tour rodando e nunca no celular */
 export const deveMostrarTourEscritorio = (o: { naAba: boolean; noTutorial: boolean; largura: number; visto: boolean; outroTour: boolean }) =>
   o.naAba && !o.noTutorial && !o.visto && !o.outroTour && o.largura >= 768;

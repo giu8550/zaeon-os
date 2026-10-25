@@ -5,7 +5,7 @@
  * leva o laboratório pra sala certa (zaeon:set-tab + a sub-aba); os passos de ação andam quando o evento da ação chega,
  * os de explicação no botão. Pular/Esc/Concluir marca como visto. Cartão: components/onboard/BalaoTour.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { OverlayTour, useDestaque } from "@/components/onboard/BalaoTour";
 import { mapPanelOn } from "@/components/cerebro/useCerebro";
 import { irPraAbaEstudos } from "@/lib/chat/conversasNav";
@@ -13,6 +13,7 @@ import { getTour } from "@/lib/onboarding/tour";
 import { EVT_PERCURSO_ESTADO, EVT_PREENCHER_CHAT, deveMostrarTourSala, eventoAvanca, marcarTourDoLabAtivo, marcarTourSalaVisto, passosDaSala, tarefaDoPercurso, tourSalaVisto } from "@/lib/onboarding/tourSala";
 import { EVT_ESTUDOS_VISTA } from "@/lib/onboarding/tutorialLab";
 import { EVT_REVER_TOURS } from "@/lib/onboarding/reverTours";
+import { geracaoDosTours } from "@/lib/onboarding/geracaoTour";
 import type { EstadoBolinha } from "@/lib/map/bolinha";
 
 const SEM_ALVOS: string[] = [];
@@ -22,16 +23,19 @@ const preencherChat = (texto: string) => window.dispatchEvent(new CustomEvent(EV
 export default function TourSala({ noTutorial }: { noTutorial: boolean }) {
   const passos = useMemo(() => passosDaSala(mapPanelOn()), []);
   const [i, setI] = useState<number | null>(null);
+  // #613: a geração em que este tour começou (um "Rever tutorial" noutra aba a invalida)
+  const geracao = useRef<string | undefined>(undefined);
+  const comecar = () => { geracao.current = geracaoDosTours(); setI(0); };
   // espera o laboratório assentar (a sala inicial, a sidebar) antes de começar
   useEffect(() => {
     const t = setTimeout(() => {
-      if (deveMostrarTourSala({ noTutorial, largura: window.innerWidth, visto: tourSalaVisto(), outroTour: getTour().active })) setI(0);
+      if (deveMostrarTourSala({ noTutorial, largura: window.innerWidth, visto: tourSalaVisto(), outroTour: getTour().active })) comecar();
     }, 1500);
     return () => clearTimeout(t);
   }, [noTutorial]);
   // #613: "Rever tutorial do laboratório" (Configurações) — recomeça do 1º passo
   useEffect(() => {
-    const rever = () => { if (deveMostrarTourSala({ noTutorial, largura: window.innerWidth, visto: tourSalaVisto(), outroTour: getTour().active })) setI(0); };
+    const rever = () => { if (deveMostrarTourSala({ noTutorial, largura: window.innerWidth, visto: tourSalaVisto(), outroTour: getTour().active })) comecar(); };
     window.addEventListener(EVT_REVER_TOURS, rever);
     return () => window.removeEventListener(EVT_REVER_TOURS, rever);
   }, [noTutorial]);
@@ -45,10 +49,10 @@ export default function TourSala({ noTutorial }: { noTutorial: boolean }) {
     if (ir.aba) irPraAbaEstudos(ir.aba);
     if (ir.vista) { const v = ir.vista; setTimeout(() => window.dispatchEvent(new CustomEvent(EVT_ESTUDOS_VISTA, { detail: v })), 120); }
   }, [passo]);
-  const sair = () => { marcarTourSalaVisto(); setI(null); };
+  const sair = () => { marcarTourSalaVisto(geracao.current); setI(null); };
   const seguir = () => setI((k) => {
     if (k === null) return null;
-    if (k + 1 >= passos.length) { marcarTourSalaVisto(); return null; }
+    if (k + 1 >= passos.length) { marcarTourSalaVisto(geracao.current); return null; }
     return k + 1;
   });
   // passo de AÇÃO: anda quando a pessoa faz a coisa (o evento chega)

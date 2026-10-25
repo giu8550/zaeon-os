@@ -125,8 +125,13 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
     const esc = (e: KeyboardEvent) => {
       // Esc digitando no chat (fechar sugestão, desistir da frase) não é sobre o tutorial
       if (e.key !== "Escape" || emCampoDeTexto(e.target)) return;
-      setMinimizado(false);
-      setConfirmando((c) => !c);
+      // o Esc que fechou outra coisa (o mapa do percurso) não é sobre o tutorial: espera os outros ouvintes e
+      // só pergunta se ninguém usou a tecla (quem usa marca com preventDefault)
+      setTimeout(() => {
+        if (e.defaultPrevented) return;
+        setMinimizado(false);
+        setConfirmando((c) => !c);
+      }, 0);
     };
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
