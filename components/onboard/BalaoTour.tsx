@@ -135,8 +135,10 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
     if (!onPular) return;
     const esc = (e: KeyboardEvent) => {
       // Esc digitando no chat (fechar sugestão, desistir da frase) não é sobre o tutorial
-      if (e.key !== "Escape" || emCampoDeTexto(e.target)) return;
+      if (e.key !== "Escape") return;
+      // dica: o Esc fecha mesmo com o cursor num campo (é só um balão, não há nada a perder)
       if (dica) { setTimeout(() => { if (!e.defaultPrevented) onPular?.(); }, 0); return; }
+      if (emCampoDeTexto(e.target)) return;
       // o Esc que fechou outra coisa (o mapa do percurso) não é sobre o tutorial: espera os outros ouvintes e
       // só pergunta se ninguém usou a tecla (quem usa marca com preventDefault)
       setTimeout(() => {
@@ -210,6 +212,8 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
           </span>
           {/* o leitor de tela recebe a fala inteira, de uma vez */}
           <p aria-live="polite" className="sr-only">{fala}</p>
+          {/* #618: tela mais baixa que o cartão: o texto rola e os botões ficam sempre na tela */}
+          <div className="overflow-y-auto" style={{ maxHeight: Math.max(96, H - 24 - SAI - 110) }}>
           <p aria-hidden className="min-h-[3em] pr-6 text-[15px] leading-relaxed text-[#e6ebff]">
             {visivel}
             {!digitando && <span className="bt-pisca ml-1 text-[13px]" style={{ color: `rgb(${cor.rgb})` }}>⟁</span>}
@@ -235,6 +239,7 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
               )}
             </div>
           )}
+          </div>
           {/* #618: falta espaço? os botões descem pra linha de baixo em vez de sair do cartão */}
           <div className="mt-3 flex flex-wrap items-center justify-end gap-x-2.5 gap-y-2">
             {!dica && <span className={`mr-auto items-center gap-2 ${confirmando ? "hidden" : "flex"}`}>

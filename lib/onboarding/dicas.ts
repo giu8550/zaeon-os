@@ -5,12 +5,16 @@
  */
 export type Dica = { alvo: string; texto: string };
 
-export const DICAS_PERFIL: Dica[] = [
-  { alvo: '[data-tour="perfil-habilidades"]',
-    texto: "Aqui ficam as tuas habilidades e o que você ainda está trabalhando. Elas vão se preenchendo conforme você usa a Zaeon — e aparecem pra quem abre o teu perfil." },
-  { alvo: '[data-tour="perfil-editar"]',
-    texto: "Em “Editar” você troca a foto e o curso. A skin fica no botão embaixo do teu personagem. 💜" },
-];
+/** o Perfil: a foto troca clicando NELA; "Editar" muda nome e curso; a skin tem botão (menos pra quem é fundador) */
+export function dicasDoPerfil(o: { fundador: boolean }): Dica[] {
+  return [
+    { alvo: '[data-tour="perfil-habilidades"]',
+      texto: "Aqui ficam as tuas habilidades e o que você está trabalhando. Essa parte aparece pra quem abre o teu perfil." },
+    { alvo: '[data-tour="perfil-foto"]',
+      texto: `Clica na tua foto pra trocar. Em “Editar” você muda o nome e o curso.${o.fundador ? "" : " A skin fica no botão embaixo do teu personagem."} 💜` },
+  ];
+}
+export const DICAS_PERFIL = dicasDoPerfil({ fundador: false });
 
 /** a Sala de Estudos = os BLUEPRINTS (components/blueprint/SalaBlueprint): só aparecem com um blueprint na tela */
 export const DICAS_SALA: Dica[] = [
@@ -26,5 +30,9 @@ const chave = (lugar: string) => `zaeon.dica.${lugar}.v1`;
 export const dicasVistas = (lugar: string): boolean => { try { return localStorage.getItem(chave(lugar)) === "1"; } catch { return true; } };
 export const marcarDicasVistas = (lugar: string) => { try { localStorage.setItem(chave(lugar), "1"); } catch { /* ignore */ } };
 export const esquecerDicas = () => { for (const l of LUGARES_COM_DICAS) { try { localStorage.removeItem(chave(l)); } catch { /* ignore */ } } };
+/** uma dica está na tela agora (o tour da sala e o do Escritório esperam ela fechar — os dois não disputam a tela) */
+let dicaNaTela = false;
+export const dicaAtiva = () => dicaNaTela;
+export const marcarDicaAtiva = (v: boolean) => { dicaNaTela = v; };
 /** mostra? Uma vez, no computador (o cartão é dos tours, que não existem no celular), sem um tour na tela */
 export const deveMostrarDicas = (o: { visto: boolean; largura: number; outroTour: boolean }) => !o.visto && !o.outroTour && o.largura >= 768;

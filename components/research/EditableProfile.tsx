@@ -21,7 +21,7 @@ import NetworkMural from "@/app/workstation/profiles/NetworkMural";
 import ModalSkin from "@/components/profile/ModalSkin";
 import { minhaArmadura } from "@/lib/cyber/cores";
 import DicasRapidas from "@/components/onboard/DicasRapidas";
-import { DICAS_PERFIL } from "@/lib/onboarding/dicas";
+import { dicasDoPerfil } from "@/lib/onboarding/dicas";
 
 // three.js só no cliente (como o CosmicLounge)
 const VitrinePersonagem = dynamic(() => import("@/components/cyber/VitrinePersonagem"), { ssr: false, loading: () => <div className="w-full h-full" /> });
@@ -203,7 +203,7 @@ export default function EditableProfile({ visitante = null, onVoltar }: {
               </button>
             )
           ) : (
-            <button data-tour="perfil-editar" onClick={() => { setEditing((v) => !v); setMsg(null); }} className="inline-flex items-center gap-1.5 text-[12px] font-bold text-cyan-600 dark:text-cyan-300 hover:underline">
+            <button onClick={() => { setEditing((v) => !v); setMsg(null); }} className="inline-flex items-center gap-1.5 text-[12px] font-bold text-cyan-600 dark:text-cyan-300 hover:underline">
               <Pencil size={13} /> {editing ? "Cancelar" : "Editar"}
             </button>
           )}
@@ -216,7 +216,7 @@ export default function EditableProfile({ visitante = null, onVoltar }: {
             <div className="relative w-[150px] h-[360px] rounded-[80px] border-[3px] border-cyan-400/40 dark:border-cyan-400/30 backdrop-blur-2xl flex items-center justify-center shrink-0 shadow-[0_0_50px_-10px_rgba(34,211,238,0.4)] bg-white/30 dark:bg-cyan-950/10">
               <RealisticDNA />
               <motion.div animate={{ y: [-8, 8, -8] }} transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }} className="relative z-10">
-                <label className={`relative block w-28 h-28 rounded-full border-4 border-cyan-400/60 p-1 shadow-2xl group/av bg-white dark:bg-black overflow-hidden ${somenteLeitura ? "" : "cursor-pointer"}`} data-testid="foto-perfil">
+                <label className={`relative block w-28 h-28 rounded-full border-4 border-cyan-400/60 p-1 shadow-2xl group/av bg-white dark:bg-black overflow-hidden ${somenteLeitura ? "" : "cursor-pointer"}`} data-testid="foto-perfil" data-tour="perfil-foto">
                   {!somenteLeitura && <input type="file" accept="image/*" className="hidden" onChange={(e) => onAvatar(e.target.files?.[0])} disabled={uploading} />}
                   {img ? <Image src={img} alt="avatar" fill className="object-cover rounded-full" />
                     : <span className="absolute inset-0 flex items-center justify-center text-3xl font-black text-cyan-600 dark:text-cyan-300">{(name || "Z").charAt(0).toUpperCase()}</span>}
@@ -323,7 +323,7 @@ export default function EditableProfile({ visitante = null, onVoltar }: {
           : (process.env.NEXT_PUBLIC_AURA_ECONOMY === "1" && <AuraCard />)}
 
         {/* #618: dicas rápidas na 1ª vez no PRÓPRIO perfil (no de outra pessoa, não) */}
-        {!somenteLeitura && <DicasRapidas lugar="perfil" dicas={DICAS_PERFIL} />}
+        {!somenteLeitura && data && <DicasRapidas lugar="perfil" dicas={dicasDoPerfil({ fundador: !!data.fundador })} />}
         <datalist id="ep-courses">{ALL_COURSES.map((c) => <option key={c} value={c} />)}</datalist>
 
         {msg && <p className="text-[12px] font-medium text-cyan-700 dark:text-cyan-300 mt-4">{msg}</p>}

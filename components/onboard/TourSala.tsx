@@ -14,6 +14,7 @@ import { ALVO_ENVIAR, EVT_CHAT_TEXTO, EVT_PERCURSO_ESTADO, EVT_PREENCHER_CHAT, T
 import { EVT_ESTUDOS_VISTA } from "@/lib/onboarding/tutorialLab";
 import { EVT_REVER_TOURS } from "@/lib/onboarding/reverTours";
 import { geracaoDosTours } from "@/lib/onboarding/geracaoTour";
+import { dicaAtiva } from "@/lib/onboarding/dicas";
 import type { EstadoBolinha } from "@/lib/map/bolinha";
 
 const SEM_ALVOS: string[] = [];
@@ -31,13 +32,13 @@ export default function TourSala({ noTutorial }: { noTutorial: boolean }) {
   // espera o laboratório assentar (a sala inicial, a sidebar) antes de começar
   useEffect(() => {
     const t = setTimeout(() => {
-      if (deveMostrarTourSala({ noTutorial, largura: window.innerWidth, visto: tourSalaVisto(), outroTour: getTour().active })) comecar();
+      if (deveMostrarTourSala({ noTutorial, largura: window.innerWidth, visto: tourSalaVisto(), outroTour: getTour().active || dicaAtiva() })) comecar();
     }, 1500);
     return () => clearTimeout(t);
   }, [noTutorial]);
   // #613: "Rever tutorial do laboratório" (Configurações) — recomeça do 1º passo
   useEffect(() => {
-    const rever = () => { if (deveMostrarTourSala({ noTutorial, largura: window.innerWidth, visto: tourSalaVisto(), outroTour: getTour().active })) comecar(); };
+    const rever = () => { if (deveMostrarTourSala({ noTutorial, largura: window.innerWidth, visto: tourSalaVisto(), outroTour: getTour().active || dicaAtiva() })) comecar(); };
     window.addEventListener(EVT_REVER_TOURS, rever);
     return () => window.removeEventListener(EVT_REVER_TOURS, rever);
   }, [noTutorial]);
