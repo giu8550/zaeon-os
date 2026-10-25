@@ -96,8 +96,10 @@ const MeusEstudosFeed = dynamic(() => import("@/components/study/MeusEstudosFeed
 // A cartolina (memória visual da conversa) só carrega quando o aluno abre — e só com a flag.
 const LoungeCartolina = dynamic(() => import("@/components/lounge/LoungeCartolina"), { ssr: false });
 const CARTOLINA_ON = process.env.NEXT_PUBLIC_CARTOLINA_MEMORIA === "1";
+const REA_BP_ON = process.env.NEXT_PUBLIC_REA_BLUEPRINT === "1";
 // TCC cross-sala: a aba do TCC da conversa (Estudos cria/edita · Pesquisa lapida). Só com a flag.
 const TccPanel = dynamic(() => import("@/components/tcc/TccPanel"), { ssr: false });
+const ReaBlueprintView = dynamic(() => import("@/components/rea/ReaBlueprintView"), { ssr: false });
 // CHAT ÚNICO: a Sala de Pesquisa vira o MODO PESQUISA desta conversa, e a conversa pode ter vários trabalhos.
 const CHAT_UNICO = chatUnicoOn();
 const SkillTreePanel = dynamic(() => import("@/components/study/SkillTreePanel"), { ssr: false });
@@ -198,6 +200,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   // está ABERTO no editor por cima do chat (null = nenhum). No chat único são vários; fora dele, no máximo um.
   const [trabalhosPorAba, setTrabalhosPorAba] = useState<Record<string, TrabalhoResumo[]>>({});
   const [trabalhoAberto, setTrabalhoAberto] = useState<string | null>(null);
+  const [reaAberto, setReaAberto] = useState<string | null>(null);   // o módulo do Blueprint REA aberto
   // o trabalho em FOCO por conversa: o último aberto no editor — voltar pra conversa e pedir "continue a
   // metodologia" mexe nele (o editor não precisa estar à mostra)
   const focoPorAbaRef = useRef<Record<string, string>>({});
@@ -1251,6 +1254,14 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
           </div>
         )}
 
+        {reaAberto && REA_BP_ON && (
+          <div className={CHAT_UNICO
+            ? "absolute inset-x-0 bottom-0 top-[46px] z-[36]"
+            : "absolute inset-y-0 right-0 z-40 w-full sm:w-[min(640px,100%)] shadow-[-24px_0_60px_-30px_rgba(15,23,42,0.5)]"}>
+            <ReaBlueprintView key={reaAberto} id={reaAberto} onFechar={() => setReaAberto(null)} />
+          </div>
+        )}
+
         {tempoUlt && (
           <div className="pointer-events-none absolute left-3 bottom-24 z-20 rounded-lg bg-black/70 px-2 py-1 font-mono text-[10px] text-cyan-200">⏱ {fmtTempos(tempoUlt)}</div>
         )}
@@ -1417,6 +1428,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
                       acoes={acoesDa(m, i)}
                       onConcept={(c) => void send(`Me explica melhor: ${c}`)}
                       onNext={(s) => void send(s)}
+                      onAbrirRea={REA_BP_ON ? (id) => setReaAberto(id) : undefined}
                     >
                       {m.studioBlock || m.blocosExtra?.length || m.desenhando ? (
                         <>

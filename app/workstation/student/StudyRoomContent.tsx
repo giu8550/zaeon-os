@@ -10,11 +10,12 @@ import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Users, BookOpen, GraduationCap,
-    FlaskConical, Newspaper, User, Lock,
+    FlaskConical, Newspaper, User, Lock, Microscope,
 } from "lucide-react";
 import { isSuperAdminEmail } from "@/lib/auth/roles";
 import { unifiedResearchRoom } from "@/lib/research/unifiedRoom";
 import { blueprintUiOn } from "@/lib/blueprint/tipos";
+import { reaBlueprintUiOn } from "@/lib/rea-blueprint/tipos";
 import { EVT_ESTUDOS_VISTA } from "@/lib/onboarding/tutorialLab";
 import { EVT_ESTUDOS_CHAT, EVT_PEDIDO_CONVERSA, EVT_ESTUDOS_IR, anunciarAbaEstudos, consumirAbaEstudos, type AbaEstudos } from "@/lib/chat/conversasNav";
 import { OmegaScholarProvider } from "./omega/OmegaScholarContext";
@@ -194,6 +195,7 @@ const VitrineEstudos = dynamic(() => import("@/components/estudos/VitrineEstudos
 // BLUEPRINT PRÁTICO (lib/blueprint, flag NEXT_PUBLIC_BLUEPRINT_PRATICO): a "Sala de Estudos" vira o blueprint dos estudos
 // nascidos no chat; o board livre e o caderno antigo só abrem pelos links que já existem (?board=, ?space=)
 const SalaBlueprint = dynamic(() => import("@/components/blueprint/SalaBlueprint"), { ssr: false });
+const SalaRea = dynamic(() => import("@/components/rea/SalaRea"), { ssr: false });
 const MeusAlunosPanel = dynamic(() => import("@/app/workstation/student/MeusAlunosPanel"), { ssr: false });
 
 /**
@@ -226,6 +228,7 @@ export default function StudyRoomContent({ flushTop = false, unified = false, ab
     // interno da CONVERSA (é o que fica ativo quando nenhuma das duas abas está).
     const allTabs = useMemo(() => [
         { id: "feed", label: "Sala de Estudos", icon: BookOpen },
+        ...(reaBlueprintUiOn() ? [{ id: "rea", label: "Engenharia reversa", icon: Microscope }] : []),
         { id: "community", label: "Marketplace", icon: Users },
     ], []);
 
@@ -466,7 +469,9 @@ export default function StudyRoomContent({ flushTop = false, unified = false, ab
                         <div className={activeTab === "meus-estudos" ? "h-full" : "hidden"}>
                             <StudyCoworkChat active={activeTab === "meus-estudos"} />
                         </div>
-                        {activeTab === "feed" ? (
+                        {activeTab === "rea" && reaBlueprintUiOn() ? (
+                            <div className="relative h-full"><SalaRea /></div>
+                        ) : activeTab === "feed" ? (
                             // a Sala de Estudos = os BLUEPRINTS. A prancha antiga e o caderno antigo saíram do menu (pedido do
                             // dono, 23/10) — só abrem pelos links que já existem (convite ?board=, estudo ?space=)
                             blueprintUiOn() && !pranchaAntiga ? (

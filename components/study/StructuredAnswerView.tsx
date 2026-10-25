@@ -23,6 +23,7 @@ import type { StructuredAnswer, Source } from "@/lib/agent/contracts";
 import ChatMarkdown from "@/components/study/ChatMarkdown";
 import CardVideoChat from "@/components/videodoc/CardVideoChat";
 import { videoDocUiOn } from "@/lib/videodoc/documentos";
+import { reaBlueprintUiOn } from "@/lib/rea-blueprint/tipos";
 import { MOTIVO_CHAT } from "@/lib/videodoc/pedido";
 
 // O texto da resposta passa pelo MESMO formatador do chat (ChatMarkdown): negrito/itálico, títulos, bullets,
@@ -48,6 +49,7 @@ export default function StructuredAnswerView({
   typing = false,
   onDigitando,
   acoes,
+  onAbrirRea,
   children,
 }: {
   answer: StructuredAnswer;
@@ -57,6 +59,8 @@ export default function StructuredAnswerView({
   onDigitando?: (ativo: boolean) => void;
   onConcept?: (c: string) => void;
   onNext?: (step: string) => void;
+  /** abre o módulo do Blueprint REA desta resposta (engenharia reversa) */
+  onAbrirRea?: (id: string) => void;
   children?: React.ReactNode;   // slot p/ artefatos (StudioBlock) embutidos
   /** Mini-ações (copiar/regenerar/👍👎) — entram logo depois do conteúdo, antes dos botões e das Fontes. */
   acoes?: React.ReactNode;
@@ -150,6 +154,19 @@ export default function StructuredAnswerView({
           {rest && answer.videoDoc?.videoId && videoDocUiOn() ? <CardVideoChat videoId={answer.videoDoc.videoId} titulo={answer.videoDoc.titulo} /> : null}
           {rest && answer.videoDoc && !answer.videoDoc.videoId && answer.videoDoc.motivo && videoDocUiOn() ? (
             <div className="mt-3 rounded-xl border border-amber-300/30 bg-amber-300/[0.07] px-3 py-2 text-[12.5px] text-amber-100/90">🎬 {MOTIVO_CHAT[answer.videoDoc.motivo] ?? "Não consegui preparar o vídeo agora."}</div>
+          ) : null}
+
+          {/* BLUEPRINT REA (engenharia reversa): um módulo próprio — abre como um paper, mas com o estilo do REA */}
+          {rest && answer.reaBlueprint && reaBlueprintUiOn() ? (
+            <button type="button" onClick={() => onAbrirRea?.(answer.reaBlueprint!.id)}
+              className="mt-3 flex w-full items-center gap-3 rounded-xl border border-emerald-400/30 bg-emerald-400/[0.06] px-3 py-2.5 text-left transition hover:bg-emerald-400/[0.12]">
+              <span className="text-lg">🔬</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[13px] font-semibold text-emerald-50">{answer.reaBlueprint.titulo}</span>
+                <span className="block text-[11px] text-emerald-200/70">{answer.reaBlueprint.gerando ? "Blueprint de engenharia reversa — montando…" : "Blueprint de engenharia reversa · toque pra abrir"}</span>
+              </span>
+              <span className="text-[11px] text-emerald-300">{answer.reaBlueprint.gerando ? "…" : "abrir →"}</span>
+            </button>
           ) : null}
 
           {/* mini-ações da mensagem (ordem: conteúdo → ações → botões do harness → Fontes) */}
