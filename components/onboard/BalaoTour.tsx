@@ -42,6 +42,13 @@ const CSS = `
 @media (prefers-reduced-motion: reduce) { .bt-anel, .bt-retrato::after, .bt-gira, .bt-pisca { animation: none; } }
 `;
 
+/** O Esc veio de um campo de texto (o chat, uma busca)? Aí ele é de quem está digitando, não do tutorial. */
+export const emCampoDeTexto = (alvo: EventTarget | null): boolean => {
+  const el = alvo as HTMLElement | null;
+  if (!el || typeof el.tagName !== "string") return false;
+  return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || !!el.isContentEditable;
+};
+
 const reduzirMovimento = () => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; } };
 
 export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onPular, chave, tom = "roxo" }: {
@@ -103,9 +110,18 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
   useLayoutEffect(() => { const el = card.current; if (!el) return; const h = el.offsetHeight; if (h && Math.abs(h - alt) > 2) setAlt(h); }, [visivel, titulo, pos.w, alt]);
   // o foco vai pro botão do passo (ou pro Pular), sem rolar a página
   useEffect(() => { (principal.current ?? card.current)?.focus({ preventScroll: true }); }, [chave, ultimaPagina]);
+  // #613: pular pergunta antes (um Esc sem querer ou um clique errado perdia o tutorial inteiro)
+  const [confirmando, setConfirmando] = useState(false);
+  const ficar = useRef<HTMLButtonElement>(null);
+  useEffect(() => { setConfirmando(false); }, [chave]);
+  useEffect(() => { if (confirmando) ficar.current?.focus({ preventScroll: true }); }, [confirmando]);
   useEffect(() => {
     if (!onPular) return;
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onPular(); };
+    const esc = (e: KeyboardEvent) => {
+      // Esc digitando no chat (fechar sugestão, desistir da frase) não é sobre o tutorial
+      if (e.key !== "Escape" || emCampoDeTexto(e.target)) return;
+      setConfirmando((c) => !c);
+    };
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
   }, [onPular]);
@@ -164,13 +180,26 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
               {/* #613: quanto falta, escrito (ajuda a não desistir no meio) */}
               <span className="text-[11px] font-medium tabular-nums text-[#c3cbea]">Passo {passo + 1} de {total}</span>
             </span>
-            {onPular && (
-              <button type="button" onClick={onPular} ref={acao || !ultimaPagina ? undefined : principal}
+            {onPular && confirmando && (
+              <span role="group" aria-label="Pular o tutorial?" className="flex items-center gap-2">
+                <span className="text-[12px] text-[#e6ebff]">Pular o tutorial?</span>
+                <button type="button" onClick={(e) => { e.stopPropagation(); onPular(); }}
+                  className="rounded-full px-2.5 py-1 text-[12px] font-medium text-[#c3cbea] transition-colors hover:text-white focus-visible:outline focus-visible:outline-1">
+                  Sim, pular
+                </button>
+                <button type="button" ref={ficar} onClick={(e) => { e.stopPropagation(); setConfirmando(false); }}
+                  className={`${botao} text-[#f1edff]`} style={{ borderColor: `rgb(${cor.rgb})` }}>
+                  Continuar tutorial
+                </button>
+              </span>
+            )}
+            {onPular && !confirmando && (
+              <button type="button" onClick={(e) => { e.stopPropagation(); setConfirmando(true); }} ref={acao || !ultimaPagina ? undefined : principal}
                 className="rounded-full px-2.5 py-1 text-[12px] font-medium text-[#c3cbea] transition-colors hover:text-white focus-visible:outline focus-visible:outline-1">
                 Pular
               </button>
             )}
-            {!ultimaPagina ? (
+            {confirmando ? null : !ultimaPagina ? (
               <button type="button" ref={principal} onClick={(e) => { e.stopPropagation(); setPg((k) => k + 1); }}
                 className={`${botao} text-[#f1edff]`} style={{ borderColor: `rgb(${cor.rgb})` }}>
                 Continuar {triangulo}

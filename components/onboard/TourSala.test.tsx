@@ -48,14 +48,39 @@ describe("TourSala — o tour do laboratório", () => {
     expect(fetch).toHaveBeenCalledWith("/api/onboard/tour", { method: "POST" });
   });
 
-  it("Esc pula e marca como visto; da próxima vez não aparece", () => {
+  it("Esc pergunta antes; confirmando, pula e marca como visto; da próxima vez não aparece", () => {
     abrir(<TourSala noTutorial={false} />);
     expect(cartao()).not.toBeNull();
     fireEvent.keyDown(window, { key: "Escape" });
+    expect(cartao()?.textContent).toMatch(/Pular o tutorial\?/);
+    fireEvent.click(screen.getByRole("button", { name: "Sim, pular" }));
     expect(cartao()).toBeNull();
     cleanup();
     abrir(<TourSala noTutorial={false} />);
     expect(cartao()).toBeNull();
+  });
+
+  it("#613: Esc digitando no chat não mexe no tutorial", () => {
+    abrir(<TourSala noTutorial={false} />);
+    const campo = document.createElement("textarea");
+    document.body.appendChild(campo);
+    fireEvent.keyDown(campo, { key: "Escape" });
+    expect(cartao()?.textContent).not.toMatch(/Pular o tutorial\?/);
+    expect(localStorage.getItem("zaeon.tour.sala.v2")).toBeNull();
+    campo.remove();
+  });
+
+  it("#613: Pular pede confirmação e dá pra voltar pro tutorial", () => {
+    abrir(<TourSala noTutorial={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Pular" }));
+    expect(cartao()).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Continuar tutorial" }));
+    expect(cartao()?.textContent).not.toMatch(/Pular o tutorial\?/);
+    expect(localStorage.getItem("zaeon.tour.sala.v2")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Pular" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sim, pular" }));
+    expect(cartao()).toBeNull();
+    expect(localStorage.getItem("zaeon.tour.sala.v2")).toBe("1");
   });
 
   it("nada de dourado: o cartão é vidro com acento ciano/roxo", () => {
