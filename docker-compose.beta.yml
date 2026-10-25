@@ -40,6 +40,7 @@ services:
         NEXT_PUBLIC_PROJETOS: ${NEXT_PUBLIC_PROJETOS:-0}
         NEXT_PUBLIC_MENTORES_TAB: ${NEXT_PUBLIC_MENTORES_TAB:-0}   # PR-A2: /mentores + loja com "Mentores" primeiro
         NEXT_PUBLIC_OCTA_CODE: ${NEXT_PUBLIC_OCTA_CODE:-}          # Octa: /octa/saude + /api/octa/evals/run ("1" liga)
+        NEXT_PUBLIC_REA_BLUEPRINT: ${NEXT_PUBLIC_REA_BLUEPRINT:-0}      # Blueprint REA no chat + aba Sala de Estudos ("1" liga)
         NEXT_PUBLIC_CYBER_AVATAR_GLB: ${NEXT_PUBLIC_CYBER_AVATAR_GLB:-}
         NEXT_PUBLIC_CYBER_LANDMARKS: ${NEXT_PUBLIC_CYBER_LANDMARKS:-}
         NEXT_PUBLIC_AURA_ECONOMY: ${NEXT_PUBLIC_AURA_ECONOMY:-0}
@@ -87,6 +88,8 @@ services:
       CHAT_UNICO: ${CHAT_UNICO:-0}
       # blueprint prático da Sala de Estudos (lib/blueprint) — par do NEXT_PUBLIC_BLUEPRINT_PRATICO; GITHUB_TOKEN opcional
       BLUEPRINT_PRATICO: ${BLUEPRINT_PRATICO:-0}
+      # Blueprint REA (lib/rea-blueprint) — par do NEXT_PUBLIC_REA_BLUEPRINT; gateia a composição + /api/rea
+      REA_BLUEPRINT: ${REA_BLUEPRINT:-0}
       # vídeo do documento com a Zaeon holograma (lib/videodoc) — par do NEXT_PUBLIC_VIDEO_DOC
       VIDEO_DOC: ${VIDEO_DOC:-0}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
