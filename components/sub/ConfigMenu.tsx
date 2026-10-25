@@ -17,6 +17,7 @@ import { Activity, Gauge, Crown, Trash2, Loader2, Ticket, GraduationCap, Globe, 
 import LanguageFlagToggle from "@/components/ui/LanguageFlagToggle";
 import { isSuperAdmin } from "@/lib/auth/roles";
 import { CHAVE_PROGRESSO, PREF_TUTORIAL, tutorialLigado } from "@/lib/cyber/onboarding";
+import { reverToursDoLab } from "@/lib/onboarding/reverTours";
 import { EVENTO_GRAFICOS, PREF_GRAFICOS, PREF_MOSTRAR_FPS, PREF_NITIDEZ, PREF_SUAVIZAR, lerNitidez, lerPreferencia, lerSuavizar, type PreferenciaGraficos, type PreferenciaNitidez, type PreferenciaSuavizar } from "@/lib/cyber/dispositivo";
 
 const item = "group relative flex items-center gap-3 w-full min-h-[48px] px-3 rounded-2xl text-left text-sm font-medium text-slate-800 dark:text-white border border-slate-200/80 dark:border-white/[0.06] bg-white/50 dark:bg-white/[0.03] hover:bg-white/80 dark:hover:bg-white/[0.08] hover:border-cyan-400/50 dark:hover:border-cyan-400/30 transition-colors";
@@ -136,6 +137,17 @@ export default function ConfigMenu() {
               </span>
               <LanguageFlagToggle size={30} />
             </div>
+            {/* #613: REVER os tutoriais do laboratório (Sala de Estudos e Escritório) — antes só pelo console */}
+            {logado && (
+              <button type="button" onClick={() => { reverToursDoLab(); setAberto(false); }} className={item}>
+                <GraduationCap size={16} className="text-cyan-600 dark:text-cyan-300 shrink-0" />
+                <span className="flex flex-col flex-1 min-w-0">
+                  <span className={rotulo}>Laboratório</span>
+                  <span>Rever tutorial</span>
+                  <span className="text-[11px] font-normal text-slate-500 dark:text-white/45 leading-snug">A Aura mostra de novo a Sala de Estudos e o Escritório.</span>
+                </span>
+              </button>
+            )}
           </Gaveta>
 
           {/* CYBERESPAÇO: modo tutorial, gráficos, nitidez, FPS */}

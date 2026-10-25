@@ -24,14 +24,16 @@ const LARGURA = 420;
 const SAI = 26, RETRATO = 80;
 /** a "datilografia" anda de tanto em tanto (ms) */
 const PASSO_MS = 30;
-const AURA = { nome: "AURA", falando: "/avatars/aura/talk.sm.webp", parada: "/avatars/aura/smile.sm.webp" };
+// falando = boca aberta; parada = sorriso de BOCA FECHADA (#613: o `smile` é de boca aberta e parecia falar pra sempre)
+const AURA = { nome: "AURA", falando: "/avatars/aura/talk.sm.webp", parada: "/avatars/aura/idle.sm.webp" };
 
 const CSS = `
 @keyframes bt-anel { 0%,100% { box-shadow: 0 0 0 1.5px rgba(var(--bt-cor),.85), 0 0 14px 2px rgba(var(--bt-cor),.28) } 50% { box-shadow: 0 0 0 1.5px rgba(var(--bt-cor),.95), 0 0 22px 4px rgba(var(--bt-cor),.34) } }
 @keyframes bt-scan { 0% { transform: translateY(-120%) } 55%,100% { transform: translateY(520%) } }
 @keyframes bt-gira { 0%,70% { transform: rotate(0) } 100% { transform: rotate(120deg) } }
 @keyframes bt-pisca { 0%,49% { opacity: 1 } 50%,100% { opacity: .25 } }
-.bt-anel { animation: bt-anel 2.8s ease-in-out infinite; }
+/* #613: o contorno é FIXO (a animação só faz ele respirar) — com "reduzir movimento" ele continua aparecendo */
+.bt-anel { box-shadow: 0 0 0 2px rgba(var(--bt-cor),.9), 0 0 16px 3px rgba(var(--bt-cor),.3); animation: bt-anel 2.8s ease-in-out infinite; }
 .bt-retrato::before { content: ""; position: absolute; inset: 0; z-index: 2; border-radius: 50%; background: repeating-linear-gradient(0deg, rgba(103,232,249,.08) 0 1px, transparent 1px 3px); }
 .bt-retrato::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 22%; z-index: 3; background: linear-gradient(180deg, transparent, rgba(103,232,249,.45), transparent); animation: bt-scan 3.2s ease-in-out infinite; }
 .bt-gira { display: inline-block; animation: bt-gira 2.4s ease-in-out infinite; }
@@ -40,9 +42,16 @@ const CSS = `
 @media (prefers-reduced-motion: reduce) { .bt-anel, .bt-retrato::after, .bt-gira, .bt-pisca { animation: none; } }
 `;
 
+/** O Esc veio de um campo de texto (o chat, uma busca)? Aí ele é de quem está digitando, não do tutorial. */
+export const emCampoDeTexto = (alvo: EventTarget | null): boolean => {
+  const el = alvo as HTMLElement | null;
+  if (!el || typeof el.tagName !== "string") return false;
+  return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || !!el.isContentEditable;
+};
+
 const reduzirMovimento = () => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; } };
 
-export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onPular, chave, tom = "roxo" }: {
+export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onPular, chave, tom = "roxo", suaVez }: {
   alvo: Caixa | null;
   evita: Caixa | null;
   /** a dica curta (1 linha) — vira o nome do cartão pro leitor de tela */
@@ -58,6 +67,8 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
   chave: string;
   /** #605: roxo na Sala de Estudos, ciano no Escritório */
   tom?: TomCartao;
+  /** #613: passo de ação — a tarefa fica escrita na última caixa (com um exemplo que dá pra usar) */
+  suaVez?: { tarefa: string; exemplo?: string; onExemplo?: (texto: string) => void; onJaFiz?: () => void };
 }) {
   const card = useRef<HTMLDivElement>(null);
   const principal = useRef<HTMLButtonElement>(null);
@@ -98,12 +109,30 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
 
   const W = window.innerWidth, H = window.innerHeight, larg = Math.min(W - 24, LARGURA);
   const pos = posicaoDoBalao(evita ?? alvo, W, H, { w: larg, h: alt });
-  useLayoutEffect(() => { const el = card.current; if (!el) return; const h = el.offsetHeight; if (h && Math.abs(h - alt) > 2) setAlt(h); }, [visivel, titulo, pos.w, alt]);
+  // #613: a altura muda com o "Sua vez" e a confirmação também — senão o cartão descia em cima do que ele aponta
+  const [confirmando, setConfirmando] = useState(false);
+  useLayoutEffect(() => { const el = card.current; if (!el) return; const h = el.offsetHeight; if (h && Math.abs(h - alt) > 2) setAlt(h); }, [visivel, titulo, pos.w, alt, ultimaPagina, confirmando, suaVez?.tarefa]);
   // o foco vai pro botão do passo (ou pro Pular), sem rolar a página
   useEffect(() => { (principal.current ?? card.current)?.focus({ preventScroll: true }); }, [chave, ultimaPagina]);
+  // #613: pular pergunta antes (um Esc sem querer ou um clique errado perdia o tutorial inteiro)
+  const ficar = useRef<HTMLButtonElement>(null);
+  // #613: minimizar — a pessoa quer ver o que está atrás do cartão sem sair do tutorial (o próximo passo reabre)
+  const [minimizado, setMinimizado] = useState(false);
+  useEffect(() => { setConfirmando(false); setMinimizado(false); }, [chave]);
+  useEffect(() => { if (confirmando) ficar.current?.focus({ preventScroll: true }); }, [confirmando]);
   useEffect(() => {
     if (!onPular) return;
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onPular(); };
+    const esc = (e: KeyboardEvent) => {
+      // Esc digitando no chat (fechar sugestão, desistir da frase) não é sobre o tutorial
+      if (e.key !== "Escape" || emCampoDeTexto(e.target)) return;
+      // o Esc que fechou outra coisa (o mapa do percurso) não é sobre o tutorial: espera os outros ouvintes e
+      // só pergunta se ninguém usou a tecla (quem usa marca com preventDefault)
+      setTimeout(() => {
+        if (e.defaultPrevented) return;
+        setMinimizado(false);
+        setConfirmando((c) => !c);
+      }, 0);
+    };
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
   }, [onPular]);
@@ -111,10 +140,26 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
   const P = 6;
   const botao = "inline-flex items-center gap-2 rounded-full border px-3.5 py-1 text-[12px] font-semibold transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-1";
   const triangulo = <span aria-hidden className="bt-gira" style={{ color: `rgb(${cor.rgb})` }}>⟁</span>;
+  if (minimizado) return createPortal(
+    <button type="button" data-tour-minimizado onClick={() => setMinimizado(false)} aria-label={`Abrir o tutorial — passo ${passo + 1} de ${total}`}
+      className="fixed bottom-4 right-4 z-[1300] flex max-w-[min(340px,calc(100vw-32px))] items-center gap-2.5 rounded-full border py-1.5 pl-1.5 pr-4 text-left transition-colors hover:bg-white/5 focus-visible:outline focus-visible:outline-1"
+      style={{ background: "rgba(12,10,34,.96)", borderColor: `rgba(${cor.rgb},.55)`, boxShadow: "0 12px 30px -14px rgba(0,0,0,.75)" }}>
+      <span aria-hidden className="h-9 w-9 shrink-0 overflow-hidden rounded-full" style={{ border: `2px solid rgb(${cor.rgb})` }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={AURA.parada} alt="" className="h-full w-full scale-[1.18] object-cover object-[50%_22%]" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[11px] font-medium tabular-nums text-[#c3cbea]">Passo {passo + 1} de {total} · abrir</span>
+        {suaVez && <span className="block truncate text-[12px] text-[#e6ebff]">{suaVez.tarefa}</span>}
+      </span>
+    </button>,
+    document.body,
+  );
   return createPortal(
     <div className={`pointer-events-none fixed inset-0 z-[1300] ${escondida ? "bt-parado" : ""}`} style={{ ["--bt-cor" as string]: cor.rgb }}>
       <style>{CSS}</style>
-      {alvo ? (
+      {/* #613: o destaque só aparece quando a Aura chega no "faz isso" (na saudação ele apontava pra nada) */}
+      {alvo && ultimaPagina ? (
         <div data-tour-anel className="bt-anel absolute rounded-xl transition-all duration-300 ease-out motion-reduce:transition-none"
           style={{ left: alvo.x - P, top: alvo.y - P, width: alvo.w + P * 2, height: alvo.h + P * 2, outline: "9999px solid rgba(2,6,23,.38)" }} />
       ) : <div className="absolute inset-0 bg-[rgba(2,6,23,.22)]" />}
@@ -133,6 +178,10 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
       >
         <div className="relative rounded-[4px_16px_16px_16px] border pb-3 pr-4 pt-[18px]"
           style={{ paddingLeft: RETRATO - SAI + 16, background: "rgba(12,10,34,.96)", borderColor: `rgba(${cor.rgb},.45)`, boxShadow: "0 16px 40px -18px rgba(0,0,0,.75)" }}>
+          <button type="button" onClick={(e) => { e.stopPropagation(); setMinimizado(true); }} aria-label="Minimizar o tutorial" title="Minimizar"
+            className="absolute right-2 top-1.5 grid h-6 w-6 place-items-center rounded-full text-[15px] leading-none text-[#c3cbea] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-1">
+            –
+          </button>
           {/* o retrato: falando enquanto o texto aparece, sorrindo quando para */}
           <div aria-hidden className="absolute rounded-full p-[3px]" style={{ left: -SAI, top: -SAI, width: RETRATO, height: RETRATO, border: `3px solid rgb(${cor.rgb})`, background: "#070a18" }}>
             <div className="bt-retrato relative h-full w-full overflow-hidden rounded-full">
@@ -147,25 +196,61 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
           </span>
           {/* o leitor de tela recebe a fala inteira, de uma vez */}
           <p aria-live="polite" className="sr-only">{fala}</p>
-          <span className="sr-only" aria-label={`Passo ${passo + 1} de ${total}`}>{passo + 1} / {total}</span>
-          <p aria-hidden className="min-h-[3em] text-[15px] leading-relaxed text-[#e6ebff]">
+          <p aria-hidden className="min-h-[3em] pr-4 text-[15px] leading-relaxed text-[#e6ebff]">
             {visivel}
             {!digitando && <span className="bt-pisca ml-1 text-[13px]" style={{ color: `rgb(${cor.rgb})` }}>⟁</span>}
           </p>
+          {suaVez && ultimaPagina && (
+            <div data-tour-sua-vez className="mt-2.5 rounded-lg border px-3 py-2" style={{ borderColor: `rgba(${cor.rgb},.4)`, background: `rgba(${cor.rgb},.08)` }}>
+              <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: `rgb(${cor.rgb})` }}>Sua vez</p>
+              <p className="mt-0.5 text-[13px] text-[#e6ebff]">{suaVez.tarefa}</p>
+              {suaVez.exemplo && suaVez.onExemplo && (
+                <button type="button" onClick={(e) => { e.stopPropagation(); suaVez.onExemplo?.(suaVez.exemplo!); }}
+                  title="Escreve no chat — é só mandar"
+                  className="mt-1.5 rounded-full border px-2.5 py-0.5 text-left text-[12px] text-[#f1edff] transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-1"
+                  style={{ borderColor: `rgba(${cor.rgb},.55)` }}>
+                  “{suaVez.exemplo}”
+                </button>
+              )}
+              {suaVez.onJaFiz && (
+                <button type="button" onClick={(e) => { e.stopPropagation(); suaVez.onJaFiz?.(); }}
+                  className="ml-2 mt-1.5 rounded-full px-2 py-0.5 text-[12px] font-medium text-[#c3cbea] underline-offset-2 transition-colors hover:text-white hover:underline focus-visible:outline focus-visible:outline-1">
+                  Já fiz ✓
+                </button>
+              )}
+            </div>
+          )}
           <div className="mt-3 flex items-center gap-2.5">
-            <span aria-hidden className="mr-auto flex items-center gap-1">
-              {Array.from({ length: total }, (_, k) => (
-                <span key={k} className="h-1.5 w-1.5 rotate-45"
-                  style={k === passo ? { background: `rgb(${cor.rgb})` } : k < passo ? { background: `rgba(${cor.rgb},.45)` } : { border: `1px solid rgba(${cor.rgb},.55)` }} />
-              ))}
+            <span className={`mr-auto items-center gap-2 ${confirmando ? "hidden" : "flex"}`}>
+              <span aria-hidden className="flex items-center gap-1">
+                {Array.from({ length: total }, (_, k) => (
+                  <span key={k} className="h-1.5 w-1.5 rotate-45"
+                    style={k === passo ? { background: `rgb(${cor.rgb})` } : k < passo ? { background: `rgba(${cor.rgb},.45)` } : { border: `1px solid rgba(${cor.rgb},.55)` }} />
+                ))}
+              </span>
+              {/* #613: quanto falta, escrito (ajuda a não desistir no meio) */}
+              <span className="whitespace-nowrap text-[11px] font-medium tabular-nums text-[#c3cbea]">Passo {passo + 1} de {total}</span>
             </span>
-            {onPular && (
-              <button type="button" onClick={onPular} ref={acao || !ultimaPagina ? undefined : principal}
+            {onPular && confirmando && (
+              <span role="group" aria-label="Pular o tutorial?" className="flex w-full items-center gap-2 whitespace-nowrap">
+                <span className="mr-auto text-[12px] text-[#e6ebff]">Pular o tutorial?</span>
+                <button type="button" onClick={(e) => { e.stopPropagation(); onPular(); }}
+                  className="rounded-full px-2.5 py-1 text-[12px] font-medium text-[#c3cbea] transition-colors hover:text-white focus-visible:outline focus-visible:outline-1">
+                  Sim, pular
+                </button>
+                <button type="button" ref={ficar} onClick={(e) => { e.stopPropagation(); setConfirmando(false); }}
+                  className={`${botao} text-[#f1edff]`} style={{ borderColor: `rgb(${cor.rgb})` }}>
+                  Continuar tutorial
+                </button>
+              </span>
+            )}
+            {onPular && !confirmando && (
+              <button type="button" onClick={(e) => { e.stopPropagation(); setConfirmando(true); }} ref={acao || !ultimaPagina ? undefined : principal}
                 className="rounded-full px-2.5 py-1 text-[12px] font-medium text-[#c3cbea] transition-colors hover:text-white focus-visible:outline focus-visible:outline-1">
                 Pular
               </button>
             )}
-            {!ultimaPagina ? (
+            {confirmando ? null : !ultimaPagina ? (
               <button type="button" ref={principal} onClick={(e) => { e.stopPropagation(); setPg((k) => k + 1); }}
                 className={`${botao} text-[#f1edff]`} style={{ borderColor: `rgb(${cor.rgb})` }}>
                 Continuar {triangulo}

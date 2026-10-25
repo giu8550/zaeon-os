@@ -44,7 +44,7 @@ import ConversasSidebar from "@/components/chat/ConversasSidebar";
 import PastasEmpilhadas, { CORPO_DA_PASTA, type Pasta } from "@/components/chat/PastasEmpilhadas";
 import SugestoesConversa from "@/components/chat/SugestoesConversa";
 import { EVT_TEMA, temaDoTexto, temaNoTutorial } from "@/lib/onboarding/tutorialLab";
-import { EVT_PERGUNTA_CHAT } from "@/lib/onboarding/tourSala";
+import { EVT_PERCURSO_ESTADO, EVT_PERGUNTA_CHAT, EVT_PREENCHER_CHAT } from "@/lib/onboarding/tourSala";
 import { useConversasSlot } from "@/components/chat/ConversasSlot";
 import { consumirPedido, EVT_ESTUDOS_CHAT, EVT_PEDIDO_CONVERSA, type PedidoConversa } from "@/lib/chat/conversasNav";
 
@@ -236,6 +236,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   // como estudável (lib/map/gatekeeper, pelo `cartolinaScopeId`); aqui entram a bolinha ("Gerar mapa") e o painel
   const [cerebroAberto, setCerebroAberto] = useState(false);
   const cerebro = useCerebro(abaAtiva, { aberto: cerebroAberto });
+  // #613: o tour do laboratório acompanha o botão do percurso (gerando → pronto)
+  useEffect(() => { window.dispatchEvent(new CustomEvent(EVT_PERCURSO_ESTADO, { detail: cerebro.estado })); }, [cerebro.estado]);
   const conferirCerebro = useRef(cerebro.conferirDepoisDoTurno); conferirCerebro.current = cerebro.conferirDepoisDoTurno;
   // o mapa é um MODAL sem "x": sai clicando fora dele (o painel segura o próprio mousedown) ou trocando de conversa
   useEffect(() => { setCerebroAberto(false); }, [abaAtiva]);
@@ -1161,6 +1163,14 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     setInput(comeco);
     requestAnimationFrame(() => { const t = colunaRef.current?.querySelector<HTMLTextAreaElement>("textarea"); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); } });
   };
+  // #613: o exemplo do "Sua vez" do tour escreve aqui (a pessoa revisa e manda)
+  const escolherRef = useRef(escolherSugestao);
+  escolherRef.current = escolherSugestao;
+  useEffect(() => {
+    const preencher = (e: Event) => { const t = (e as CustomEvent<{ texto?: string }>).detail?.texto; if (t) escolherRef.current(t); };
+    window.addEventListener(EVT_PREENCHER_CHAT, preencher);
+    return () => window.removeEventListener(EVT_PREENCHER_CHAT, preencher);
+  }, []);
   // o MAPA da conversa: aparece quando ela vira estudo ("Gerar mapa"); depois, "Ver mapa"
   const bolinhaMapa = cerebro.ligado && abaAtiva ? (
     <BolinhaCerebro
