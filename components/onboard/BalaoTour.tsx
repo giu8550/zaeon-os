@@ -14,7 +14,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { posicaoDoBalao, type Caixa } from "@/lib/onboarding/tutorialLab";
-import { COR_DO_TOM, letrasVisiveis, paginasDaFala, type TomCartao } from "@/lib/onboarding/cartaoTour";
+import { COR_DO_TOM, letrasVisiveis, paginasDaFala, posicaoEstavel, type Ancora, type TomCartao } from "@/lib/onboarding/cartaoTour";
 
 export { useDestaque } from "@/components/onboard/BalaoDroid";
 
@@ -111,7 +111,13 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
   // #618: o cartão nunca encolhe (o botão de seguir saía da tela) — sem vão do lado, ele fica num canto por cima do
   // destaque; e, por garantia, nunca passa das bordas
   const bruto = posicaoDoBalao(evita ?? alvo, W, H, { w: larg, h: alt }, 16, larg);
-  const pos = { ...bruto, left: Math.max(12, Math.min(bruto.left, W - bruto.w - 12)), top: Math.max(12, Math.min(bruto.top, H - alt - 12)) };
+  const novo = { ...bruto, left: Math.max(12, Math.min(bruto.left, W - bruto.w - 12)), top: Math.max(12, Math.min(bruto.top, H - alt - 12)) };
+  // #618: dentro do mesmo passo (e com o destaque no mesmo lugar) o cartão não pula de canto a cada "Continuar"
+  const caixa = evita ?? alvo;
+  const fixo = useRef<{ k: string; ancora: Ancora } | null>(null);
+  const kFixo = `${chave}|${W}x${H}|${caixa ? [caixa.x, caixa.y, caixa.w, caixa.h].map(Math.round).join(",") : "-"}`;
+  const { pos, ancora } = posicaoEstavel(fixo.current?.k === kFixo ? fixo.current.ancora : null, novo, alt, H, caixa);
+  useEffect(() => { fixo.current = { k: kFixo, ancora }; });
   // #613: a altura muda com o "Sua vez" e a confirmação também — senão o cartão descia em cima do que ele aponta
   const [confirmando, setConfirmando] = useState(false);
   useLayoutEffect(() => { const el = card.current; if (!el) return; const h = el.offsetHeight; if (h && Math.abs(h - alt) > 2) setAlt(h); }, [visivel, titulo, pos.w, alt, ultimaPagina, confirmando, suaVez?.tarefa]);
@@ -182,8 +188,10 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
         <div className="relative rounded-[4px_16px_16px_16px] border pb-3 pr-4 pt-[18px]"
           style={{ paddingLeft: RETRATO - SAI + 16, background: "rgba(12,10,34,.96)", borderColor: `rgba(${cor.rgb},.45)`, boxShadow: "0 16px 40px -18px rgba(0,0,0,.75)" }}>
           <button type="button" onClick={(e) => { e.stopPropagation(); setMinimizado(true); }} aria-label="Minimizar o tutorial" title="Minimizar"
-            className="absolute right-2 top-1.5 grid h-6 w-6 place-items-center rounded-full text-[15px] leading-none text-[#c3cbea] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-1">
-            –
+            className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full border text-[#e6ebff] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-1"
+            style={{ borderColor: `rgba(${cor.rgb},.45)` }}>
+            {/* #618: o "–" sumia; uma setinha pra baixo (= recolher), com borda */}
+            <svg aria-hidden width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
           </button>
           {/* o retrato: falando enquanto o texto aparece, sorrindo quando para */}
           <div aria-hidden className="absolute rounded-full p-[3px]" style={{ left: -SAI, top: -SAI, width: RETRATO, height: RETRATO, border: `3px solid rgb(${cor.rgb})`, background: "#070a18" }}>
@@ -199,7 +207,7 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
           </span>
           {/* o leitor de tela recebe a fala inteira, de uma vez */}
           <p aria-live="polite" className="sr-only">{fala}</p>
-          <p aria-hidden className="min-h-[3em] pr-4 text-[15px] leading-relaxed text-[#e6ebff]">
+          <p aria-hidden className="min-h-[3em] pr-6 text-[15px] leading-relaxed text-[#e6ebff]">
             {visivel}
             {!digitando && <span className="bt-pisca ml-1 text-[13px]" style={{ color: `rgb(${cor.rgb})` }}>⟁</span>}
           </p>
@@ -248,6 +256,13 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
                   Continuar tutorial
                 </button>
               </span>
+            )}
+            {/* #618: minimizar ESCRITO, junto dos outros botões — o ícone do canto ninguém via */}
+            {!confirmando && (
+              <button type="button" onClick={(e) => { e.stopPropagation(); setMinimizado(true); }}
+                className="rounded-full px-2 py-1 text-[12px] font-medium text-[#c3cbea] transition-colors hover:text-white focus-visible:outline focus-visible:outline-1">
+                Minimizar
+              </button>
             )}
             {onPular && !confirmando && (
               <button type="button" onClick={(e) => { e.stopPropagation(); setConfirmando(true); }} ref={acao || !ultimaPagina ? undefined : principal}

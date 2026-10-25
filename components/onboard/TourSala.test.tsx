@@ -343,3 +343,12 @@ describe("#618 · o contorno anda junto com a pessoa", () => {
     expect(document.querySelector("[data-tour-sua-vez]")!.textContent).toMatch(/é só apertar ➤/);
   });
 });
+
+describe("#618 · minimizar visível", () => {
+  it("tem o botão \"Minimizar\" escrito junto do Pular, e ele minimiza", () => {
+    abrir(<TourSala noTutorial={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Minimizar" }));
+    expect(cartao()).toBeNull();
+    expect(document.querySelector("[data-tour-minimizado]")).not.toBeNull();
+  });
+});
