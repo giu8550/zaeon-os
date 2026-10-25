@@ -39,3 +39,10 @@ describe("o tour do laboratório (fora do tutorial)", () => {
     expect(deveMostrarTourSala({ ...base, largura: 390 })).toBe(false);
   });
 });
+
+describe("tourSala · #613 alvos que existem na tela", () => {
+  it("nenhum passo aponta pras marcações que saíram da tela (sala-estudos, diagrama)", () => {
+    const todos = PASSOS_SALA.flatMap((p) => p.alvos).join(" ");
+    expect(todos).not.toMatch(/data-tour="(sala-estudos|diagrama)"/);
+  });
+});

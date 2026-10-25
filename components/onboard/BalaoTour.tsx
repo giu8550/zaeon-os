@@ -24,14 +24,16 @@ const LARGURA = 420;
 const SAI = 26, RETRATO = 80;
 /** a "datilografia" anda de tanto em tanto (ms) */
 const PASSO_MS = 30;
-const AURA = { nome: "AURA", falando: "/avatars/aura/talk.sm.webp", parada: "/avatars/aura/smile.sm.webp" };
+// falando = boca aberta; parada = sorriso de BOCA FECHADA (#613: o `smile` é de boca aberta e parecia falar pra sempre)
+const AURA = { nome: "AURA", falando: "/avatars/aura/talk.sm.webp", parada: "/avatars/aura/idle.sm.webp" };
 
 const CSS = `
 @keyframes bt-anel { 0%,100% { box-shadow: 0 0 0 1.5px rgba(var(--bt-cor),.85), 0 0 14px 2px rgba(var(--bt-cor),.28) } 50% { box-shadow: 0 0 0 1.5px rgba(var(--bt-cor),.95), 0 0 22px 4px rgba(var(--bt-cor),.34) } }
 @keyframes bt-scan { 0% { transform: translateY(-120%) } 55%,100% { transform: translateY(520%) } }
 @keyframes bt-gira { 0%,70% { transform: rotate(0) } 100% { transform: rotate(120deg) } }
 @keyframes bt-pisca { 0%,49% { opacity: 1 } 50%,100% { opacity: .25 } }
-.bt-anel { animation: bt-anel 2.8s ease-in-out infinite; }
+/* #613: o contorno é FIXO (a animação só faz ele respirar) — com "reduzir movimento" ele continua aparecendo */
+.bt-anel { box-shadow: 0 0 0 2px rgba(var(--bt-cor),.9), 0 0 16px 3px rgba(var(--bt-cor),.3); animation: bt-anel 2.8s ease-in-out infinite; }
 .bt-retrato::before { content: ""; position: absolute; inset: 0; z-index: 2; border-radius: 50%; background: repeating-linear-gradient(0deg, rgba(103,232,249,.08) 0 1px, transparent 1px 3px); }
 .bt-retrato::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 22%; z-index: 3; background: linear-gradient(180deg, transparent, rgba(103,232,249,.45), transparent); animation: bt-scan 3.2s ease-in-out infinite; }
 .bt-gira { display: inline-block; animation: bt-gira 2.4s ease-in-out infinite; }
@@ -147,17 +149,20 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
           </span>
           {/* o leitor de tela recebe a fala inteira, de uma vez */}
           <p aria-live="polite" className="sr-only">{fala}</p>
-          <span className="sr-only" aria-label={`Passo ${passo + 1} de ${total}`}>{passo + 1} / {total}</span>
           <p aria-hidden className="min-h-[3em] text-[15px] leading-relaxed text-[#e6ebff]">
             {visivel}
             {!digitando && <span className="bt-pisca ml-1 text-[13px]" style={{ color: `rgb(${cor.rgb})` }}>⟁</span>}
           </p>
           <div className="mt-3 flex items-center gap-2.5">
-            <span aria-hidden className="mr-auto flex items-center gap-1">
-              {Array.from({ length: total }, (_, k) => (
-                <span key={k} className="h-1.5 w-1.5 rotate-45"
-                  style={k === passo ? { background: `rgb(${cor.rgb})` } : k < passo ? { background: `rgba(${cor.rgb},.45)` } : { border: `1px solid rgba(${cor.rgb},.55)` }} />
-              ))}
+            <span className="mr-auto flex items-center gap-2">
+              <span aria-hidden className="flex items-center gap-1">
+                {Array.from({ length: total }, (_, k) => (
+                  <span key={k} className="h-1.5 w-1.5 rotate-45"
+                    style={k === passo ? { background: `rgb(${cor.rgb})` } : k < passo ? { background: `rgba(${cor.rgb},.45)` } : { border: `1px solid rgba(${cor.rgb},.55)` }} />
+                ))}
+              </span>
+              {/* #613: quanto falta, escrito (ajuda a não desistir no meio) */}
+              <span className="text-[11px] font-medium tabular-nums text-[#c3cbea]">Passo {passo + 1} de {total}</span>
             </span>
             {onPular && (
               <button type="button" onClick={onPular} ref={acao || !ultimaPagina ? undefined : principal}

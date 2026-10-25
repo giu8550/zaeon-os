@@ -29,7 +29,7 @@ describe("TourSala — o tour do laboratório", () => {
   it("anda pela AÇÃO: pedir estudo → (Bora) → diagrama → percurso → Boa jornada marca como visto", () => {
     abrir(<TourSala noTutorial={false} />);
     expect(cartao()?.textContent).toMatch(/Quero estudar sobre/);
-    expect(screen.getByText("1 / 5")).toBeTruthy();
+    expect(screen.getByText("Passo 1 de 5")).toBeTruthy();
     // passo de ação: sem botão de seguir, só o Pular
     expect(screen.queryByRole("button", { name: "Bora" })).toBeNull();
     disparar(EVT_PERGUNTA_CHAT, { prompt: "Quero estudar sobre: fotossíntese" });
@@ -41,7 +41,7 @@ describe("TourSala — o tour do laboratório", () => {
     disparar(EVT_ABRIR_DOC, { studioKind: "diagram" });
     expect(cartao()?.textContent).toMatch(/percurso/);
     disparar(EVT_PERCURSO_ABERTO);
-    expect(screen.getByText("5 / 5")).toBeTruthy();
+    expect(screen.getByText("Passo 5 de 5")).toBeTruthy();
     fireEvent.click(ateBotao(/Boa jornada/));
     expect(cartao()).toBeNull();
     expect(localStorage.getItem("zaeon.tour.sala.v2")).toBe("1");
@@ -137,5 +137,22 @@ describe("#605 · o cartão novo (diálogo com a Aura)", () => {
     render(<TourEscritorio naAba noTutorial={false} />);
     act(() => { vi.advanceTimersByTime(1500); });
     expect(document.body.innerHTML).toMatch(/34,211,238/);
+  });
+});
+
+describe("#613 · ajustes rápidos do cartão", () => {
+  it("terminou de falar: o retrato visível é o sorriso de BOCA FECHADA (idle)", () => {
+    abrir(<TourSala noTutorial={false} />);
+    act(() => { vi.advanceTimersByTime(10_000); });
+    const img = [...cartao()!.querySelectorAll("img")].find((i) => i.style.opacity === "1");
+    expect(img?.getAttribute("src")).toBe("/avatars/aura/idle.sm.webp");
+  });
+  it("o contorno do destaque é fixo no CSS (não depende da animação) — aparece com 'reduzir movimento'", () => {
+    abrir(<TourSala noTutorial={false} />);
+    expect(document.body.innerHTML).toMatch(/\.bt-anel \{ box-shadow: 0 0 0 2px/);
+  });
+  it("mostra 'Passo X de Y' escrito", () => {
+    abrir(<TourSala noTutorial={false} />);
+    expect(cartao()!.textContent).toMatch(/Passo 1 de 5/);
   });
 });
