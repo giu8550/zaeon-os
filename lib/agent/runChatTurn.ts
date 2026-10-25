@@ -210,6 +210,23 @@ export async function runChatTurn(
         if (videoDoc) out.answer = { ...out.answer, videoDoc };
       }
     }
+    // BLUEPRINT REA (engenharia reversa): "faz a engenharia reversa de X" / "como X funciona por dentro" cria o
+    // blueprint da conversa — um MÓDULO próprio no chat (estilo REA: achados por proveniência + reconstrução).
+    // AGUARDADO só o `iniciarRea` (cria o id, pra o card ir NESTA resposta); a composição corre em 2º plano.
+    if (userId && out.mode === "structured") {
+      const reaT = await import("@/lib/rea-blueprint/tipos");
+      const scopeIdRea = typeof ac.cartolinaScopeId === "string" ? ac.cartolinaScopeId : null;
+      if (reaT.reaBlueprintOn() && scopeIdRea && (await import("@/lib/agent/aprender")).pedeEngenhariaReversa(prompt)) {
+        const srv = await import("@/lib/rea-blueprint/server");
+        const { textoDaResposta } = await import("@/lib/blueprint/patch");
+        const titulo = String(out.answer.nucleo || prompt).replace(/\s+/g, " ").trim().slice(0, 120) || "Engenharia reversa";
+        const id = await srv.iniciarRea(userId, scopeIdRea, titulo).catch(() => null);
+        if (id) {
+          out.answer = { ...out.answer, reaBlueprint: { id, titulo, gerando: true } };
+          void srv.reaBlueprintDoTurno({ userId, scopeId: scopeIdRea, titulo, prompt, answerTexto: textoDaResposta(out.answer), history: params.history }).catch(() => null);
+        }
+      }
+    }
     // Chat → memória: o turno entra no grafo do estudo (e a cartolina recebe a projeção) — ÚNICO
     // ponto de escrita por turno. Fire-and-forget. Seções que foram pro TCC não viram notas soltas.
     if (userId) void cartolina.fixarTurno({ userId, scopeId: ac.cartolinaScopeId, prompt, answer: tcc ? { ...answer, work: undefined } : answer, msgId: ac.cartolinaMsgId });

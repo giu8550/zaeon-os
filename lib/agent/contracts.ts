@@ -86,6 +86,8 @@ export type StructuredAnswer = {
   /** TCC cross-sala (TCC_CROSS): o turno criou/editou o TCC desta conversa → o cliente abre a aba. */
   /** o VÍDEO do documento pedido no chat (lib/videodoc) — o card com ▶ abre o player com a Zaeon holograma */
   videoDoc?: { videoId?: string; titulo: string; motivo?: string };
+  /** BLUEPRINT REA (engenharia reversa): o módulo próprio desta conversa (lib/rea-blueprint). `gerando` enquanto compõe. */
+  reaBlueprint?: { id: string; titulo: string; gerando?: boolean };
   tcc?: { workId: string; titulo: string; criado: boolean; alteradas: number; gerando?: boolean; tipo?: string }; // tipo: chat único (TCC/Artigo/Relatório)
 };
 
