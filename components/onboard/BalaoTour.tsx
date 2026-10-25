@@ -209,12 +209,13 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
               <p className="mt-0.5 text-[13px] text-[#e6ebff]">{suaVez.tarefa}</p>
               {suaVez.exemplo && suaVez.onExemplo && (
                 <button type="button" onClick={(e) => { e.stopPropagation(); suaVez.onExemplo?.(suaVez.exemplo!); }}
-                  title="Escreve no chat — é só mandar"
                   className="mt-1.5 rounded-full border px-2.5 py-0.5 text-left text-[12px] text-[#f1edff] transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-1"
                   style={{ borderColor: `rgba(${cor.rgb},.55)` }}>
-                  “{suaVez.exemplo}”
+                  Usar o exemplo: “{suaVez.exemplo}”
                 </button>
               )}
+              {/* #618: o exemplo não manda sozinho — dizer o que acontece */}
+              {suaVez.exemplo && suaVez.onExemplo && <p className="mt-1 text-[11px] text-[#c3cbea]">Vai pro campo de mensagem, é só apertar ➤</p>}
               {suaVez.onJaFiz && (
                 <button type="button" onClick={(e) => { e.stopPropagation(); suaVez.onJaFiz?.(); }}
                   className="ml-2 mt-1.5 rounded-full px-2 py-0.5 text-[12px] font-medium text-[#c3cbea] underline-offset-2 transition-colors hover:text-white hover:underline focus-visible:outline focus-visible:outline-1">

@@ -21,7 +21,7 @@ describe("o tour do laboratório (fora do tutorial)", () => {
     expect(eventoAvanca(percurso!, EVT_PERCURSO_ABERTO, undefined)).toBe(true);
   });
   it("começa no “Quero estudar sobre…” e mostra a Sala de Estudos como o caderno vivo", () => {
-    expect(PASSOS_SALA[0]!.alvos[0]).toBe('[data-tour="study-start"]');
+    expect(PASSOS_SALA[0]!.alvos[0]).toBe('[data-tour="composer-estudos"]');   // #618: o campo, não o botão
     expect(PASSOS_SALA[1]!.fala).toMatch(/caderno vivo/);
     expect(PASSOS_SALA[1]!.ir).toEqual({ tab: "sala-de-estudos", aba: "feed" });
     expect(PASSOS_SALA.at(-1)!.cta).toMatch(/Boa jornada/);
@@ -64,5 +64,13 @@ describe("#613 · os passos de ação não travam", () => {
     expect(tarefaDoPercurso("ativa", "x")).toMatch(/Pronto/);
     expect(tarefaDoPercurso("sugerida", "x")).toBe("x");
     expect(tarefaDoPercurso(null, "x")).toBe("x");
+  });
+});
+
+describe("#618 · um caminho só no passo 1", () => {
+  it("o passo 1 destaca o campo do chat (não o botão \"Quero estudar sobre…\") e os passos de escrever são noChat", () => {
+    const p1 = PASSOS_SALA.find((p) => p.id === "iniciar-estudo")!;
+    expect(p1.alvos).toEqual(['[data-tour="composer-estudos"]']);
+    expect(PASSOS_SALA.filter((p) => p.noChat).map((p) => p.id)).toEqual(["iniciar-estudo", "criar-diagrama"]);
   });
 });

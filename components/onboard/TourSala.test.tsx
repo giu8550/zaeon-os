@@ -306,3 +306,40 @@ describe("#613 · revisão (Sourcery)", () => {
     expect(localStorage.getItem("zaeon.tour.sala.v2")).toBe("1");
   });
 });
+
+describe("#618 · o contorno anda junto com a pessoa", () => {
+  const paginaFinal = () => { for (let k = 0; k < 6 && screen.queryByRole("button", { name: "Continuar" }); k++) fireEvent.click(screen.getByRole("button", { name: "Continuar" })); };
+  const caixa = (el: HTMLElement, x: number, y: number, w: number, h: number) => {
+    el.getBoundingClientRect = () => ({ x, y, left: x, top: y, width: w, height: h, right: x + w, bottom: y + h, toJSON: () => ({}) }) as DOMRect;
+  };
+  it("campo vazio → contorno no campo; com texto → no ➤ e \"Agora é só mandar\"; apagou → volta pro campo", () => {
+    const campo = document.createElement("div");
+    campo.setAttribute("data-tour", "composer-estudos");
+    const enviar = document.createElement("button");
+    enviar.setAttribute("data-tour", "enviar");
+    campo.appendChild(enviar);
+    document.body.appendChild(campo);
+    caixa(campo, 160, 450, 850, 140); caixa(enviar, 960, 540, 40, 40);
+    abrir(<TourSala noTutorial={false} />);
+    paginaFinal();
+    const anel = () => document.querySelector("[data-tour-anel]") as HTMLElement | null;
+    const sv = () => document.querySelector("[data-tour-sua-vez]")?.textContent ?? "";
+    act(() => { vi.advanceTimersByTime(100); });
+    expect(anel()!.style.width).toBe("862px");          // o campo (+6 de cada lado)
+    expect(sv()).toMatch(/Escreve um tema/);
+    disparar("zaeon:chat:texto", true);
+    act(() => { vi.advanceTimersByTime(100); });
+    expect(anel()!.style.width).toBe("52px");           // o ➤
+    expect(sv()).toMatch(/Agora é só mandar ➤/);
+    disparar("zaeon:chat:texto", false);
+    act(() => { vi.advanceTimersByTime(100); });
+    expect(anel()!.style.width).toBe("862px");
+    campo.remove();
+  });
+  it("o exemplo diz o que faz", () => {
+    abrir(<TourSala noTutorial={false} />);
+    paginaFinal();
+    expect(screen.getByRole("button", { name: /Usar o exemplo: “Quero estudar sobre fotossíntese”/ })).toBeTruthy();
+    expect(document.querySelector("[data-tour-sua-vez]")!.textContent).toMatch(/é só apertar ➤/);
+  });
+});

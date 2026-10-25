@@ -10,13 +10,15 @@ import { OverlayTour, useDestaque } from "@/components/onboard/BalaoTour";
 import { mapPanelOn } from "@/components/cerebro/useCerebro";
 import { irPraAbaEstudos } from "@/lib/chat/conversasNav";
 import { getTour } from "@/lib/onboarding/tour";
-import { EVT_PERCURSO_ESTADO, EVT_PREENCHER_CHAT, deveMostrarTourSala, eventoAvanca, marcarTourDoLabAtivo, marcarTourSalaVisto, passosDaSala, tarefaDoPercurso, tourSalaVisto } from "@/lib/onboarding/tourSala";
+import { ALVO_ENVIAR, EVT_CHAT_TEXTO, EVT_PERCURSO_ESTADO, EVT_PREENCHER_CHAT, TAREFA_ENVIAR, deveMostrarTourSala, eventoAvanca, marcarTourDoLabAtivo, marcarTourSalaVisto, passosDaSala, tarefaDoPercurso, tourSalaVisto } from "@/lib/onboarding/tourSala";
 import { EVT_ESTUDOS_VISTA } from "@/lib/onboarding/tutorialLab";
 import { EVT_REVER_TOURS } from "@/lib/onboarding/reverTours";
 import { geracaoDosTours } from "@/lib/onboarding/geracaoTour";
 import type { EstadoBolinha } from "@/lib/map/bolinha";
 
 const SEM_ALVOS: string[] = [];
+/** #618: com o contorno no ➤, o cartão continua sem cobrir o campo inteiro (a pessoa revisa o que vai mandar) */
+const EVITA_CHAT = ['[data-tour="composer-estudos"]'];
 /** #613: o exemplo do "Sua vez" vai pro campo do chat (components/study/StudyCoworkChat) — a pessoa só manda */
 const preencherChat = (texto: string) => window.dispatchEvent(new CustomEvent(EVT_PREENCHER_CHAT, { detail: { texto } }));
 
@@ -71,7 +73,16 @@ export default function TourSala({ noTutorial }: { noTutorial: boolean }) {
     window.addEventListener(EVT_PERCURSO_ESTADO, on);
     return () => window.removeEventListener(EVT_PERCURSO_ESTADO, on);
   }, []);
-  const { alvo, evita } = useDestaque(passo?.alvos ?? SEM_ALVOS, SEM_ALVOS, !!passo);
+  // #618: o campo do chat tem texto? o contorno anda junto: campo vazio → campo; com texto → ➤ enviar
+  const [temTexto, setTemTexto] = useState(false);
+  useEffect(() => {
+    const on = (e: Event) => setTemTexto(!!(e as CustomEvent).detail);
+    window.addEventListener(EVT_CHAT_TEXTO, on);
+    return () => window.removeEventListener(EVT_CHAT_TEXTO, on);
+  }, []);
+  const mandar = !!passo?.noChat && temTexto;
+  const alvos = useMemo(() => (mandar ? [ALVO_ENVIAR] : passo?.alvos ?? SEM_ALVOS), [mandar, passo]);
+  const { alvo, evita } = useDestaque(alvos, mandar ? EVITA_CHAT : SEM_ALVOS, !!passo);
   if (!passo || i === null) return null;
   const ultimo = i === passos.length - 1;
   return (
@@ -86,7 +97,7 @@ export default function TourSala({ noTutorial }: { noTutorial: boolean }) {
       acao={passo.cta ? { rotulo: passo.cta, onClick: ultimo ? sair : seguir } : undefined}
       onPular={sair}
       suaVez={passo.suaVez ? {
-        tarefa: passo.id === "gerar-percurso" ? tarefaDoPercurso(percurso, passo.suaVez) : passo.suaVez,
+        tarefa: mandar ? TAREFA_ENVIAR : passo.id === "gerar-percurso" ? tarefaDoPercurso(percurso, passo.suaVez) : passo.suaVez,
         exemplo: passo.exemplo, onExemplo: preencherChat, onJaFiz: passo.jaFiz ? seguir : undefined,
       } : undefined}
     />

@@ -17,6 +17,11 @@ export const EVT_PERGUNTA_CHAT = "zaeon:chat:pergunta";
 export const EVT_PERCURSO_ABERTO = "zaeon:percurso:aberto";
 /** #613: o chip de exemplo do "Sua vez" escreve no campo do chat (detail: { texto }) — quem manda é a pessoa */
 export const EVT_PREENCHER_CHAT = "zaeon:chat:preencher";
+/** #618: o campo do chat ficou com texto ou vazio (detail: boolean) — o contorno do tour passa pro ➤ enviar */
+export const EVT_CHAT_TEXTO = "zaeon:chat:texto";
+/** #618: com texto no campo, o destaque vai pro ➤ (o botão de enviar DESTE chat, não de outro composer da tela) */
+export const ALVO_ENVIAR = '[data-tour="composer-estudos"] [data-tour="enviar"]';
+export const TAREFA_ENVIAR = "Agora é só mandar ➤";
 /** #613: o botão do percurso mudou de estado (detail: EstadoBolinha) — o cartão diz "gerando…" e depois "pronto" */
 export const EVT_PERCURSO_ESTADO = "zaeon:percurso:estado";
 
@@ -41,6 +46,8 @@ export type PassoSala = {
   suaVez?: string;
   /** #613: um exemplo pronto: clicar escreve no chat (EVT_PREENCHER_CHAT) */
   exemplo?: string;
+  /** #618: passo que se faz escrevendo no chat — com texto no campo, o contorno vai pro ➤ e a tarefa vira "mandar" */
+  noChat?: boolean;
   /** #613: a IA pode responder com outro formato (uma aula em vez do diagrama) — "Já fiz ✓" segue mesmo assim */
   jaFiz?: boolean;
   /** só existe com o mapa do percurso ligado (NEXT_PUBLIC_MAP_HARNESS) */
@@ -49,7 +56,8 @@ export type PassoSala = {
 
 export const PASSOS_SALA: PassoSala[] = [
   { id: "iniciar-estudo", ir: { tab: "sala-de-estudos", aba: "meus-estudos" },
-    alvos: ['[data-tour="study-start"]', '[data-tour="sugestoes"]', '[data-tour="composer-estudos"]'],
+    // #618: o campo, e não o botão "Quero estudar sobre…" — o "Sua vez" pede pra escrever (um caminho só)
+    alvos: ['[data-tour="composer-estudos"]'], noChat: true,
     avancaEm: [{ evento: EVT_PERGUNTA_CHAT }],
     suaVez: "Escreve um tema no chat e manda", exemplo: "Quero estudar sobre fotossíntese",
     dica: "✨ Clica em “Quero estudar sobre…” e escolhe um tema",
@@ -63,7 +71,7 @@ export const PASSOS_SALA: PassoSala[] = [
     alvos: ['[data-tour="composer-estudos"]'],
     // #613: qualquer documento visual que abre em aba (diagrama, aula) conta — a IA nem sempre escolhe o diagrama
     avancaEm: [{ evento: EVT_ABRIR_DOC, kinds: [...KINDS_EM_ABA] }],
-    suaVez: "Pede um diagrama interativo no chat", exemplo: "Faz um diagrama interativo disso", jaFiz: true,
+    suaVez: "Pede um diagrama interativo no chat", exemplo: "Faz um diagrama interativo disso", jaFiz: true, noChat: true,
     dica: "🧭 Peça um diagrama interativo",
     fala: "Pronto — teu estudo nasceu! 🎉 Agora, aqui no chat, pede um diagrama interativo (ex.: “faz um diagrama interativo disso”). Ver o assunto desenhado fixa o conhecimento de um jeito que o texto sozinho não alcança." },
   { id: "gerar-percurso", precisaMapa: true, ir: { tab: "sala-de-estudos", aba: "meus-estudos" },

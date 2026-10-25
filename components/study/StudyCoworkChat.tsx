@@ -44,7 +44,7 @@ import ConversasSidebar from "@/components/chat/ConversasSidebar";
 import PastasEmpilhadas, { CORPO_DA_PASTA, type Pasta } from "@/components/chat/PastasEmpilhadas";
 import SugestoesConversa from "@/components/chat/SugestoesConversa";
 import { EVT_TEMA, temaDoTexto, temaNoTutorial } from "@/lib/onboarding/tutorialLab";
-import { EVT_PERCURSO_ESTADO, EVT_PERGUNTA_CHAT, EVT_PREENCHER_CHAT } from "@/lib/onboarding/tourSala";
+import { EVT_CHAT_TEXTO, EVT_PERCURSO_ESTADO, EVT_PERGUNTA_CHAT, EVT_PREENCHER_CHAT } from "@/lib/onboarding/tourSala";
 import { useConversasSlot } from "@/components/chat/ConversasSlot";
 import { consumirPedido, EVT_ESTUDOS_CHAT, EVT_PEDIDO_CONVERSA, type PedidoConversa } from "@/lib/chat/conversasNav";
 
@@ -288,6 +288,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const [spaces, setSpaces] = useState<Space[]>([]);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
+  // #618: o tour do laboratório leva o contorno pro ➤ quando o campo tem texto
+  const campoComTexto = !!input.trim();
+  useEffect(() => { window.dispatchEvent(new CustomEvent(EVT_CHAT_TEXTO, { detail: campoComTexto })); }, [campoComTexto]);
   const [sending, setSending] = useState(false);
   // a avatar do painel dos documentos escreve no tablet enquanto a resposta sai (components/research/ZaeonDocumentos)
   useEffect(() => { avisarEscrevendo(sending); }, [sending]);
