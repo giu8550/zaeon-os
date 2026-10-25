@@ -12,6 +12,8 @@ import { useState } from "react";
 import { NOME_FASE } from "@/lib/blueprint/tipos";
 import { precisaAvaliar } from "@/lib/blueprint/fases";
 import { useBlueprint } from "./useBlueprint";
+import DicasRapidas from "@/components/onboard/DicasRapidas";
+import { DICAS_SALA } from "@/lib/onboarding/dicas";
 import { CSS_BARBIE, LETRAS, MAO, PAPEL, REDONDA, ROSA, SKINS, corNaSkin, useLetraEscolhida, useSkinEscolhida, type Skin } from "./skin";
 import dynamic from "next/dynamic";
 
@@ -94,8 +96,8 @@ export default function SalaBlueprint({ inicialId }: { inicialId?: string | null
         </div>
         <span className="self-center whitespace-nowrap pr-1 font-mono text-[11px] tracking-[0.2em] text-sky-300">BLUEPRINTS</span>
         {lista === null && <span className="self-center font-mono text-[11px] text-sky-200/50">carregando…</span>}
-        {lista?.map((b) => (
-          <button key={b.id} type="button" onClick={() => void B.abrir(b.id)} className="min-w-[190px] flex-none rounded-[3px] border px-2.5 py-1.5 text-left font-mono transition hover:bg-white/5"
+        {lista?.map((b, k) => (
+          <button key={b.id} type="button" data-tour={k === 0 ? "blueprint-lista" : undefined} onClick={() => void B.abrir(b.id)} className="min-w-[190px] flex-none rounded-[3px] border px-2.5 py-1.5 text-left font-mono transition hover:bg-white/5"
             style={{ borderColor: corNaSkin(skin, atual?.id === b.id ? COR.estudo : "rgba(127,224,255,.25)"), background: atual?.id === b.id ? (papel || rosa ? "rgba(255,255,255,.5)" : "rgba(127,224,255,.08)") : undefined }}>
             <b className="block max-w-[240px] truncate text-[12px] text-sky-50">{b.titulo}</b>
             <small className="text-[10px] text-sky-200/70">
@@ -105,7 +107,9 @@ export default function SalaBlueprint({ inicialId }: { inicialId?: string | null
           </button>
         ))}
       </div>
-      <div className="relative min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1" data-tour="blueprint-prancha">
+        {/* #618: dicas rápidas na 1ª vez (só com um blueprint aberto — sem nenhum, o aviso da tela já explica) */}
+        {atual && <DicasRapidas lugar="sala-estudos" dicas={DICAS_SALA} />}
         {atual ? (
           <PranchaBlueprint id={atual.id} doc={atual.doc} onFixar={B.fixar} skin={skin} letra={letra}
             acoes={{ podeEditar: podeEscrever(atual.papel), avaliando, abrirVideo: setVideoAberto,

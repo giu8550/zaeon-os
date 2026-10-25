@@ -43,3 +43,17 @@ describe("#618 · DicasRapidas", () => {
     expect(localStorage.getItem("zaeon.dica.perfil.v1")).toBeNull();
   });
 });
+
+describe("#618 · dicas da Sala de Estudos (blueprint)", () => {
+  it("falam das 4 fases, dos críticos e da prova; o \"Rever tutorial\" traz de volta", async () => {
+    const { DICAS_SALA } = await import("@/lib/onboarding/dicas");
+    render(<DicasRapidas lugar="sala-estudos" dicas={DICAS_SALA} />); act(() => { vi.advanceTimersByTime(1300); });
+    expect(cartao()!.textContent).toMatch(/blueprint/);
+    fireEvent.click(screen.getByRole("button", { name: /Entendi/ }));
+    expect(cartao()!.textContent).toMatch(/4 fases.*críticos.*prova/s);
+    fireEvent.click(screen.getByRole("button", { name: /Entendi/ }));
+    expect(localStorage.getItem("zaeon.dica.sala-estudos.v1")).toBe("1");
+    reverToursDoLab();
+    expect(localStorage.getItem("zaeon.dica.sala-estudos.v1")).toBeNull();
+  });
+});
