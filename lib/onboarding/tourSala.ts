@@ -13,6 +13,8 @@ import { EVT_ABRIR_DOC } from "@/lib/chat/documentos";
 export const EVT_PERGUNTA_CHAT = "zaeon:chat:pergunta";
 /** o mapa do percurso abriu com um mapa pronto (components/cerebro/CerebroPanel) */
 export const EVT_PERCURSO_ABERTO = "zaeon:percurso:aberto";
+/** #613: o chip de exemplo do "Sua vez" escreve no campo do chat (detail: { texto }) — quem manda é a pessoa */
+export const EVT_PREENCHER_CHAT = "zaeon:chat:preencher";
 
 /** um evento que faz o passo andar; `kind` filtra o detail.studioKind (ex.: só o documento "diagram") */
 export type Avanco = { evento: string; kind?: string };
@@ -31,6 +33,10 @@ export type PassoSala = {
   avancaEm?: Avanco[];
   /** passo de EXPLICAÇÃO: o rótulo do botão que segue */
   cta?: string;
+  /** #613: passo de AÇÃO — a tarefa em 1 linha, na caixa "Sua vez" da última caixa (a instrução não some no meio da fala) */
+  suaVez?: string;
+  /** #613: um exemplo pronto: clicar escreve no chat (EVT_PREENCHER_CHAT) */
+  exemplo?: string;
   /** só existe com o mapa do percurso ligado (NEXT_PUBLIC_MAP_HARNESS) */
   precisaMapa?: boolean;
 };
@@ -39,6 +45,7 @@ export const PASSOS_SALA: PassoSala[] = [
   { id: "iniciar-estudo", ir: { tab: "sala-de-estudos", aba: "meus-estudos" },
     alvos: ['[data-tour="study-start"]', '[data-tour="sugestoes"]', '[data-tour="composer-estudos"]'],
     avancaEm: [{ evento: EVT_PERGUNTA_CHAT }],
+    suaVez: "Escreve um tema no chat e manda", exemplo: "Quero estudar sobre fotossíntese",
     dica: "✨ Clica em “Quero estudar sobre…” e escolhe um tema",
     fala: "Oi! Que bom te ver aqui. 💜 Bora começar: clica em “Quero estudar sobre…” e me diz um tema — a matéria da prova, uma curiosidade, qualquer coisa. Dica: quanto mais específico, melhor (fotossíntese, Revolução Francesa, derivadas). Pode mandar!" },
   { id: "sala-estudos", ir: { tab: "sala-de-estudos", aba: "feed" },
@@ -49,11 +56,13 @@ export const PASSOS_SALA: PassoSala[] = [
   { id: "criar-diagrama", ir: { tab: "sala-de-estudos", aba: "meus-estudos" },
     alvos: ['[data-tour="composer-estudos"]'],
     avancaEm: [{ evento: EVT_ABRIR_DOC, kind: "diagram" }],
+    suaVez: "Pede um diagrama interativo no chat", exemplo: "Faz um diagrama interativo disso",
     dica: "🧭 Peça um diagrama interativo",
     fala: "Pronto — teu estudo nasceu! 🎉 Agora, aqui no chat, pede um diagrama interativo (ex.: “faz um diagrama interativo disso”). Ver o assunto desenhado fixa o conhecimento de um jeito que o texto sozinho não alcança." },
   { id: "gerar-percurso", precisaMapa: true, ir: { tab: "sala-de-estudos", aba: "meus-estudos" },
     alvos: ['[data-tour="gerar-percurso"]'],
     avancaEm: [{ evento: EVT_PERCURSO_ABERTO }],
+    suaVez: "Clica no ✦ pra gerar; pronto, clica de novo pra abrir o mapa",
     dica: "✦ Gere o percurso e abra o mapa",
     fala: "Agora sim: você já tá bem informado sobre o assunto. 💜 Hora de criar um percurso pra não se perder nos estudos — clica aqui pra gerar e, quando ficar pronto, clica de novo pra abrir o mapa." },
   { id: "mapa-pronto", precisaMapa: true,

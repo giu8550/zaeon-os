@@ -51,7 +51,7 @@ export const emCampoDeTexto = (alvo: EventTarget | null): boolean => {
 
 const reduzirMovimento = () => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; } };
 
-export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onPular, chave, tom = "roxo" }: {
+export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onPular, chave, tom = "roxo", suaVez }: {
   alvo: Caixa | null;
   evita: Caixa | null;
   /** a dica curta (1 linha) — vira o nome do cartão pro leitor de tela */
@@ -67,6 +67,8 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
   chave: string;
   /** #605: roxo na Sala de Estudos, ciano no Escritório */
   tom?: TomCartao;
+  /** #613: passo de ação — a tarefa fica escrita na última caixa (com um exemplo que dá pra usar) */
+  suaVez?: { tarefa: string; exemplo?: string; onExemplo?: (texto: string) => void };
 }) {
   const card = useRef<HTMLDivElement>(null);
   const principal = useRef<HTMLButtonElement>(null);
@@ -132,7 +134,8 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
   return createPortal(
     <div className={`pointer-events-none fixed inset-0 z-[1300] ${escondida ? "bt-parado" : ""}`} style={{ ["--bt-cor" as string]: cor.rgb }}>
       <style>{CSS}</style>
-      {alvo ? (
+      {/* #613: o destaque só aparece quando a Aura chega no "faz isso" (na saudação ele apontava pra nada) */}
+      {alvo && ultimaPagina ? (
         <div data-tour-anel className="bt-anel absolute rounded-xl transition-all duration-300 ease-out motion-reduce:transition-none"
           style={{ left: alvo.x - P, top: alvo.y - P, width: alvo.w + P * 2, height: alvo.h + P * 2, outline: "9999px solid rgba(2,6,23,.38)" }} />
       ) : <div className="absolute inset-0 bg-[rgba(2,6,23,.22)]" />}
@@ -169,6 +172,20 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
             {visivel}
             {!digitando && <span className="bt-pisca ml-1 text-[13px]" style={{ color: `rgb(${cor.rgb})` }}>⟁</span>}
           </p>
+          {suaVez && ultimaPagina && (
+            <div data-tour-sua-vez className="mt-2.5 rounded-lg border px-3 py-2" style={{ borderColor: `rgba(${cor.rgb},.4)`, background: `rgba(${cor.rgb},.08)` }}>
+              <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: `rgb(${cor.rgb})` }}>Sua vez</p>
+              <p className="mt-0.5 text-[13px] text-[#e6ebff]">{suaVez.tarefa}</p>
+              {suaVez.exemplo && suaVez.onExemplo && (
+                <button type="button" onClick={(e) => { e.stopPropagation(); suaVez.onExemplo?.(suaVez.exemplo!); }}
+                  title="Escreve no chat — é só mandar"
+                  className="mt-1.5 rounded-full border px-2.5 py-0.5 text-left text-[12px] text-[#f1edff] transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-1"
+                  style={{ borderColor: `rgba(${cor.rgb},.55)` }}>
+                  “{suaVez.exemplo}”
+                </button>
+              )}
+            </div>
+          )}
           <div className="mt-3 flex items-center gap-2.5">
             <span className="mr-auto flex items-center gap-2">
               <span aria-hidden className="flex items-center gap-1">

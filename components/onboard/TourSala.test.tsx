@@ -181,3 +181,33 @@ describe("#613 · ajustes rápidos do cartão", () => {
     expect(cartao()!.textContent).toMatch(/Passo 1 de 5/);
   });
 });
+
+describe("#613 · \"Sua vez\": a tarefa não some e o destaque vem na hora certa", () => {
+  const paginaFinal = () => { for (let k = 0; k < 6 && screen.queryByRole("button", { name: "Continuar" }); k++) fireEvent.click(screen.getByRole("button", { name: "Continuar" })); };
+  const suaVez = () => document.querySelector("[data-tour-sua-vez]") as HTMLElement | null;
+  it("na saudação não tem 'Sua vez' nem destaque; na última caixa tem os dois", () => {
+    const campo = document.createElement("div");
+    campo.setAttribute("data-tour", "composer-estudos");
+    campo.getBoundingClientRect = () => ({ x: 300, y: 600, left: 300, top: 600, width: 500, height: 60, right: 800, bottom: 660, toJSON: () => ({}) }) as DOMRect;
+    document.body.appendChild(campo);
+    abrir(<TourSala noTutorial={false} />);
+    act(() => { vi.advanceTimersByTime(500); });
+    expect(suaVez()).toBeNull();
+    expect(document.querySelector("[data-tour-anel]")).toBeNull();
+    paginaFinal();
+    act(() => { vi.advanceTimersByTime(500); });
+    expect(suaVez()?.textContent).toMatch(/Escreve um tema no chat/);
+    expect(document.querySelector("[data-tour-anel]")).not.toBeNull();
+    campo.remove();
+  });
+  it("o exemplo escreve no chat (a pessoa é quem manda)", () => {
+    abrir(<TourSala noTutorial={false} />);
+    paginaFinal();
+    const ouvir = vi.fn();
+    window.addEventListener("zaeon:chat:preencher", ouvir);
+    fireEvent.click(screen.getByRole("button", { name: /Quero estudar sobre fotossíntese/ }));
+    expect((ouvir.mock.calls[0]![0] as CustomEvent).detail).toEqual({ texto: "Quero estudar sobre fotossíntese" });
+    window.removeEventListener("zaeon:chat:preencher", ouvir);
+    expect(cartao()).not.toBeNull(); // o passo só anda quando a pergunta for MANDADA
+  });
+});

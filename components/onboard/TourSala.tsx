@@ -10,10 +10,12 @@ import { OverlayTour, useDestaque } from "@/components/onboard/BalaoTour";
 import { mapPanelOn } from "@/components/cerebro/useCerebro";
 import { irPraAbaEstudos } from "@/lib/chat/conversasNav";
 import { getTour } from "@/lib/onboarding/tour";
-import { deveMostrarTourSala, eventoAvanca, marcarTourDoLabAtivo, marcarTourSalaVisto, passosDaSala, tourSalaVisto } from "@/lib/onboarding/tourSala";
+import { EVT_PREENCHER_CHAT, deveMostrarTourSala, eventoAvanca, marcarTourDoLabAtivo, marcarTourSalaVisto, passosDaSala, tourSalaVisto } from "@/lib/onboarding/tourSala";
 import { EVT_ESTUDOS_VISTA } from "@/lib/onboarding/tutorialLab";
 
 const SEM_ALVOS: string[] = [];
+/** #613: o exemplo do "Sua vez" vai pro campo do chat (components/study/StudyCoworkChat) — a pessoa só manda */
+const preencherChat = (texto: string) => window.dispatchEvent(new CustomEvent(EVT_PREENCHER_CHAT, { detail: { texto } }));
 
 export default function TourSala({ noTutorial }: { noTutorial: boolean }) {
   const passos = useMemo(() => passosDaSala(mapPanelOn()), []);
@@ -64,6 +66,7 @@ export default function TourSala({ noTutorial }: { noTutorial: boolean }) {
       total={passos.length}
       acao={passo.cta ? { rotulo: passo.cta, onClick: ultimo ? sair : seguir } : undefined}
       onPular={sair}
+      suaVez={passo.suaVez ? { tarefa: passo.suaVez, exemplo: passo.exemplo, onExemplo: preencherChat } : undefined}
     />
   );
 }

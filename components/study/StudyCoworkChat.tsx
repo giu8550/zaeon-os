@@ -44,7 +44,7 @@ import ConversasSidebar from "@/components/chat/ConversasSidebar";
 import PastasEmpilhadas, { CORPO_DA_PASTA, type Pasta } from "@/components/chat/PastasEmpilhadas";
 import SugestoesConversa from "@/components/chat/SugestoesConversa";
 import { EVT_TEMA, temaDoTexto, temaNoTutorial } from "@/lib/onboarding/tutorialLab";
-import { EVT_PERGUNTA_CHAT } from "@/lib/onboarding/tourSala";
+import { EVT_PERGUNTA_CHAT, EVT_PREENCHER_CHAT } from "@/lib/onboarding/tourSala";
 import { useConversasSlot } from "@/components/chat/ConversasSlot";
 import { consumirPedido, EVT_ESTUDOS_CHAT, EVT_PEDIDO_CONVERSA, type PedidoConversa } from "@/lib/chat/conversasNav";
 
@@ -1158,6 +1158,14 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     setInput(comeco);
     requestAnimationFrame(() => { const t = colunaRef.current?.querySelector<HTMLTextAreaElement>("textarea"); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); } });
   };
+  // #613: o exemplo do "Sua vez" do tour escreve aqui (a pessoa revisa e manda)
+  const escolherRef = useRef(escolherSugestao);
+  escolherRef.current = escolherSugestao;
+  useEffect(() => {
+    const preencher = (e: Event) => { const t = (e as CustomEvent<{ texto?: string }>).detail?.texto; if (t) escolherRef.current(t); };
+    window.addEventListener(EVT_PREENCHER_CHAT, preencher);
+    return () => window.removeEventListener(EVT_PREENCHER_CHAT, preencher);
+  }, []);
   // o MAPA da conversa: aparece quando ela vira estudo ("Gerar mapa"); depois, "Ver mapa"
   const bolinhaMapa = cerebro.ligado && abaAtiva ? (
     <BolinhaCerebro
