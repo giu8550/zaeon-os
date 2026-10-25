@@ -164,22 +164,15 @@ export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: 
     const cabeca = v.humanoid.getRawBoneNode("head"); if (cabeca) { v.scene.updateMatrixWorld(true); alturaTopo = cabeca.getWorldPosition(new THREE.Vector3()).y + 0.24; enquadrar(); }
     const ch = new Character(v, cam, 7, { pack, talk: pack }); c = ch;
     ch.overlay = (_, now, dt) => {
-      // GERANDO: de pé, digitando no teclado holográfico e olhando as telas
+      // GERANDO: as mãos posam na cena (comandando as telas de mãos abertas, ou no gesto do poder) — nada de teclado
       const r = seqUlt, hu = v.humanoid;
-      if (r && r.digitar > 0.01) {
-        v.scene.updateMatrixWorld(true);
-        ik(hu, "left", r.maos.esq, r.digitar * 0.92); ik(hu, "right", r.maos.dir, r.digitar * 0.92);
-        const cab = hu.getNormalizedBoneNode("head"), pes = hu.getNormalizedBoneNode("neck");
-        // a cabeça VARRE as telas (guinada), um pouco erguida — ela olha as telas, não o teclado
-        pes?.quaternion.multiply(qx.setFromEuler(eul.set(-4 * D2R * r.digitar, r.olhar * 0.4 * r.digitar, 0)));
-        cab?.quaternion.multiply(qx.setFromEuler(eul.set(-6 * D2R * r.digitar, r.olhar * 0.6 * r.digitar, 0)));
-      } else if (r && r.maosPeso > 0.01) {
-        // PODERES CÓSMICOS: as mãos vão pros alvos da cena (têmporas / livro / sigilo) e a cabeça acompanha
+      if (r && r.maosPeso > 0.01) {
         v.scene.updateMatrixWorld(true);
         ik(hu, "left", r.maos.esq, r.maosPeso * 0.95); ik(hu, "right", r.maos.dir, r.maosPeso * 0.95);
         const cab = hu.getNormalizedBoneNode("head"), pes = hu.getNormalizedBoneNode("neck");
-        pes?.quaternion.multiply(qx.setFromEuler(eul.set(r.cabecaTilt * 0.5, r.olhar * 0.2 * r.maosPeso, 0)));
-        cab?.quaternion.multiply(qx.setFromEuler(eul.set(r.cabecaTilt * 0.7, r.olhar * 0.3 * r.maosPeso, 0)));
+        // a cabeça acompanha: lendo baixa (cabecaTilt), e VARRE as telas de leve (olhar)
+        pes?.quaternion.multiply(qx.setFromEuler(eul.set(r.cabecaTilt * 0.5, r.olhar * 0.3 * r.maosPeso, 0)));
+        cab?.quaternion.multiply(qx.setFromEuler(eul.set(r.cabecaTilt * 0.7, r.olhar * 0.45 * r.maosPeso, 0)));
       }
       const k = 1 - Math.exp(-dt * 6);
       const quer: Modo | null = !sinais.escrevendo && (sinais.lendo || now < st.lerAte) ? "ler" : null;
