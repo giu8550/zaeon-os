@@ -262,3 +262,18 @@ describe("#613 · minimizar o cartão", () => {
     expect(cartao()?.textContent).toMatch(/caderno vivo/);
   });
 });
+
+describe("#613 · rever o tutorial sem console", () => {
+  it("depois de pular, \"Rever tutorial\" esquece os dois tours e o da sala recomeça do 1º passo", async () => {
+    const { reverToursDoLab } = await import("@/lib/onboarding/reverTours");
+    abrir(<TourSala noTutorial={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Pular" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sim, pular" }));
+    expect(cartao()).toBeNull();
+    localStorage.setItem("zaeon.tour.escritorio.v1", "1");
+    act(() => { reverToursDoLab(); });
+    expect(localStorage.getItem("zaeon.tour.sala.v2")).toBeNull();
+    expect(localStorage.getItem("zaeon.tour.escritorio.v1")).toBeNull();
+    expect(screen.getByText("Passo 1 de 5")).toBeTruthy();
+  });
+});

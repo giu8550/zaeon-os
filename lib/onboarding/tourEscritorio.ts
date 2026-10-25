@@ -34,6 +34,8 @@ export const PASSOS_ESCRITORIO_3D: PassoEscritorio[] = [
 export const passosDoEscritorio = (cowork: boolean): PassoEscritorio[] => (cowork ? PASSOS_ESCRITORIO : PASSOS_ESCRITORIO_3D);
 
 const CHAVE = "zaeon.tour.escritorio.v1";
+/** #613: "Rever tutorial do laboratório" (Configurações) */
+export const esquecerTourEscritorio = () => { try { localStorage.removeItem(CHAVE); } catch { /* ignore */ } };
 export const tourEscritorioVisto = (): boolean => { try { return localStorage.getItem(CHAVE) === "1"; } catch { return true; } };
 export const marcarTourEscritorioVisto = () => { try { localStorage.setItem(CHAVE, "1"); } catch { /* ignore */ } };
 /** mostra? Só com a aba Escritório na tela, uma vez, fora do tutorial, sem outro tour rodando e nunca no celular */

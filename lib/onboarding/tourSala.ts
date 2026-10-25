@@ -96,6 +96,8 @@ export function tarefaDoPercurso(estado: EstadoBolinha | null, padrao: string): 
 
 // v2: o roteiro novo — quem só viu o passeio antigo (v1) ganha o novo uma vez
 const CHAVE = "zaeon.tour.sala.v2";
+/** #613: "Rever tutorial do laboratório" (Configurações) */
+export const esquecerTourSala = () => { try { localStorage.removeItem(CHAVE); } catch { /* ignore */ } };
 export const tourSalaVisto = (): boolean => { try { return localStorage.getItem(CHAVE) === "1"; } catch { return true; } };
 export const marcarTourSalaVisto = () => {
   try { localStorage.setItem(CHAVE, "1"); } catch { /* ignore */ }

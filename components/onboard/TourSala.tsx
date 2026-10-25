@@ -12,6 +12,7 @@ import { irPraAbaEstudos } from "@/lib/chat/conversasNav";
 import { getTour } from "@/lib/onboarding/tour";
 import { EVT_PERCURSO_ESTADO, EVT_PREENCHER_CHAT, deveMostrarTourSala, eventoAvanca, marcarTourDoLabAtivo, marcarTourSalaVisto, passosDaSala, tarefaDoPercurso, tourSalaVisto } from "@/lib/onboarding/tourSala";
 import { EVT_ESTUDOS_VISTA } from "@/lib/onboarding/tutorialLab";
+import { EVT_REVER_TOURS } from "@/lib/onboarding/reverTours";
 import type { EstadoBolinha } from "@/lib/map/bolinha";
 
 const SEM_ALVOS: string[] = [];
@@ -27,6 +28,12 @@ export default function TourSala({ noTutorial }: { noTutorial: boolean }) {
       if (deveMostrarTourSala({ noTutorial, largura: window.innerWidth, visto: tourSalaVisto(), outroTour: getTour().active })) setI(0);
     }, 1500);
     return () => clearTimeout(t);
+  }, [noTutorial]);
+  // #613: "Rever tutorial do laboratório" (Configurações) — recomeça do 1º passo
+  useEffect(() => {
+    const rever = () => { if (deveMostrarTourSala({ noTutorial, largura: window.innerWidth, visto: tourSalaVisto(), outroTour: getTour().active })) setI(0); };
+    window.addEventListener(EVT_REVER_TOURS, rever);
+    return () => window.removeEventListener(EVT_REVER_TOURS, rever);
   }, [noTutorial]);
   const passo = i === null ? null : passos[i] ?? null;
   useEffect(() => { marcarTourDoLabAtivo(!!passo); }, [passo]);
