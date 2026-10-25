@@ -7,13 +7,15 @@
  *  1. PENSAR  — os olhos acendem (o começo);
  *  2. RASPAR  — as telas acendem e a ARANHA passeia pela página se alimentando delas (o nível rápido: até 5 s);
  *  3. ENERGIA — passou de 5 s: a aranha vira uma esfera de energia e RAIOS saltam dela pras telas;
- *  4. depois, numa resposta longa: ÁRVORE de habilidades → ENERGIA → CÉREBRO → ENERGIA… em laço.
+ *  4. depois, numa resposta longa: um LAÇO de PODERES CÓSMICOS — ÁRVORE de habilidades → TELEPATIA (ondas da mente) →
+ *     ENERGIA → LEITURA (lê livros holográficos) → FEITIÇO (conjura um sigilo) → CÉREBRO → ENERGIA… em laço, pra a
+ *     cena ficar rica e variada numa geração longa (out/2026, o dono: "variação de poderes cósmicos").
  */
-export type Sequencia = "pensar" | "raspar" | "energia" | "arvore" | "cerebro";
+export type Sequencia = "pensar" | "raspar" | "energia" | "arvore" | "cerebro" | "telepatia" | "leitura" | "feitico";
 /** quando cada nível começa (s desde o começo da geração) */
 export const NIVEL = { raspar: 1.4, energia: 5, holo: 12 } as const;
-export const DURACAO = { arvore: 5.5, cerebro: 5.5, energia: 4 } as const;
-const LACO: readonly Sequencia[] = ["arvore", "energia", "cerebro", "energia"];
+export const DURACAO = { arvore: 5.5, cerebro: 5.5, energia: 4, telepatia: 5.5, leitura: 6, feitico: 5 } as const;
+const LACO: readonly Sequencia[] = ["arvore", "telepatia", "energia", "leitura", "feitico", "cerebro", "energia"];
 
 /** `t` = s desde que a geração começou → a sequência, o progresso nela (0..1) e o número do bloco */
 export function sequenciaEm(t: number): { seq: Sequencia; u: number; ciclo: number } {

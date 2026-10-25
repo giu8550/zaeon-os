@@ -11,13 +11,13 @@ describe("o roteiro da avatar enquanto a resposta é gerada", () => {
     expect(sequenciaEm(NIVEL.energia + 0.1).seq).toBe("energia");
     expect(sequenciaEm(NIVEL.holo - 0.1).seq).toBe("energia");
   });
-  it("numa resposta longa: árvore, energia, cérebro, energia… em laço", () => {
+  it("numa resposta longa: um laço de poderes cósmicos (árvore → telepatia → energia → leitura → feitiço → cérebro → energia)", () => {
     const t0 = NIVEL.holo + 0.1;
-    expect(sequenciaEm(t0).seq).toBe("arvore");
-    expect(sequenciaEm(t0 + DURACAO.arvore).seq).toBe("energia");
-    expect(sequenciaEm(t0 + DURACAO.arvore + DURACAO.energia).seq).toBe("cerebro");
-    const volta = DURACAO.arvore + DURACAO.cerebro + 2 * DURACAO.energia;
-    expect(sequenciaEm(t0 + volta).seq).toBe("arvore");
+    const ordem: (keyof typeof DURACAO)[] = ["arvore", "telepatia", "energia", "leitura", "feitico", "cerebro", "energia"];
+    let acc = t0;
+    for (const seq of ordem) { expect(sequenciaEm(acc).seq).toBe(seq); acc += DURACAO[seq]; }
+    // fechou a volta → recomeça na árvore
+    expect(sequenciaEm(acc).seq).toBe("arvore");
   });
   it("o progresso fica entre 0 e 1, cada bloco tem o seu número, e o envelope entra e sai suave", () => {
     for (let t = 0; t < 80; t += 0.37) { const { u } = sequenciaEm(t); expect(u).toBeGreaterThanOrEqual(0); expect(u).toBeLessThanOrEqual(1); }
