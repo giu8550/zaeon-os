@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { PASSOS_SALA, EVT_PERGUNTA_CHAT, EVT_PERCURSO_ABERTO, deveMostrarTourSala, eventoAvanca, passosDaSala } from "./tourSala";
+import { PASSOS_SALA, EVT_PERGUNTA_CHAT, EVT_PERCURSO_ABERTO, deveMostrarTourSala, eventoAvanca, passosDaSala, tarefaDoPercurso } from "./tourSala";
 import { EVT_ABRIR_DOC } from "@/lib/chat/documentos";
 
 describe("o tour do laboratório (fora do tutorial)", () => {
@@ -16,7 +16,7 @@ describe("o tour do laboratório (fora do tutorial)", () => {
     const [estudo, , diagrama, percurso] = PASSOS_SALA;
     expect(eventoAvanca(estudo!, EVT_PERGUNTA_CHAT, { prompt: "Quero estudar sobre: fotossíntese" })).toBe(true);
     expect(eventoAvanca(diagrama!, EVT_ABRIR_DOC, { studioKind: "diagram" })).toBe(true);
-    expect(eventoAvanca(diagrama!, EVT_ABRIR_DOC, { studioKind: "aula" })).toBe(false);   // uma aula não é o diagrama
+    expect(eventoAvanca(diagrama!, EVT_ABRIR_DOC, { studioKind: "quiz" })).toBe(false);   // #613: aula conta (é visual); um quiz não
     expect(eventoAvanca(diagrama!, EVT_PERGUNTA_CHAT, null)).toBe(false);
     expect(eventoAvanca(percurso!, EVT_PERCURSO_ABERTO, undefined)).toBe(true);
   });
@@ -44,5 +44,25 @@ describe("tourSala · #613 alvos que existem na tela", () => {
   it("nenhum passo aponta pras marcações que saíram da tela (sala-estudos, diagrama)", () => {
     const todos = PASSOS_SALA.flatMap((p) => p.alvos).join(" ");
     expect(todos).not.toMatch(/data-tour="(sala-estudos|diagrama)"/);
+  });
+});
+
+describe("#613 · os passos de ação não travam", () => {
+  const diagrama = PASSOS_SALA.find((p) => p.id === "criar-diagrama")!;
+  it("o passo do diagrama anda com qualquer documento visual (diagrama ou aula), não com qualquer coisa", () => {
+    expect(eventoAvanca(diagrama, EVT_ABRIR_DOC, { studioKind: "diagram" })).toBe(true);
+    expect(eventoAvanca(diagrama, EVT_ABRIR_DOC, { studioKind: "aula" })).toBe(true);
+    expect(eventoAvanca(diagrama, EVT_ABRIR_DOC, { studioKind: "quiz" })).toBe(false);
+    expect(eventoAvanca(diagrama, EVT_ABRIR_DOC, null)).toBe(false);
+    expect(diagrama.jaFiz).toBe(true);
+  });
+  it("todo passo de ação tem a tarefa escrita (\"Sua vez\")", () => {
+    for (const p of PASSOS_SALA.filter((x) => x.avancaEm?.length)) expect(p.suaVez, p.id).toBeTruthy();
+  });
+  it("o percurso diz gerando… e depois pronto", () => {
+    expect(tarefaDoPercurso("gerando", "x")).toMatch(/Gerando/);
+    expect(tarefaDoPercurso("ativa", "x")).toMatch(/Pronto/);
+    expect(tarefaDoPercurso("sugerida", "x")).toBe("x");
+    expect(tarefaDoPercurso(null, "x")).toBe("x");
   });
 });

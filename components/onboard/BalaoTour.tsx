@@ -68,7 +68,7 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
   /** #605: roxo na Sala de Estudos, ciano no Escritório */
   tom?: TomCartao;
   /** #613: passo de ação — a tarefa fica escrita na última caixa (com um exemplo que dá pra usar) */
-  suaVez?: { tarefa: string; exemplo?: string; onExemplo?: (texto: string) => void };
+  suaVez?: { tarefa: string; exemplo?: string; onExemplo?: (texto: string) => void; onJaFiz?: () => void };
 }) {
   const card = useRef<HTMLDivElement>(null);
   const principal = useRef<HTMLButtonElement>(null);
@@ -182,6 +182,12 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
                   className="mt-1.5 rounded-full border px-2.5 py-0.5 text-left text-[12px] text-[#f1edff] transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-1"
                   style={{ borderColor: `rgba(${cor.rgb},.55)` }}>
                   “{suaVez.exemplo}”
+                </button>
+              )}
+              {suaVez.onJaFiz && (
+                <button type="button" onClick={(e) => { e.stopPropagation(); suaVez.onJaFiz?.(); }}
+                  className="ml-2 mt-1.5 rounded-full px-2 py-0.5 text-[12px] font-medium text-[#c3cbea] underline-offset-2 transition-colors hover:text-white hover:underline focus-visible:outline focus-visible:outline-1">
+                  Já fiz ✓
                 </button>
               )}
             </div>

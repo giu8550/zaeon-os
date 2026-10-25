@@ -10,8 +10,9 @@ import { OverlayTour, useDestaque } from "@/components/onboard/BalaoTour";
 import { mapPanelOn } from "@/components/cerebro/useCerebro";
 import { irPraAbaEstudos } from "@/lib/chat/conversasNav";
 import { getTour } from "@/lib/onboarding/tour";
-import { EVT_PREENCHER_CHAT, deveMostrarTourSala, eventoAvanca, marcarTourDoLabAtivo, marcarTourSalaVisto, passosDaSala, tourSalaVisto } from "@/lib/onboarding/tourSala";
+import { EVT_PERCURSO_ESTADO, EVT_PREENCHER_CHAT, deveMostrarTourSala, eventoAvanca, marcarTourDoLabAtivo, marcarTourSalaVisto, passosDaSala, tarefaDoPercurso, tourSalaVisto } from "@/lib/onboarding/tourSala";
 import { EVT_ESTUDOS_VISTA } from "@/lib/onboarding/tutorialLab";
+import type { EstadoBolinha } from "@/lib/map/bolinha";
 
 const SEM_ALVOS: string[] = [];
 /** #613: o exemplo do "Sua vez" vai pro campo do chat (components/study/StudyCoworkChat) — a pessoa só manda */
@@ -52,6 +53,13 @@ export default function TourSala({ noTutorial }: { noTutorial: boolean }) {
     return () => { for (const ev of eventos) window.removeEventListener(ev, ouvir); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [passo]);
+  // #613: o estado do botão do percurso (gerando → pronto), pro "Sua vez" acompanhar
+  const [percurso, setPercurso] = useState<EstadoBolinha | null>(null);
+  useEffect(() => {
+    const on = (e: Event) => setPercurso(((e as CustomEvent).detail as EstadoBolinha) ?? null);
+    window.addEventListener(EVT_PERCURSO_ESTADO, on);
+    return () => window.removeEventListener(EVT_PERCURSO_ESTADO, on);
+  }, []);
   const { alvo, evita } = useDestaque(passo?.alvos ?? SEM_ALVOS, SEM_ALVOS, !!passo);
   if (!passo || i === null) return null;
   const ultimo = i === passos.length - 1;
@@ -66,7 +74,10 @@ export default function TourSala({ noTutorial }: { noTutorial: boolean }) {
       total={passos.length}
       acao={passo.cta ? { rotulo: passo.cta, onClick: ultimo ? sair : seguir } : undefined}
       onPular={sair}
-      suaVez={passo.suaVez ? { tarefa: passo.suaVez, exemplo: passo.exemplo, onExemplo: preencherChat } : undefined}
+      suaVez={passo.suaVez ? {
+        tarefa: passo.id === "gerar-percurso" ? tarefaDoPercurso(percurso, passo.suaVez) : passo.suaVez,
+        exemplo: passo.exemplo, onExemplo: preencherChat, onJaFiz: passo.jaFiz ? seguir : undefined,
+      } : undefined}
     />
   );
 }

@@ -36,7 +36,7 @@ describe("TourSala — o tour do laboratório", () => {
     expect(cartao()?.textContent).toMatch(/caderno vivo/);
     fireEvent.click(ateBotao("Bora"));
     expect(cartao()?.textContent).toMatch(/diagrama interativo/);
-    disparar(EVT_ABRIR_DOC, { studioKind: "aula" });           // uma aula não conta
+    disparar(EVT_ABRIR_DOC, { studioKind: "quiz" });           // um documento que não é visual não conta
     expect(cartao()?.textContent).toMatch(/diagrama interativo/);
     disparar(EVT_ABRIR_DOC, { studioKind: "diagram" });
     expect(cartao()?.textContent).toMatch(/percurso/);
@@ -209,5 +209,37 @@ describe("#613 · \"Sua vez\": a tarefa não some e o destaque vem na hora certa
     expect((ouvir.mock.calls[0]![0] as CustomEvent).detail).toEqual({ texto: "Quero estudar sobre fotossíntese" });
     window.removeEventListener("zaeon:chat:preencher", ouvir);
     expect(cartao()).not.toBeNull(); // o passo só anda quando a pergunta for MANDADA
+  });
+});
+
+describe("#613 · diagrama e percurso não travam o tour", () => {
+  const paginaFinal = () => { for (let k = 0; k < 6 && screen.queryByRole("button", { name: "Continuar" }); k++) fireEvent.click(screen.getByRole("button", { name: "Continuar" })); };
+  const ateDiagrama = () => {
+    abrir(<TourSala noTutorial={false} />);
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Quero estudar sobre: fotossíntese" });
+    fireEvent.click(ateBotao("Bora"));
+    paginaFinal();
+  };
+  it("a IA respondeu com uma aula: o passo do diagrama anda do mesmo jeito", () => {
+    ateDiagrama();
+    disparar(EVT_ABRIR_DOC, { studioKind: "aula" });
+    expect(cartao()?.textContent).toMatch(/percurso/);
+  });
+  it("\"Já fiz ✓\" segue o passo do diagrama", () => {
+    ateDiagrama();
+    fireEvent.click(screen.getByRole("button", { name: "Já fiz ✓" }));
+    expect(cartao()?.textContent).toMatch(/percurso/);
+  });
+  it("o percurso: gerando… e depois pronto, abre o mapa", () => {
+    ateDiagrama();
+    disparar(EVT_ABRIR_DOC, { studioKind: "diagram" });
+    paginaFinal();
+    const sv = () => document.querySelector("[data-tour-sua-vez]")?.textContent ?? "";
+    expect(sv()).toMatch(/Clica no ✦/);
+    expect(screen.queryByRole("button", { name: "Já fiz ✓" })).toBeNull();
+    disparar("zaeon:percurso:estado", "gerando");
+    expect(sv()).toMatch(/Gerando o teu percurso/);
+    disparar("zaeon:percurso:estado", "ativa");
+    expect(sv()).toMatch(/Pronto!.*abrir o mapa/);
   });
 });
