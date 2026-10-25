@@ -9,7 +9,7 @@
  *  Depois: "a chuva é feia, tire; níveis de evento — rápido: a aranha passeando em cima da tela e se ALIMENTANDO
  *  das telas; mais de 5 s: a aranha vira ENERGIA e RAIOS aparecem; ela pode ficar de pé — o ângulo da câmera é que
  *  tem que ser bacana pra mostrar mais da cena".
- *  - REDE (raspar/energia): ela fica DE PÉ e DIGITA num TECLADO holográfico, olhando as telas; a câmera se afasta e
+ *  - REDE (raspar/energia): ela fica DE PÉ e COMANDA as telas de MÃOS ABERTAS (sem teclado — o dono não quer digitar),
  *    fica em três-quartos, derivando devagar. As telas, em CAMADAS de profundidade:
  *    · a TELA PRINCIPAL atrás dela — a página que a ARANHA (procedural, à moda do cyohei9907/web-crawlers — código
  *      nosso) raspa: cada pata que pousa abre um anel de glitch na página; parada, ela SE ALIMENTA de uma tela do arco
@@ -19,7 +19,7 @@
  *    · um ARCO de telas em volta dela (código, gráficos, matriz, radar, ondas…), cada uma um shader: o conteúdo rola,
  *      uma faixa de varredura passa, piscam, dão glitch com aberração cromática; halos atrás (o "bloom" barato);
  *    · telas LONGE desfocadas e telas PERTO da câmera fora de foco (o blur é pré-calculado na textura: custo zero);
- *    · FEIXES do teclado às telas, ANÉIS girando no chão sob ela;
+ *    · FEIXES das MÃOS às telas, ANÉIS girando no chão sob ela;
  *  - ÁRVORE: uma árvore de habilidades holográfica cresce à frente do peito, nó por nó;
  *  - CÉREBRO: partículas que se juntam num cérebro girando, com sinapses piscando.
  */
@@ -117,7 +117,7 @@ type Perna = { lado: number; k: number; pe: THREE.Vector3; de: THREE.Vector3; pa
 export type ResultadoSeq = {
   /** 0..1: a câmera se afasta; `orbita` = o ângulo (rad) que ela gira em volta */
   abrir: number; orbita: number;
-  /** 0..1: digitando no teclado holográfico; as mãos vão até `maos` (mundo) */
+  /** 0..1: intensidade da REDE (vestigial — as mãos agora posam sempre por `maosPeso`); `maos` = alvos (mundo) */
   digitar: number; maos: { esq: THREE.Vector3; dir: THREE.Vector3 };
   /** 0..1: as mãos posam numa cena de poder (telepatia/leitura/feitiço) — o corpo leva os punhos a `maos` por IK */
   maosPeso: number;
@@ -213,10 +213,8 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
   })();
   const tecladoMat = guarda(new THREE.MeshBasicMaterial({ map: tecladoTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, color: CIANO }));
   const tecladoPlano = new THREE.Mesh(geoTela, tecladoMat); tecladoPlano.scale.set(0.36, 0.13, 1); teclado.add(tecladoPlano);
-  const TECLADO = { w: 0.36, h: 0.13 };
   const toquesTecla = [0, 1].map(() => { const s = new THREE.Sprite(brilhoMat(CIANO)); s.scale.setScalar(0.06); teclado.add(s); return { s, vida: 0 }; });
   const maos = { esq: new THREE.Vector3(), dir: new THREE.Vector3() };
-  const dedos = [{ alvo: new THREE.Vector2(0.24, 0.5), prox: 0, aperta: 0 }, { alvo: new THREE.Vector2(0.76, 0.5), prox: 0, aperta: 0 }];
   // os FEIXES (do teclado às telas do arco), piscando
   const NFEIXE = 7, feixePos = new Float32Array(NFEIXE * 6), feixeGeo = guarda(new THREE.BufferGeometry()); feixeGeo.setAttribute("position", new THREE.BufferAttribute(feixePos, 3));
   const feixeMat = guarda(new THREE.LineBasicMaterial({ color: MAGENTA, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
@@ -404,8 +402,40 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
   const estouro = new THREE.Points(estGeo, estMat); estouro.frustumCulled = false; feitico.add(estouro);
   const estDir = Array.from({ length: NEST }, () => { const a = Math.random() * Math.PI * 2, b = Math.acos(aleat(-1, 1)); return new THREE.Vector3(Math.sin(b) * Math.cos(a), Math.cos(b), Math.sin(b) * Math.sin(a)); });
 
+  // ── TELECINESE: cristais levitando e orbitando entre as mãos erguidas ──
+  const telecinese = new THREE.Group(); raiz.add(telecinese);
+  const corCris = [MAGENTA, CIANO, new THREE.Color("#c9b8ff")];
+  const cristais = Array.from({ length: 10 }, (_, i) => { const sp = new THREE.Sprite(brilhoMat(corCris[i % 3]!)); sp.scale.setScalar(0.028 + (i % 3) * 0.012); telecinese.add(sp); return { sp, a: Math.random() * Math.PI * 2, r: aleat(0.11, 0.26), y: aleat(-0.12, 0.16), vel: aleat(0.6, 1.3) * (Math.random() < 0.5 ? 1 : -1), fase: Math.random() * 7 }; });
+  const nucleoTele = new THREE.Sprite(brilhoMat(new THREE.Color("#e8ddff"))); nucleoTele.scale.setScalar(0.06); telecinese.add(nucleoTele);
+
+  // ── PORTAL: uma fenda dimensional (anel + vórtice girando) se abre à frente ──
+  const portal = new THREE.Group(); raiz.add(portal);
+  const vortexTex = (() => {
+    const c = novoCanvas(256, 256), g = ctx2d(c); g.translate(128, 128);
+    for (let b = 0; b < 5; b++) { g.strokeStyle = b % 2 ? "rgba(191,138,255,.8)" : "rgba(95,242,255,.7)"; g.lineWidth = 7 - b; g.beginPath(); for (let t = 0; t < 120; t++) { const an = t * 0.26 + b * 1.25, r = 6 + t * 0.95; const x = Math.cos(an) * r, y = Math.sin(an) * r; t ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); }
+    return guarda(textura(c));
+  })();
+  const vortex = new THREE.Mesh(geoTela, guarda(new THREE.MeshBasicMaterial({ map: vortexTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, color: new THREE.Color("#b98aff") }))); vortex.scale.setScalar(0.34);
+  const anelPortal = new THREE.Mesh(geoTela, guarda(new THREE.MeshBasicMaterial({ map: ondaTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, color: MAGENTA }))); anelPortal.scale.setScalar(0.42);
+  portal.add(vortex, anelPortal);
+  const NPV = 26, pvPos = new Float32Array(NPV * 3), pvGeo = guarda(new THREE.BufferGeometry()); pvGeo.setAttribute("position", new THREE.BufferAttribute(pvPos, 3));
+  const pvMat = guarda(new THREE.PointsMaterial({ size: 0.02, map: estrela, color: CIANO, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const pvPontos = new THREE.Points(pvGeo, pvMat); pvPontos.frustumCulled = false; portal.add(pvPontos);
+  const pvBase = Array.from({ length: NPV }, () => ({ a: Math.random() * Math.PI * 2, r: aleat(0.2, 0.42), fase: Math.random() }));
+
+  // ── CONSTELAÇÃO: ela desenha um mapa estelar no ar — estrelas surgem e se ligam, o dedo traçando ──
+  const constel = new THREE.Group(); raiz.add(constel);
+  const ESTRELAS: [number, number][] = ([[-0.16, 0.2], [-0.05, 0.12], [0.03, 0.22], [0.12, 0.08], [0.17, -0.05], [0.04, -0.1], [-0.06, -0.04], [-0.17, -0.12], [-0.02, 0.0]] as [number, number][]).map(([x, y]) => [x * 1.35, y * 1.35]);
+  const cnPos = new Float32Array(ESTRELAS.length * 3), cnGeo = guarda(new THREE.BufferGeometry()); cnGeo.setAttribute("position", new THREE.BufferAttribute(cnPos, 3));
+  const cnMat = guarda(new THREE.PointsMaterial({ size: 0.065, map: estrela, color: new THREE.Color("#dbe8ff"), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const cnPontos = new THREE.Points(cnGeo, cnMat); cnPontos.frustumCulled = false; constel.add(cnPontos);
+  const cnLinPos = new Float32Array((ESTRELAS.length - 1) * 6), cnLinGeo = guarda(new THREE.BufferGeometry()); cnLinGeo.setAttribute("position", new THREE.BufferAttribute(cnLinPos, 3));
+  const cnLinMat = guarda(new THREE.LineBasicMaterial({ color: CIANO, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const cnLinhas = new THREE.LineSegments(cnLinGeo, cnLinMat); cnLinhas.frustumCulled = false; constel.add(cnLinhas);
+  const ponta = new THREE.Sprite(brilhoMat(new THREE.Color("#ffffff"))); ponta.scale.setScalar(0.05); constel.add(ponta);   // a ponta do dedo que traça
+
   // ── o estado (zerado a cada troca de avatar) ──
-  const w = { olhos: 0, rede: 0, aranha: 0, energia: 0, arvore: 0, cerebro: 0, abrir: 0, digitar: 0, telepatia: 0, leitura: 0, feitico: 0, maos: 0 };
+  const w = { olhos: 0, rede: 0, aranha: 0, energia: 0, arvore: 0, cerebro: 0, abrir: 0, digitar: 0, telepatia: 0, leitura: 0, feitico: 0, telecinese: 0, portal: 0, constelacao: 0, maos: 0 };
   let ultimaSeq: Sequencia | null = null, ultimoCiclo = -1, proxSinapse = 0, inicioGeracao = 0, lado = 1;
   const peito = new THREE.Vector3(), quadrilV = new THREE.Vector3(), pOlho = new THREE.Vector3(), paraCam = new THREE.Vector3(), camDir = new THREE.Vector3(), camDireita = new THREE.Vector3(), camCima = new THREE.Vector3();
   const zerar = () => {
@@ -436,17 +466,21 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
     w.telepatia = chegar(w.telepatia, s?.seq === "telepatia" ? env : 0, dt, 4);
     w.leitura = chegar(w.leitura, s?.seq === "leitura" ? env : 0, dt, 4);
     w.feitico = chegar(w.feitico, s?.seq === "feitico" ? env : 0, dt, 4);
+    w.telecinese = chegar(w.telecinese, s?.seq === "telecinese" ? env : 0, dt, 4);
+    w.portal = chegar(w.portal, s?.seq === "portal" ? env : 0, dt, 4);
+    w.constelacao = chegar(w.constelacao, s?.seq === "constelacao" ? env : 0, dt, 4);
     w.abrir = chegar(w.abrir, naRede ? 1 : s && s.seq !== "pensar" ? 0.55 : 0, dt, 1.3);
     w.digitar = chegar(w.digitar, naRede ? 1 : 0, dt, 4);
-    // as mãos posam nas cenas de poder (telepatia/leitura/feitiço) — o corpo faz o IK
-    const poseMaos = s?.seq === "telepatia" ? w.telepatia : s?.seq === "leitura" ? w.leitura : s?.seq === "feitico" ? w.feitico : 0;
+    // as mãos posam nas cenas de poder (o corpo faz o IK pros alvos de cada cena)
+    const COM_MAOS: Partial<Record<Sequencia, number>> = { raspar: w.rede, energia: w.rede, telepatia: w.telepatia, leitura: w.leitura, feitico: w.feitico, telecinese: w.telecinese, portal: w.portal, constelacao: w.constelacao };
+    const poseMaos = (s && COM_MAOS[s.seq]) || 0;
     w.maos = chegar(w.maos, poseMaos, dt, 4);
     // a câmera em TRÊS-QUARTOS (cada resposta de um lado), derivando devagar
     const orbita = (lado * 0.5 + Math.sin((agora - inicioGeracao) * 0.22) * 0.12) * w.abrir;
     const olhar = Math.sin(agora * 0.55) * 0.32 + Math.sin(agora * 1.7) * 0.06;
-    // a cabeça: lendo baixa pro livro, telepata ergue um tiquinho, conjurando olha as mãos
-    const cabecaTilt = w.leitura * 0.42 + w.feitico * 0.12 - w.telepatia * 0.14;
-    const algo = w.olhos + w.rede + w.arvore + w.cerebro + w.energia + w.telepatia + w.leitura + w.feitico > 0.005;
+    // a cabeça: lendo baixa pro livro; telepata e constelação erguem; conjurando/telecinese olham as mãos
+    const cabecaTilt = w.leitura * 0.42 + w.feitico * 0.12 + w.telecinese * 0.08 + w.portal * 0.06 - w.telepatia * 0.14 - w.constelacao * 0.22;
+    const algo = w.olhos + w.rede + w.arvore + w.cerebro + w.energia + w.telepatia + w.leitura + w.feitico + w.telecinese + w.portal + w.constelacao > 0.005;
     raiz.visible = algo;
     const res: ResultadoSeq = { abrir: w.abrir, orbita, digitar: w.digitar, maos, maosPeso: w.maos, cabecaTilt, olhar, seq: s?.seq ?? null, nova };
     if (!algo || !vrm) return res;
@@ -563,33 +597,24 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
       for (const o of olhosAranha) (o.material as THREE.SpriteMaterial).opacity = vis;
     }
 
-    // o TECLADO: à frente da cintura dela, inclinado; os dedos "batem" em teclas (as mãos vão até `maos`)
-    if (teclado.visible) {
-      teclado.position.set(0, peito.y - 0.2, peito.z + 0.3);
-      teclado.rotation.set(-0.62, 0, 0);
-      tecladoMat.opacity = Math.min(1, Math.max(w.digitar, w.rede) * 1.2) * (0.85 + 0.15 * Math.sin(agora * 11));
-      teclado.updateMatrixWorld(true);
-      dedos.forEach((d, i) => {
-        if (agora > d.prox) {   // a próxima tecla (cada mão no seu lado do teclado)
-          d.alvo.set(i ? aleat(0.55, 0.92) : aleat(0.08, 0.45), aleat(0.2, 0.85)); d.prox = agora + aleat(0.09, 0.2); d.aperta = 1;
-          const t = toquesTecla[i]!; t.vida = 1; t.s.position.set((d.alvo.x - 0.5) * TECLADO.w, (d.alvo.y - 0.5) * TECLADO.h, 0.005);
-          if (Math.random() < 0.18 && w.rede > 0.5) { const alvo = telas[feixeAlvo[Math.floor(Math.random() * NFEIXE)]!]!; teclado.localToWorld(aux.copy(t.s.position)); soltarPacote(aux, aux2.copy(alvo.mesh.position).add(rede.position), 0.5, 0.05); }
-        }
-        d.aperta = Math.max(0, d.aperta - dt * 9);
-        // a mão: 4 cm acima da tecla (o punho), descendo no toque
-        teclado.localToWorld(aux.set((d.alvo.x - 0.5) * TECLADO.w, (d.alvo.y - 0.5) * TECLADO.h - 0.03, 0.045 - d.aperta * 0.025));
-        (i ? maos.esq : maos.dir).copy(aux);
-        const t = toquesTecla[i]!; t.vida = Math.max(0, t.vida - dt * 5);
-        (t.s.material as THREE.SpriteMaterial).opacity = t.vida * w.digitar; t.s.scale.setScalar(0.03 + 0.04 * t.vida);
-      });
-      // os FEIXES do teclado às telas
-      teclado.localToWorld(aux.set(0, 0, 0));
+    // COMANDO: ela controla as telas com as MÃOS ABERTAS erguidas — SEM teclado, SEM digitar (o dono pediu). Os feixes
+    // de energia saem das mãos pras telas; de vez em quando um pacote de dados voa até uma tela. (O teclado e o brilho
+    // das teclas ficam escondidos; o `teclado` só serve de âncora pros raios da energia mirarem perto das mãos.)
+    teclado.visible = false; tecladoMat.opacity = 0;
+    for (const t of toquesTecla) (t.s.material as THREE.SpriteMaterial).opacity = 0;
+    if (w.rede > 0.01) {
+      const centro = aux.copy(peito).addScaledVector(camCima, 0.12).addScaledVector(camDir, -0.1);   // o ponto entre as mãos
+      teclado.position.copy(centro);
+      maos.esq.copy(centro).addScaledVector(camDireita, 0.22);
+      maos.dir.copy(centro).addScaledVector(camDireita, -0.22);
       for (let i = 0; i < NFEIXE; i++) {
         if (Math.random() < dt * 2) feixeAlvo[i] = 1 + Math.floor(Math.random() * 16);
         const alvo = telas[feixeAlvo[i]!]!; aux2.copy(alvo.mesh.position).add(rede.position);
-        feixePos.set([aux.x, aux.y, aux.z, aux2.x, aux2.y, aux2.z], i * 6);
+        const origem = i % 2 ? maos.esq : maos.dir;
+        feixePos.set([origem.x, origem.y, origem.z, aux2.x, aux2.y, aux2.z], i * 6);
       }
-      feixeGeo.attributes.position!.needsUpdate = true; feixeMat.opacity = w.rede * 0.28 * (0.6 + 0.4 * Math.random());
+      feixeGeo.attributes.position!.needsUpdate = true; feixeMat.opacity = w.rede * 0.3 * (0.6 + 0.4 * Math.random());
+      if (Math.random() < dt * 4 && w.rede > 0.5) { const alvo = telas[feixeAlvo[Math.floor(Math.random() * NFEIXE)]!]!; soltarPacote(maos.dir, aux2.copy(alvo.mesh.position).add(rede.position), 0.5, 0.05); }
     }
 
     // PACOTES
@@ -714,6 +739,55 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
       estGeo.attributes.position!.needsUpdate = true; estMat.opacity = w.feitico * burst * (1 - burst) * 4;
       feitico.localToWorld(aux.set(0.17, -0.06, 0.08)); maos.esq.copy(aux);
       feitico.localToWorld(aux2.set(-0.17, -0.06, 0.08)); maos.dir.copy(aux2);
+    }
+
+    // TELECINESE: cristais orbitando/levitando entre as mãos erguidas
+    telecinese.visible = w.telecinese > 0.005;
+    if (telecinese.visible) {
+      aux.copy(peito).addScaledVector(camDir, -0.3).addScaledVector(camCima, -0.02);
+      telecinese.position.copy(aux);
+      for (const c of cristais) {
+        c.a += dt * c.vel;
+        c.sp.position.set(Math.cos(c.a) * c.r, c.y + Math.sin(agora * 1.2 + c.fase) * 0.03, Math.sin(c.a) * c.r * 0.5);
+        (c.sp.material as THREE.SpriteMaterial).opacity = w.telecinese * (0.65 + 0.35 * Math.sin(agora * 5 + c.fase));
+      }
+      nucleoTele.position.set(0, 0, 0); (nucleoTele.material as THREE.SpriteMaterial).opacity = w.telecinese * (0.6 + 0.4 * Math.sin(agora * 3));
+      maos.esq.copy(telecinese.position).addScaledVector(camDireita, 0.17).addScaledVector(camCima, -0.13);
+      maos.dir.copy(telecinese.position).addScaledVector(camDireita, -0.17).addScaledVector(camCima, -0.13);
+    }
+
+    // PORTAL: a fenda (anel + vórtice) abre à frente, partículas espiralando pra dentro; as mãos a enquadram
+    portal.visible = w.portal > 0.005;
+    if (portal.visible) {
+      const u = s?.seq === "portal" ? s.u : 1;
+      aux.copy(peito).addScaledVector(camDir, -0.42).addScaledVector(camCima, 0.02);
+      portal.position.copy(aux); portal.quaternion.copy(cam.quaternion); portal.updateMatrixWorld(true);
+      const abre = sstep(Math.min(1, u * 1.5));
+      vortex.rotation.z = agora * 0.9; vortex.scale.setScalar(0.3 * abre);
+      anelPortal.rotation.z = -agora * 0.3; anelPortal.scale.setScalar(0.42 * abre);
+      (vortex.material as THREE.MeshBasicMaterial).opacity = w.portal * 0.9;
+      (anelPortal.material as THREE.MeshBasicMaterial).opacity = w.portal * (0.8 + 0.2 * Math.sin(agora * 6));
+      for (let i = 0; i < NPV; i++) { const p = pvBase[i]!, tt = (agora * 0.5 + p.fase) % 1, rr = p.r * (1 - sstep(tt)) * abre, an = p.a + tt * 7; pvPos.set([Math.cos(an) * rr, Math.sin(an) * rr, tt * 0.1], i * 3); }
+      pvGeo.attributes.position!.needsUpdate = true; pvMat.opacity = w.portal * abre;
+      portal.localToWorld(aux.set(0.22, -0.02, 0.04)); maos.esq.copy(aux);
+      portal.localToWorld(aux2.set(-0.22, -0.02, 0.04)); maos.dir.copy(aux2);
+    }
+
+    // CONSTELAÇÃO: as estrelas surgem em sequência e se ligam; o dedo (mão direita) traça, o rosto ergue
+    constel.visible = w.constelacao > 0.005;
+    if (constel.visible) {
+      const u = s?.seq === "constelacao" ? s.u : 1;
+      aux.copy(peito).addScaledVector(camDir, -0.34).addScaledVector(camCima, 0.13);
+      constel.position.copy(aux); constel.quaternion.copy(cam.quaternion); constel.updateMatrixWorld(true);
+      const prog = u * ESTRELAS.length;
+      for (let i = 0; i < ESTRELAS.length; i++) { const e = ESTRELAS[i]!; cnPos.set(prog > i ? [e[0], e[1], 0] : [0, -99, 0], i * 3); }
+      cnGeo.attributes.position!.needsUpdate = true; cnMat.opacity = w.constelacao * (0.8 + 0.2 * Math.sin(agora * 4));
+      for (let i = 0; i < ESTRELAS.length - 1; i++) { const a = ESTRELAS[i]!, b = ESTRELAS[i + 1]!; cnLinPos.set(prog > i + 1 ? [a[0], a[1], 0, b[0], b[1], 0] : [0, -99, 0, 0, -99, 0], i * 6); }
+      cnLinGeo.attributes.position!.needsUpdate = true; cnLinMat.opacity = w.constelacao * 0.7;
+      const idx = Math.min(ESTRELAS.length - 1, Math.floor(prog)), e = ESTRELAS[idx]!;
+      ponta.position.set(e[0], e[1], 0.02); (ponta.material as THREE.SpriteMaterial).opacity = w.constelacao;
+      constel.localToWorld(aux.set(e[0], e[1], 0.05)); maos.dir.copy(aux);
+      maos.esq.copy(peito).addScaledVector(camDireita, 0.14).addScaledVector(camCima, -0.28);
     }
     return res;
   };

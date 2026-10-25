@@ -11,11 +11,13 @@
  *     ENERGIA → LEITURA (lê livros holográficos) → FEITIÇO (conjura um sigilo) → CÉREBRO → ENERGIA… em laço, pra a
  *     cena ficar rica e variada numa geração longa (out/2026, o dono: "variação de poderes cósmicos").
  */
-export type Sequencia = "pensar" | "raspar" | "energia" | "arvore" | "cerebro" | "telepatia" | "leitura" | "feitico";
+export type Sequencia =
+  | "pensar" | "raspar" | "energia" | "arvore" | "cerebro"
+  | "telepatia" | "leitura" | "feitico" | "telecinese" | "portal" | "constelacao";
 /** quando cada nível começa (s desde o começo da geração) */
 export const NIVEL = { raspar: 1.4, energia: 5, holo: 12 } as const;
-export const DURACAO = { arvore: 5.5, cerebro: 5.5, energia: 4, telepatia: 5.5, leitura: 6, feitico: 5 } as const;
-const LACO: readonly Sequencia[] = ["arvore", "telepatia", "energia", "leitura", "feitico", "cerebro", "energia"];
+export const DURACAO = { arvore: 5.5, cerebro: 5.5, energia: 4, telepatia: 5.5, leitura: 6, feitico: 5, telecinese: 5.5, portal: 5, constelacao: 5.5 } as const;
+const LACO: readonly Sequencia[] = ["arvore", "telepatia", "telecinese", "energia", "leitura", "constelacao", "feitico", "portal", "cerebro", "energia"];
 
 /** `t` = s desde que a geração começou → a sequência, o progresso nela (0..1) e o número do bloco */
 export function sequenciaEm(t: number): { seq: Sequencia; u: number; ciclo: number } {
