@@ -75,3 +75,33 @@ describe("o balão do Droid não cobre o caminho", async () => {
     expect(uniaoDe([null])).toBeNull();
   });
 });
+
+describe("#618 · o cartão dos tours nunca encolhe nem sai da tela", async () => {
+  const { posicaoDoBalao } = await import("./tutorialLab");
+  const telas = [[1366, 643], [1280, 720], [1440, 800], [1920, 969], [1024, 700], [800, 600]] as const;
+  it("o mapa/canal ocupando quase a tela (o bug do \"Boa jornada\" e do Escritório): largura cheia, dentro da tela", () => {
+    for (const [W, H] of telas) {
+      const b = { w: Math.min(W - 24, 420), h: 260 };
+      for (const alvo of [{ x: 85, y: 160, w: W - 330, h: H - 200 }, { x: 85, y: 115, w: W - 415, h: H - 160 }, { x: 0, y: 0, w: W, h: H }]) {
+        const p = posicaoDoBalao(alvo, W, H, b, 16, b.w);
+        expect(p.w, `${W}x${H}`).toBe(b.w);
+        expect(p.left).toBeGreaterThanOrEqual(12); expect(p.left + p.w).toBeLessThanOrEqual(W - 12);
+        expect(p.top).toBeGreaterThanOrEqual(12); expect(p.top + b.h).toBeLessThanOrEqual(H - 12);
+      }
+    }
+  });
+  it("varrendo tamanhos e posições de destaque: sempre inteiro e na largura cheia", () => {
+    for (const [W, H] of telas) {
+      const b = { w: Math.min(W - 24, 420), h: 280 };
+      for (let x = 0; x < W; x += 97) for (let y = 0; y < H; y += 83) for (const [w, h] of [[40, 40], [210, 55], [850, 140], [300, 500]]) {
+        const p = posicaoDoBalao({ x, y, w, h }, W, H, b, 16, b.w);
+        expect(p.w).toBe(b.w);
+        expect(p.left).toBeGreaterThanOrEqual(12); expect(p.left + p.w).toBeLessThanOrEqual(W - 12);
+      }
+    }
+  });
+  it("o balão do Droid (tablet) continua podendo estreitar no vão (sem minW)", () => {
+    const p = posicaoDoBalao({ x: 340, y: 60, w: 600, h: 680 }, 1280, 800, { w: 440, h: 170 });
+    expect(p.w).toBeLessThan(440);
+  });
+});

@@ -108,7 +108,10 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
   }, []);
 
   const W = window.innerWidth, H = window.innerHeight, larg = Math.min(W - 24, LARGURA);
-  const pos = posicaoDoBalao(evita ?? alvo, W, H, { w: larg, h: alt });
+  // #618: o cartão nunca encolhe (o botão de seguir saía da tela) — sem vão do lado, ele fica num canto por cima do
+  // destaque; e, por garantia, nunca passa das bordas
+  const bruto = posicaoDoBalao(evita ?? alvo, W, H, { w: larg, h: alt }, 16, larg);
+  const pos = { ...bruto, left: Math.max(12, Math.min(bruto.left, W - bruto.w - 12)), top: Math.max(12, Math.min(bruto.top, H - alt - 12)) };
   // #613: a altura muda com o "Sua vez" e a confirmação também — senão o cartão descia em cima do que ele aponta
   const [confirmando, setConfirmando] = useState(false);
   useLayoutEffect(() => { const el = card.current; if (!el) return; const h = el.offsetHeight; if (h && Math.abs(h - alt) > 2) setAlt(h); }, [visivel, titulo, pos.w, alt, ultimaPagina, confirmando, suaVez?.tarefa]);
@@ -220,7 +223,8 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
               )}
             </div>
           )}
-          <div className="mt-3 flex items-center gap-2.5">
+          {/* #618: falta espaço? os botões descem pra linha de baixo em vez de sair do cartão */}
+          <div className="mt-3 flex flex-wrap items-center justify-end gap-x-2.5 gap-y-2">
             <span className={`mr-auto items-center gap-2 ${confirmando ? "hidden" : "flex"}`}>
               <span aria-hidden className="flex items-center gap-1">
                 {Array.from({ length: total }, (_, k) => (
