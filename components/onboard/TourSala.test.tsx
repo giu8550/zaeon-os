@@ -243,3 +243,22 @@ describe("#613 · diagrama e percurso não travam o tour", () => {
     expect(sv()).toMatch(/Pronto!.*abrir o mapa/);
   });
 });
+
+describe("#613 · minimizar o cartão", () => {
+  it("minimiza numa pílula (sem escurecer a tela) e reabre no mesmo lugar", () => {
+    abrir(<TourSala noTutorial={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Minimizar o tutorial" }));
+    expect(cartao()).toBeNull();
+    const pilula = document.querySelector("[data-tour-minimizado]") as HTMLElement;
+    expect(pilula.textContent).toMatch(/Passo 1 de 5/);
+    expect(localStorage.getItem("zaeon.tour.sala.v2")).toBeNull();   // minimizar não é pular
+    fireEvent.click(pilula);
+    expect(cartao()).not.toBeNull();
+  });
+  it("fez a ação minimizado: o próximo passo volta aberto", () => {
+    abrir(<TourSala noTutorial={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Minimizar o tutorial" }));
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Quero estudar sobre: fotossíntese" });
+    expect(cartao()?.textContent).toMatch(/caderno vivo/);
+  });
+});

@@ -115,13 +115,16 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
   // #613: pular pergunta antes (um Esc sem querer ou um clique errado perdia o tutorial inteiro)
   const [confirmando, setConfirmando] = useState(false);
   const ficar = useRef<HTMLButtonElement>(null);
-  useEffect(() => { setConfirmando(false); }, [chave]);
+  // #613: minimizar — a pessoa quer ver o que está atrás do cartão sem sair do tutorial (o próximo passo reabre)
+  const [minimizado, setMinimizado] = useState(false);
+  useEffect(() => { setConfirmando(false); setMinimizado(false); }, [chave]);
   useEffect(() => { if (confirmando) ficar.current?.focus({ preventScroll: true }); }, [confirmando]);
   useEffect(() => {
     if (!onPular) return;
     const esc = (e: KeyboardEvent) => {
       // Esc digitando no chat (fechar sugestão, desistir da frase) não é sobre o tutorial
       if (e.key !== "Escape" || emCampoDeTexto(e.target)) return;
+      setMinimizado(false);
       setConfirmando((c) => !c);
     };
     window.addEventListener("keydown", esc);
@@ -131,6 +134,21 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
   const P = 6;
   const botao = "inline-flex items-center gap-2 rounded-full border px-3.5 py-1 text-[12px] font-semibold transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-1";
   const triangulo = <span aria-hidden className="bt-gira" style={{ color: `rgb(${cor.rgb})` }}>⟁</span>;
+  if (minimizado) return createPortal(
+    <button type="button" data-tour-minimizado onClick={() => setMinimizado(false)} aria-label={`Abrir o tutorial — passo ${passo + 1} de ${total}`}
+      className="fixed bottom-4 right-4 z-[1300] flex max-w-[min(340px,calc(100vw-32px))] items-center gap-2.5 rounded-full border py-1.5 pl-1.5 pr-4 text-left transition-colors hover:bg-white/5 focus-visible:outline focus-visible:outline-1"
+      style={{ background: "rgba(12,10,34,.96)", borderColor: `rgba(${cor.rgb},.55)`, boxShadow: "0 12px 30px -14px rgba(0,0,0,.75)" }}>
+      <span aria-hidden className="h-9 w-9 shrink-0 overflow-hidden rounded-full" style={{ border: `2px solid rgb(${cor.rgb})` }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={AURA.parada} alt="" className="h-full w-full scale-[1.18] object-cover object-[50%_22%]" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[11px] font-medium tabular-nums text-[#c3cbea]">Passo {passo + 1} de {total} · abrir</span>
+        {suaVez && <span className="block truncate text-[12px] text-[#e6ebff]">{suaVez.tarefa}</span>}
+      </span>
+    </button>,
+    document.body,
+  );
   return createPortal(
     <div className={`pointer-events-none fixed inset-0 z-[1300] ${escondida ? "bt-parado" : ""}`} style={{ ["--bt-cor" as string]: cor.rgb }}>
       <style>{CSS}</style>
@@ -154,6 +172,10 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
       >
         <div className="relative rounded-[4px_16px_16px_16px] border pb-3 pr-4 pt-[18px]"
           style={{ paddingLeft: RETRATO - SAI + 16, background: "rgba(12,10,34,.96)", borderColor: `rgba(${cor.rgb},.45)`, boxShadow: "0 16px 40px -18px rgba(0,0,0,.75)" }}>
+          <button type="button" onClick={(e) => { e.stopPropagation(); setMinimizado(true); }} aria-label="Minimizar o tutorial" title="Minimizar"
+            className="absolute right-2 top-1.5 grid h-6 w-6 place-items-center rounded-full text-[15px] leading-none text-[#c3cbea] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-1">
+            –
+          </button>
           {/* o retrato: falando enquanto o texto aparece, sorrindo quando para */}
           <div aria-hidden className="absolute rounded-full p-[3px]" style={{ left: -SAI, top: -SAI, width: RETRATO, height: RETRATO, border: `3px solid rgb(${cor.rgb})`, background: "#070a18" }}>
             <div className="bt-retrato relative h-full w-full overflow-hidden rounded-full">
