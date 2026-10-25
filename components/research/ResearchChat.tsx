@@ -18,9 +18,7 @@ import AgentePilula, { RECUO_ROSTO } from "@/components/agents/avatar/AgentePilu
 import BoasVindasAgente from "@/components/agents/avatar/BoasVindasAgente";
 import { useFalaAoChegar, useManifesto, usePublicarPresenca } from "@/components/agents/avatar/hooks";
 import { sinalDoChat } from "@/lib/avatars/presenca";
-import ChatMarkdown from "@/components/study/ChatMarkdown";
 import LivrosCartao from "@/components/chat/LivrosCartao";
-import { semListaDeLivros } from "@/lib/livros/busca";
 import { researchWorkType } from "@/lib/agent/tools";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
 import StructuredAnswerView from "@/components/study/StructuredAnswerView";
@@ -642,24 +640,6 @@ export default function ResearchChat({
                 onAprofundar={comAbas ? () => aprofundar(m) : undefined}
               />
             ) : null;
-            if (!isUser && m.answer) {
-              return (
-                <div key={m.id} data-msg-id={m.id} className={`group/msg flex justify-start ${recuoRosto}`}>
-                  {pilula}
-                  <div className="max-w-[88%] w-full">
-                    {/* Clicar num conceito/próximo passo proposto pela IA já ENVIA (sem clicar no input nem Enter). */}
-                    <StructuredAnswerView answer={m.answer} acoes={acoesResposta} onConcept={(c) => void send(`Explique: ${c}`)} onNext={(s) => void send(s)}>
-                      {m.blocos?.length || m.desenhando ? (
-                        <>
-                          {m.blocos?.map((b) => <BlocoOuCartao key={b.studioKind} b={b} />)}
-                          {m.desenhando && <Desenhando texto={m.desenhando} />}
-                        </>
-                      ) : null}
-                    </StructuredAnswerView>
-                  </div>
-                </div>
-              );
-            }
             if (isUser && editando === m.id) {
               return (
                 <div key={m.id} data-msg-id={m.id} className="flex justify-end">
@@ -667,37 +647,46 @@ export default function ResearchChat({
                 </div>
               );
             }
-            return (
-              <div key={m.id} data-msg-id={m.id} className={`group/msg flex flex-col ${isUser ? "items-end" : `items-start ${recuoRosto}`}`}>
-                {pilula}
-                <div
-                  className={`max-w-[88%] px-4 py-3 font-serif leading-[1.65] whitespace-pre-wrap ${
-                    isUser
-                      ? "rounded-2xl bg-slate-100 text-slate-900 border border-slate-200 dark:bg-white/[0.08] dark:text-white/90 dark:border-white/10"
-                      : "rounded-r-2xl rounded-bl-2xl bg-slate-50 text-slate-800 border-l-2 border-cyan-500/60 text-justify dark:bg-white/[0.03] dark:text-white/90 dark:border-cyan-400/50"
-                  }`}
-                  style={{ fontSize: fonteChat(compacto ? 17 : 22) }}
-                >
-                  {isUser && m.anexo && (
-                    <span className="block mb-1 font-sans text-[12px] font-semibold text-cyan-700 dark:text-cyan-300/90">📎 {m.anexo}</span>
-                  )}
-                  {isUser
-                    ? m.text
-                    : (m.text
-                        // livros achados: o cartão (com "Abrir no leitor") substitui a lista em markdown do texto
-                        ? <ChatMarkdown text={m.answer?.livros?.length ? semListaDeLivros(m.text) : m.text} />
-                        : <AuraThinking active fase={m.fase} phases={quick ? ["Pensando"] : ["Pensando", "Elaborando"]} />)}
-                </div>
-                {!isUser && m.answer?.livros?.length ? <LivrosCartao livros={m.answer.livros} sala="pesquisa" /> : null}
-                {!isUser && (m.blocos?.length || m.desenhando) ? (
-                  <div className="w-full max-w-[88%]">
-                    {m.blocos?.map((b) => <BlocoOuCartao key={b.studioKind} b={b} />)}
-                    {m.desenhando && <Desenhando texto={m.desenhando} />}
+            if (isUser) {
+              return (
+                <div key={m.id} data-msg-id={m.id} className="group/msg flex flex-col items-end">
+                  <div
+                    className="max-w-[88%] px-4 py-3 font-serif leading-[1.65] whitespace-pre-wrap rounded-2xl bg-slate-100 text-slate-900 border border-slate-200 dark:bg-white/[0.08] dark:text-white/90 dark:border-white/10"
+                    style={{ fontSize: fonteChat(compacto ? 17 : 22) }}
+                  >
+                    {m.anexo && (
+                      <span className="block mb-1 font-sans text-[12px] font-semibold text-cyan-700 dark:text-cyan-300/90">📎 {m.anexo}</span>
+                    )}
+                    {m.text}
                   </div>
-                ) : null}
-                {isUser
-                  ? <AcoesPergunta texto={m.text} ocupado={sending} onEditar={() => setEditando(m.id)} />
-                  : acoesResposta}
+                  <AcoesPergunta texto={m.text} ocupado={sending} onEditar={() => setEditando(m.id)} />
+                </div>
+              );
+            }
+            // ASSISTENTE: o MESMO cartão desde o streaming. O texto que você vê "escrevendo" já nasce
+            // DENTRO do cartão (no corpo); quando a resposta estruturada chega, o título e as seções
+            // entram ao redor — o React NÃO remonta (mesma key), então nada some nem "reaparece toda".
+            // Sem texto ainda (só pensando) = o indicador. Clicar num conceito/próximo passo já ENVIA.
+            const temConteudo = !!m.answer || !!m.text;
+            const respCartao: StructuredAnswer = m.answer ?? { nucleo: "", desenvolvimento: m.text };
+            return (
+              <div key={m.id} data-msg-id={m.id} className={`group/msg flex justify-start ${recuoRosto}`}>
+                {pilula}
+                <div className="max-w-[88%] w-full">
+                  {temConteudo ? (
+                    <StructuredAnswerView answer={respCartao} acoes={acoesResposta} onConcept={(c) => void send(`Explique: ${c}`)} onNext={(s) => void send(s)}>
+                      {m.blocos?.length || m.desenhando ? (
+                        <>
+                          {m.blocos?.map((b) => <BlocoOuCartao key={b.studioKind} b={b} />)}
+                          {m.desenhando && <Desenhando texto={m.desenhando} />}
+                        </>
+                      ) : null}
+                    </StructuredAnswerView>
+                  ) : (
+                    <AuraThinking active fase={m.fase} phases={quick ? ["Pensando"] : ["Pensando", "Elaborando"]} />
+                  )}
+                  {m.answer?.livros?.length ? <LivrosCartao livros={m.answer.livros} sala="pesquisa" /> : null}
+                </div>
               </div>
             );
           })}
