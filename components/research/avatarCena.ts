@@ -41,6 +41,9 @@ const NA_SEQUENCIA: Record<Sequencia, { clipe: string; rosto: string }> = {
   telepatia: { clipe: "think", rosto: "thinking" },
   leitura: { clipe: "g_offer_both", rosto: "curious" },
   feitico: { clipe: "g_sweep_both", rosto: "proud" },
+  telecinese: { clipe: "g_offer_both", rosto: "proud" },
+  portal: { clipe: "g_frame_both", rosto: "curious" },
+  constelacao: { clipe: "g_offer_both", rosto: "happy" },
 };
 /** os gestos de quando a clicam (clipes do pacote — todos existem nele) */
 const AO_CLICAR = ["wave", "laugh", "clap", "think", "bow", "excited_bounce", "point_self", "shrug", "nod"] as const;

@@ -13,7 +13,7 @@ describe("o roteiro da avatar enquanto a resposta é gerada", () => {
   });
   it("numa resposta longa: um laço de poderes cósmicos (árvore → telepatia → energia → leitura → feitiço → cérebro → energia)", () => {
     const t0 = NIVEL.holo + 0.1;
-    const ordem: (keyof typeof DURACAO)[] = ["arvore", "telepatia", "energia", "leitura", "feitico", "cerebro", "energia"];
+    const ordem: (keyof typeof DURACAO)[] = ["arvore", "telepatia", "telecinese", "energia", "leitura", "constelacao", "feitico", "portal", "cerebro", "energia"];
     let acc = t0;
     for (const seq of ordem) { expect(sequenciaEm(acc).seq).toBe(seq); acc += DURACAO[seq]; }
     // fechou a volta → recomeça na árvore
