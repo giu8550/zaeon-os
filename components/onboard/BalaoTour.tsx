@@ -51,7 +51,7 @@ export const emCampoDeTexto = (alvo: EventTarget | null): boolean => {
 
 const reduzirMovimento = () => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; } };
 
-export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onPular, chave, tom = "roxo", suaVez }: {
+export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onPular, chave, tom = "roxo", suaVez, dica = false }: {
   alvo: Caixa | null;
   evita: Caixa | null;
   /** a dica curta (1 linha) — vira o nome do cartão pro leitor de tela */
@@ -69,13 +69,15 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
   tom?: TomCartao;
   /** #613: passo de ação — a tarefa fica escrita na última caixa (com um exemplo que dá pra usar) */
   suaVez?: { tarefa: string; exemplo?: string; onExemplo?: (texto: string) => void; onJaFiz?: () => void };
+  /** #618: DICA RÁPIDA (components/onboard/DicasRapidas) — só a fala e o botão; sem progresso, minimizar nem "Pular?" */
+  dica?: boolean;
 }) {
   const card = useRef<HTMLDivElement>(null);
   const principal = useRef<HTMLButtonElement>(null);
   const cor = COR_DO_TOM[tom];
   const [alt, setAlt] = useState(200);
   // a fala em caixas curtas: uma ideia por caixa
-  const paginas = useMemo(() => paginasDaFala(fala), [fala]);
+  const paginas = useMemo(() => (dica ? [fala] : paginasDaFala(fala)), [fala, dica]);   // #618: dica = uma caixa só
   const [pg, setPg] = useState(0);
   const [ms, setMs] = useState(0);
   const [completo, setCompleto] = useState(false);
@@ -134,6 +136,7 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
     const esc = (e: KeyboardEvent) => {
       // Esc digitando no chat (fechar sugestão, desistir da frase) não é sobre o tutorial
       if (e.key !== "Escape" || emCampoDeTexto(e.target)) return;
+      if (dica) { setTimeout(() => { if (!e.defaultPrevented) onPular?.(); }, 0); return; }
       // o Esc que fechou outra coisa (o mapa do percurso) não é sobre o tutorial: espera os outros ouvintes e
       // só pergunta se ninguém usou a tecla (quem usa marca com preventDefault)
       setTimeout(() => {
@@ -144,7 +147,7 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
     };
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
-  }, [onPular]);
+  }, [onPular, dica]);
 
   const P = 6;
   const botao = "inline-flex items-center gap-2 rounded-full border px-3.5 py-1 text-[12px] font-semibold transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-1";
@@ -187,12 +190,12 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
       >
         <div className="relative rounded-[4px_16px_16px_16px] border pb-3 pr-4 pt-[18px]"
           style={{ paddingLeft: RETRATO - SAI + 16, background: "rgba(12,10,34,.96)", borderColor: `rgba(${cor.rgb},.45)`, boxShadow: "0 16px 40px -18px rgba(0,0,0,.75)" }}>
-          <button type="button" onClick={(e) => { e.stopPropagation(); setMinimizado(true); }} aria-label="Minimizar o tutorial" title="Minimizar"
+          {!dica && <button type="button" onClick={(e) => { e.stopPropagation(); setMinimizado(true); }} aria-label="Minimizar o tutorial" title="Minimizar"
             className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full border text-[#e6ebff] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-1"
             style={{ borderColor: `rgba(${cor.rgb},.45)` }}>
             {/* #618: o "–" sumia; uma setinha pra baixo (= recolher), com borda */}
             <svg aria-hidden width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
-          </button>
+          </button>}
           {/* o retrato: falando enquanto o texto aparece, sorrindo quando para */}
           <div aria-hidden className="absolute rounded-full p-[3px]" style={{ left: -SAI, top: -SAI, width: RETRATO, height: RETRATO, border: `3px solid rgb(${cor.rgb})`, background: "#070a18" }}>
             <div className="bt-retrato relative h-full w-full overflow-hidden rounded-full">
@@ -234,7 +237,7 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
           )}
           {/* #618: falta espaço? os botões descem pra linha de baixo em vez de sair do cartão */}
           <div className="mt-3 flex flex-wrap items-center justify-end gap-x-2.5 gap-y-2">
-            <span className={`mr-auto items-center gap-2 ${confirmando ? "hidden" : "flex"}`}>
+            {!dica && <span className={`mr-auto items-center gap-2 ${confirmando ? "hidden" : "flex"}`}>
               <span aria-hidden className="flex items-center gap-1">
                 {Array.from({ length: total }, (_, k) => (
                   <span key={k} className="h-1.5 w-1.5 rotate-45"
@@ -243,7 +246,7 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
               </span>
               {/* #613: quanto falta, escrito (ajuda a não desistir no meio) */}
               <span className="whitespace-nowrap text-[11px] font-medium tabular-nums text-[#c3cbea]">Passo {passo + 1} de {total}</span>
-            </span>
+            </span>}
             {onPular && confirmando && (
               <span role="group" aria-label="Pular o tutorial?" className="flex w-full items-center gap-2 whitespace-nowrap">
                 <span className="mr-auto text-[12px] text-[#e6ebff]">Pular o tutorial?</span>
@@ -258,13 +261,13 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
               </span>
             )}
             {/* #618: minimizar ESCRITO, junto dos outros botões — o ícone do canto ninguém via */}
-            {!confirmando && (
+            {!confirmando && !dica && (
               <button type="button" onClick={(e) => { e.stopPropagation(); setMinimizado(true); }}
                 className="rounded-full px-2 py-1 text-[12px] font-medium text-[#c3cbea] transition-colors hover:text-white focus-visible:outline focus-visible:outline-1">
                 Minimizar
               </button>
             )}
-            {onPular && !confirmando && (
+            {onPular && !confirmando && !dica && (
               <button type="button" onClick={(e) => { e.stopPropagation(); setConfirmando(true); }} ref={acao || !ultimaPagina ? undefined : principal}
                 className="rounded-full px-2.5 py-1 text-[12px] font-medium text-[#c3cbea] transition-colors hover:text-white focus-visible:outline focus-visible:outline-1">
                 Pular

@@ -20,6 +20,8 @@ import { ALL_COURSES } from "@/constants/courses";
 import NetworkMural from "@/app/workstation/profiles/NetworkMural";
 import ModalSkin from "@/components/profile/ModalSkin";
 import { minhaArmadura } from "@/lib/cyber/cores";
+import DicasRapidas from "@/components/onboard/DicasRapidas";
+import { DICAS_PERFIL } from "@/lib/onboarding/dicas";
 
 // three.js só no cliente (como o CosmicLounge)
 const VitrinePersonagem = dynamic(() => import("@/components/cyber/VitrinePersonagem"), { ssr: false, loading: () => <div className="w-full h-full" /> });
@@ -201,7 +203,7 @@ export default function EditableProfile({ visitante = null, onVoltar }: {
               </button>
             )
           ) : (
-            <button onClick={() => { setEditing((v) => !v); setMsg(null); }} className="inline-flex items-center gap-1.5 text-[12px] font-bold text-cyan-600 dark:text-cyan-300 hover:underline">
+            <button data-tour="perfil-editar" onClick={() => { setEditing((v) => !v); setMsg(null); }} className="inline-flex items-center gap-1.5 text-[12px] font-bold text-cyan-600 dark:text-cyan-300 hover:underline">
               <Pencil size={13} /> {editing ? "Cancelar" : "Editar"}
             </button>
           )}
@@ -287,7 +289,7 @@ export default function EditableProfile({ visitante = null, onVoltar }: {
           </div>
 
           {/* DIREITA: árvore de habilidades */}
-          <div className="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/50 dark:bg-white/[0.03] p-5">
+          <div data-tour="perfil-habilidades" className="rounded-3xl border border-slate-200 dark:border-white/10 bg-white/50 dark:bg-white/[0.03] p-5">
             <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-white/45 mb-3">Habilidades</p>
             <div className="flex flex-col gap-2.5 mb-4">
               {SKILLS.filter((s) => s.kind === "pos").map((s) => <SkillBar key={s.name} {...s} />)}
@@ -320,6 +322,8 @@ export default function EditableProfile({ visitante = null, onVoltar }: {
           ? (auraVisitante?.aura && <AuraCard visitante={auraVisitante} />)
           : (process.env.NEXT_PUBLIC_AURA_ECONOMY === "1" && <AuraCard />)}
 
+        {/* #618: dicas rápidas na 1ª vez no PRÓPRIO perfil (no de outra pessoa, não) */}
+        {!somenteLeitura && <DicasRapidas lugar="perfil" dicas={DICAS_PERFIL} />}
         <datalist id="ep-courses">{ALL_COURSES.map((c) => <option key={c} value={c} />)}</datalist>
 
         {msg && <p className="text-[12px] font-medium text-cyan-700 dark:text-cyan-300 mt-4">{msg}</p>}

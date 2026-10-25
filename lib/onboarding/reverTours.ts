@@ -6,6 +6,7 @@
 import { esquecerTourSala } from "@/lib/onboarding/tourSala";
 import { esquecerTourEscritorio } from "@/lib/onboarding/tourEscritorio";
 import { novaGeracaoDosTours } from "@/lib/onboarding/geracaoTour";
+import { esquecerDicas } from "@/lib/onboarding/dicas";
 
 export const EVT_REVER_TOURS = "zaeon:tour:rever";
 
@@ -14,5 +15,6 @@ export function reverToursDoLab(): void {
   novaGeracaoDosTours();
   esquecerTourSala();
   esquecerTourEscritorio();
+  esquecerDicas();   // #618: as dicas rápidas (Perfil) também
   try { window.dispatchEvent(new Event(EVT_REVER_TOURS)); } catch { /* sem janela */ }
 }
