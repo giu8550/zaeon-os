@@ -38,6 +38,9 @@ const NA_SEQUENCIA: Record<Sequencia, { clipe: string; rosto: string }> = {
   energia: { clipe: "g_sweep_both", rosto: "proud" },
   arvore: { clipe: "g_offer_both", rosto: "happy" },
   cerebro: { clipe: "g_frame_both", rosto: "proud" },
+  telepatia: { clipe: "think", rosto: "thinking" },
+  leitura: { clipe: "g_offer_both", rosto: "curious" },
+  feitico: { clipe: "g_sweep_both", rosto: "proud" },
 };
 /** os gestos de quando a clicam (clipes do pacote — todos existem nele) */
 const AO_CLICAR = ["wave", "laugh", "clap", "think", "bow", "excited_bounce", "point_self", "shrug", "nod"] as const;
@@ -167,6 +170,13 @@ export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: 
         // a cabeça VARRE as telas (guinada), um pouco erguida — ela olha as telas, não o teclado
         pes?.quaternion.multiply(qx.setFromEuler(eul.set(-4 * D2R * r.digitar, r.olhar * 0.4 * r.digitar, 0)));
         cab?.quaternion.multiply(qx.setFromEuler(eul.set(-6 * D2R * r.digitar, r.olhar * 0.6 * r.digitar, 0)));
+      } else if (r && r.maosPeso > 0.01) {
+        // PODERES CÓSMICOS: as mãos vão pros alvos da cena (têmporas / livro / sigilo) e a cabeça acompanha
+        v.scene.updateMatrixWorld(true);
+        ik(hu, "left", r.maos.esq, r.maosPeso * 0.95); ik(hu, "right", r.maos.dir, r.maosPeso * 0.95);
+        const cab = hu.getNormalizedBoneNode("head"), pes = hu.getNormalizedBoneNode("neck");
+        pes?.quaternion.multiply(qx.setFromEuler(eul.set(r.cabecaTilt * 0.5, r.olhar * 0.2 * r.maosPeso, 0)));
+        cab?.quaternion.multiply(qx.setFromEuler(eul.set(r.cabecaTilt * 0.7, r.olhar * 0.3 * r.maosPeso, 0)));
       }
       const k = 1 - Math.exp(-dt * 6);
       const quer: Modo | null = !sinais.escrevendo && (sinais.lendo || now < st.lerAte) ? "ler" : null;

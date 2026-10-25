@@ -119,6 +119,10 @@ export type ResultadoSeq = {
   abrir: number; orbita: number;
   /** 0..1: digitando no teclado holográfico; as mãos vão até `maos` (mundo) */
   digitar: number; maos: { esq: THREE.Vector3; dir: THREE.Vector3 };
+  /** 0..1: as mãos posam numa cena de poder (telepatia/leitura/feitiço) — o corpo leva os punhos a `maos` por IK */
+  maosPeso: number;
+  /** quanto a cabeça inclina (rad, + = pra baixo): lendo olha pro livro, telepata ergue o rosto */
+  cabecaTilt: number;
   /** pra onde ela olha (rad, guinada) varrendo as telas */
   olhar: number;
   seq: Sequencia | null; nova: boolean;
@@ -356,8 +360,52 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
   };
   novasSinapses();
 
+  // ═══════════════════════ PODERES CÓSMICOS (o laço da geração longa) ═══════════════════════
+  // texturas de uso comum: um ANEL fino e luminoso, e um SIGILO rúnico (ticks + glifos num círculo)
+  const ondaTex = (() => {
+    const c = novoCanvas(128, 128), g = ctx2d(c), gr = g.createRadialGradient(64, 64, 40, 64, 64, 62);
+    gr.addColorStop(0, "rgba(95,242,255,0)"); gr.addColorStop(0.82, "rgba(95,242,255,0)"); gr.addColorStop(0.9, "rgba(170,250,255,.95)"); gr.addColorStop(0.96, "rgba(95,242,255,.6)"); gr.addColorStop(1, "rgba(95,242,255,0)");
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return guarda(textura(c));
+  })();
+  const sigiloTex = (() => {
+    const c = novoCanvas(256, 256), g = ctx2d(c); g.translate(128, 128);
+    g.strokeStyle = "rgba(255,211,107,.95)"; g.lineWidth = 3; for (const R of [118, 86]) { g.beginPath(); g.arc(0, 0, R, 0, Math.PI * 2); g.stroke(); }
+    g.lineWidth = 2; for (let k = 0; k < 48; k++) { const a = (k / 48) * Math.PI * 2, r0 = 86, r1 = k % 4 ? 100 : 112; g.beginPath(); g.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); g.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); g.stroke(); }
+    g.strokeStyle = "rgba(255,61,242,.9)"; g.lineWidth = 2.5; for (let k = 0; k < 7; k++) { const a = (k / 7) * Math.PI * 2 - Math.PI / 2, b = ((k + 3) / 7) * Math.PI * 2 - Math.PI / 2; g.beginPath(); g.moveTo(Math.cos(a) * 80, Math.sin(a) * 80); g.lineTo(Math.cos(b) * 80, Math.sin(b) * 80); g.stroke(); }   // o heptagrama no meio
+    const runas = ["ᚨ", "ᛉ", "ᛟ", "ᚾ", "ᛊ", "ᛏ", "ᛗ", "ᛒ", "ᚦ", "ᛚ", "ᚲ", "ᛖ"];
+    g.font = "22px serif"; g.fillStyle = "rgba(201,249,255,.9)"; g.textAlign = "center"; g.textBaseline = "middle"; for (let k = 0; k < 12; k++) { const a = (k / 12) * Math.PI * 2; g.save(); g.rotate(a); g.fillText(runas[k]!, 0, -103); g.restore(); }
+    return guarda(textura(c));
+  })();
+
+  // ── TELEPATIA: ondas da mente saindo da cabeça + um halo de pensamentos sugados pra dentro ──
+  const telepatia = new THREE.Group(); raiz.add(telepatia);
+  const ondas = [0, 1, 2].map((i) => { const m = new THREE.Mesh(geoTela, guarda(new THREE.MeshBasicMaterial({ map: ondaTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, color: i === 1 ? MAGENTA : CIANO }))); m.renderOrder = 7; telepatia.add(m); return { m, fase: i / 3 }; });
+  const NPENS = 48, pensPos = new Float32Array(NPENS * 3), pensGeo = guarda(new THREE.BufferGeometry()); pensGeo.setAttribute("position", new THREE.BufferAttribute(pensPos, 3));
+  const pensBase = Array.from({ length: NPENS }, () => { const a = Math.random() * Math.PI * 2, b = Math.acos(aleat(-1, 1)), r = aleat(0.34, 0.6); return { dir: new THREE.Vector3(Math.sin(b) * Math.cos(a), Math.cos(b) * 0.7, Math.sin(b) * Math.sin(a)), r, fase: Math.random() * Math.PI * 2 }; });
+  const pensMat = guarda(new THREE.PointsMaterial({ size: 0.02, map: estrela, color: CIANO, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const pensamentos = new THREE.Points(pensGeo, pensMat); pensamentos.frustumCulled = false; telepatia.add(pensamentos);
+
+  // ── LEITURA: um livro holográfico aberto flutuando à frente, páginas com texto, glifos subindo pra cabeça ──
+  const livro = new THREE.Group(); raiz.add(livro);
+  const pagTex = (() => { const c = novoCanvas(256, 256), g = ctx2d(c); g.fillStyle = "rgba(10,40,70,.35)"; g.fillRect(0, 0, 256, 256); g.strokeStyle = "rgba(170,250,255,.85)"; g.lineWidth = 4; g.strokeRect(6, 6, 244, 244); g.lineWidth = 3; for (let l = 0; l < 13; l++) { const y = 26 + l * 17, w = aleat(60, 232); g.beginPath(); g.moveTo(18, y); g.lineTo(18 + w, y); g.stroke(); } return guarda(textura(c)); })();
+  const pagMat = () => guarda(new THREE.MeshBasicMaterial({ map: pagTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, color: CIANO }));
+  const pagE = new THREE.Mesh(geoTela, pagMat()), pagD = new THREE.Mesh(geoTela, pagMat()), folha = new THREE.Mesh(geoTela, pagMat());
+  pagE.scale.set(0.2, 0.26, 1); pagD.scale.set(0.2, 0.26, 1); folha.scale.set(0.2, 0.26, 1);
+  pagE.position.set(-0.105, 0, 0); pagD.position.set(0.105, 0, 0); pagE.rotation.y = 0.33; pagD.rotation.y = -0.33;
+  const lombada = new THREE.Mesh(geoTela, guarda(new THREE.MeshBasicMaterial({ map: ondaTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, color: OURO }))); lombada.scale.set(0.03, 0.27, 1);
+  livro.add(pagE, pagD, folha, lombada); const flip = { t: 1, prox: 0 };
+
+  // ── FEITIÇO: um sigilo rúnico girando à frente das palmas, carrega e ESTOURA num pulso de partículas ──
+  const feitico = new THREE.Group(); raiz.add(feitico);
+  const sigilos = [0, 1].map((i) => { const m = new THREE.Mesh(geoTela, guarda(new THREE.MeshBasicMaterial({ map: sigiloTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, color: i ? MAGENTA : OURO }))); m.scale.setScalar(i ? 0.19 : 0.3); feitico.add(m); return m; });
+  const nucleoFeitico = new THREE.Sprite(brilhoMat(new THREE.Color("#fff4d6"))); nucleoFeitico.scale.setScalar(0.08); feitico.add(nucleoFeitico);
+  const NEST = 40, estPos = new Float32Array(NEST * 3), estGeo = guarda(new THREE.BufferGeometry()); estGeo.setAttribute("position", new THREE.BufferAttribute(estPos, 3));
+  const estMat = guarda(new THREE.PointsMaterial({ size: 0.03, map: estrela, color: OURO, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const estouro = new THREE.Points(estGeo, estMat); estouro.frustumCulled = false; feitico.add(estouro);
+  const estDir = Array.from({ length: NEST }, () => { const a = Math.random() * Math.PI * 2, b = Math.acos(aleat(-1, 1)); return new THREE.Vector3(Math.sin(b) * Math.cos(a), Math.cos(b), Math.sin(b) * Math.sin(a)); });
+
   // ── o estado (zerado a cada troca de avatar) ──
-  const w = { olhos: 0, rede: 0, aranha: 0, energia: 0, arvore: 0, cerebro: 0, abrir: 0, digitar: 0 };
+  const w = { olhos: 0, rede: 0, aranha: 0, energia: 0, arvore: 0, cerebro: 0, abrir: 0, digitar: 0, telepatia: 0, leitura: 0, feitico: 0, maos: 0 };
   let ultimaSeq: Sequencia | null = null, ultimoCiclo = -1, proxSinapse = 0, inicioGeracao = 0, lado = 1;
   const peito = new THREE.Vector3(), quadrilV = new THREE.Vector3(), pOlho = new THREE.Vector3(), paraCam = new THREE.Vector3(), camDir = new THREE.Vector3(), camDireita = new THREE.Vector3(), camCima = new THREE.Vector3();
   const zerar = () => {
@@ -385,14 +433,22 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
     w.energia = chegar(w.energia, s?.seq === "energia" ? env : 0, dt, 4);
     w.arvore = chegar(w.arvore, s?.seq === "arvore" ? env : 0, dt, 4);
     w.cerebro = chegar(w.cerebro, s?.seq === "cerebro" ? env : 0, dt, 4);
+    w.telepatia = chegar(w.telepatia, s?.seq === "telepatia" ? env : 0, dt, 4);
+    w.leitura = chegar(w.leitura, s?.seq === "leitura" ? env : 0, dt, 4);
+    w.feitico = chegar(w.feitico, s?.seq === "feitico" ? env : 0, dt, 4);
     w.abrir = chegar(w.abrir, naRede ? 1 : s && s.seq !== "pensar" ? 0.55 : 0, dt, 1.3);
     w.digitar = chegar(w.digitar, naRede ? 1 : 0, dt, 4);
+    // as mãos posam nas cenas de poder (telepatia/leitura/feitiço) — o corpo faz o IK
+    const poseMaos = s?.seq === "telepatia" ? w.telepatia : s?.seq === "leitura" ? w.leitura : s?.seq === "feitico" ? w.feitico : 0;
+    w.maos = chegar(w.maos, poseMaos, dt, 4);
     // a câmera em TRÊS-QUARTOS (cada resposta de um lado), derivando devagar
     const orbita = (lado * 0.5 + Math.sin((agora - inicioGeracao) * 0.22) * 0.12) * w.abrir;
     const olhar = Math.sin(agora * 0.55) * 0.32 + Math.sin(agora * 1.7) * 0.06;
-    const algo = w.olhos + w.rede + w.arvore + w.cerebro + w.energia > 0.005;
+    // a cabeça: lendo baixa pro livro, telepata ergue um tiquinho, conjurando olha as mãos
+    const cabecaTilt = w.leitura * 0.42 + w.feitico * 0.12 - w.telepatia * 0.14;
+    const algo = w.olhos + w.rede + w.arvore + w.cerebro + w.energia + w.telepatia + w.leitura + w.feitico > 0.005;
     raiz.visible = algo;
-    const res: ResultadoSeq = { abrir: w.abrir, orbita, digitar: w.digitar, maos, olhar, seq: s?.seq ?? null, nova };
+    const res: ResultadoSeq = { abrir: w.abrir, orbita, digitar: w.digitar, maos, maosPeso: w.maos, cabecaTilt, olhar, seq: s?.seq ?? null, nova };
     if (!algo || !vrm) return res;
 
     const h = vrm.humanoid;
@@ -605,6 +661,59 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
       cerMat.opacity = w.cerebro;
       if (agora > proxSinapse) { novasSinapses(); proxSinapse = agora + aleat(0.15, 0.35); }
       sinMat.opacity = w.cerebro * junta * (0.5 + 0.5 * Math.random());
+    }
+
+    // TELEPATIA: ondas concêntricas saindo da cabeça + os pensamentos num halo, sugados pra dentro
+    telepatia.visible = w.telepatia > 0.005;
+    if (telepatia.visible) {
+      for (const o of ondas) {
+        const u = (agora * 0.5 + o.fase) % 1;
+        o.m.position.copy(cabeca); o.m.quaternion.copy(cam.quaternion); o.m.scale.setScalar(0.12 + u * 0.8);
+        (o.m.material as THREE.MeshBasicMaterial).opacity = w.telepatia * sstep(1 - u) * sstep(u * 4) * 0.85;
+      }
+      const suga = 0.55 + 0.45 * Math.sin(agora * 1.5);
+      for (let i = 0; i < NPENS; i++) {
+        const p = pensBase[i]!, rr = p.r * (0.5 + 0.5 * ((Math.sin(agora * 0.8 + p.fase) + 1) / 2)) * (0.45 + 0.55 * suga);
+        aux.copy(cabeca).addScaledVector(p.dir, rr); pensPos.set([aux.x, aux.y, aux.z], i * 3);
+      }
+      pensGeo.attributes.position!.needsUpdate = true; pensMat.opacity = w.telepatia * 0.9;
+      maos.esq.copy(cabeca).addScaledVector(camDireita, 0.12).addScaledVector(camDir, 0.04).addScaledVector(camCima, -0.03);
+      maos.dir.copy(cabeca).addScaledVector(camDireita, -0.12).addScaledVector(camDir, 0.04).addScaledVector(camCima, -0.03);
+    }
+
+    // LEITURA: o livro holográfico à frente (ENTRE ela e a câmera: -camDir), páginas virando, glifos subindo pra cabeça
+    livro.visible = w.leitura > 0.005;
+    if (livro.visible) {
+      livro.position.copy(peito).addScaledVector(camDir, -0.26).addScaledVector(camCima, -0.1);
+      livro.quaternion.copy(cam.quaternion); livro.rotateX(0.6); livro.updateMatrixWorld(true);
+      const op = w.leitura;
+      for (const m of [pagE, pagD, lombada]) (m.material as THREE.MeshBasicMaterial).opacity = op * 0.9;
+      flip.t = Math.min(1, flip.t + dt / 0.5);
+      if (agora > flip.prox) { flip.t = 0; flip.prox = agora + aleat(1.4, 2.8); }
+      const vir = flip.t < 1;
+      (folha.material as THREE.MeshBasicMaterial).opacity = vir ? op : 0;
+      if (vir) { folha.position.set(0, 0, 0.003); folha.rotation.set(0, 0.33 - sstep(flip.t) * 0.66, 0); }
+      if (Math.random() < dt * 7) { livro.localToWorld(aux.set(aleat(-0.1, 0.1), aleat(-0.05, 0.05), 0.02)); soltarPacote(aux, cabeca, aleat(0.6, 0.9), 0.14); }
+      livro.localToWorld(aux.set(0.17, -0.13, 0.04)); maos.esq.copy(aux);
+      livro.localToWorld(aux2.set(-0.17, -0.13, 0.04)); maos.dir.copy(aux2);
+    }
+
+    // FEITIÇO: o sigilo rúnico girando entre as palmas, carrega e ESTOURA num pulso
+    feitico.visible = w.feitico > 0.005;
+    if (feitico.visible) {
+      const u = s?.seq === "feitico" ? s.u : 1;
+      aux.copy(peito).addScaledVector(camDir, -0.34).addScaledVector(camCima, -0.1);
+      feitico.position.copy(aux); feitico.quaternion.copy(cam.quaternion); feitico.updateMatrixWorld(true);
+      const carga = sstep(Math.min(1, u * 1.6)), brilho = 0.85 + 0.15 * Math.sin(agora * 10);
+      sigilos[0]!.rotation.z = agora * 0.6; sigilos[1]!.rotation.z = -agora * 0.9;
+      sigilos[0]!.scale.setScalar(0.3 * (0.4 + 0.6 * carga)); sigilos[1]!.scale.setScalar(0.19 * (0.4 + 0.6 * carga));
+      for (const m of sigilos) (m.material as THREE.MeshBasicMaterial).opacity = w.feitico * brilho;
+      (nucleoFeitico.material as THREE.SpriteMaterial).opacity = w.feitico * carga; nucleoFeitico.scale.setScalar(0.05 + 0.06 * carga * brilho);
+      const burst = sstep((u - 0.76) / 0.24);
+      for (let i = 0; i < NEST; i++) { aux2.copy(feitico.position).addScaledVector(estDir[i]!, burst * 0.5); estPos.set([aux2.x, aux2.y, aux2.z], i * 3); }
+      estGeo.attributes.position!.needsUpdate = true; estMat.opacity = w.feitico * burst * (1 - burst) * 4;
+      feitico.localToWorld(aux.set(0.17, -0.06, 0.08)); maos.esq.copy(aux);
+      feitico.localToWorld(aux2.set(-0.17, -0.06, 0.08)); maos.dir.copy(aux2);
     }
     return res;
   };
