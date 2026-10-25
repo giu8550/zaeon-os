@@ -53,3 +53,25 @@ export const COR_DO_TOM: Record<TomCartao, { rgb: string; texto: string; tinta: 
   roxo: { rgb: "167,139,250", texto: "#d8ccff", tinta: "#1a1238" },
   ciano: { rgb: "34,211,238", texto: "#a5f3fc", tinta: "#04202a" },
 };
+
+// ───────────── #618: o cartão fica PARADO dentro do mesmo passo ─────────────
+type Caixa = { x: number; y: number; w: number; h: number };
+type Posicao = { left: number; top: number; w: number };
+/** onde o cartão ficou preso: pela borda de CIMA (cresce pra baixo) ou pela de BAIXO (em cima do destaque, cresce pra cima) */
+export type Ancora = { left: number; w: number; lado: "topo" | "base"; v: number };
+
+/**
+ * A cada "Continuar" a caixa muda de altura e a conta de posição mandava o cartão pra outro canto — desorientava.
+ * Agora ele fica onde estava: preso pela borda que não encosta no destaque (em cima do destaque, cresce pra cima).
+ * Só muda de lugar se, parado, passasse da tela ou cobrisse o destaque.
+ */
+export function posicaoEstavel(ant: Ancora | null, novo: Posicao, alt: number, H: number, evitar: Caixa | null, B = 12): { pos: Posicao; ancora: Ancora } {
+  const cobre = (l: number, w: number, t: number) =>
+    !!evitar && l < evitar.x + evitar.w && l + w > evitar.x && t < evitar.y + evitar.h && t + alt > evitar.y;
+  if (ant) {
+    const top = ant.lado === "topo" ? ant.v : H - ant.v - alt;
+    if (top >= B && top + alt <= H - B && !cobre(ant.left, ant.w, top)) return { pos: { left: ant.left, top, w: ant.w }, ancora: ant };
+  }
+  const acima = !!evitar && novo.top + alt <= evitar.y;
+  return { pos: novo, ancora: { left: novo.left, w: novo.w, lado: acima ? "base" : "topo", v: acima ? H - (novo.top + alt) : novo.top } };
+}

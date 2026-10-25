@@ -306,3 +306,70 @@ describe("#613 · revisão (Sourcery)", () => {
     expect(localStorage.getItem("zaeon.tour.sala.v2")).toBe("1");
   });
 });
+
+describe("#618 · o contorno anda junto com a pessoa", () => {
+  const paginaFinal = () => { for (let k = 0; k < 6 && screen.queryByRole("button", { name: "Continuar" }); k++) fireEvent.click(screen.getByRole("button", { name: "Continuar" })); };
+  const caixa = (el: HTMLElement, x: number, y: number, w: number, h: number) => {
+    el.getBoundingClientRect = () => ({ x, y, left: x, top: y, width: w, height: h, right: x + w, bottom: y + h, toJSON: () => ({}) }) as DOMRect;
+  };
+  it("campo vazio → contorno no campo; DIGITANDO → no ➤ e \"Agora é só mandar\"; apagou → volta pro campo", async () => {
+    const { useAvisoTextoDoChat } = await import("@/components/onboard/useAvisoTextoDoChat");
+    const { useState } = await import("react");
+    // um chat de mentira com o MESMO aviso que o StudyCoworkChat usa (campo de verdade, digitação de verdade)
+    function Chat() {
+      const [v, setV] = useState("");
+      useAvisoTextoDoChat(v);
+      return (
+        <div data-tour="composer-estudos" ref={(el) => { if (el) caixa(el, 160, 450, 850, 140); }}>
+          <textarea aria-label="mensagem" value={v} onChange={(e) => setV(e.target.value)} />
+          <button data-tour="enviar" ref={(el) => { if (el) caixa(el, 960, 540, 40, 40); }}>➤</button>
+        </div>
+      );
+    }
+    render(<Chat />);
+    abrir(<TourSala noTutorial={false} />);
+    paginaFinal();
+    const anel = () => document.querySelector("[data-tour-anel]") as HTMLElement | null;
+    const sv = () => document.querySelector("[data-tour-sua-vez]")?.textContent ?? "";
+    act(() => { vi.advanceTimersByTime(100); });
+    expect(anel()!.style.width).toBe("862px");          // o campo (+6 de cada lado)
+    expect(sv()).toMatch(/Escreve um tema/);
+    fireEvent.change(screen.getByLabelText("mensagem"), { target: { value: "Quero estudar sobre: python" } });
+    act(() => { vi.advanceTimersByTime(100); });
+    expect(anel()!.style.width).toBe("52px");           // o ➤
+    expect(sv()).toMatch(/Agora é só mandar ➤/);
+    fireEvent.change(screen.getByLabelText("mensagem"), { target: { value: "" } });
+    act(() => { vi.advanceTimersByTime(100); });
+    expect(anel()!.style.width).toBe("862px");
+  });
+  it("o exemplo diz o que faz", () => {
+    abrir(<TourSala noTutorial={false} />);
+    paginaFinal();
+    expect(screen.getByRole("button", { name: /Usar o exemplo: “Quero estudar sobre fotossíntese”/ })).toBeTruthy();
+    expect(document.querySelector("[data-tour-sua-vez]")!.textContent).toMatch(/é só apertar ➤/);
+  });
+});
+
+describe("#618 · minimizar visível", () => {
+  it("tem o botão \"Minimizar\" escrito junto do Pular, e ele minimiza", () => {
+    abrir(<TourSala noTutorial={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Minimizar" }));
+    expect(cartao()).toBeNull();
+    expect(document.querySelector("[data-tour-minimizado]")).not.toBeNull();
+  });
+});
+
+describe("#618 · revisão (Sourcery): o cartão de verdade não encolhe", () => {
+  it("OverlayTour com o mapa tomando a tela (vão de ~300 px do lado): 420 px de largura e dentro da tela", async () => {
+    const { OverlayTour } = await import("@/components/onboard/BalaoTour");
+    Object.defineProperty(window, "innerWidth", { value: 1366, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 643, configurable: true });
+    render(<OverlayTour chave="mapa" alvo={{ x: 85, y: 160, w: 950, h: 440 }} evita={{ x: 85, y: 160, w: 950, h: 440 }}
+      titulo="mapa" fala="Esse mapa é o teu guia." passo={4} total={5} acao={{ rotulo: "Boa jornada!", onClick: () => {} }} onPular={() => {}} />);
+    const c = cartao()!;
+    expect(c.style.width).toBe("420px");
+    const left = parseFloat(c.style.left), top = parseFloat(c.style.top);
+    expect(left).toBeGreaterThanOrEqual(12); expect(left + 420).toBeLessThanOrEqual(1366 - 12);
+    expect(top).toBeGreaterThanOrEqual(12);
+  });
+});

@@ -105,9 +105,11 @@ export function uniaoDe(cs: (Caixa | null | undefined)[]): Caixa | null {
 }
 /** onde fica o BALÃO do Droid (canto superior esquerdo e largura, px) pra NÃO cobrir o que a pessoa precisa clicar:
  *  embaixo do destaque, em cima, à direita, à esquerda, no canto mais livre e, sem espaço (um modal no meio da tela),
- *  MAIS ESTREITO no vão do lado. Sem destaque, no pé da tela */
-export function posicaoDoBalao(evitar: Caixa | null, W: number, H: number, b: { w: number; h: number }, m = 16): { left: number; top: number; w: number } {
-  const B = 12, MIN = 250, lim = (v: number, a: number, z: number) => Math.max(a, Math.min(z, v));
+ *  MAIS ESTREITO no vão do lado. Sem destaque, no pé da tela.
+ *  `minW`: o mais estreito que ele pode ficar. #618: o cartão dos tours não encolhe (minW = a largura dele) — espremido
+ *  num vão de ~300 px, o botão de seguir saía da tela; sem vão largo, ele fica num canto POR CIMA do destaque. */
+export function posicaoDoBalao(evitar: Caixa | null, W: number, H: number, b: { w: number; h: number }, m = 16, minW = 250): { left: number; top: number; w: number } {
+  const B = 12, MIN = Math.min(minW, b.w), lim = (v: number, a: number, z: number) => Math.max(a, Math.min(z, v));
   if (!evitar) return { left: lim((W - b.w) / 2, B, W - b.w - B), top: lim(H - b.h - 24, B, H - b.h - B), w: b.w };
   const sobre = (l: number, t: number, w: number, h: number) => {
     const ox = Math.min(l + w, evitar.x + evitar.w + m) - Math.max(l, evitar.x - m), oy = Math.min(t + h, evitar.y + evitar.h + m) - Math.max(t, evitar.y - m);

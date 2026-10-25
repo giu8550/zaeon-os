@@ -245,6 +245,7 @@ export default function CoworkComposer({
               onClick={() => value.trim() && !busy && onSubmit()}
               disabled={!value.trim() || busy}
               title="Enviar"
+              data-tour="enviar"
               className="shrink-0 self-end mb-0.5 w-10 h-10 rounded-full flex items-center justify-center text-white transition-transform hover:scale-105 active:scale-95 disabled:opacity-30 disabled:hover:scale-100"
               style={{ background: "linear-gradient(135deg,#2563eb,#06b6d4)" }}
             >

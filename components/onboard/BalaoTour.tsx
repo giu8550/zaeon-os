@@ -14,7 +14,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { posicaoDoBalao, type Caixa } from "@/lib/onboarding/tutorialLab";
-import { COR_DO_TOM, letrasVisiveis, paginasDaFala, type TomCartao } from "@/lib/onboarding/cartaoTour";
+import { COR_DO_TOM, letrasVisiveis, paginasDaFala, posicaoEstavel, type Ancora, type TomCartao } from "@/lib/onboarding/cartaoTour";
 
 export { useDestaque } from "@/components/onboard/BalaoDroid";
 
@@ -51,7 +51,7 @@ export const emCampoDeTexto = (alvo: EventTarget | null): boolean => {
 
 const reduzirMovimento = () => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; } };
 
-export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onPular, chave, tom = "roxo", suaVez }: {
+export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onPular, chave, tom = "roxo", suaVez, dica = false }: {
   alvo: Caixa | null;
   evita: Caixa | null;
   /** a dica curta (1 linha) — vira o nome do cartão pro leitor de tela */
@@ -69,13 +69,15 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
   tom?: TomCartao;
   /** #613: passo de ação — a tarefa fica escrita na última caixa (com um exemplo que dá pra usar) */
   suaVez?: { tarefa: string; exemplo?: string; onExemplo?: (texto: string) => void; onJaFiz?: () => void };
+  /** #618: DICA RÁPIDA (components/onboard/DicasRapidas) — só a fala e o botão; sem progresso, minimizar nem "Pular?" */
+  dica?: boolean;
 }) {
   const card = useRef<HTMLDivElement>(null);
   const principal = useRef<HTMLButtonElement>(null);
   const cor = COR_DO_TOM[tom];
   const [alt, setAlt] = useState(200);
   // a fala em caixas curtas: uma ideia por caixa
-  const paginas = useMemo(() => paginasDaFala(fala), [fala]);
+  const paginas = useMemo(() => (dica ? [fala] : paginasDaFala(fala)), [fala, dica]);   // #618: dica = uma caixa só
   const [pg, setPg] = useState(0);
   const [ms, setMs] = useState(0);
   const [completo, setCompleto] = useState(false);
@@ -108,7 +110,16 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
   }, []);
 
   const W = window.innerWidth, H = window.innerHeight, larg = Math.min(W - 24, LARGURA);
-  const pos = posicaoDoBalao(evita ?? alvo, W, H, { w: larg, h: alt });
+  // #618: o cartão nunca encolhe (o botão de seguir saía da tela) — sem vão do lado, ele fica num canto por cima do
+  // destaque; e, por garantia, nunca passa das bordas
+  const bruto = posicaoDoBalao(evita ?? alvo, W, H, { w: larg, h: alt }, 16, larg);
+  const novo = { ...bruto, left: Math.max(12, Math.min(bruto.left, W - bruto.w - 12)), top: Math.max(12, Math.min(bruto.top, H - alt - 12)) };
+  // #618: dentro do mesmo passo (e com o destaque no mesmo lugar) o cartão não pula de canto a cada "Continuar"
+  const caixa = evita ?? alvo;
+  const fixo = useRef<{ k: string; ancora: Ancora } | null>(null);
+  const kFixo = `${chave}|${W}x${H}|${caixa ? [caixa.x, caixa.y, caixa.w, caixa.h].map(Math.round).join(",") : "-"}`;
+  const { pos, ancora } = posicaoEstavel(fixo.current?.k === kFixo ? fixo.current.ancora : null, novo, alt, H, caixa);
+  useEffect(() => { fixo.current = { k: kFixo, ancora }; });
   // #613: a altura muda com o "Sua vez" e a confirmação também — senão o cartão descia em cima do que ele aponta
   const [confirmando, setConfirmando] = useState(false);
   useLayoutEffect(() => { const el = card.current; if (!el) return; const h = el.offsetHeight; if (h && Math.abs(h - alt) > 2) setAlt(h); }, [visivel, titulo, pos.w, alt, ultimaPagina, confirmando, suaVez?.tarefa]);
@@ -124,7 +135,10 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
     if (!onPular) return;
     const esc = (e: KeyboardEvent) => {
       // Esc digitando no chat (fechar sugestão, desistir da frase) não é sobre o tutorial
-      if (e.key !== "Escape" || emCampoDeTexto(e.target)) return;
+      if (e.key !== "Escape") return;
+      // dica: o Esc fecha mesmo com o cursor num campo (é só um balão, não há nada a perder)
+      if (dica) { setTimeout(() => { if (!e.defaultPrevented) onPular?.(); }, 0); return; }
+      if (emCampoDeTexto(e.target)) return;
       // o Esc que fechou outra coisa (o mapa do percurso) não é sobre o tutorial: espera os outros ouvintes e
       // só pergunta se ninguém usou a tecla (quem usa marca com preventDefault)
       setTimeout(() => {
@@ -135,7 +149,7 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
     };
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
-  }, [onPular]);
+  }, [onPular, dica]);
 
   const P = 6;
   const botao = "inline-flex items-center gap-2 rounded-full border px-3.5 py-1 text-[12px] font-semibold transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-1";
@@ -178,10 +192,12 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
       >
         <div className="relative rounded-[4px_16px_16px_16px] border pb-3 pr-4 pt-[18px]"
           style={{ paddingLeft: RETRATO - SAI + 16, background: "rgba(12,10,34,.96)", borderColor: `rgba(${cor.rgb},.45)`, boxShadow: "0 16px 40px -18px rgba(0,0,0,.75)" }}>
-          <button type="button" onClick={(e) => { e.stopPropagation(); setMinimizado(true); }} aria-label="Minimizar o tutorial" title="Minimizar"
-            className="absolute right-2 top-1.5 grid h-6 w-6 place-items-center rounded-full text-[15px] leading-none text-[#c3cbea] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-1">
-            –
-          </button>
+          {!dica && <button type="button" onClick={(e) => { e.stopPropagation(); setMinimizado(true); }} aria-label="Minimizar o tutorial" title="Minimizar"
+            className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full border text-[#e6ebff] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-1"
+            style={{ borderColor: `rgba(${cor.rgb},.45)` }}>
+            {/* #618: o "–" sumia; uma setinha pra baixo (= recolher), com borda */}
+            <svg aria-hidden width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+          </button>}
           {/* o retrato: falando enquanto o texto aparece, sorrindo quando para */}
           <div aria-hidden className="absolute rounded-full p-[3px]" style={{ left: -SAI, top: -SAI, width: RETRATO, height: RETRATO, border: `3px solid rgb(${cor.rgb})`, background: "#070a18" }}>
             <div className="bt-retrato relative h-full w-full overflow-hidden rounded-full">
@@ -196,7 +212,9 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
           </span>
           {/* o leitor de tela recebe a fala inteira, de uma vez */}
           <p aria-live="polite" className="sr-only">{fala}</p>
-          <p aria-hidden className="min-h-[3em] pr-4 text-[15px] leading-relaxed text-[#e6ebff]">
+          {/* #618: tela mais baixa que o cartão: o texto rola e os botões ficam sempre na tela */}
+          <div className="overflow-y-auto" style={{ maxHeight: Math.max(96, H - 24 - SAI - 110) }}>
+          <p aria-hidden className="min-h-[3em] pr-6 text-[15px] leading-relaxed text-[#e6ebff]">
             {visivel}
             {!digitando && <span className="bt-pisca ml-1 text-[13px]" style={{ color: `rgb(${cor.rgb})` }}>⟁</span>}
           </p>
@@ -206,12 +224,13 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
               <p className="mt-0.5 text-[13px] text-[#e6ebff]">{suaVez.tarefa}</p>
               {suaVez.exemplo && suaVez.onExemplo && (
                 <button type="button" onClick={(e) => { e.stopPropagation(); suaVez.onExemplo?.(suaVez.exemplo!); }}
-                  title="Escreve no chat — é só mandar"
                   className="mt-1.5 rounded-full border px-2.5 py-0.5 text-left text-[12px] text-[#f1edff] transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-1"
                   style={{ borderColor: `rgba(${cor.rgb},.55)` }}>
-                  “{suaVez.exemplo}”
+                  Usar o exemplo: “{suaVez.exemplo}”
                 </button>
               )}
+              {/* #618: o exemplo não manda sozinho — dizer o que acontece */}
+              {suaVez.exemplo && suaVez.onExemplo && <p className="mt-1 text-[11px] text-[#c3cbea]">Vai pro campo de mensagem, é só apertar ➤</p>}
               {suaVez.onJaFiz && (
                 <button type="button" onClick={(e) => { e.stopPropagation(); suaVez.onJaFiz?.(); }}
                   className="ml-2 mt-1.5 rounded-full px-2 py-0.5 text-[12px] font-medium text-[#c3cbea] underline-offset-2 transition-colors hover:text-white hover:underline focus-visible:outline focus-visible:outline-1">
@@ -220,8 +239,10 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
               )}
             </div>
           )}
-          <div className="mt-3 flex items-center gap-2.5">
-            <span className={`mr-auto items-center gap-2 ${confirmando ? "hidden" : "flex"}`}>
+          </div>
+          {/* #618: falta espaço? os botões descem pra linha de baixo em vez de sair do cartão */}
+          <div className="mt-3 flex flex-wrap items-center justify-end gap-x-2.5 gap-y-2">
+            {!dica && <span className={`mr-auto items-center gap-2 ${confirmando ? "hidden" : "flex"}`}>
               <span aria-hidden className="flex items-center gap-1">
                 {Array.from({ length: total }, (_, k) => (
                   <span key={k} className="h-1.5 w-1.5 rotate-45"
@@ -230,7 +251,7 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
               </span>
               {/* #613: quanto falta, escrito (ajuda a não desistir no meio) */}
               <span className="whitespace-nowrap text-[11px] font-medium tabular-nums text-[#c3cbea]">Passo {passo + 1} de {total}</span>
-            </span>
+            </span>}
             {onPular && confirmando && (
               <span role="group" aria-label="Pular o tutorial?" className="flex w-full items-center gap-2 whitespace-nowrap">
                 <span className="mr-auto text-[12px] text-[#e6ebff]">Pular o tutorial?</span>
@@ -244,7 +265,14 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
                 </button>
               </span>
             )}
-            {onPular && !confirmando && (
+            {/* #618: minimizar ESCRITO, junto dos outros botões — o ícone do canto ninguém via */}
+            {!confirmando && !dica && (
+              <button type="button" onClick={(e) => { e.stopPropagation(); setMinimizado(true); }}
+                className="rounded-full px-2 py-1 text-[12px] font-medium text-[#c3cbea] transition-colors hover:text-white focus-visible:outline focus-visible:outline-1">
+                Minimizar
+              </button>
+            )}
+            {onPular && !confirmando && !dica && (
               <button type="button" onClick={(e) => { e.stopPropagation(); setConfirmando(true); }} ref={acao || !ultimaPagina ? undefined : principal}
                 className="rounded-full px-2.5 py-1 text-[12px] font-medium text-[#c3cbea] transition-colors hover:text-white focus-visible:outline focus-visible:outline-1">
                 Pular

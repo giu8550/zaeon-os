@@ -144,7 +144,7 @@ export default function ConfigMenu() {
                 <span className="flex flex-col flex-1 min-w-0">
                   <span className={rotulo}>Laboratório</span>
                   <span>Rever tutorial</span>
-                  <span className="text-[11px] font-normal text-slate-500 dark:text-white/45 leading-snug">A Aura mostra de novo a Sala de Estudos e o Escritório.</span>
+                  <span className="text-[11px] font-normal text-slate-500 dark:text-white/45 leading-snug">A Aura mostra de novo os tutoriais e as dicas da Sala de Estudos e do Perfil.</span>
                 </span>
               </button>
             )}
