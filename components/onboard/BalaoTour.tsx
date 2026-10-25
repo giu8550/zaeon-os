@@ -109,11 +109,12 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
 
   const W = window.innerWidth, H = window.innerHeight, larg = Math.min(W - 24, LARGURA);
   const pos = posicaoDoBalao(evita ?? alvo, W, H, { w: larg, h: alt });
-  useLayoutEffect(() => { const el = card.current; if (!el) return; const h = el.offsetHeight; if (h && Math.abs(h - alt) > 2) setAlt(h); }, [visivel, titulo, pos.w, alt]);
+  // #613: a altura muda com o "Sua vez" e a confirmação também — senão o cartão descia em cima do que ele aponta
+  const [confirmando, setConfirmando] = useState(false);
+  useLayoutEffect(() => { const el = card.current; if (!el) return; const h = el.offsetHeight; if (h && Math.abs(h - alt) > 2) setAlt(h); }, [visivel, titulo, pos.w, alt, ultimaPagina, confirmando, suaVez?.tarefa]);
   // o foco vai pro botão do passo (ou pro Pular), sem rolar a página
   useEffect(() => { (principal.current ?? card.current)?.focus({ preventScroll: true }); }, [chave, ultimaPagina]);
   // #613: pular pergunta antes (um Esc sem querer ou um clique errado perdia o tutorial inteiro)
-  const [confirmando, setConfirmando] = useState(false);
   const ficar = useRef<HTMLButtonElement>(null);
   // #613: minimizar — a pessoa quer ver o que está atrás do cartão sem sair do tutorial (o próximo passo reabre)
   const [minimizado, setMinimizado] = useState(false);
@@ -190,7 +191,7 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
           </span>
           {/* o leitor de tela recebe a fala inteira, de uma vez */}
           <p aria-live="polite" className="sr-only">{fala}</p>
-          <p aria-hidden className="min-h-[3em] text-[15px] leading-relaxed text-[#e6ebff]">
+          <p aria-hidden className="min-h-[3em] pr-4 text-[15px] leading-relaxed text-[#e6ebff]">
             {visivel}
             {!digitando && <span className="bt-pisca ml-1 text-[13px]" style={{ color: `rgb(${cor.rgb})` }}>⟁</span>}
           </p>
@@ -215,7 +216,7 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
             </div>
           )}
           <div className="mt-3 flex items-center gap-2.5">
-            <span className="mr-auto flex items-center gap-2">
+            <span className={`mr-auto items-center gap-2 ${confirmando ? "hidden" : "flex"}`}>
               <span aria-hidden className="flex items-center gap-1">
                 {Array.from({ length: total }, (_, k) => (
                   <span key={k} className="h-1.5 w-1.5 rotate-45"
@@ -223,11 +224,11 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
                 ))}
               </span>
               {/* #613: quanto falta, escrito (ajuda a não desistir no meio) */}
-              <span className="text-[11px] font-medium tabular-nums text-[#c3cbea]">Passo {passo + 1} de {total}</span>
+              <span className="whitespace-nowrap text-[11px] font-medium tabular-nums text-[#c3cbea]">Passo {passo + 1} de {total}</span>
             </span>
             {onPular && confirmando && (
-              <span role="group" aria-label="Pular o tutorial?" className="flex items-center gap-2">
-                <span className="text-[12px] text-[#e6ebff]">Pular o tutorial?</span>
+              <span role="group" aria-label="Pular o tutorial?" className="flex w-full items-center gap-2 whitespace-nowrap">
+                <span className="mr-auto text-[12px] text-[#e6ebff]">Pular o tutorial?</span>
                 <button type="button" onClick={(e) => { e.stopPropagation(); onPular(); }}
                   className="rounded-full px-2.5 py-1 text-[12px] font-medium text-[#c3cbea] transition-colors hover:text-white focus-visible:outline focus-visible:outline-1">
                   Sim, pular
