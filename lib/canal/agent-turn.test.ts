@@ -372,3 +372,59 @@ describe("#468 · a IA fica sabendo quem saiu", () => {
     expect(b).not.toMatch(/@teo \(Téo\)/);
   });
 });
+
+describe("agent-turn · #562 memória profunda com privacidade", () => {
+  const fake = () => {
+    const chamadas = { lembrar: [] as any[], guardar: [] as any[] };
+    return {
+      chamadas,
+      memoria: {
+        lembrar: async (a: any) => { chamadas.lembrar.push(a); return "Memórias relevantes:\n- gosta de exemplos"; },
+        guardar: async (a: any) => { chamadas.guardar.push(a); },
+      },
+    };
+  };
+  const sozinha = { id: CANAL, ownerId: A, titulo: "Meu escritório", acesso: "privado", membros: [], agentes: ["aura"] };
+
+  it("conversa só da pessoa: relembra e guarda com ELA (tudo dela, sem filtro de ala) e a lembrança chega no turno", async () => {
+    const { prisma } = fakePrisma(sozinha, [msg({ autorId: A, texto: "@aura me explica mitose", mencoes: ["aura"] })]);
+    const { memoria, chamadas } = fake();
+    const gerar = vi.fn(async (_a: any) => "Mitose é a divisão celular…");
+    const r = await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A }, { prisma, gerar, publicar: async () => {}, memoria });
+    expect(r.ok).toBe(true);
+    expect(chamadas.lembrar).toEqual([{ dono: A, ala: null, dica: expect.stringContaining("mitose") }]);
+    expect(gerar.mock.calls[0]![0]).toMatchObject({ memoria: expect.stringContaining("gosta de exemplos"), memoriaDe: A });
+    await new Promise((ok) => setTimeout(ok, 0));
+    expect(chamadas.guardar).toEqual([expect.objectContaining({ dono: A, scopeId: CANAL, resposta: "Mitose é a divisão celular…" })]);
+  });
+
+  it("com mentor, na conversa só da pessoa: a ala do mentor (a mesma do chat)", async () => {
+    const { prisma } = fakePrisma({ ...sozinha, agentes: ["medicina"] }, [msg({ autorId: A, texto: "@medicina oi", mencoes: ["medicina"] })]);
+    const { memoria, chamadas } = fake();
+    await executarTurno({ canalId: CANAL, agentKey: "medicina", userId: A }, { prisma, gerar: async () => "Oi!", publicar: async () => {}, memoria });
+    expect(chamadas.lembrar[0]).toMatchObject({ dono: A, ala: `medicina/${A}` });
+  });
+
+  it.each([
+    ["grupo com membro", { ...sozinha, acesso: "turma", membros: [B] }],
+    ["conversa de dois", { ...sozinha, dmCom: B }],
+    ["escritório aberto", { ...sozinha, acesso: "aberto" }],
+  ] as const)("%s: só a memória do ESCRITÓRIO — nenhuma memória pessoal lida nem gravada", async (_n, c) => {
+    const { prisma } = fakePrisma(c, [msg({ autorId: A, texto: "@aura resume o capítulo", mencoes: ["aura"] })]);
+    const { memoria, chamadas } = fake();
+    const gerar = vi.fn(async (_a: any) => "Resumo…");
+    await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A }, { prisma, gerar, publicar: async () => {}, memoria });
+    await new Promise((ok) => setTimeout(ok, 0));
+    expect(chamadas.lembrar).toEqual([{ dono: CANAL, ala: "escritorio", dica: expect.any(String) }]);
+    expect(chamadas.guardar.map((g) => g.dono)).toEqual([CANAL]);
+    expect(gerar.mock.calls[0]![0]).toMatchObject({ memoriaDe: CANAL });
+    expect(JSON.stringify([chamadas.lembrar, chamadas.guardar])).not.toContain(A);
+  });
+
+  it("memória fora do ar não derruba o turno", async () => {
+    const { prisma } = fakePrisma(sozinha, [msg({ autorId: A, texto: "@aura oi", mencoes: ["aura"] })]);
+    const memoria = { lembrar: async () => { throw new Error("atlas fora"); }, guardar: async () => { throw new Error("atlas fora"); } };
+    const r = await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A }, { prisma, gerar: async () => "Oi!", publicar: async () => {}, memoria });
+    expect(r.ok).toBe(true);
+  });
+});

@@ -111,3 +111,17 @@ describe("memory-provider · mongoDrawerCollection", () => {
     expect(hits[0].id).toBe("abc123");
   });
 });
+
+describe("memory-provider · #562 wakeUpContext com wingLabel null", () => {
+  it("null = tudo do dono (sem filtro de ala); ausente = a ala da superfície, como antes", async () => {
+    const { __setMemoryForTest, wakeUpContext } = await import("./memory-provider");
+    const escopos: any[] = [];
+    __setMemoryForTest({ search: async () => [], write: async () => {}, wakeUp: async (scope) => { escopos.push(scope); return []; } });
+    try {
+      await wakeUpContext({ userId: "u1", surface: "escritorio", wingLabel: null });
+      await wakeUpContext({ userId: "u1", surface: "escritorio" });
+      await wakeUpContext({ userId: "u1", surface: "escritorio", wingLabel: "farmacia/u1" });
+    } finally { __setMemoryForTest(null); }
+    expect(escopos).toEqual([{ userId: "u1" }, { userId: "u1", wingLabel: "escritorio" }, { userId: "u1", wingLabel: "farmacia/u1" }]);
+  });
+});

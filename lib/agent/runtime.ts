@@ -41,6 +41,8 @@ export type ToolResult = {
 /** O contexto que o runtime enxerga: world-state + os campos de gating (plano/execMode/curso/GPU). */
 export type ToolContext = AgentContext & {
   userId?: string;      // dono do turno — memory_search FILTRA por isto (nunca cruza usuários)
+  /** #562: de quem é a memória que o memory_search pode ler, quando não é a do dono do turno (Escritório em grupo = o escritório). */
+  memoriaDe?: string;
   plan?: Plan;
   execMode?: ExecMode;
   courseTags?: string[];
@@ -206,7 +208,8 @@ export const memorySearchDef: ToolDef = {
   schema: stubSchema("memory_search", "Busca na memória de longo prazo do usuário (recall semântico verbatim)."),
   async run(args, ctx) {
     const memUnavailable: ToolResult = { ok: false, error: "memória de longo prazo indisponível", code: "memory_unavailable", provenance: {} };
-    const userId = ctx.userId;
+    // #562: no Escritório, a memória do turno pode não ser a de quem mandou (em grupo é a do próprio escritório)
+    const userId = ctx.memoriaDe ?? ctx.userId;
     const query = String(args?.query ?? "").trim();
     if (!userId || !query) return memUnavailable; // sem dono/consulta → degrada (nunca cruza usuários)
     try {
