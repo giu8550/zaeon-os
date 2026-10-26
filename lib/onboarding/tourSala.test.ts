@@ -64,7 +64,7 @@ describe("#613 · os passos de ação não travam", () => {
   it("o percurso diz gerando… e depois pronto", () => {
     expect(tarefaDoPercurso("gerando", "x")).toMatch(/Gerando/);
     expect(tarefaDoPercurso("ativa", "x")).toMatch(/Pronto/);
-    expect(tarefaDoPercurso("sugerida", "x")).toBe("x");
+    expect(tarefaDoPercurso("oculta", "x")).toBe("x");   // #626: "sugerida" agora diz o nome do botão
     expect(tarefaDoPercurso(null, "x")).toBe("x");
   });
 });
@@ -90,5 +90,20 @@ describe("#626 · o passo do diagrama acompanha o pedido", async () => {
   });
   it("desenho que não é visual (podcast) não muda nada", () => {
     expect(proximoPedido("enviado", { tipo: "desenho", fase: "comecou", kind: "podcast" })).toBe("enviado");
+  });
+});
+
+describe("#626 · o percurso com os nomes do botão", async () => {
+  const { tarefaDoPercurso, avisarEstadoPercurso, estadoPercursoAtual } = await import("./tourSala");
+  it("cada estado com o que está escrito no botão (sem o ✦, que não existe na tela)", () => {
+    expect(tarefaDoPercurso("sugerida", "x")).toMatch(/“Gerar mapa”/);
+    expect(tarefaDoPercurso("vazia", "x")).toMatch(/“Traçar percurso”/);
+    expect(tarefaDoPercurso("gerando", "x")).toMatch(/Gerando o mapa/);
+    expect(tarefaDoPercurso("ativa", "x")).toMatch(/“Ver mapa”/);
+    for (const p of PASSOS_SALA) expect(`${p.dica} ${p.fala} ${p.suaVez ?? ""}`).not.toMatch(/✦/);
+  });
+  it("o último estado fica guardado (o tour que começa depois do chat não perde o \"Ver mapa\")", () => {
+    avisarEstadoPercurso("ativa");
+    expect(estadoPercursoAtual()).toBe("ativa");
   });
 });

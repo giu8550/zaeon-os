@@ -237,12 +237,12 @@ describe("#613 · diagrama e percurso não travam o tour", () => {
     disparar(EVT_ABRIR_DOC, { studioKind: "diagram" });
     paginaFinal();
     const sv = () => document.querySelector("[data-tour-sua-vez]")?.textContent ?? "";
-    expect(sv()).toMatch(/Clica no ✦/);
+    expect(sv()).toMatch(/Clica no botão do mapa/);
     expect(screen.queryByRole("button", { name: "Já fiz ✓" })).toBeNull();
     disparar("zaeon:percurso:estado", "gerando");
-    expect(sv()).toMatch(/Gerando o teu percurso/);
+    expect(sv()).toMatch(/Gerando o mapa/);
     disparar("zaeon:percurso:estado", "ativa");
-    expect(sv()).toMatch(/Pronto!.*abrir o mapa/);
+    expect(sv()).toMatch(/Pronto!.*“Ver mapa”/);
   });
 });
 
@@ -419,5 +419,18 @@ describe("#626 · passo 3 reconhece o pedido", () => {
     disparar("zaeon:chat:desenho", { fase: "comecou", kind: "diagram" });
     disparar("zaeon:chat:desenho", { fase: "falhou", kind: "diagram" });
     expect(cartao()?.textContent).toMatch(/Dessa vez não saiu o desenho/);
+  });
+});
+
+describe("#626 · percurso já pronto antes do tour começar", () => {
+  it("o estudo já tem mapa: o passo do percurso já diz \"Ver mapa\" (não manda gerar de novo)", async () => {
+    const { avisarEstadoPercurso } = await import("@/lib/onboarding/tourSala");
+    avisarEstadoPercurso("ativa");   // o chat avisou ANTES de o tour existir
+    abrir(<TourSala noTutorial={false} />);
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Quero estudar sobre: fotossíntese" });
+    fireEvent.click(ateBotao("Bora"));
+    disparar(EVT_ABRIR_DOC, { studioKind: "diagram" });
+    for (let k = 0; k < 6 && screen.queryByRole("button", { name: "Continuar" }); k++) fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    expect(document.querySelector("[data-tour-sua-vez]")?.textContent).toMatch(/Pronto!.*“Ver mapa”/);
   });
 });

@@ -109,8 +109,8 @@ export const PASSOS_SALA: PassoSala[] = [
   { id: "gerar-percurso", precisaMapa: true, ir: { tab: "sala-de-estudos", aba: "meus-estudos" },
     alvos: ['[data-tour="gerar-percurso"]'],
     avancaEm: [{ evento: EVT_PERCURSO_ABERTO }],
-    suaVez: "Clica no ✦ pra gerar; pronto, clica de novo pra abrir o mapa",
-    dica: "✦ Gere o percurso e abra o mapa",
+    suaVez: "Clica no botão do mapa, em cima da conversa, pra gerar; quando ficar pronto, clica de novo pra abrir",
+    dica: "📍 Gere o percurso e abra o mapa",
     fala: "Agora sim: você já tá bem informado sobre o assunto. 💜 Hora de criar um percurso pra não se perder nos estudos — clica aqui pra gerar e, quando ficar pronto, clica de novo pra abrir o mapa." },
   { id: "mapa-pronto", precisaMapa: true,
     alvos: ['[data-tour="percurso-view"]'],
@@ -130,9 +130,23 @@ export function eventoAvanca(p: PassoSala, evento: string, detail: unknown): boo
 
 /** #613: o "Sua vez" do percurso acompanha o botão — sem isso, a pessoa clicava, nada abria e achava que travou */
 export function tarefaDoPercurso(estado: EstadoBolinha | null, padrao: string): string {
-  if (estado === "gerando") return "Gerando o teu percurso… ⏳ leva uns segundos, pode esperar aqui";
-  if (estado === "ativa") return "Pronto! 🎉 Clica no ✦ de novo pra abrir o mapa";
+  // #626: com o NOME que está escrito no botão (lib/map/bolinha · ROTULO) — o "✦" não existia na tela
+  if (estado === "sugerida") return "Clica em “Gerar mapa”, em cima da conversa";
+  if (estado === "vazia") return "Clica em “Traçar percurso”, em cima da conversa";
+  if (estado === "gerando") return "Gerando o mapa… ⏳ leva uns segundos, pode esperar aqui";
+  if (estado === "ativa") return "Pronto! 🎉 Clica em “Ver mapa” pra abrir";
   return padrao;
+}
+
+/**
+ * #626: o ÚLTIMO estado do botão do percurso fica guardado aqui. O chat avisa quando ele muda, mas monta ANTES do
+ * tour — o 1º aviso (ex.: um estudo que já tem mapa, "Ver mapa") se perdia e o cartão mandava gerar de novo.
+ */
+let estadoPercurso: EstadoBolinha | null = null;
+export const estadoPercursoAtual = (): EstadoBolinha | null => estadoPercurso;
+export function avisarEstadoPercurso(estado: EstadoBolinha): void {
+  estadoPercurso = estado;
+  try { window.dispatchEvent(new CustomEvent(EVT_PERCURSO_ESTADO, { detail: estado })); } catch { /* sem janela */ }
 }
 
 // v2: o roteiro novo — quem só viu o passeio antigo (v1) ganha o novo uma vez

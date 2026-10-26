@@ -10,7 +10,7 @@ import { OverlayTour, useDestaque } from "@/components/onboard/BalaoTour";
 import { mapPanelOn } from "@/components/cerebro/useCerebro";
 import { irPraAbaEstudos } from "@/lib/chat/conversasNav";
 import { getTour } from "@/lib/onboarding/tour";
-import { ALVO_ENVIAR, AVISO_PEDIDO, EVT_DESENHO, EVT_PERGUNTA_CHAT, EVT_TURNO_FIM, KINDS_VISUAIS, TAREFA_SEM_DESENHO, proximoPedido, type EventoPedido, type PedidoDesenho, EVT_CHAT_TEXTO, EVT_PERCURSO_ESTADO, EVT_PREENCHER_CHAT, TAREFA_ENVIAR, deveMostrarTourSala, eventoAvanca, marcarTourDoLabAtivo, marcarTourSalaVisto, passosDaSala, tarefaDoPercurso, tourSalaVisto } from "@/lib/onboarding/tourSala";
+import { ALVO_ENVIAR, AVISO_PEDIDO, EVT_DESENHO, EVT_PERGUNTA_CHAT, EVT_TURNO_FIM, KINDS_VISUAIS, TAREFA_SEM_DESENHO, estadoPercursoAtual, proximoPedido, type EventoPedido, type PedidoDesenho, EVT_CHAT_TEXTO, EVT_PERCURSO_ESTADO, EVT_PREENCHER_CHAT, TAREFA_ENVIAR, deveMostrarTourSala, eventoAvanca, marcarTourDoLabAtivo, marcarTourSalaVisto, passosDaSala, tarefaDoPercurso, tourSalaVisto } from "@/lib/onboarding/tourSala";
 import { EVT_ESTUDOS_VISTA } from "@/lib/onboarding/tutorialLab";
 import { EVT_REVER_TOURS } from "@/lib/onboarding/reverTours";
 import { geracaoDosTours } from "@/lib/onboarding/geracaoTour";
@@ -100,7 +100,7 @@ export default function TourSala({ noTutorial }: { noTutorial: boolean }) {
   }, [passo]);
   const esperando = pedido === "enviado" || pedido === "desenhando";
   // #613: o estado do botão do percurso (gerando → pronto), pro "Sua vez" acompanhar
-  const [percurso, setPercurso] = useState<EstadoBolinha | null>(null);
+  const [percurso, setPercurso] = useState<EstadoBolinha | null>(estadoPercursoAtual);   // #626: o que já se sabe
   useEffect(() => {
     const on = (e: Event) => setPercurso(((e as CustomEvent).detail as EstadoBolinha) ?? null);
     window.addEventListener(EVT_PERCURSO_ESTADO, on);
