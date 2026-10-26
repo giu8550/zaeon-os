@@ -28,12 +28,12 @@ const ateBotao = (nome: string | RegExp) => {
 describe("TourSala — o tour do laboratório", () => {
   it("anda pela AÇÃO: pedir estudo → (Bora) → diagrama → percurso → Boa jornada marca como visto", () => {
     abrir(<TourSala noTutorial={false} />);
-    expect(cartao()?.textContent).toMatch(/Quero estudar sobre/);
+    expect(cartao()?.textContent).toMatch(/me diz aqui no chat um tema/);
     expect(screen.getByText("Passo 1 de 5")).toBeTruthy();
     // passo de ação: sem botão de seguir, só o Pular
     expect(screen.queryByRole("button", { name: "Bora" })).toBeNull();
     disparar(EVT_PERGUNTA_CHAT, { prompt: "Quero estudar sobre: fotossíntese" });
-    expect(cartao()?.textContent).toMatch(/caderno vivo/);
+    expect(cartao()?.textContent).toMatch(/blueprint/);
     fireEvent.click(ateBotao("Bora"));
     expect(cartao()?.textContent).toMatch(/diagrama interativo/);
     disparar(EVT_ABRIR_DOC, { studioKind: "quiz" });           // um documento que não é visual não conta
@@ -261,7 +261,7 @@ describe("#613 · minimizar o cartão", () => {
     abrir(<TourSala noTutorial={false} />);
     fireEvent.click(screen.getByRole("button", { name: "Minimizar o tutorial" }));
     disparar(EVT_PERGUNTA_CHAT, { prompt: "Quero estudar sobre: fotossíntese" });
-    expect(cartao()?.textContent).toMatch(/caderno vivo/);
+    expect(cartao()?.textContent).toMatch(/blueprint/);
   });
 });
 
@@ -350,10 +350,11 @@ describe("#618 · o contorno anda junto com a pessoa", () => {
   });
 });
 
-describe("#618 · minimizar visível", () => {
-  it("tem o botão \"Minimizar\" escrito junto do Pular, e ele minimiza", () => {
+describe("#626 · minimizar só pela setinha do canto", () => {
+  it("não tem mais o \"Minimizar\" escrito (os botões cabem numa linha); a setinha minimiza", () => {
     abrir(<TourSala noTutorial={false} />);
-    fireEvent.click(screen.getByRole("button", { name: "Minimizar" }));
+    expect(screen.queryByRole("button", { name: "Minimizar" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Minimizar o tutorial" }));
     expect(cartao()).toBeNull();
     expect(document.querySelector("[data-tour-minimizado]")).not.toBeNull();
   });

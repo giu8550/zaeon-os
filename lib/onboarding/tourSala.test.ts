@@ -20,9 +20,11 @@ describe("o tour do laboratório (fora do tutorial)", () => {
     expect(eventoAvanca(diagrama!, EVT_PERGUNTA_CHAT, null)).toBe(false);
     expect(eventoAvanca(percurso!, EVT_PERCURSO_ABERTO, undefined)).toBe(true);
   });
-  it("começa no “Quero estudar sobre…” e mostra a Sala de Estudos como o caderno vivo", () => {
+  it("começa pedindo um tema no chat e mostra a Sala de Estudos como os blueprints", () => {
     expect(PASSOS_SALA[0]!.alvos[0]).toBe('[data-tour="composer-estudos"]');   // #618: o campo, não o botão
-    expect(PASSOS_SALA[1]!.fala).toMatch(/caderno vivo/);
+    expect(PASSOS_SALA[1]!.fala).toMatch(/blueprint/);
+    expect(PASSOS_SALA[1]!.fala).not.toMatch(/👇/);   // #626: a Sala fica na barra da esquerda, não embaixo
+    expect(PASSOS_SALA[0]!.fala).not.toMatch(/Quero estudar sobre…/);   // #626: o botão nem existe em conversa começada
     expect(PASSOS_SALA[1]!.ir).toEqual({ tab: "sala-de-estudos", aba: "feed" });
     expect(PASSOS_SALA.at(-1)!.cta).toMatch(/Boa jornada/);
   });

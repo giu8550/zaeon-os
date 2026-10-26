@@ -1,6 +1,6 @@
 /**
  * O TOUR DO LABORATÓRIO (out/2026, v2): a 1ª vez que a pessoa abre o laboratório FORA do tutorial do tablet, a Aura guia
- * o caminho de ouro — pedir um estudo no chat ("Quero estudar sobre…") → conhecer a Sala de Estudos (o caderno vivo)
+ * o caminho de ouro — pedir um estudo no chat ("Quero estudar sobre…") → conhecer a Sala de Estudos (os blueprints)
  * enquanto o estudo nasce → voltar pro chat e pedir um DIAGRAMA interativo → GERAR O PERCURSO → o mapa pronto.
  * Os passos de ação só andam quando a pessoa FAZ a coisa (o evento chega); os de explicação têm um botão (cta).
  * A 1ª missão do tablet (lib/onboarding/tutorialLab) e o tutorial do metaverso não mudam.
@@ -60,13 +60,13 @@ export const PASSOS_SALA: PassoSala[] = [
     alvos: ['[data-tour="composer-estudos"]'], noChat: true,
     avancaEm: [{ evento: EVT_PERGUNTA_CHAT }],
     suaVez: "Escreve um tema no chat e manda", exemplo: "Quero estudar sobre fotossíntese",
-    dica: "✨ Clica em “Quero estudar sobre…” e escolhe um tema",
-    fala: "Oi! Que bom te ver aqui. 💜 Bora começar: clica em “Quero estudar sobre…” e me diz um tema — a matéria da prova, uma curiosidade, qualquer coisa. Dica: quanto mais específico, melhor (fotossíntese, Revolução Francesa, derivadas). Pode mandar!" },
+    dica: "✨ Me diz no chat um tema pra estudar",
+    fala: "Oi! Que bom te ver aqui. 💜 Bora começar: me diz aqui no chat um tema que você quer estudar — a matéria da prova, uma curiosidade, qualquer coisa. Dica: quanto mais específico, melhor (fotossíntese, Revolução Francesa, derivadas). Pode mandar!" },
   { id: "sala-estudos", ir: { tab: "sala-de-estudos", aba: "feed" },
     alvos: ['[data-tour="tab-feed"]'],
     cta: "Bora",
-    dica: "📒 Sala de Estudos: o caderno vivo",
-    fala: "Enquanto eu monto o teu estudo, vem conhecer a tua Sala de Estudos 👇 Pensa nela como um caderno vivo e sem fundo: aqui o que a gente conversa vira videoaulas, teus arquivos, desenhos, esquemas e mapas — material de verdade, bem mais fundo que o chat." },
+    dica: "🗺️ Sala de Estudos: os teus blueprints",
+    fala: "Enquanto eu monto o teu estudo, vem conhecer a tua Sala de Estudos: é lá que cada estudo vira um blueprint, com as fases pra você dominar o assunto — o que estudar, o que construir e o que destrava cada fase." },
   { id: "criar-diagrama", ir: { tab: "sala-de-estudos", aba: "meus-estudos" },
     alvos: ['[data-tour="composer-estudos"]'],
     // #613: qualquer documento visual que abre em aba (diagrama, aula) conta — a IA nem sempre escolhe o diagrama

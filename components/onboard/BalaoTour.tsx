@@ -265,13 +265,6 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
                 </button>
               </span>
             )}
-            {/* #618: minimizar ESCRITO, junto dos outros botões — o ícone do canto ninguém via */}
-            {!confirmando && !dica && (
-              <button type="button" onClick={(e) => { e.stopPropagation(); setMinimizado(true); }}
-                className="rounded-full px-2 py-1 text-[12px] font-medium text-[#c3cbea] transition-colors hover:text-white focus-visible:outline focus-visible:outline-1">
-                Minimizar
-              </button>
-            )}
             {onPular && !confirmando && !dica && (
               <button type="button" onClick={(e) => { e.stopPropagation(); setConfirmando(true); }} ref={acao || !ultimaPagina ? undefined : principal}
                 className="rounded-full px-2.5 py-1 text-[12px] font-medium text-[#c3cbea] transition-colors hover:text-white focus-visible:outline focus-visible:outline-1">
