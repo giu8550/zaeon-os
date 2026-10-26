@@ -10,7 +10,7 @@ import { OverlayTour, useDestaque } from "@/components/onboard/BalaoTour";
 import { mapPanelOn } from "@/components/cerebro/useCerebro";
 import { irPraAbaEstudos } from "@/lib/chat/conversasNav";
 import { getTour } from "@/lib/onboarding/tour";
-import { ALVO_ENVIAR, EVT_CHAT_TEXTO, EVT_PERCURSO_ESTADO, EVT_PREENCHER_CHAT, TAREFA_ENVIAR, deveMostrarTourSala, eventoAvanca, marcarTourDoLabAtivo, marcarTourSalaVisto, passosDaSala, tarefaDoPercurso, tourSalaVisto } from "@/lib/onboarding/tourSala";
+import { ALVO_ENVIAR, AVISO_PEDIDO, EVT_DESENHO, EVT_PERGUNTA_CHAT, EVT_TURNO_FIM, KINDS_VISUAIS, TAREFA_SEM_DESENHO, estadoPercursoAtual, proximoPedido, type EventoPedido, type PedidoDesenho, EVT_CHAT_TEXTO, EVT_PERCURSO_ESTADO, EVT_PREENCHER_CHAT, TAREFA_ENVIAR, deveMostrarTourSala, eventoAvanca, marcarTourDoLabAtivo, marcarTourSalaVisto, passosDaSala, tarefaDoPercurso, tourSalaVisto } from "@/lib/onboarding/tourSala";
 import { EVT_ESTUDOS_VISTA } from "@/lib/onboarding/tutorialLab";
 import { EVT_REVER_TOURS } from "@/lib/onboarding/reverTours";
 import { geracaoDosTours } from "@/lib/onboarding/geracaoTour";
@@ -58,17 +58,49 @@ export default function TourSala({ noTutorial }: { noTutorial: boolean }) {
     if (k + 1 >= passos.length) { marcarTourSalaVisto(geracao.current); return null; }
     return k + 1;
   });
+  // #626: anda SÓ se ainda estiver neste passo — dois avisos na mesma hora (desenho pronto + documento aberto)
+  // pulavam dois passos
+  const seguirDe = (id: string) => setI((k) => {
+    if (k === null || passos[k]?.id !== id) return k;
+    if (k + 1 >= passos.length) { marcarTourSalaVisto(geracao.current); return null; }
+    return k + 1;
+  });
   // passo de AÇÃO: anda quando a pessoa faz a coisa (o evento chega)
   useEffect(() => {
     if (!passo?.avancaEm?.length) return;
+    const id = passo.id;
     const eventos = Array.from(new Set(passo.avancaEm.map((a) => a.evento)));
-    const ouvir = (e: Event) => { if (eventoAvanca(passo, e.type, (e as CustomEvent).detail)) seguir(); };
+    const ouvir = (e: Event) => { if (eventoAvanca(passo, e.type, (e as CustomEvent).detail)) seguirDe(id); };
     for (const ev of eventos) window.addEventListener(ev, ouvir);
     return () => { for (const ev of eventos) window.removeEventListener(ev, ouvir); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [passo]);
+  // #626: o passo do diagrama acompanha o pedido (enviado → desenhando → pronto; ou não saiu o desenho)
+  const [pedido, setPedido] = useState<PedidoDesenho>(null);
+  useEffect(() => {
+    setPedido(null);
+    if (passo?.id !== "criar-diagrama") return;
+    const id = passo.id;
+    const mudar = (ev: EventoPedido) => setPedido((p) => proximoPedido(p, ev));
+    const pergunta = () => mudar({ tipo: "pergunta" });
+    const desenho = (e: Event) => {
+      const d = ((e as CustomEvent).detail ?? {}) as { fase?: "comecou" | "pronto" | "falhou"; kind?: string };
+      if (!d.fase || !d.kind) return;
+      if (d.fase === "pronto" && KINDS_VISUAIS.includes(d.kind)) seguirDe(id);
+      else mudar({ tipo: "desenho", fase: d.fase, kind: d.kind });
+    };
+    // o desenho pode começar um instante depois de a resposta acabar: espera um pouco antes de dizer "não saiu"
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const fim = () => { clearTimeout(t); t = setTimeout(() => mudar({ tipo: "fim" }), 1500); };
+    window.addEventListener(EVT_PERGUNTA_CHAT, pergunta);
+    window.addEventListener(EVT_DESENHO, desenho);
+    window.addEventListener(EVT_TURNO_FIM, fim);
+    return () => { clearTimeout(t); window.removeEventListener(EVT_PERGUNTA_CHAT, pergunta); window.removeEventListener(EVT_DESENHO, desenho); window.removeEventListener(EVT_TURNO_FIM, fim); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [passo]);
+  const esperando = pedido === "enviado" || pedido === "desenhando";
   // #613: o estado do botão do percurso (gerando → pronto), pro "Sua vez" acompanhar
-  const [percurso, setPercurso] = useState<EstadoBolinha | null>(null);
+  const [percurso, setPercurso] = useState<EstadoBolinha | null>(estadoPercursoAtual);   // #626: o que já se sabe
   useEffect(() => {
     const on = (e: Event) => setPercurso(((e as CustomEvent).detail as EstadoBolinha) ?? null);
     window.addEventListener(EVT_PERCURSO_ESTADO, on);
@@ -97,9 +129,14 @@ export default function TourSala({ noTutorial }: { noTutorial: boolean }) {
       total={passos.length}
       acao={passo.cta ? { rotulo: passo.cta, onClick: ultimo ? sair : seguir } : undefined}
       onPular={sair}
+      etiqueta={mandar && !esperando ? "Enviar" : undefined}
+      // #626: pediu o desenho → o cartão sai da frente (pílula com o aviso) pra a pessoa ver a resposta chegando
+      minimizarAgora={esperando}
+      avisoMinimizado={esperando ? AVISO_PEDIDO[pedido] : undefined}
       suaVez={passo.suaVez ? {
-        tarefa: mandar ? TAREFA_ENVIAR : passo.id === "gerar-percurso" ? tarefaDoPercurso(percurso, passo.suaVez) : passo.suaVez,
-        exemplo: passo.exemplo, onExemplo: preencherChat, onJaFiz: passo.jaFiz ? seguir : undefined,
+        tarefa: pedido === "semDesenho" ? TAREFA_SEM_DESENHO : mandar ? TAREFA_ENVIAR : passo.id === "gerar-percurso" ? tarefaDoPercurso(percurso, passo.suaVez) : passo.suaVez,
+        // #626: com o campo preenchido, o exemplo já cumpriu o papel — sai da frente do "apertar ↑"
+        exemplo: mandar ? undefined : passo.exemplo, onExemplo: preencherChat, onJaFiz: passo.jaFiz ? () => seguirDe(passo.id) : undefined, jaFizEmDestaque: pedido === "semDesenho",
       } : undefined}
     />
   );

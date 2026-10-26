@@ -84,3 +84,15 @@ describe("#618 · dicas da Sala de Estudos (blueprint)", () => {
     expect(cartao()!.textContent).toMatch(/blueprint/);   // reaparece com a tela aberta
   });
 });
+
+describe("#626 · Rever tutorial abre uma conversa nova", () => {
+  it("pede uma conversa nova e vazia pra Sala de Estudos (o bilhete fica, se o chat ainda não abriu)", async () => {
+    const { EVT_PEDIDO_CONVERSA } = await import("@/lib/chat/conversasNav");
+    const ouvir = vi.fn();
+    window.addEventListener(EVT_PEDIDO_CONVERSA, ouvir);
+    reverToursDoLab();
+    expect((ouvir.mock.calls[0]![0] as CustomEvent).detail).toEqual({ sala: "estudos", nova: true });
+    expect(JSON.parse(localStorage.getItem("zaeon.conversa.pedido.estudos")!)).toEqual({ sala: "estudos", nova: true });
+    window.removeEventListener(EVT_PEDIDO_CONVERSA, ouvir);
+  });
+});

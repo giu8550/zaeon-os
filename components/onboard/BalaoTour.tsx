@@ -34,12 +34,15 @@ const CSS = `
 @keyframes bt-pisca { 0%,49% { opacity: 1 } 50%,100% { opacity: .25 } }
 /* #613: o contorno é FIXO (a animação só faz ele respirar) — com "reduzir movimento" ele continua aparecendo */
 .bt-anel { box-shadow: 0 0 0 2px rgba(var(--bt-cor),.9), 0 0 16px 3px rgba(var(--bt-cor),.3); animation: bt-anel 2.8s ease-in-out infinite; }
+/* #626: o destaque FORTE (o botão de enviar): contorno grosso, também fixo sem animação */
+@keyframes bt-forte { 0%,100% { box-shadow: 0 0 0 3px rgba(var(--bt-cor),1), 0 0 16px 4px rgba(var(--bt-cor),.4) } 50% { box-shadow: 0 0 0 3px rgba(var(--bt-cor),1), 0 0 28px 8px rgba(var(--bt-cor),.55) } }
+.bt-anel.bt-forte { box-shadow: 0 0 0 3px rgba(var(--bt-cor),1), 0 0 22px 6px rgba(var(--bt-cor),.45); animation: bt-forte 1.6s ease-in-out infinite; }
 .bt-retrato::before { content: ""; position: absolute; inset: 0; z-index: 2; border-radius: 50%; background: repeating-linear-gradient(0deg, rgba(103,232,249,.08) 0 1px, transparent 1px 3px); }
 .bt-retrato::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 22%; z-index: 3; background: linear-gradient(180deg, transparent, rgba(103,232,249,.45), transparent); animation: bt-scan 3.2s ease-in-out infinite; }
 .bt-gira { display: inline-block; animation: bt-gira 2.4s ease-in-out infinite; }
 .bt-pisca { animation: bt-pisca 1.1s steps(1) infinite; }
-.bt-parado .bt-anel, .bt-parado .bt-retrato::after, .bt-parado .bt-gira, .bt-parado .bt-pisca { animation-play-state: paused; }
-@media (prefers-reduced-motion: reduce) { .bt-anel, .bt-retrato::after, .bt-gira, .bt-pisca { animation: none; } }
+.bt-parado .bt-anel, .bt-parado .bt-forte, .bt-parado .bt-retrato::after, .bt-parado .bt-gira, .bt-parado .bt-pisca { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) { .bt-anel, .bt-anel.bt-forte, .bt-retrato::after, .bt-gira, .bt-pisca { animation: none; } }
 `;
 
 /** O Esc veio de um campo de texto (o chat, uma busca)? Aí ele é de quem está digitando, não do tutorial. */
@@ -51,7 +54,7 @@ export const emCampoDeTexto = (alvo: EventTarget | null): boolean => {
 
 const reduzirMovimento = () => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; } };
 
-export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onPular, chave, tom = "roxo", suaVez, dica = false }: {
+export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onPular, chave, tom = "roxo", suaVez, dica = false, etiqueta, minimizarAgora = false, avisoMinimizado }: {
   alvo: Caixa | null;
   evita: Caixa | null;
   /** a dica curta (1 linha) — vira o nome do cartão pro leitor de tela */
@@ -68,7 +71,12 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
   /** #605: roxo na Sala de Estudos, ciano no Escritório */
   tom?: TomCartao;
   /** #613: passo de ação — a tarefa fica escrita na última caixa (com um exemplo que dá pra usar) */
-  suaVez?: { tarefa: string; exemplo?: string; onExemplo?: (texto: string) => void; onJaFiz?: () => void };
+  suaVez?: { tarefa: string; exemplo?: string; onExemplo?: (texto: string) => void; onJaFiz?: () => void; jaFizEmDestaque?: boolean };
+  /** #626: minimiza sozinho (a pessoa fez a ação e está esperando) e volta quando passa; com o aviso na pílula */
+  minimizarAgora?: boolean;
+  avisoMinimizado?: string;
+  /** #626: um nome curto do lado do destaque ("Enviar") — liga o cartão ao botão que a pessoa tem que apertar */
+  etiqueta?: string;
   /** #618: DICA RÁPIDA (components/onboard/DicasRapidas) — só a fala e o botão; sem progresso, minimizar nem "Pular?" */
   dica?: boolean;
 }) {
@@ -130,6 +138,7 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
   // #613: minimizar — a pessoa quer ver o que está atrás do cartão sem sair do tutorial (o próximo passo reabre)
   const [minimizado, setMinimizado] = useState(false);
   useEffect(() => { setConfirmando(false); setMinimizado(false); }, [chave]);
+  useEffect(() => { setMinimizado(minimizarAgora); }, [minimizarAgora]);
   useEffect(() => { if (confirmando) ficar.current?.focus({ preventScroll: true }); }, [confirmando]);
   useEffect(() => {
     if (!onPular) return;
@@ -164,7 +173,7 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
       </span>
       <span className="min-w-0">
         <span className="block text-[11px] font-medium tabular-nums text-[#c3cbea]">Passo {passo + 1} de {total} · abrir</span>
-        {suaVez && <span className="block truncate text-[12px] text-[#e6ebff]">{suaVez.tarefa}</span>}
+        {(avisoMinimizado ?? suaVez?.tarefa) && <span className="block truncate text-[12px] text-[#e6ebff]">{avisoMinimizado ?? suaVez?.tarefa}</span>}
       </span>
     </button>,
     document.body,
@@ -174,9 +183,16 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
       <style>{CSS}</style>
       {/* #613: o destaque só aparece quando a Aura chega no "faz isso" (na saudação ele apontava pra nada) */}
       {alvo && ultimaPagina ? (
-        <div data-tour-anel className="bt-anel absolute rounded-xl transition-all duration-300 ease-out motion-reduce:transition-none"
+        <div data-tour-anel className={`bt-anel ${etiqueta ? "bt-forte" : ""} absolute rounded-xl transition-all duration-300 ease-out motion-reduce:transition-none`}
           style={{ left: alvo.x - P, top: alvo.y - P, width: alvo.w + P * 2, height: alvo.h + P * 2, outline: "9999px solid rgba(2,6,23,.38)" }} />
       ) : <div className="absolute inset-0 bg-[rgba(2,6,23,.22)]" />}
+      {/* #626: com etiqueta (o ➤/↑ de enviar), o destaque fica mais forte e ganha o nome em cima */}
+      {alvo && ultimaPagina && etiqueta && (
+        <span data-tour-etiqueta className="absolute whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] font-semibold"
+          style={{ left: Math.max(12, Math.min(alvo.x + alvo.w / 2, W - 12)), top: Math.max(4, alvo.y - P - 30), transform: "translateX(-50%)", background: `rgb(${cor.rgb})`, color: cor.tinta }}>
+          {etiqueta}
+        </span>
+      )}
       <div
         ref={card}
         role="dialog"
@@ -222,18 +238,20 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
             <div data-tour-sua-vez className="mt-2.5 rounded-lg border px-3 py-2" style={{ borderColor: `rgba(${cor.rgb},.4)`, background: `rgba(${cor.rgb},.08)` }}>
               <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: `rgb(${cor.rgb})` }}>Sua vez</p>
               <p className="mt-0.5 text-[13px] text-[#e6ebff]">{suaVez.tarefa}</p>
+              {/* #626: o exemplo é um LINK discreto — o botão grande roubava a atenção do enviar */}
               {suaVez.exemplo && suaVez.onExemplo && (
                 <button type="button" onClick={(e) => { e.stopPropagation(); suaVez.onExemplo?.(suaVez.exemplo!); }}
-                  className="mt-1.5 rounded-full border px-2.5 py-0.5 text-left text-[12px] text-[#f1edff] transition-colors hover:bg-white/10 focus-visible:outline focus-visible:outline-1"
-                  style={{ borderColor: `rgba(${cor.rgb},.55)` }}>
-                  Usar o exemplo: “{suaVez.exemplo}”
+                  className="mt-1 text-left text-[12px] text-[#c3cbea] underline decoration-dotted underline-offset-2 transition-colors hover:text-white focus-visible:outline focus-visible:outline-1">
+                  ou usa o exemplo: “{suaVez.exemplo}”
                 </button>
               )}
-              {/* #618: o exemplo não manda sozinho — dizer o que acontece */}
-              {suaVez.exemplo && suaVez.onExemplo && <p className="mt-1 text-[11px] text-[#c3cbea]">Vai pro campo de mensagem, é só apertar ➤</p>}
               {suaVez.onJaFiz && (
                 <button type="button" onClick={(e) => { e.stopPropagation(); suaVez.onJaFiz?.(); }}
-                  className="ml-2 mt-1.5 rounded-full px-2 py-0.5 text-[12px] font-medium text-[#c3cbea] underline-offset-2 transition-colors hover:text-white hover:underline focus-visible:outline focus-visible:outline-1">
+                  // #626: sem desenho, o "Já fiz" é o caminho — vira botão de verdade
+                  className={suaVez.jaFizEmDestaque
+                    ? `${botao} mt-2 text-[#f1edff]`
+                    : "ml-2 mt-1.5 rounded-full px-2 py-0.5 text-[12px] font-medium text-[#c3cbea] underline-offset-2 transition-colors hover:text-white hover:underline focus-visible:outline focus-visible:outline-1"}
+                  style={suaVez.jaFizEmDestaque ? { borderColor: `rgb(${cor.rgb})` } : undefined}>
                   Já fiz ✓
                 </button>
               )}
@@ -264,13 +282,6 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
                   Continuar tutorial
                 </button>
               </span>
-            )}
-            {/* #618: minimizar ESCRITO, junto dos outros botões — o ícone do canto ninguém via */}
-            {!confirmando && !dica && (
-              <button type="button" onClick={(e) => { e.stopPropagation(); setMinimizado(true); }}
-                className="rounded-full px-2 py-1 text-[12px] font-medium text-[#c3cbea] transition-colors hover:text-white focus-visible:outline focus-visible:outline-1">
-                Minimizar
-              </button>
             )}
             {onPular && !confirmando && !dica && (
               <button type="button" onClick={(e) => { e.stopPropagation(); setConfirmando(true); }} ref={acao || !ultimaPagina ? undefined : principal}

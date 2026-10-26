@@ -20,9 +20,11 @@ describe("o tour do laboratório (fora do tutorial)", () => {
     expect(eventoAvanca(diagrama!, EVT_PERGUNTA_CHAT, null)).toBe(false);
     expect(eventoAvanca(percurso!, EVT_PERCURSO_ABERTO, undefined)).toBe(true);
   });
-  it("começa no “Quero estudar sobre…” e mostra a Sala de Estudos como o caderno vivo", () => {
+  it("começa pedindo um tema no chat e mostra a Sala de Estudos como os blueprints", () => {
     expect(PASSOS_SALA[0]!.alvos[0]).toBe('[data-tour="composer-estudos"]');   // #618: o campo, não o botão
-    expect(PASSOS_SALA[1]!.fala).toMatch(/caderno vivo/);
+    expect(PASSOS_SALA[1]!.fala).toMatch(/blueprint/);
+    expect(PASSOS_SALA[1]!.fala).not.toMatch(/👇/);   // #626: a Sala fica na barra da esquerda, não embaixo
+    expect(PASSOS_SALA[0]!.fala).not.toMatch(/Quero estudar sobre…/);   // #626: o botão nem existe em conversa começada
     expect(PASSOS_SALA[1]!.ir).toEqual({ tab: "sala-de-estudos", aba: "feed" });
     expect(PASSOS_SALA.at(-1)!.cta).toMatch(/Boa jornada/);
   });
@@ -62,7 +64,7 @@ describe("#613 · os passos de ação não travam", () => {
   it("o percurso diz gerando… e depois pronto", () => {
     expect(tarefaDoPercurso("gerando", "x")).toMatch(/Gerando/);
     expect(tarefaDoPercurso("ativa", "x")).toMatch(/Pronto/);
-    expect(tarefaDoPercurso("sugerida", "x")).toBe("x");
+    expect(tarefaDoPercurso("oculta", "x")).toBe("x");   // #626: "sugerida" agora diz o nome do botão
     expect(tarefaDoPercurso(null, "x")).toBe("x");
   });
 });
@@ -72,5 +74,36 @@ describe("#618 · um caminho só no passo 1", () => {
     const p1 = PASSOS_SALA.find((p) => p.id === "iniciar-estudo")!;
     expect(p1.alvos).toEqual(['[data-tour="composer-estudos"]']);
     expect(PASSOS_SALA.filter((p) => p.noChat).map((p) => p.id)).toEqual(["iniciar-estudo", "criar-diagrama"]);
+  });
+});
+
+describe("#626 · o passo do diagrama acompanha o pedido", async () => {
+  const { proximoPedido } = await import("./tourSala");
+  it("enviado → desenhando; fim sem desenho → semDesenho; falhou → semDesenho; pedir de novo → enviado", () => {
+    expect(proximoPedido(null, { tipo: "pergunta" })).toBe("enviado");
+    expect(proximoPedido("enviado", { tipo: "desenho", fase: "comecou", kind: "diagram" })).toBe("desenhando");
+    expect(proximoPedido("enviado", { tipo: "fim" })).toBe("semDesenho");
+    expect(proximoPedido("desenhando", { tipo: "fim" })).toBe("desenhando");    // o desenho segue depois da resposta
+    expect(proximoPedido("desenhando", { tipo: "desenho", fase: "falhou", kind: "diagram" })).toBe("semDesenho");
+    expect(proximoPedido("semDesenho", { tipo: "pergunta" })).toBe("enviado");
+    expect(proximoPedido("semDesenho", { tipo: "desenho", fase: "comecou", kind: "aula" })).toBe("desenhando");
+  });
+  it("desenho que não é visual (podcast) não muda nada", () => {
+    expect(proximoPedido("enviado", { tipo: "desenho", fase: "comecou", kind: "podcast" })).toBe("enviado");
+  });
+});
+
+describe("#626 · o percurso com os nomes do botão", async () => {
+  const { tarefaDoPercurso, avisarEstadoPercurso, estadoPercursoAtual } = await import("./tourSala");
+  it("cada estado com o que está escrito no botão (sem o ✦, que não existe na tela)", () => {
+    expect(tarefaDoPercurso("sugerida", "x")).toMatch(/“Gerar mapa”/);
+    expect(tarefaDoPercurso("vazia", "x")).toMatch(/“Traçar percurso”/);
+    expect(tarefaDoPercurso("gerando", "x")).toMatch(/Gerando o mapa/);
+    expect(tarefaDoPercurso("ativa", "x")).toMatch(/“Ver mapa”/);
+    for (const p of PASSOS_SALA) expect(`${p.dica} ${p.fala} ${p.suaVez ?? ""}`).not.toMatch(/✦/);
+  });
+  it("o último estado fica guardado (o tour que começa depois do chat não perde o \"Ver mapa\")", () => {
+    avisarEstadoPercurso("ativa");
+    expect(estadoPercursoAtual()).toBe("ativa");
   });
 });

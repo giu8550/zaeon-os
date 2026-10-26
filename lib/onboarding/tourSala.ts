@@ -1,6 +1,6 @@
 /**
  * O TOUR DO LABORATÓRIO (out/2026, v2): a 1ª vez que a pessoa abre o laboratório FORA do tutorial do tablet, a Aura guia
- * o caminho de ouro — pedir um estudo no chat ("Quero estudar sobre…") → conhecer a Sala de Estudos (o caderno vivo)
+ * o caminho de ouro — pedir um estudo no chat ("Quero estudar sobre…") → conhecer a Sala de Estudos (os blueprints)
  * enquanto o estudo nasce → voltar pro chat e pedir um DIAGRAMA interativo → GERAR O PERCURSO → o mapa pronto.
  * Os passos de ação só andam quando a pessoa FAZ a coisa (o evento chega); os de explicação têm um botão (cta).
  * A 1ª missão do tablet (lib/onboarding/tutorialLab) e o tutorial do metaverso não mudam.
@@ -21,7 +21,39 @@ export const EVT_PREENCHER_CHAT = "zaeon:chat:preencher";
 export const EVT_CHAT_TEXTO = "zaeon:chat:texto";
 /** #618: com texto no campo, o destaque vai pro ➤ (o botão de enviar DESTE chat, não de outro composer da tela) */
 export const ALVO_ENVIAR = '[data-tour="composer-estudos"] [data-tour="enviar"]';
-export const TAREFA_ENVIAR = "Agora é só mandar ➤";
+/** #626: o chat começou / terminou um desenho (detail: { fase: "comecou" | "pronto" | "falhou", kind }) */
+export const EVT_DESENHO = "zaeon:chat:desenho";
+/** #626: a resposta da Aura terminou (o turno do chat fechou) */
+export const EVT_TURNO_FIM = "zaeon:chat:turno-fim";
+export type FaseDesenho = "comecou" | "pronto" | "falhou";
+export const avisarDesenho = (fase: FaseDesenho, kind: string) => { try { window.dispatchEvent(new CustomEvent(EVT_DESENHO, { detail: { fase, kind } })); } catch { /* sem janela */ } };
+export const avisarTurnoFim = () => { try { window.dispatchEvent(new Event(EVT_TURNO_FIM)); } catch { /* sem janela */ } };
+/** os desenhos que contam pro passo do diagrama (o que abre em aba + o mapa mental) */
+export const KINDS_VISUAIS: readonly string[] = [...KINDS_EM_ABA, "mindmap"];
+
+/**
+ * #626: o passo do diagrama acompanha o PEDIDO (antes, ele só andava quando o documento abria — bem depois do
+ * Enter — e parecia ignorar a pessoa). enviado → (o desenho começou) desenhando → (pronto) o passo anda.
+ * A resposta acabou sem desenho, ou o desenho falhou → semDesenho (o cartão volta com o "Já fiz" em destaque).
+ */
+export type PedidoDesenho = null | "enviado" | "desenhando" | "semDesenho";
+export type EventoPedido = { tipo: "pergunta" } | { tipo: "desenho"; fase: FaseDesenho; kind: string } | { tipo: "fim" };
+export function proximoPedido(atual: PedidoDesenho, ev: EventoPedido): PedidoDesenho {
+  if (ev.tipo === "pergunta") return "enviado";
+  if (ev.tipo === "desenho") {
+    if (!KINDS_VISUAIS.includes(ev.kind)) return atual;
+    return ev.fase === "comecou" ? "desenhando" : ev.fase === "falhou" ? "semDesenho" : atual;
+  }
+  return atual === "enviado" ? "semDesenho" : atual;   // fim do turno sem nenhum desenho começar
+}
+export const AVISO_PEDIDO: Record<"enviado" | "desenhando", string> = {
+  enviado: "✓ Pedido enviado! A Aura está respondendo…",
+  desenhando: "Desenhando o teu diagrama… ⏳",
+};
+export const TAREFA_SEM_DESENHO = "Dessa vez não saiu o desenho. Pede de novo, ou clica em “Já fiz” pra seguir.";
+
+/** o botão de enviar do chat é um ↑ (CoworkComposer) — o texto usa o MESMO símbolo */
+export const TAREFA_ENVIAR = "Agora é só apertar ↑ ou Enter";
 /** #613: o botão do percurso mudou de estado (detail: EstadoBolinha) — o cartão diz "gerando…" e depois "pronto" */
 export const EVT_PERCURSO_ESTADO = "zaeon:percurso:estado";
 
@@ -60,13 +92,13 @@ export const PASSOS_SALA: PassoSala[] = [
     alvos: ['[data-tour="composer-estudos"]'], noChat: true,
     avancaEm: [{ evento: EVT_PERGUNTA_CHAT }],
     suaVez: "Escreve um tema no chat e manda", exemplo: "Quero estudar sobre fotossíntese",
-    dica: "✨ Clica em “Quero estudar sobre…” e escolhe um tema",
-    fala: "Oi! Que bom te ver aqui. 💜 Bora começar: clica em “Quero estudar sobre…” e me diz um tema — a matéria da prova, uma curiosidade, qualquer coisa. Dica: quanto mais específico, melhor (fotossíntese, Revolução Francesa, derivadas). Pode mandar!" },
+    dica: "✨ Me diz no chat um tema pra estudar",
+    fala: "Oi! Que bom te ver aqui. 💜 Bora começar: me diz aqui no chat um tema que você quer estudar — a matéria da prova, uma curiosidade, qualquer coisa. Dica: quanto mais específico, melhor (fotossíntese, Revolução Francesa, derivadas). Pode mandar!" },
   { id: "sala-estudos", ir: { tab: "sala-de-estudos", aba: "feed" },
     alvos: ['[data-tour="tab-feed"]'],
     cta: "Bora",
-    dica: "📒 Sala de Estudos: o caderno vivo",
-    fala: "Enquanto eu monto o teu estudo, vem conhecer a tua Sala de Estudos 👇 Pensa nela como um caderno vivo e sem fundo: aqui o que a gente conversa vira videoaulas, teus arquivos, desenhos, esquemas e mapas — material de verdade, bem mais fundo que o chat." },
+    dica: "🗺️ Sala de Estudos: os teus blueprints",
+    fala: "Enquanto eu monto o teu estudo, vem conhecer a tua Sala de Estudos: é lá que cada estudo vira um blueprint, com as fases pra você dominar o assunto — o que estudar, o que construir e o que destrava cada fase." },
   { id: "criar-diagrama", ir: { tab: "sala-de-estudos", aba: "meus-estudos" },
     alvos: ['[data-tour="composer-estudos"]'],
     // #613: qualquer documento visual que abre em aba (diagrama, aula) conta — a IA nem sempre escolhe o diagrama
@@ -77,8 +109,8 @@ export const PASSOS_SALA: PassoSala[] = [
   { id: "gerar-percurso", precisaMapa: true, ir: { tab: "sala-de-estudos", aba: "meus-estudos" },
     alvos: ['[data-tour="gerar-percurso"]'],
     avancaEm: [{ evento: EVT_PERCURSO_ABERTO }],
-    suaVez: "Clica no ✦ pra gerar; pronto, clica de novo pra abrir o mapa",
-    dica: "✦ Gere o percurso e abra o mapa",
+    suaVez: "Clica no botão do mapa, em cima da conversa, pra gerar; quando ficar pronto, clica de novo pra abrir",
+    dica: "📍 Gere o percurso e abra o mapa",
     fala: "Agora sim: você já tá bem informado sobre o assunto. 💜 Hora de criar um percurso pra não se perder nos estudos — clica aqui pra gerar e, quando ficar pronto, clica de novo pra abrir o mapa." },
   { id: "mapa-pronto", precisaMapa: true,
     alvos: ['[data-tour="percurso-view"]'],
@@ -98,9 +130,23 @@ export function eventoAvanca(p: PassoSala, evento: string, detail: unknown): boo
 
 /** #613: o "Sua vez" do percurso acompanha o botão — sem isso, a pessoa clicava, nada abria e achava que travou */
 export function tarefaDoPercurso(estado: EstadoBolinha | null, padrao: string): string {
-  if (estado === "gerando") return "Gerando o teu percurso… ⏳ leva uns segundos, pode esperar aqui";
-  if (estado === "ativa") return "Pronto! 🎉 Clica no ✦ de novo pra abrir o mapa";
+  // #626: com o NOME que está escrito no botão (lib/map/bolinha · ROTULO) — o "✦" não existia na tela
+  if (estado === "sugerida") return "Clica em “Gerar mapa”, em cima da conversa";
+  if (estado === "vazia") return "Clica em “Traçar percurso”, em cima da conversa";
+  if (estado === "gerando") return "Gerando o mapa… ⏳ leva uns segundos, pode esperar aqui";
+  if (estado === "ativa") return "Pronto! 🎉 Clica em “Ver mapa” pra abrir";
   return padrao;
+}
+
+/**
+ * #626: o ÚLTIMO estado do botão do percurso fica guardado aqui. O chat avisa quando ele muda, mas monta ANTES do
+ * tour — o 1º aviso (ex.: um estudo que já tem mapa, "Ver mapa") se perdia e o cartão mandava gerar de novo.
+ */
+let estadoPercurso: EstadoBolinha | null = null;
+export const estadoPercursoAtual = (): EstadoBolinha | null => estadoPercurso;
+export function avisarEstadoPercurso(estado: EstadoBolinha): void {
+  estadoPercurso = estado;
+  try { window.dispatchEvent(new CustomEvent(EVT_PERCURSO_ESTADO, { detail: estado })); } catch { /* sem janela */ }
 }
 
 // v2: o roteiro novo — quem só viu o passeio antigo (v1) ganha o novo uma vez

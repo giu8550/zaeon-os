@@ -28,12 +28,12 @@ const ateBotao = (nome: string | RegExp) => {
 describe("TourSala — o tour do laboratório", () => {
   it("anda pela AÇÃO: pedir estudo → (Bora) → diagrama → percurso → Boa jornada marca como visto", () => {
     abrir(<TourSala noTutorial={false} />);
-    expect(cartao()?.textContent).toMatch(/Quero estudar sobre/);
+    expect(cartao()?.textContent).toMatch(/me diz aqui no chat um tema/);
     expect(screen.getByText("Passo 1 de 5")).toBeTruthy();
     // passo de ação: sem botão de seguir, só o Pular
     expect(screen.queryByRole("button", { name: "Bora" })).toBeNull();
     disparar(EVT_PERGUNTA_CHAT, { prompt: "Quero estudar sobre: fotossíntese" });
-    expect(cartao()?.textContent).toMatch(/caderno vivo/);
+    expect(cartao()?.textContent).toMatch(/blueprint/);
     fireEvent.click(ateBotao("Bora"));
     expect(cartao()?.textContent).toMatch(/diagrama interativo/);
     disparar(EVT_ABRIR_DOC, { studioKind: "quiz" });           // um documento que não é visual não conta
@@ -207,7 +207,7 @@ describe("#613 · \"Sua vez\": a tarefa não some e o destaque vem na hora certa
     paginaFinal();
     const ouvir = vi.fn();
     window.addEventListener("zaeon:chat:preencher", ouvir);
-    fireEvent.click(screen.getByRole("button", { name: /Quero estudar sobre fotossíntese/ }));
+    fireEvent.click(screen.getByRole("button", { name: /usa o exemplo: “Quero estudar sobre fotossíntese”/ }));
     expect((ouvir.mock.calls[0]![0] as CustomEvent).detail).toEqual({ texto: "Quero estudar sobre fotossíntese" });
     window.removeEventListener("zaeon:chat:preencher", ouvir);
     expect(cartao()).not.toBeNull(); // o passo só anda quando a pergunta for MANDADA
@@ -237,12 +237,12 @@ describe("#613 · diagrama e percurso não travam o tour", () => {
     disparar(EVT_ABRIR_DOC, { studioKind: "diagram" });
     paginaFinal();
     const sv = () => document.querySelector("[data-tour-sua-vez]")?.textContent ?? "";
-    expect(sv()).toMatch(/Clica no ✦/);
+    expect(sv()).toMatch(/Clica no botão do mapa/);
     expect(screen.queryByRole("button", { name: "Já fiz ✓" })).toBeNull();
     disparar("zaeon:percurso:estado", "gerando");
-    expect(sv()).toMatch(/Gerando o teu percurso/);
+    expect(sv()).toMatch(/Gerando o mapa/);
     disparar("zaeon:percurso:estado", "ativa");
-    expect(sv()).toMatch(/Pronto!.*abrir o mapa/);
+    expect(sv()).toMatch(/Pronto!.*“Ver mapa”/);
   });
 });
 
@@ -261,7 +261,7 @@ describe("#613 · minimizar o cartão", () => {
     abrir(<TourSala noTutorial={false} />);
     fireEvent.click(screen.getByRole("button", { name: "Minimizar o tutorial" }));
     disparar(EVT_PERGUNTA_CHAT, { prompt: "Quero estudar sobre: fotossíntese" });
-    expect(cartao()?.textContent).toMatch(/caderno vivo/);
+    expect(cartao()?.textContent).toMatch(/blueprint/);
   });
 });
 
@@ -312,7 +312,7 @@ describe("#618 · o contorno anda junto com a pessoa", () => {
   const caixa = (el: HTMLElement, x: number, y: number, w: number, h: number) => {
     el.getBoundingClientRect = () => ({ x, y, left: x, top: y, width: w, height: h, right: x + w, bottom: y + h, toJSON: () => ({}) }) as DOMRect;
   };
-  it("campo vazio → contorno no campo; DIGITANDO → no ➤ e \"Agora é só mandar\"; apagou → volta pro campo", async () => {
+  it("campo vazio → contorno no campo; DIGITANDO → no ↑ com a etiqueta \"Enviar\" e \"Agora é só apertar ↑\"; apagou → volta pro campo", async () => {
     const { useAvisoTextoDoChat } = await import("@/components/onboard/useAvisoTextoDoChat");
     const { useState } = await import("react");
     // um chat de mentira com o MESMO aviso que o StudyCoworkChat usa (campo de verdade, digitação de verdade)
@@ -337,7 +337,9 @@ describe("#618 · o contorno anda junto com a pessoa", () => {
     fireEvent.change(screen.getByLabelText("mensagem"), { target: { value: "Quero estudar sobre: python" } });
     act(() => { vi.advanceTimersByTime(100); });
     expect(anel()!.style.width).toBe("52px");           // o ➤
-    expect(sv()).toMatch(/Agora é só mandar ➤/);
+    expect(sv()).toMatch(/Agora é só apertar ↑ ou Enter/);
+    expect(sv()).not.toMatch(/exemplo/);                                       // #626: o exemplo sai da frente
+    expect(document.querySelector("[data-tour-etiqueta]")?.textContent).toBe("Enviar");
     fireEvent.change(screen.getByLabelText("mensagem"), { target: { value: "" } });
     act(() => { vi.advanceTimersByTime(100); });
     expect(anel()!.style.width).toBe("862px");
@@ -345,15 +347,16 @@ describe("#618 · o contorno anda junto com a pessoa", () => {
   it("o exemplo diz o que faz", () => {
     abrir(<TourSala noTutorial={false} />);
     paginaFinal();
-    expect(screen.getByRole("button", { name: /Usar o exemplo: “Quero estudar sobre fotossíntese”/ })).toBeTruthy();
-    expect(document.querySelector("[data-tour-sua-vez]")!.textContent).toMatch(/é só apertar ➤/);
+    expect(screen.getByRole("button", { name: /ou usa o exemplo: “Quero estudar sobre fotossíntese”/ })).toBeTruthy();
+    expect(document.querySelector("[data-tour-etiqueta]")).toBeNull();          // sem texto no campo, sem etiqueta
   });
 });
 
-describe("#618 · minimizar visível", () => {
-  it("tem o botão \"Minimizar\" escrito junto do Pular, e ele minimiza", () => {
+describe("#626 · minimizar só pela setinha do canto", () => {
+  it("não tem mais o \"Minimizar\" escrito (os botões cabem numa linha); a setinha minimiza", () => {
     abrir(<TourSala noTutorial={false} />);
-    fireEvent.click(screen.getByRole("button", { name: "Minimizar" }));
+    expect(screen.queryByRole("button", { name: "Minimizar" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Minimizar o tutorial" }));
     expect(cartao()).toBeNull();
     expect(document.querySelector("[data-tour-minimizado]")).not.toBeNull();
   });
@@ -371,5 +374,63 @@ describe("#618 · revisão (Sourcery): o cartão de verdade não encolhe", () =>
     const left = parseFloat(c.style.left), top = parseFloat(c.style.top);
     expect(left).toBeGreaterThanOrEqual(12); expect(left + 420).toBeLessThanOrEqual(1366 - 12);
     expect(top).toBeGreaterThanOrEqual(12);
+  });
+});
+
+describe("#626 · passo 3 reconhece o pedido", () => {
+  const paginaFinal = () => { for (let k = 0; k < 6 && screen.queryByRole("button", { name: "Continuar" }); k++) fireEvent.click(screen.getByRole("button", { name: "Continuar" })); };
+  const pilula = () => document.querySelector("[data-tour-minimizado]")?.textContent ?? "";
+  const noDiagrama = () => {
+    abrir(<TourSala noTutorial={false} />);
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Quero estudar sobre: fotossíntese" });
+    fireEvent.click(ateBotao("Bora"));
+    paginaFinal();
+    expect(cartao()?.textContent).toMatch(/Pede um diagrama/);
+  };
+  it("Enter → \"Pedido enviado\" (minimizado); desenho começou → \"Desenhando\"; pronto → anda UM passo só", () => {
+    noDiagrama();
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Faz um diagrama interativo disso" });
+    expect(cartao()).toBeNull();
+    expect(pilula()).toMatch(/Pedido enviado/);
+    disparar("zaeon:chat:desenho", { fase: "comecou", kind: "diagram" });
+    expect(pilula()).toMatch(/Desenhando o teu diagrama/);
+    disparar("zaeon:chat:turno-fim");
+    act(() => { vi.advanceTimersByTime(2000); });
+    expect(pilula()).toMatch(/Desenhando/);                 // a resposta acabou, mas o desenho segue
+    act(() => {
+      window.dispatchEvent(new CustomEvent("zaeon:chat:desenho", { detail: { fase: "pronto", kind: "diagram" } }));
+      window.dispatchEvent(new CustomEvent(EVT_ABRIR_DOC, { detail: { studioKind: "diagram" } }));   // os dois juntos
+    });
+    expect(cartao()?.textContent).toMatch(/percurso/);
+    expect(screen.getByText("Passo 4 de 5")).toBeTruthy();   // não pulou o passo 4
+  });
+  it("a resposta acabou sem desenho → o cartão volta com o \"Já fiz\" em destaque", () => {
+    noDiagrama();
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Faz um diagrama interativo disso" });
+    disparar("zaeon:chat:turno-fim");
+    act(() => { vi.advanceTimersByTime(2000); });
+    expect(cartao()?.textContent).toMatch(/Dessa vez não saiu o desenho/);
+    fireEvent.click(screen.getByRole("button", { name: "Já fiz ✓" }));
+    expect(cartao()?.textContent).toMatch(/percurso/);
+  });
+  it("o desenho falhou → o cartão volta também", () => {
+    noDiagrama();
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Faz um diagrama interativo disso" });
+    disparar("zaeon:chat:desenho", { fase: "comecou", kind: "diagram" });
+    disparar("zaeon:chat:desenho", { fase: "falhou", kind: "diagram" });
+    expect(cartao()?.textContent).toMatch(/Dessa vez não saiu o desenho/);
+  });
+});
+
+describe("#626 · percurso já pronto antes do tour começar", () => {
+  it("o estudo já tem mapa: o passo do percurso já diz \"Ver mapa\" (não manda gerar de novo)", async () => {
+    const { avisarEstadoPercurso } = await import("@/lib/onboarding/tourSala");
+    avisarEstadoPercurso("ativa");   // o chat avisou ANTES de o tour existir
+    abrir(<TourSala noTutorial={false} />);
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Quero estudar sobre: fotossíntese" });
+    fireEvent.click(ateBotao("Bora"));
+    disparar(EVT_ABRIR_DOC, { studioKind: "diagram" });
+    for (let k = 0; k < 6 && screen.queryByRole("button", { name: "Continuar" }); k++) fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    expect(document.querySelector("[data-tour-sua-vez]")?.textContent).toMatch(/Pronto!.*“Ver mapa”/);
   });
 });
