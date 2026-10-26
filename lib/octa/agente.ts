@@ -31,6 +31,7 @@ import { extrairTokens } from "@/lib/octa/design/tokens";
 import { renderPagina, ErroMarca } from "@/lib/octa/secoes/render";
 import { validarSecoes, TIPOS_SECAO } from "@/lib/octa/secoes/tipos";
 import { precisaAprovacao } from "@/lib/octa/permissao";
+import { ehCaminhoSensivel, noPiiLigado, CONTEUDO_PROTEGIDO } from "@/lib/octa/noPii";
 import type { PermissaoOcta } from "@/lib/octa/projetos";
 import type { ErroPublicar, ResultadoPublicar } from "@/lib/octa/publicar";
 import type { ErroCaptura, OpcoesCaptura, ResultadoCaptura } from "@/lib/octa/captura";
@@ -50,6 +51,8 @@ type CtxOcta = ToolContext & { octaWs?: Workspace; octaPedido?: string; octaPubl
 
 const MAX_ARQ = 200_000;
 const ws = (ctx: ToolContext): Workspace => (ctx as CtxOcta).octaWs ?? {};
+/** Trava de segredo, camada 1 (lib/octa/noPii): `.env`, chaves e credenciais não vão pro modelo. */
+const protegido = (p: string): boolean => noPiiLigado() && ehCaminhoSensivel(p);
 const ok = (claim: string) => ({ ok: true, findings: [{ claim, confidence: "alta" as const }], provenance: {} });
 const schema = (name: string, description: string, props: Record<string, string>, required: string[]) => ({
   name, description,
@@ -67,7 +70,10 @@ export const FERRAMENTAS: ToolDef[] = [
     name: "octa_listar", runtime: "ts", risk: "read", minPlan: "free",
     schema: schema("octa_listar", "Lista os arquivos do projeto (caminho e tamanho).", {}, []),
     async run(_a, ctx) {
-      const lista = Object.entries(ws(ctx)).map(([p, c]) => `${p} (${c.length} b)`);
+      // O NOME do arquivo de segredo aparece (saber que o `.env` existe ajuda e não vaza nada);
+      // o conteúdo é que não sai — ver octa_ler. Marcado pro agente não tentar ler em vão.
+      const lista = Object.entries(ws(ctx)).map(([p, c]) =>
+        protegido(p) ? `${p} (protegido: credenciais)` : `${p} (${c.length} b)`);
       return ok(lista.length ? lista.join("\n") : "(projeto vazio)");
     },
   },
@@ -77,6 +83,8 @@ export const FERRAMENTAS: ToolDef[] = [
     async run(a, ctx) {
       const p = normalizePath(String(a?.path ?? ""));
       if (!p || !(p in ws(ctx))) return err(`arquivo não existe: ${a?.path}`, "not_found");
+      // Trava de segredo (lib/octa/noPii): credencial não entra no prompt de NENHUM modelo.
+      if (protegido(p)) return err(`${p}: ${CONTEUDO_PROTEGIDO}`, "tool_denied");
       return ok(ws(ctx)[p]);
     },
   },
@@ -87,7 +95,10 @@ export const FERRAMENTAS: ToolDef[] = [
       const q = String(a?.texto ?? "").toLowerCase();
       if (!q) return err("busca vazia", "bad_args");
       const hits: string[] = [];
-      for (const [p, c] of Object.entries(ws(ctx))) c.split("\n").forEach((l, i) => { if (hits.length < 60 && l.toLowerCase().includes(q)) hits.push(`${p}:${i + 1}: ${l.trim().slice(0, 160)}`); });
+      for (const [p, c] of Object.entries(ws(ctx))) {
+        if (protegido(p)) continue;   // buscar dentro do .env vazaria o valor linha por linha
+        c.split("\n").forEach((l, i) => { if (hits.length < 60 && l.toLowerCase().includes(q)) hits.push(`${p}:${i + 1}: ${l.trim().slice(0, 160)}`); });
+      }
       return ok(hits.length ? hits.join("\n") : "nada encontrado");
     },
   },
