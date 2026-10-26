@@ -76,3 +76,19 @@ describe("#618 · um caminho só no passo 1", () => {
     expect(PASSOS_SALA.filter((p) => p.noChat).map((p) => p.id)).toEqual(["iniciar-estudo", "criar-diagrama"]);
   });
 });
+
+describe("#626 · o passo do diagrama acompanha o pedido", async () => {
+  const { proximoPedido } = await import("./tourSala");
+  it("enviado → desenhando; fim sem desenho → semDesenho; falhou → semDesenho; pedir de novo → enviado", () => {
+    expect(proximoPedido(null, { tipo: "pergunta" })).toBe("enviado");
+    expect(proximoPedido("enviado", { tipo: "desenho", fase: "comecou", kind: "diagram" })).toBe("desenhando");
+    expect(proximoPedido("enviado", { tipo: "fim" })).toBe("semDesenho");
+    expect(proximoPedido("desenhando", { tipo: "fim" })).toBe("desenhando");    // o desenho segue depois da resposta
+    expect(proximoPedido("desenhando", { tipo: "desenho", fase: "falhou", kind: "diagram" })).toBe("semDesenho");
+    expect(proximoPedido("semDesenho", { tipo: "pergunta" })).toBe("enviado");
+    expect(proximoPedido("semDesenho", { tipo: "desenho", fase: "comecou", kind: "aula" })).toBe("desenhando");
+  });
+  it("desenho que não é visual (podcast) não muda nada", () => {
+    expect(proximoPedido("enviado", { tipo: "desenho", fase: "comecou", kind: "podcast" })).toBe("enviado");
+  });
+});

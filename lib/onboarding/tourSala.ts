@@ -21,6 +21,37 @@ export const EVT_PREENCHER_CHAT = "zaeon:chat:preencher";
 export const EVT_CHAT_TEXTO = "zaeon:chat:texto";
 /** #618: com texto no campo, o destaque vai pro ➤ (o botão de enviar DESTE chat, não de outro composer da tela) */
 export const ALVO_ENVIAR = '[data-tour="composer-estudos"] [data-tour="enviar"]';
+/** #626: o chat começou / terminou um desenho (detail: { fase: "comecou" | "pronto" | "falhou", kind }) */
+export const EVT_DESENHO = "zaeon:chat:desenho";
+/** #626: a resposta da Aura terminou (o turno do chat fechou) */
+export const EVT_TURNO_FIM = "zaeon:chat:turno-fim";
+export type FaseDesenho = "comecou" | "pronto" | "falhou";
+export const avisarDesenho = (fase: FaseDesenho, kind: string) => { try { window.dispatchEvent(new CustomEvent(EVT_DESENHO, { detail: { fase, kind } })); } catch { /* sem janela */ } };
+export const avisarTurnoFim = () => { try { window.dispatchEvent(new Event(EVT_TURNO_FIM)); } catch { /* sem janela */ } };
+/** os desenhos que contam pro passo do diagrama (o que abre em aba + o mapa mental) */
+export const KINDS_VISUAIS: readonly string[] = [...KINDS_EM_ABA, "mindmap"];
+
+/**
+ * #626: o passo do diagrama acompanha o PEDIDO (antes, ele só andava quando o documento abria — bem depois do
+ * Enter — e parecia ignorar a pessoa). enviado → (o desenho começou) desenhando → (pronto) o passo anda.
+ * A resposta acabou sem desenho, ou o desenho falhou → semDesenho (o cartão volta com o "Já fiz" em destaque).
+ */
+export type PedidoDesenho = null | "enviado" | "desenhando" | "semDesenho";
+export type EventoPedido = { tipo: "pergunta" } | { tipo: "desenho"; fase: FaseDesenho; kind: string } | { tipo: "fim" };
+export function proximoPedido(atual: PedidoDesenho, ev: EventoPedido): PedidoDesenho {
+  if (ev.tipo === "pergunta") return "enviado";
+  if (ev.tipo === "desenho") {
+    if (!KINDS_VISUAIS.includes(ev.kind)) return atual;
+    return ev.fase === "comecou" ? "desenhando" : ev.fase === "falhou" ? "semDesenho" : atual;
+  }
+  return atual === "enviado" ? "semDesenho" : atual;   // fim do turno sem nenhum desenho começar
+}
+export const AVISO_PEDIDO: Record<"enviado" | "desenhando", string> = {
+  enviado: "✓ Pedido enviado! A Aura está respondendo…",
+  desenhando: "Desenhando o teu diagrama… ⏳",
+};
+export const TAREFA_SEM_DESENHO = "Dessa vez não saiu o desenho. Pede de novo, ou clica em “Já fiz” pra seguir.";
+
 /** o botão de enviar do chat é um ↑ (CoworkComposer) — o texto usa o MESMO símbolo */
 export const TAREFA_ENVIAR = "Agora é só apertar ↑ ou Enter";
 /** #613: o botão do percurso mudou de estado (detail: EstadoBolinha) — o cartão diz "gerando…" e depois "pronto" */

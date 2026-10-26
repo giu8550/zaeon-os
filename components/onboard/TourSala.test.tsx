@@ -376,3 +376,48 @@ describe("#618 · revisão (Sourcery): o cartão de verdade não encolhe", () =>
     expect(top).toBeGreaterThanOrEqual(12);
   });
 });
+
+describe("#626 · passo 3 reconhece o pedido", () => {
+  const paginaFinal = () => { for (let k = 0; k < 6 && screen.queryByRole("button", { name: "Continuar" }); k++) fireEvent.click(screen.getByRole("button", { name: "Continuar" })); };
+  const pilula = () => document.querySelector("[data-tour-minimizado]")?.textContent ?? "";
+  const noDiagrama = () => {
+    abrir(<TourSala noTutorial={false} />);
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Quero estudar sobre: fotossíntese" });
+    fireEvent.click(ateBotao("Bora"));
+    paginaFinal();
+    expect(cartao()?.textContent).toMatch(/Pede um diagrama/);
+  };
+  it("Enter → \"Pedido enviado\" (minimizado); desenho começou → \"Desenhando\"; pronto → anda UM passo só", () => {
+    noDiagrama();
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Faz um diagrama interativo disso" });
+    expect(cartao()).toBeNull();
+    expect(pilula()).toMatch(/Pedido enviado/);
+    disparar("zaeon:chat:desenho", { fase: "comecou", kind: "diagram" });
+    expect(pilula()).toMatch(/Desenhando o teu diagrama/);
+    disparar("zaeon:chat:turno-fim");
+    act(() => { vi.advanceTimersByTime(2000); });
+    expect(pilula()).toMatch(/Desenhando/);                 // a resposta acabou, mas o desenho segue
+    act(() => {
+      window.dispatchEvent(new CustomEvent("zaeon:chat:desenho", { detail: { fase: "pronto", kind: "diagram" } }));
+      window.dispatchEvent(new CustomEvent(EVT_ABRIR_DOC, { detail: { studioKind: "diagram" } }));   // os dois juntos
+    });
+    expect(cartao()?.textContent).toMatch(/percurso/);
+    expect(screen.getByText("Passo 4 de 5")).toBeTruthy();   // não pulou o passo 4
+  });
+  it("a resposta acabou sem desenho → o cartão volta com o \"Já fiz\" em destaque", () => {
+    noDiagrama();
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Faz um diagrama interativo disso" });
+    disparar("zaeon:chat:turno-fim");
+    act(() => { vi.advanceTimersByTime(2000); });
+    expect(cartao()?.textContent).toMatch(/Dessa vez não saiu o desenho/);
+    fireEvent.click(screen.getByRole("button", { name: "Já fiz ✓" }));
+    expect(cartao()?.textContent).toMatch(/percurso/);
+  });
+  it("o desenho falhou → o cartão volta também", () => {
+    noDiagrama();
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Faz um diagrama interativo disso" });
+    disparar("zaeon:chat:desenho", { fase: "comecou", kind: "diagram" });
+    disparar("zaeon:chat:desenho", { fase: "falhou", kind: "diagram" });
+    expect(cartao()?.textContent).toMatch(/Dessa vez não saiu o desenho/);
+  });
+});

@@ -44,7 +44,7 @@ import ConversasSidebar from "@/components/chat/ConversasSidebar";
 import PastasEmpilhadas, { CORPO_DA_PASTA, type Pasta } from "@/components/chat/PastasEmpilhadas";
 import SugestoesConversa from "@/components/chat/SugestoesConversa";
 import { EVT_TEMA, temaDoTexto, temaNoTutorial } from "@/lib/onboarding/tutorialLab";
-import { EVT_PERCURSO_ESTADO, EVT_PERGUNTA_CHAT, EVT_PREENCHER_CHAT } from "@/lib/onboarding/tourSala";
+import { EVT_PERCURSO_ESTADO, EVT_PERGUNTA_CHAT, EVT_PREENCHER_CHAT, avisarDesenho, avisarTurnoFim } from "@/lib/onboarding/tourSala";
 import { useAvisoTextoDoChat } from "@/components/onboard/useAvisoTextoDoChat";
 import { useConversasSlot } from "@/components/chat/ConversasSlot";
 import { consumirPedido, EVT_ESTUDOS_CHAT, EVT_PEDIDO_CONVERSA, type PedidoConversa } from "@/lib/chat/conversasNav";
@@ -782,8 +782,10 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     if (aviso) marcar(aviso);
     // Rede (por tipo: podcast/vídeo, molécula, imagem, texto) em lib/studio/studioClient.ts —
     // o MESMO núcleo do mobile. Aqui fica só o que é desta tela: o evento e o aviso.
+    avisarDesenho("comecou", kind);   // #626: o tour do laboratório mostra "desenhando…"
     const r = await gerarArtefato(kind, { spaceId, topic, contexto, sala: "estudos", ...(pdf ? { pdf } : {}) });
     if (aviso) marcar(undefined);
+    avisarDesenho(r.tipo === "pronto" ? "pronto" : "falhou", kind);
     if (r.tipo === "pronto") {
       window.dispatchEvent(new CustomEvent("zaeon:study:embed", { detail: { ...r.bloco, attachMsgId, scopeId } }));
       // Documento (diagrama/aula): abre a aba em "Documentos"; pedido explícito já mostra ela.
@@ -1062,6 +1064,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       avisarEscritorio(activeMentor, "ocioso");
       setMessages((prev) => prev.map((m) => (m.id === asstId ? { ...m, fase: undefined, ...(m.streaming ? { streaming: false } : null) } : m)));
       setSending(false);
+      avisarTurnoFim();   // #626: o tour sabe que a resposta acabou (e se veio desenho junto)
       // o mentor pode ter subido a maestria neste turno → o painel refaz o progresso
       if (tree) setTreeRefresh((n) => n + 1);
       // a conversa pode ter virado ESTUDO (o servidor decide depois da resposta) → a bolinha "Gerar mapa" aparece

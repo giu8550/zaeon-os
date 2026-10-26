@@ -54,7 +54,7 @@ export const emCampoDeTexto = (alvo: EventTarget | null): boolean => {
 
 const reduzirMovimento = () => { try { return window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; } };
 
-export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onPular, chave, tom = "roxo", suaVez, dica = false, etiqueta }: {
+export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onPular, chave, tom = "roxo", suaVez, dica = false, etiqueta, minimizarAgora = false, avisoMinimizado }: {
   alvo: Caixa | null;
   evita: Caixa | null;
   /** a dica curta (1 linha) — vira o nome do cartão pro leitor de tela */
@@ -71,7 +71,10 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
   /** #605: roxo na Sala de Estudos, ciano no Escritório */
   tom?: TomCartao;
   /** #613: passo de ação — a tarefa fica escrita na última caixa (com um exemplo que dá pra usar) */
-  suaVez?: { tarefa: string; exemplo?: string; onExemplo?: (texto: string) => void; onJaFiz?: () => void };
+  suaVez?: { tarefa: string; exemplo?: string; onExemplo?: (texto: string) => void; onJaFiz?: () => void; jaFizEmDestaque?: boolean };
+  /** #626: minimiza sozinho (a pessoa fez a ação e está esperando) e volta quando passa; com o aviso na pílula */
+  minimizarAgora?: boolean;
+  avisoMinimizado?: string;
   /** #626: um nome curto do lado do destaque ("Enviar") — liga o cartão ao botão que a pessoa tem que apertar */
   etiqueta?: string;
   /** #618: DICA RÁPIDA (components/onboard/DicasRapidas) — só a fala e o botão; sem progresso, minimizar nem "Pular?" */
@@ -135,6 +138,7 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
   // #613: minimizar — a pessoa quer ver o que está atrás do cartão sem sair do tutorial (o próximo passo reabre)
   const [minimizado, setMinimizado] = useState(false);
   useEffect(() => { setConfirmando(false); setMinimizado(false); }, [chave]);
+  useEffect(() => { setMinimizado(minimizarAgora); }, [minimizarAgora]);
   useEffect(() => { if (confirmando) ficar.current?.focus({ preventScroll: true }); }, [confirmando]);
   useEffect(() => {
     if (!onPular) return;
@@ -169,7 +173,7 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
       </span>
       <span className="min-w-0">
         <span className="block text-[11px] font-medium tabular-nums text-[#c3cbea]">Passo {passo + 1} de {total} · abrir</span>
-        {suaVez && <span className="block truncate text-[12px] text-[#e6ebff]">{suaVez.tarefa}</span>}
+        {(avisoMinimizado ?? suaVez?.tarefa) && <span className="block truncate text-[12px] text-[#e6ebff]">{avisoMinimizado ?? suaVez?.tarefa}</span>}
       </span>
     </button>,
     document.body,
@@ -243,7 +247,11 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
               )}
               {suaVez.onJaFiz && (
                 <button type="button" onClick={(e) => { e.stopPropagation(); suaVez.onJaFiz?.(); }}
-                  className="ml-2 mt-1.5 rounded-full px-2 py-0.5 text-[12px] font-medium text-[#c3cbea] underline-offset-2 transition-colors hover:text-white hover:underline focus-visible:outline focus-visible:outline-1">
+                  // #626: sem desenho, o "Já fiz" é o caminho — vira botão de verdade
+                  className={suaVez.jaFizEmDestaque
+                    ? `${botao} mt-2 text-[#f1edff]`
+                    : "ml-2 mt-1.5 rounded-full px-2 py-0.5 text-[12px] font-medium text-[#c3cbea] underline-offset-2 transition-colors hover:text-white hover:underline focus-visible:outline focus-visible:outline-1"}
+                  style={suaVez.jaFizEmDestaque ? { borderColor: `rgb(${cor.rgb})` } : undefined}>
                   Já fiz ✓
                 </button>
               )}
