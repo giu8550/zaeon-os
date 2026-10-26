@@ -97,9 +97,11 @@ export default function TourSala({ noTutorial }: { noTutorial: boolean }) {
       total={passos.length}
       acao={passo.cta ? { rotulo: passo.cta, onClick: ultimo ? sair : seguir } : undefined}
       onPular={sair}
+      etiqueta={mandar ? "Enviar" : undefined}
       suaVez={passo.suaVez ? {
         tarefa: mandar ? TAREFA_ENVIAR : passo.id === "gerar-percurso" ? tarefaDoPercurso(percurso, passo.suaVez) : passo.suaVez,
-        exemplo: passo.exemplo, onExemplo: preencherChat, onJaFiz: passo.jaFiz ? seguir : undefined,
+        // #626: com o campo preenchido, o exemplo já cumpriu o papel — sai da frente do "apertar ↑"
+        exemplo: mandar ? undefined : passo.exemplo, onExemplo: preencherChat, onJaFiz: passo.jaFiz ? seguir : undefined,
       } : undefined}
     />
   );

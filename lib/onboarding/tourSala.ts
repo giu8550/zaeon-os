@@ -21,7 +21,8 @@ export const EVT_PREENCHER_CHAT = "zaeon:chat:preencher";
 export const EVT_CHAT_TEXTO = "zaeon:chat:texto";
 /** #618: com texto no campo, o destaque vai pro ➤ (o botão de enviar DESTE chat, não de outro composer da tela) */
 export const ALVO_ENVIAR = '[data-tour="composer-estudos"] [data-tour="enviar"]';
-export const TAREFA_ENVIAR = "Agora é só mandar ➤";
+/** o botão de enviar do chat é um ↑ (CoworkComposer) — o texto usa o MESMO símbolo */
+export const TAREFA_ENVIAR = "Agora é só apertar ↑ ou Enter";
 /** #613: o botão do percurso mudou de estado (detail: EstadoBolinha) — o cartão diz "gerando…" e depois "pronto" */
 export const EVT_PERCURSO_ESTADO = "zaeon:percurso:estado";
 

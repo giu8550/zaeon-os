@@ -207,7 +207,7 @@ describe("#613 · \"Sua vez\": a tarefa não some e o destaque vem na hora certa
     paginaFinal();
     const ouvir = vi.fn();
     window.addEventListener("zaeon:chat:preencher", ouvir);
-    fireEvent.click(screen.getByRole("button", { name: /Quero estudar sobre fotossíntese/ }));
+    fireEvent.click(screen.getByRole("button", { name: /usa o exemplo: “Quero estudar sobre fotossíntese”/ }));
     expect((ouvir.mock.calls[0]![0] as CustomEvent).detail).toEqual({ texto: "Quero estudar sobre fotossíntese" });
     window.removeEventListener("zaeon:chat:preencher", ouvir);
     expect(cartao()).not.toBeNull(); // o passo só anda quando a pergunta for MANDADA
@@ -312,7 +312,7 @@ describe("#618 · o contorno anda junto com a pessoa", () => {
   const caixa = (el: HTMLElement, x: number, y: number, w: number, h: number) => {
     el.getBoundingClientRect = () => ({ x, y, left: x, top: y, width: w, height: h, right: x + w, bottom: y + h, toJSON: () => ({}) }) as DOMRect;
   };
-  it("campo vazio → contorno no campo; DIGITANDO → no ➤ e \"Agora é só mandar\"; apagou → volta pro campo", async () => {
+  it("campo vazio → contorno no campo; DIGITANDO → no ↑ com a etiqueta \"Enviar\" e \"Agora é só apertar ↑\"; apagou → volta pro campo", async () => {
     const { useAvisoTextoDoChat } = await import("@/components/onboard/useAvisoTextoDoChat");
     const { useState } = await import("react");
     // um chat de mentira com o MESMO aviso que o StudyCoworkChat usa (campo de verdade, digitação de verdade)
@@ -337,7 +337,9 @@ describe("#618 · o contorno anda junto com a pessoa", () => {
     fireEvent.change(screen.getByLabelText("mensagem"), { target: { value: "Quero estudar sobre: python" } });
     act(() => { vi.advanceTimersByTime(100); });
     expect(anel()!.style.width).toBe("52px");           // o ➤
-    expect(sv()).toMatch(/Agora é só mandar ➤/);
+    expect(sv()).toMatch(/Agora é só apertar ↑ ou Enter/);
+    expect(sv()).not.toMatch(/exemplo/);                                       // #626: o exemplo sai da frente
+    expect(document.querySelector("[data-tour-etiqueta]")?.textContent).toBe("Enviar");
     fireEvent.change(screen.getByLabelText("mensagem"), { target: { value: "" } });
     act(() => { vi.advanceTimersByTime(100); });
     expect(anel()!.style.width).toBe("862px");
@@ -345,8 +347,8 @@ describe("#618 · o contorno anda junto com a pessoa", () => {
   it("o exemplo diz o que faz", () => {
     abrir(<TourSala noTutorial={false} />);
     paginaFinal();
-    expect(screen.getByRole("button", { name: /Usar o exemplo: “Quero estudar sobre fotossíntese”/ })).toBeTruthy();
-    expect(document.querySelector("[data-tour-sua-vez]")!.textContent).toMatch(/é só apertar ➤/);
+    expect(screen.getByRole("button", { name: /ou usa o exemplo: “Quero estudar sobre fotossíntese”/ })).toBeTruthy();
+    expect(document.querySelector("[data-tour-etiqueta]")).toBeNull();          // sem texto no campo, sem etiqueta
   });
 });
 
