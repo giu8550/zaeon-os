@@ -28,6 +28,7 @@
  */
 import { semImagens, type ChamarModelo, type MsgModelo, type RespostaModelo } from "@/lib/octa/agente";
 import { modeloReal } from "@/lib/octa/litellm";
+import { ehProvedorTerceiro, semSegredos } from "@/lib/octa/noPii";
 
 type Env = Record<string, string | undefined>;
 const num = (v: string | undefined, d: number) => (Number(v) > 0 ? Number(v) : d);
@@ -105,6 +106,14 @@ export function criarChamadorOcta(
   let caiu = false;
   let gastoLocal = 0;
 
+  // Trava de segredo, camada 2 (lib/octa/noPii): quando o passo vai pra um provedor TERCEIRO
+  // (Hugging Face Inference Providers), as mensagens saem com os segredos redigidos — rede de
+  // segurança pra credencial CHUMBADA num arquivo legítimo, que a camada 1 (por caminho) libera.
+  // Vertex/Contabo passam intactos: o Google já é o provedor estabelecido e a Contabo é nossa.
+  // Hoje é no-op (o Octa não tem alvo terceiro); nasce ligado pro PR que acende o hf-heavy.
+  const chamarSeguro: ChamarGateway = (modelo, msgs, signal) =>
+    chamar(modelo, ehProvedorTerceiro(modelo) ? semSegredos(msgs) : msgs, signal);
+
   const f = (async (msgs: MsgModelo[]) => {
     if (escolha.landing) return passoLanding(msgs);
     let motivo: string | undefined;
@@ -116,7 +125,7 @@ export function criarChamadorOcta(
       else if (tokensDe(msgs) > escolha.maxPromptTok) motivo = "prompt_grande";
       else {
         try {
-          const r = await chamar(escolha.local, msgs, AbortSignal.timeout(Math.min(escolha.timeoutMs, resta)));
+          const r = await chamarSeguro(escolha.local, msgs, AbortSignal.timeout(Math.min(escolha.timeoutMs, resta)));
           gastoLocal += agora() - t0;
           if (!vazia(r)) { servidos.push({ modelo: escolha.local, modeloId: r.modeloId, ms: agora() - t0 }); return r; }
           motivo = "resposta_vazia";
@@ -130,7 +139,7 @@ export function criarChamadorOcta(
       caiu = true;
     }
     const t1 = agora();
-    const r = await chamar(escolha.reserva, msgs);
+    const r = await chamarSeguro(escolha.reserva, msgs);
     servidos.push({ modelo: escolha.reserva, modeloId: r.modeloId, ms: agora() - t1, motivo });
     return r;
   }) as ChamarModelo & { servidos: Servido[] };
@@ -144,7 +153,7 @@ export function criarChamadorOcta(
     else if (primario) {
       const t0 = agora();
       try {
-        const r = await chamar(primario, msgs, AbortSignal.timeout(escolha.timeoutMs));
+        const r = await chamarSeguro(primario, msgs, AbortSignal.timeout(escolha.timeoutMs));
         if (!vazia(r)) { servidos.push({ modelo: primario, modeloId: r.modeloId, ms: agora() - t0 }); return r; }
         motivo = "resposta_vazia";
       } catch (e: any) {
@@ -158,7 +167,7 @@ export function criarChamadorOcta(
     if (resta <= 0) throw new Error(`reserva esgotada neste turno: o modelo principal falhou (${motivo}) e o tempo da reserva acabou`);
     const t1 = agora();
     try {
-      const r = await chamar(escolha.reserva, escolha.reservaSemImagem ? semImagens(msgs) : msgs, AbortSignal.timeout(Math.min(escolha.timeoutMs, resta)));
+      const r = await chamarSeguro(escolha.reserva, escolha.reservaSemImagem ? semImagens(msgs) : msgs, AbortSignal.timeout(Math.min(escolha.timeoutMs, resta)));
       servidos.push({ modelo: escolha.reserva, modeloId: r.modeloId, ms: agora() - t1, motivo });
       return r;
     } finally { gastoReserva += agora() - t1; }
