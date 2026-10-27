@@ -53,7 +53,9 @@ export const AVISO_PEDIDO: Record<"enviado" | "desenhando", string> = {
 export const TAREFA_SEM_DESENHO = "Dessa vez não saiu o desenho. Pede de novo, ou clica em “Já fiz” pra seguir.";
 
 /** o botão de enviar do chat é um ↑ (CoworkComposer) — o texto usa o MESMO símbolo */
-export const TAREFA_ENVIAR = "Agora é só apertar ↑ ou Enter";
+export const TAREFA_ENVIAR = "Quando terminar, aperta ↑ ou Enter";
+/** #629: o contorno só vai pro ↑ depois de a pessoa PARAR de digitar por um instante (uma letra não é um pedido) */
+export const ESPERA_DIGITAR_MS = 1500;
 /** #613: o botão do percurso mudou de estado (detail: EstadoBolinha) — o cartão diz "gerando…" e depois "pronto" */
 export const EVT_PERCURSO_ESTADO = "zaeon:percurso:estado";
 

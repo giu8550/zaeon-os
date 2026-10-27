@@ -312,7 +312,7 @@ describe("#618 · o contorno anda junto com a pessoa", () => {
   const caixa = (el: HTMLElement, x: number, y: number, w: number, h: number) => {
     el.getBoundingClientRect = () => ({ x, y, left: x, top: y, width: w, height: h, right: x + w, bottom: y + h, toJSON: () => ({}) }) as DOMRect;
   };
-  it("campo vazio → contorno no campo; DIGITANDO → no ↑ com a etiqueta \"Enviar\" e \"Agora é só apertar ↑\"; apagou → volta pro campo", async () => {
+  it("campo vazio → contorno no campo; DIGITANDO → no ↑ com a etiqueta \"Enviar\" e \"Quando terminar, aperta ↑\" (só depois de parar de digitar); apagou → volta pro campo", async () => {
     const { useAvisoTextoDoChat } = await import("@/components/onboard/useAvisoTextoDoChat");
     const { useState } = await import("react");
     // um chat de mentira com o MESMO aviso que o StudyCoworkChat usa (campo de verdade, digitação de verdade)
@@ -334,10 +334,17 @@ describe("#618 · o contorno anda junto com a pessoa", () => {
     act(() => { vi.advanceTimersByTime(100); });
     expect(anel()!.style.width).toBe("862px");          // o campo (+6 de cada lado)
     expect(sv()).toMatch(/Escreve um tema/);
+    fireEvent.change(screen.getByLabelText("mensagem"), { target: { value: "quer" } });
+    act(() => { vi.advanceTimersByTime(500); });
+    expect(anel()!.style.width).toBe("862px");          // #629: ainda digitando → o contorno fica no campo
+    expect(sv()).not.toMatch(/aperta ↑/);
     fireEvent.change(screen.getByLabelText("mensagem"), { target: { value: "Quero estudar sobre: python" } });
-    act(() => { vi.advanceTimersByTime(100); });
-    expect(anel()!.style.width).toBe("52px");           // o ➤
-    expect(sv()).toMatch(/Agora é só apertar ↑ ou Enter/);
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(anel()!.style.width).toBe("862px");          // cada letra recomeça a espera
+    act(() => { vi.advanceTimersByTime(600); });
+    act(() => { vi.advanceTimersByTime(100); });         // o destaque remede no quadro seguinte
+    expect(anel()!.style.width).toBe("52px");           // parou de digitar → o ↑
+    expect(sv()).toMatch(/Quando terminar, aperta ↑ ou Enter/);
     expect(sv()).not.toMatch(/exemplo/);                                       // #626: o exemplo sai da frente
     expect(document.querySelector("[data-tour-etiqueta]")?.textContent).toBe("Enviar");
     fireEvent.change(screen.getByLabelText("mensagem"), { target: { value: "" } });
@@ -432,5 +439,24 @@ describe("#626 · percurso já pronto antes do tour começar", () => {
     disparar(EVT_ABRIR_DOC, { studioKind: "diagram" });
     for (let k = 0; k < 6 && screen.queryByRole("button", { name: "Continuar" }); k++) fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     expect(document.querySelector("[data-tour-sua-vez]")?.textContent).toMatch(/Pronto!.*“Ver mapa”/);
+  });
+});
+
+describe("#629 · o exemplo vai direto pro ↑", () => {
+  it("usar o exemplo não espera a pausa (não tem o que terminar de escrever)", async () => {
+    const { useAvisoTextoDoChat } = await import("@/components/onboard/useAvisoTextoDoChat");
+    const { useState, useEffect } = await import("react");
+    function Chat() {
+      const [v, setV] = useState("");
+      useAvisoTextoDoChat(v);
+      useEffect(() => { const on = (e: Event) => setV((e as CustomEvent).detail.texto); window.addEventListener("zaeon:chat:preencher", on); return () => window.removeEventListener("zaeon:chat:preencher", on); }, []);
+      return <div data-tour="composer-estudos"><button data-tour="enviar">↑</button></div>;
+    }
+    render(<Chat />);
+    abrir(<TourSala noTutorial={false} />);
+    for (let k = 0; k < 6 && screen.queryByRole("button", { name: "Continuar" }); k++) fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    fireEvent.click(screen.getByRole("button", { name: /ou usa o exemplo/ }));
+    act(() => { vi.advanceTimersByTime(50); });
+    expect(document.querySelector("[data-tour-sua-vez]")?.textContent).toMatch(/Quando terminar, aperta ↑/);
   });
 });

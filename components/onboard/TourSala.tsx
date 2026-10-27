@@ -10,7 +10,7 @@ import { OverlayTour, useDestaque } from "@/components/onboard/BalaoTour";
 import { mapPanelOn } from "@/components/cerebro/useCerebro";
 import { irPraAbaEstudos } from "@/lib/chat/conversasNav";
 import { getTour } from "@/lib/onboarding/tour";
-import { ALVO_ENVIAR, AVISO_PEDIDO, EVT_DESENHO, EVT_PERGUNTA_CHAT, EVT_TURNO_FIM, KINDS_VISUAIS, TAREFA_SEM_DESENHO, estadoPercursoAtual, proximoPedido, type EventoPedido, type PedidoDesenho, EVT_CHAT_TEXTO, EVT_PERCURSO_ESTADO, EVT_PREENCHER_CHAT, TAREFA_ENVIAR, deveMostrarTourSala, eventoAvanca, marcarTourDoLabAtivo, marcarTourSalaVisto, passosDaSala, tarefaDoPercurso, tourSalaVisto } from "@/lib/onboarding/tourSala";
+import { ALVO_ENVIAR, AVISO_PEDIDO, EVT_DESENHO, EVT_PERGUNTA_CHAT, EVT_TURNO_FIM, KINDS_VISUAIS, TAREFA_SEM_DESENHO, estadoPercursoAtual, proximoPedido, type EventoPedido, type PedidoDesenho, EVT_CHAT_TEXTO, EVT_PERCURSO_ESTADO, EVT_PREENCHER_CHAT, TAREFA_ENVIAR, ESPERA_DIGITAR_MS, deveMostrarTourSala, eventoAvanca, marcarTourDoLabAtivo, marcarTourSalaVisto, passosDaSala, tarefaDoPercurso, tourSalaVisto } from "@/lib/onboarding/tourSala";
 import { EVT_ESTUDOS_VISTA } from "@/lib/onboarding/tutorialLab";
 import { EVT_REVER_TOURS } from "@/lib/onboarding/reverTours";
 import { geracaoDosTours } from "@/lib/onboarding/geracaoTour";
@@ -106,13 +106,23 @@ export default function TourSala({ noTutorial }: { noTutorial: boolean }) {
     window.addEventListener(EVT_PERCURSO_ESTADO, on);
     return () => window.removeEventListener(EVT_PERCURSO_ESTADO, on);
   }, []);
-  // #618: o campo do chat tem texto? o contorno anda junto: campo vazio → campo; com texto → ➤ enviar
+  // #618: o campo do chat tem texto? o contorno anda junto: campo vazio → campo; com texto → ↑ enviar.
+  // #629: só depois de a pessoa PARAR de digitar (com "quer" o cartão já mandava apertar); o exemplo vai direto
   const [temTexto, setTemTexto] = useState(false);
+  const veioDoExemplo = useRef(false);
   useEffect(() => {
-    const on = (e: Event) => setTemTexto(!!(e as CustomEvent).detail);
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const on = (e: Event) => {
+      clearTimeout(t);
+      if (!(e as CustomEvent).detail) { setTemTexto(false); return; }
+      if (veioDoExemplo.current) { veioDoExemplo.current = false; setTemTexto(true); return; }
+      setTemTexto(false);
+      t = setTimeout(() => setTemTexto(true), ESPERA_DIGITAR_MS);
+    };
     window.addEventListener(EVT_CHAT_TEXTO, on);
-    return () => window.removeEventListener(EVT_CHAT_TEXTO, on);
+    return () => { clearTimeout(t); window.removeEventListener(EVT_CHAT_TEXTO, on); };
   }, []);
+  const usarExemplo = (texto: string) => { veioDoExemplo.current = true; preencherChat(texto); };
   const mandar = !!passo?.noChat && temTexto;
   const alvos = useMemo(() => (mandar ? [ALVO_ENVIAR] : passo?.alvos ?? SEM_ALVOS), [mandar, passo]);
   const { alvo, evita } = useDestaque(alvos, mandar ? EVITA_CHAT : SEM_ALVOS, !!passo);
@@ -136,7 +146,7 @@ export default function TourSala({ noTutorial }: { noTutorial: boolean }) {
       suaVez={passo.suaVez ? {
         tarefa: pedido === "semDesenho" ? TAREFA_SEM_DESENHO : mandar ? TAREFA_ENVIAR : passo.id === "gerar-percurso" ? tarefaDoPercurso(percurso, passo.suaVez) : passo.suaVez,
         // #626: com o campo preenchido, o exemplo já cumpriu o papel — sai da frente do "apertar ↑"
-        exemplo: mandar ? undefined : passo.exemplo, onExemplo: preencherChat, onJaFiz: passo.jaFiz ? () => seguirDe(passo.id) : undefined, jaFizEmDestaque: pedido === "semDesenho",
+        exemplo: mandar ? undefined : passo.exemplo, onExemplo: usarExemplo, onJaFiz: passo.jaFiz ? () => seguirDe(passo.id) : undefined, jaFizEmDestaque: pedido === "semDesenho",
       } : undefined}
     />
   );
