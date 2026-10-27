@@ -40,6 +40,8 @@ export type PedidoDesenho = null | "enviado" | "desenhando" | "semDesenho";
 export type EventoPedido = { tipo: "pergunta" } | { tipo: "desenho"; fase: FaseDesenho; kind: string } | { tipo: "fim" };
 export function proximoPedido(atual: PedidoDesenho, ev: EventoPedido): PedidoDesenho {
   if (ev.tipo === "pergunta") return "enviado";
+  // #629: antes do pedido, desenho nenhum conta — o "brinde" da resposta do passo 1 ficava pronto aqui e pulava o passo
+  if (atual === null) return null;
   if (ev.tipo === "desenho") {
     if (!KINDS_VISUAIS.includes(ev.kind)) return atual;
     return ev.fase === "comecou" ? "desenhando" : ev.fase === "falhou" ? "semDesenho" : atual;

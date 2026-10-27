@@ -65,28 +65,34 @@ export default function TourSala({ noTutorial }: { noTutorial: boolean }) {
     if (k + 1 >= passos.length) { marcarTourSalaVisto(geracao.current); return null; }
     return k + 1;
   });
+  // #626/#629: o pedido do diagrama (enviado → desenhando → pronto)
+  const [pedido, setPedido] = useState<PedidoDesenho>(null);
+  const pedidoRef = useRef<PedidoDesenho>(null);   // o valor NA HORA do evento (dois avisos seguidos chegam antes do render)
   // passo de AÇÃO: anda quando a pessoa faz a coisa (o evento chega)
   useEffect(() => {
     if (!passo?.avancaEm?.length) return;
     const id = passo.id;
     const eventos = Array.from(new Set(passo.avancaEm.map((a) => a.evento)));
-    const ouvir = (e: Event) => { if (eventoAvanca(passo, e.type, (e as CustomEvent).detail)) seguirDe(id); };
+    const ouvir = (e: Event) => {
+      // #629: no passo do diagrama, o documento só conta DEPOIS do pedido (o brinde do passo 1 abria e pulava o passo)
+      if (id === "criar-diagrama" && pedidoRef.current === null) return;
+      if (eventoAvanca(passo, e.type, (e as CustomEvent).detail)) seguirDe(id);
+    };
     for (const ev of eventos) window.addEventListener(ev, ouvir);
     return () => { for (const ev of eventos) window.removeEventListener(ev, ouvir); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [passo]);
   // #626: o passo do diagrama acompanha o pedido (enviado → desenhando → pronto; ou não saiu o desenho)
-  const [pedido, setPedido] = useState<PedidoDesenho>(null);
   useEffect(() => {
-    setPedido(null);
+    setPedido(null); pedidoRef.current = null;
     if (passo?.id !== "criar-diagrama") return;
     const id = passo.id;
-    const mudar = (ev: EventoPedido) => setPedido((p) => proximoPedido(p, ev));
+    const mudar = (ev: EventoPedido) => { const n = proximoPedido(pedidoRef.current, ev); pedidoRef.current = n; setPedido(n); };
     const pergunta = () => mudar({ tipo: "pergunta" });
     const desenho = (e: Event) => {
       const d = ((e as CustomEvent).detail ?? {}) as { fase?: "comecou" | "pronto" | "falhou"; kind?: string };
       if (!d.fase || !d.kind) return;
-      if (d.fase === "pronto" && KINDS_VISUAIS.includes(d.kind)) seguirDe(id);
+      if (d.fase === "pronto" && KINDS_VISUAIS.includes(d.kind)) { if (pedidoRef.current !== null) seguirDe(id); }
       else mudar({ tipo: "desenho", fase: d.fase, kind: d.kind });
     };
     // o desenho pode começar um instante depois de a resposta acabar: espera um pouco antes de dizer "não saiu"

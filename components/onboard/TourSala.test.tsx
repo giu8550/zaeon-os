@@ -36,8 +36,9 @@ describe("TourSala — o tour do laboratório", () => {
     expect(cartao()?.textContent).toMatch(/blueprint/);
     fireEvent.click(ateBotao("Bora"));
     expect(cartao()?.textContent).toMatch(/diagrama interativo/);
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Faz um diagrama interativo disso" });   // #629: o desenho só conta depois do pedido
     disparar(EVT_ABRIR_DOC, { studioKind: "quiz" });           // um documento que não é visual não conta
-    expect(cartao()?.textContent).toMatch(/diagrama interativo/);
+    expect(document.querySelector("[data-tour-minimizado]")?.textContent).toMatch(/Pedido enviado/);   // ainda no passo 3
     disparar(EVT_ABRIR_DOC, { studioKind: "diagram" });
     expect(cartao()?.textContent).toMatch(/percurso/);
     disparar(EVT_PERCURSO_ABERTO);
@@ -224,6 +225,7 @@ describe("#613 · diagrama e percurso não travam o tour", () => {
   };
   it("a IA respondeu com uma aula: o passo do diagrama anda do mesmo jeito", () => {
     ateDiagrama();
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Faz um diagrama interativo disso" });   // #629: o desenho só conta depois do pedido
     disparar(EVT_ABRIR_DOC, { studioKind: "aula" });
     expect(cartao()?.textContent).toMatch(/percurso/);
   });
@@ -234,6 +236,7 @@ describe("#613 · diagrama e percurso não travam o tour", () => {
   });
   it("o percurso: gerando… e depois pronto, abre o mapa", () => {
     ateDiagrama();
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Faz um diagrama interativo disso" });   // #629: o desenho só conta depois do pedido
     disparar(EVT_ABRIR_DOC, { studioKind: "diagram" });
     paginaFinal();
     const sv = () => document.querySelector("[data-tour-sua-vez]")?.textContent ?? "";
@@ -436,6 +439,7 @@ describe("#626 · percurso já pronto antes do tour começar", () => {
     abrir(<TourSala noTutorial={false} />);
     disparar(EVT_PERGUNTA_CHAT, { prompt: "Quero estudar sobre: fotossíntese" });
     fireEvent.click(ateBotao("Bora"));
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Faz um diagrama interativo disso" });   // #629: o desenho só conta depois do pedido
     disparar(EVT_ABRIR_DOC, { studioKind: "diagram" });
     for (let k = 0; k < 6 && screen.queryByRole("button", { name: "Continuar" }); k++) fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     expect(document.querySelector("[data-tour-sua-vez]")?.textContent).toMatch(/Pronto!.*“Ver mapa”/);
@@ -458,5 +462,22 @@ describe("#629 · o exemplo vai direto pro ↑", () => {
     fireEvent.click(screen.getByRole("button", { name: /ou usa o exemplo/ }));
     act(() => { vi.advanceTimersByTime(50); });
     expect(document.querySelector("[data-tour-sua-vez]")?.textContent).toMatch(/Quando terminar, aperta ↑/);
+  });
+});
+
+describe("#629 · o desenho de brinde não pula o passo 3", () => {
+  it("documento aberto ANTES do pedido (o brinde da resposta do passo 1) é ignorado; depois do pedido, conta", () => {
+    abrir(<TourSala noTutorial={false} />);
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Quero estudar sobre: fotossíntese" });
+    fireEvent.click(ateBotao("Bora"));
+    expect(cartao()?.textContent).toMatch(/diagrama/);
+    disparar("zaeon:chat:desenho", { fase: "comecou", kind: "diagram" });   // o brinde
+    disparar("zaeon:chat:desenho", { fase: "pronto", kind: "diagram" });
+    disparar(EVT_ABRIR_DOC, { studioKind: "diagram" });
+    expect(screen.getByText("Passo 3 de 5")).toBeTruthy();                   // não pulou
+    expect(cartao()).not.toBeNull();                                          // nem minimizou
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Faz um diagrama interativo disso" });
+    disparar(EVT_ABRIR_DOC, { studioKind: "diagram" });
+    expect(cartao()?.textContent).toMatch(/percurso/);
   });
 });
