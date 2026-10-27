@@ -15,6 +15,7 @@ import { EVT_ESTUDOS_VISTA } from "@/lib/onboarding/tutorialLab";
 import { EVT_REVER_TOURS } from "@/lib/onboarding/reverTours";
 import { geracaoDosTours } from "@/lib/onboarding/geracaoTour";
 import { dicaAtiva } from "@/lib/onboarding/dicas";
+import { esperarVistos, vistosJaLidos } from "@/lib/onboarding/vistosConta";
 import type { EstadoBolinha } from "@/lib/map/bolinha";
 
 const SEM_ALVOS: string[] = [];
@@ -31,10 +32,11 @@ export default function TourSala({ noTutorial }: { noTutorial: boolean }) {
   const comecar = () => { geracao.current = geracaoDosTours(); setI(0); };
   // espera o laboratório assentar (a sala inicial, a sidebar) antes de começar
   useEffect(() => {
-    const t = setTimeout(() => {
-      if (deveMostrarTourSala({ noTutorial, largura: window.innerWidth, visto: tourSalaVisto(), outroTour: getTour().active || dicaAtiva() })) comecar();
-    }, 1500);
-    return () => clearTimeout(t);
+    // #629: antes de decidir, pergunta à conta se a pessoa já viu (noutro navegador/computador)
+    let vivo = true;
+    const decidir = () => { if (vivo && deveMostrarTourSala({ noTutorial, largura: window.innerWidth, visto: tourSalaVisto(), outroTour: getTour().active || dicaAtiva() })) comecar(); };
+    const t = setTimeout(() => { if (vistosJaLidos()) decidir(); else void esperarVistos().then(decidir); }, 1500);
+    return () => { vivo = false; clearTimeout(t); };
   }, [noTutorial]);
   // #613: "Rever tutorial do laboratório" (Configurações) — recomeça do 1º passo
   useEffect(() => {

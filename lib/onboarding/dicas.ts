@@ -3,6 +3,7 @@
  * pessoa entra num lugar, com "Entendi". Sem "Passo X de Y", sem travar a tela. O cartão é o mesmo dos tours
  * (components/onboard/BalaoTour, modo `dica`); o "Rever tutorial" das Configurações traz elas de volta.
  */
+import { ITENS_VISTOS, salvarVistoNaConta, type ItemVisto } from "@/lib/onboarding/vistosConta";
 export type Dica = { alvo: string; texto: string };
 
 /** o Perfil: a foto troca clicando NELA; "Editar" muda nome e curso; a skin tem botão (menos pra quem é fundador) */
@@ -33,7 +34,12 @@ export const DICAS_SALA: Dica[] = [
 export const LUGARES_COM_DICAS = ["perfil", "sala-estudos"] as const;
 const chave = (lugar: string) => `zaeon.dica.${lugar}.v1`;
 export const dicasVistas = (lugar: string): boolean => { try { return localStorage.getItem(chave(lugar)) === "1"; } catch { return true; } };
-export const marcarDicasVistas = (lugar: string) => { try { localStorage.setItem(chave(lugar), "1"); } catch { /* ignore */ } };
+export const marcarDicasVistas = (lugar: string) => {
+  try { localStorage.setItem(chave(lugar), "1"); } catch { /* ignore */ }
+  // #629: a conta guarda também (vale em qualquer navegador)
+  const item = `dica:${lugar}`;
+  if ((ITENS_VISTOS as readonly string[]).includes(item)) salvarVistoNaConta(item as ItemVisto);
+};
 export const esquecerDicas = () => { for (const l of LUGARES_COM_DICAS) { try { localStorage.removeItem(chave(l)); } catch { /* ignore */ } } };
 /** uma dica está na tela agora (o tour da sala e o do Escritório esperam ela fechar — os dois não disputam a tela) */
 let dicaNaTela = false;

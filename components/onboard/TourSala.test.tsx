@@ -6,6 +6,9 @@ import TourEscritorio from "@/components/onboard/TourEscritorio";
 import { EVT_PERGUNTA_CHAT, EVT_PERCURSO_ABERTO } from "@/lib/onboarding/tourSala";
 import { EVT_ABRIR_DOC } from "@/lib/chat/documentos";
 
+// #629: a conta (User.toursVistos) já respondeu — os tours decidem na hora (o caminho com espera tem teste próprio)
+vi.mock("@/lib/onboarding/vistosConta", async (orig) => ({ ...(await orig<typeof import("@/lib/onboarding/vistosConta")>()), vistosJaLidos: () => true, esperarVistos: () => Promise.resolve() }));
+
 const disparar = (tipo: string, detail?: unknown) => act(() => { window.dispatchEvent(new CustomEvent(tipo, { detail })); });
 const cartao = () => document.querySelector("[data-tour-cartao]") as HTMLElement | null;
 

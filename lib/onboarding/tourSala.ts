@@ -10,6 +10,7 @@ import type { AbaEstudos } from "@/lib/chat/conversasNav";
 import { EVT_ABRIR_DOC, KINDS_EM_ABA } from "@/lib/chat/documentos";
 import type { EstadoBolinha } from "@/lib/map/bolinha";
 import { geracaoValida } from "@/lib/onboarding/geracaoTour";
+import { CHAVE_LOCAL, salvarVistoNaConta } from "@/lib/onboarding/vistosConta";
 
 /** o chat da Sala de Estudos mandou uma pergunta (components/study/StudyCoworkChat) */
 export const EVT_PERGUNTA_CHAT = "zaeon:chat:pergunta";
@@ -154,7 +155,7 @@ export function avisarEstadoPercurso(estado: EstadoBolinha): void {
 }
 
 // v2: o roteiro novo — quem só viu o passeio antigo (v1) ganha o novo uma vez
-const CHAVE = "zaeon.tour.sala.v2";
+const CHAVE = CHAVE_LOCAL.sala;   // "zaeon.tour.sala.v2" (#629: a conta guarda também — lib/onboarding/vistosConta)
 /** #613: "Rever tutorial do laboratório" (Configurações) */
 export const esquecerTourSala = () => { try { localStorage.removeItem(CHAVE); } catch { /* ignore */ } };
 export const tourSalaVisto = (): boolean => { try { return localStorage.getItem(CHAVE) === "1"; } catch { return true; } };
@@ -162,6 +163,7 @@ export const tourSalaVisto = (): boolean => { try { return localStorage.getItem(
 export const marcarTourSalaVisto = (geracao?: string) => {
   if (!geracaoValida(geracao)) return;
   try { localStorage.setItem(CHAVE, "1"); } catch { /* ignore */ }
+  salvarVistoNaConta("sala");
   try { void fetch("/api/onboard/tour", { method: "POST" }).catch(() => {}); } catch { /* sem rede */ }
 };
 /** mostra o tour? Nunca no tutorial (a missão tem o tour dela), nunca no celular (a sidebar some), uma vez só */

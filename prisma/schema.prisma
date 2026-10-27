@@ -30,6 +30,7 @@ model User {
   city                String?
   onboardingComplete  Boolean   @default(false)
   tourDone            Boolean   @default(false)   // tour guiado da Zaeon (onboarding) — visível no dashboard
+  toursVistos         Json?     // #629: os tutoriais/dicas do laboratório que a pessoa já viu ["sala","escritorio","dica:perfil",…] (lib/onboarding/vistosConta) — vale em qualquer navegador
   cyberNasceuEm       DateTime? // 1ª entrada no CYBERESPAÇO: vazio = nunca entrou → nasce num tubo de ensaio (lib/cyber/onboarding)
   cyberPerfil         Json?     // o que a pessoa contou pra Zaeon na capela (nome, situação, área, foco, o que quer estudar, objetivo — lib/cyber/conversaZaeon): memória dos agentes e base da gamificação
   cyberExpulsoEm      DateTime? // a última vez que o Droid expulsou a pessoa do cyberespaço (desrespeitou a Zaeon)

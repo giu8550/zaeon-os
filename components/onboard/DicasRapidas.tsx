@@ -8,6 +8,7 @@ import { EVT_REVER_TOURS } from "@/lib/onboarding/reverTours";
 import { OverlayTour, useDestaque } from "@/components/onboard/BalaoTour";
 import { getTour } from "@/lib/onboarding/tour";
 import { tourDoLabAtivo } from "@/lib/onboarding/tourSala";
+import { esperarVistos, vistosJaLidos } from "@/lib/onboarding/vistosConta";
 import { deveMostrarDicas, dicasVistas, marcarDicaAtiva, marcarDicasVistas, type Dica } from "@/lib/onboarding/dicas";
 
 const SEM_ALVOS: string[] = [];
@@ -22,13 +23,16 @@ export default function DicasRapidas({ lugar, dicas }: { lugar: string; dicas: D
     return () => window.removeEventListener(EVT_REVER_TOURS, rever);
   }, []);
   // espera a tela assentar e nenhum tour estar rodando (confere de novo a cada segundo)
+  // #629: a conta responde primeiro (a pessoa pode já ter visto noutro navegador)
+  const [contaLida, setContaLida] = useState(vistosJaLidos);
+  useEffect(() => { let vivo = true; void esperarVistos().then(() => { if (vivo) setContaLida(true); }); return () => { vivo = false; }; }, []);
   useEffect(() => {
-    if (dicasVistas(lugar)) return;
+    if (!contaLida || dicasVistas(lugar)) return;
     const t = setInterval(() => {
       if (deveMostrarDicas({ visto: dicasVistas(lugar), largura: window.innerWidth, outroTour: getTour().active || tourDoLabAtivo() })) { setI(0); clearInterval(t); }
     }, 1200);
     return () => clearInterval(t);
-  }, [lugar, rodada]);
+  }, [lugar, rodada, contaLida]);
   const dica = i === null ? null : dicas[i] ?? null;
   // com uma dica na tela, os tours esperam (lib/onboarding/dicas)
   useEffect(() => { marcarDicaAtiva(!!dica); }, [dica]);

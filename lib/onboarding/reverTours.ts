@@ -8,6 +8,7 @@ import { esquecerTourEscritorio } from "@/lib/onboarding/tourEscritorio";
 import { novaGeracaoDosTours } from "@/lib/onboarding/geracaoTour";
 import { esquecerDicas } from "@/lib/onboarding/dicas";
 import { pedirConversa } from "@/lib/chat/conversasNav";
+import { limparVistosDaConta } from "@/lib/onboarding/vistosConta";
 
 export const EVT_REVER_TOURS = "zaeon:tour:rever";
 
@@ -17,6 +18,7 @@ export function reverToursDoLab(): void {
   esquecerTourSala();
   esquecerTourEscritorio();
   esquecerDicas();   // #618: as dicas rápidas (Perfil) também
+  limparVistosDaConta();   // #629: a conta esquece também (senão ela marcava tudo como visto no próximo carregamento)
   // #626: o tour da sala começa pedindo um estudo — numa conversa que JÁ é estudo (com mapa e tudo) isso não faz
   // sentido. Abre uma conversa nova e vazia (o bilhete vale também se o laboratório ainda não estiver aberto).
   try { pedirConversa({ sala: "estudos", nova: true }); } catch { /* sem janela */ }

@@ -6,6 +6,9 @@ import DicasRapidas from "@/components/onboard/DicasRapidas";
 import { DICAS_PERFIL } from "@/lib/onboarding/dicas";
 import { reverToursDoLab } from "@/lib/onboarding/reverTours";
 
+// #629: a conta (User.toursVistos) já respondeu — os tours decidem na hora (o caminho com espera tem teste próprio)
+vi.mock("@/lib/onboarding/vistosConta", async (orig) => ({ ...(await orig<typeof import("@/lib/onboarding/vistosConta")>()), vistosJaLidos: () => true, esperarVistos: () => Promise.resolve() }));
+
 const cartao = () => document.querySelector("[data-tour-cartao]") as HTMLElement | null;
 const abrir = () => { render(<DicasRapidas lugar="perfil" dicas={DICAS_PERFIL} />); act(() => { vi.advanceTimersByTime(1300); }); };
 
