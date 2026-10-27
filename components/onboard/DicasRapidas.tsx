@@ -33,11 +33,20 @@ export default function DicasRapidas({ lugar, dicas }: { lugar: string; dicas: D
   // com uma dica na tela, os tours esperam (lib/onboarding/dicas)
   useEffect(() => { marcarDicaAtiva(!!dica); }, [dica]);
   useEffect(() => () => marcarDicaAtiva(false), []);
+  const fechar = () => { marcarDicasVistas(lugar); setI(null); };
+  const seguir = (k: number) => (k + 1 >= dicas.length ? fechar() : setI(k + 1));
+  // #629: a dica aponta pra algo que não está na tela (um blueprint sem crítico, por ex.)? pula ela em vez de apontar o vazio
+  const alvoDaVez = dica?.alvo;
+  useEffect(() => {
+    if (!alvoDaVez || i === null) return;
+    const t = setTimeout(() => { if (!document.querySelector(alvoDaVez)) seguir(i); }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alvoDaVez, i]);
   const { alvo, evita } = useDestaque(dica ? [dica.alvo] : SEM_ALVOS, SEM_ALVOS, !!dica);
   if (!dica || i === null) return null;
-  const fechar = () => { marcarDicasVistas(lugar); setI(null); };
   return (
     <OverlayTour dica chave={`${lugar}-${i}`} alvo={alvo} evita={evita} titulo={dica.texto} fala={dica.texto} passo={i} total={dicas.length}
-      tom="ciano" acao={{ rotulo: "Entendi", onClick: i + 1 >= dicas.length ? fechar : () => setI(i + 1) }} onPular={fechar} />
+      tom="ciano" acao={{ rotulo: "Entendi", onClick: () => seguir(i) }} onPular={fechar} />
   );
 }

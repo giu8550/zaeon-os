@@ -10,18 +10,23 @@ export function dicasDoPerfil(o: { fundador: boolean }): Dica[] {
   return [
     { alvo: '[data-tour="perfil-habilidades"]',
       texto: "Aqui ficam as tuas habilidades e o que você está trabalhando. Essa parte aparece pra quem abre o teu perfil." },
-    { alvo: '[data-tour="perfil-foto"]',
-      texto: `Clica na tua foto pra trocar. Em “Editar” você muda o nome e o curso.${o.fundador ? "" : " A skin fica no botão embaixo do teu personagem."} 💜` },
+    // #629: UMA coisa por dica, apontando pro lugar dela (a de antes apontava a foto e falava de três coisas)
+    { alvo: '[data-tour="perfil-foto"]', texto: "Clica na tua foto pra trocar." },
+    { alvo: '[data-tour="perfil-editar"]', texto: "Aqui você muda o nome e o curso." },
+    ...(o.fundador ? [] : [{ alvo: '[data-tour="perfil-skin"]', texto: "E aqui você troca o visual do teu personagem. 💜" }]),
   ];
 }
 export const DICAS_PERFIL = dicasDoPerfil({ fundador: false });
 
 /** a Sala de Estudos = os BLUEPRINTS (components/blueprint/SalaBlueprint): só aparecem com um blueprint na tela */
+// #629: cada dica aponta UMA coisa da tela (as de antes falavam de fases e críticos sem mostrar onde ficam);
+// a que não estiver na tela (um blueprint sem crítico) é pulada
 export const DICAS_SALA: Dica[] = [
-  { alvo: '[data-tour="blueprint-lista"]',
-    texto: "Cada conversa que vira estudo ganha um blueprint aqui em cima — com a fase em que você está e os críticos que faltam." },
-  { alvo: '[data-tour="blueprint-prancha"]',
-    texto: "São 4 fases: Fundamento, Prova de conceito, Produto e Final. Os críticos (em vermelho) destravam cada fase — manda a prova (o link do teu repositório ou do que você construiu) e a Zaeon avalia. Na última, um mentor confere. 🚀" },
+  { alvo: '[data-tour="blueprint-lista"]', texto: "Cada conversa que vira estudo ganha um blueprint aqui. Clica num pra abrir." },
+  { alvo: '[data-tour="blueprint-fases"]', texto: "Essas barrinhas são as 4 fases: Fundamento, Prova de conceito, Produto e Final. A que está acesa é onde você está." },
+  { alvo: '[data-tour="blueprint-prancha"]', texto: "Esse é o teu estudo montado como uma máquina: cada peça é um pedaço do assunto. Passa o mouse pra desmontar, clica pra fixar." },
+  { alvo: '[data-tour="blueprint-critico"]', texto: "Os críticos travam a fase. Manda a prova (o link do que você fez) e a Zaeon avalia. 🚀" },
+  { alvo: '[data-tour="blueprint-legenda"]', texto: "E aqui as cores dos fios: percurso, prática e crítico." },
 ];
 
 /** os lugares com dicas (o "Rever tutorial" esquece todos) */

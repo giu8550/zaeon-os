@@ -21,9 +21,9 @@ const PlayerVideoDoc = dynamic(() => import("@/components/videodoc/PlayerVideoDo
 
 const AZUL = "#0b2c4d";
 
-function BarrinhaFases({ b, skin }: { b: Pick<ResumoBlueprint, "fase" | "aguardandoMentor">; skin: Skin }) {
+function BarrinhaFases({ b, skin, tour }: { b: Pick<ResumoBlueprint, "fase" | "aguardandoMentor">; skin: Skin; tour?: string }) {
   return (
-    <div className="mt-1.5 flex gap-[3px]">
+    <div data-tour={tour} className="mt-1.5 flex gap-[3px]">
       {[1, 2, 3, 4].map((f) => {
         const ok = f < b.fase || (f === 4 && b.aguardandoMentor), at = f === b.fase && !b.aguardandoMentor;
         return <i key={f} className="h-[3px] flex-1 rounded-sm" style={{ background: corNaSkin(skin, ok ? (f === 4 ? "#ffd36b" : COR.provado) : at ? COR.critico : "rgba(150,205,255,.14)") }} />;
@@ -103,7 +103,7 @@ export default function SalaBlueprint({ inicialId }: { inicialId?: string | null
             <small className="text-[10px] text-sky-200/70">
               {b.area} · {b.aguardandoMentor ? <span style={{ color: corNaSkin(skin, "#ffd36b") }}>aguardando mentor</span> : <>fase {b.fase}{b.criticosAbertos ? <> · <span style={{ color: corNaSkin(skin, COR.critico) }}>{b.criticosAbertos} crítico{b.criticosAbertos > 1 ? "s" : ""}</span></> : null}</>}
             </small>
-            <BarrinhaFases b={b} skin={skin} />
+            <BarrinhaFases b={b} skin={skin} tour={k === 0 ? "blueprint-fases" : undefined} />
           </button>
         ))}
       </div>

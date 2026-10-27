@@ -203,7 +203,7 @@ export default function EditableProfile({ visitante = null, onVoltar }: {
               </button>
             )
           ) : (
-            <button onClick={() => { setEditing((v) => !v); setMsg(null); }} className="inline-flex items-center gap-1.5 text-[12px] font-bold text-cyan-600 dark:text-cyan-300 hover:underline">
+            <button data-tour="perfil-editar" onClick={() => { setEditing((v) => !v); setMsg(null); }} className="inline-flex items-center gap-1.5 text-[12px] font-bold text-cyan-600 dark:text-cyan-300 hover:underline">
               <Pencil size={13} /> {editing ? "Cancelar" : "Editar"}
             </button>
           )}
@@ -307,7 +307,7 @@ export default function EditableProfile({ visitante = null, onVoltar }: {
               <VitrinePersonagem fundador={!!data?.fundador} corpo={data?.corpo ? CORPOS_DE_JOGADOR[data.corpo] : undefined} cor={data?.corArmadura ?? minhaArmadura()} className="w-full h-full" />
             </div>
             {!data?.fundador && !somenteLeitura && (
-              <button type="button" onClick={() => setSkinAberto(true)} aria-haspopup="dialog"
+              <button type="button" data-tour="perfil-skin" onClick={() => setSkinAberto(true)} aria-haspopup="dialog"
                 className="px-6 py-2.5 rounded-full text-white font-black uppercase tracking-widest text-[11px] transition-transform hover:scale-[1.02] focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300"
                 style={{ background: "linear-gradient(135deg,#2563eb,#06b6d4)" }}>
                 Mudar skin
