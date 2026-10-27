@@ -11,6 +11,7 @@ import { TEMPLO } from "@/lib/cyber/templo";
 import { criarMeio } from "./TemploMeio";
 import { criarRasta } from "./TemploRasta";
 import { criarLoungesEstudo } from "./TemploEstudo";
+import { NEON_HEX, tronUiOn, dePurplear } from "@/lib/cyber/neon";
 
 export type SalaoCosmicoHandle = { group: THREE.Group; alvos: THREE.Object3D[]; /** de onde sai o som calmo dos lounges estudantis */ caixasEstudo: THREE.Object3D[]; /** os raios do campus de TI que caíram desde a última leitura (mundo) */ raiosCampus(): { x: number; y: number; z: number }[]; /** a cápsula da torre em que eu estou (a vista de dentro) */ capsulaDentro(id: string | null): void; /** os estilhaços girando em volta do cubo da torre (mundo) */ estilhacos(): { x: number; y: number; z: number; r: number }[]; atualizar(dt: number, t: number): void; /** a porta da CÚPULA da guardiã: aberta pra quem venceu o duelo */ cupula(aberta: boolean): void; dispose(): void };
 
@@ -18,6 +19,7 @@ const aditivo = (cor: THREE.ColorRepresentation, op: number) => new THREE.MeshBa
 
 export function criarSalaoCosmico(o: { low: boolean; paredeMat: THREE.Material }): SalaoCosmicoHandle {
   const group = new THREE.Group(); group.name = "salao-cosmico";
+  const tron = tronUiOn();   // TRON: salão preto/ciano; cor só nas pontes esq./dir. (lounge/rasta) e no meio (vermelho, protegido)
   const alvos: THREE.Object3D[] = [], geos: THREE.BufferGeometry[] = [], mats: THREE.Material[] = [];
   const malha = <G extends THREE.BufferGeometry>(g: G, m: THREE.Material, pai: THREE.Object3D = group) => { geos.push(g); if (!mats.includes(m)) mats.push(m); const x = new THREE.Mesh(g, m); pai.add(x); return x; };
   const seg = o.low ? 48 : 96;
@@ -59,10 +61,13 @@ export function criarSalaoCosmico(o: { low: boolean; paredeMat: THREE.Material }
 
   // ── as PONTES: a rampa de cristal, as quinas acesas, o guarda-corpo e as faixas de luz (o ritmo de quem sobe) ──
   const COR_PONTE: Record<string, number> = { lounge: 0x66e6ff, rasta: 0x2fae4a, festas: 0xffd23f, casais: 0xff7ab8, meio: 0xff2a3a, escadaMeio: 0xff2a3a };
-  const tabMat = new THREE.MeshStandardMaterial({ color: 0x14123a, emissive: 0x2a1c70, emissiveIntensity: 0.5, roughness: 0.3, metalness: 0.5 });
+  const tabMat = new THREE.MeshStandardMaterial({ color: tron ? 0x05070c : 0x14123a, emissive: tron ? 0x000000 : 0x2a1c70, emissiveIntensity: tron ? 0 : 0.5, roughness: 0.4, metalness: 0.4 });
+  // TRON: as pontes de cor são SÓ as dos lados (lounge=esq. ciano, rasta=dir. verde) e o meio (vermelho, protegido);
+  // as outras (festas/casais) viram ciano pra não poluir.
+  const PONTE_COLORIDA = new Set(["lounge", "rasta", "meio", "escadaMeio"]);
   for (const po of PONTES) {
-    const { a, b, meia } = po, dx = b.x - a.x, dz = b.z - a.z, L = Math.hypot(dx, dz), dy = po.hb - po.ha, inc = Math.atan2(dy, L), comp = Math.hypot(L, dy), cor = COR_PONTE[po.id] ?? 0x66e6ff;
-    const ponte = new THREE.Group(); ponte.position.set((a.x + b.x) / 2, po.ha + dy / 2, (a.z + b.z) / 2); ponte.rotation.y = Math.atan2(dx, dz); group.add(ponte);
+    const { a, b, meia } = po, dx = b.x - a.x, dz = b.z - a.z, L = Math.hypot(dx, dz), dy = po.hb - po.ha, inc = Math.atan2(dy, L), comp = Math.hypot(L, dy), cor = tron && !PONTE_COLORIDA.has(po.id) ? NEON_HEX.ciano : (COR_PONTE[po.id] ?? 0x66e6ff);
+    const ponte = new THREE.Group(); ponte.name = "ponte-" + po.id; ponte.position.set((a.x + b.x) / 2, po.ha + dy / 2, (a.z + b.z) / 2); ponte.rotation.y = Math.atan2(dx, dz); group.add(ponte);
     const tab = malha(new THREE.BoxGeometry(meia * 2, 0.5, comp), tabMat, ponte); tab.rotation.x = -inc; tab.position.y = -0.25; alvos.push(tab);
     const quinaMat = aditivo(cor, 0.9), faixa = aditivo(cor, 0.4);
     for (const sx of [-1, 1]) {
@@ -149,6 +154,10 @@ export function criarSalaoCosmico(o: { low: boolean; paredeMat: THREE.Material }
   // o FEIXE subindo pro céu (aditivo, sem luz de verdade: barato)
   const feixe = malha(new THREE.CylinderGeometry(0.6, 1.8, 160, 16, 1, true), aditivo(0xb98cff, 0.16), mon); feixe.position.y = P.alt + 4.5 + 80;
   for (const x of [casca, cume, feixe, ...aneis]) x.userData.semLote = true;
+
+  // TRON: o salão também vira ciano/preto — MENOS a torre (caminho-do-meio, pulso exclusivo) e a Rasta (verde),
+  // que o dePurplear pula por nome. A escada vermelha pro inglês é vermelha → o remap nem encosta.
+  if (tronUiOn()) dePurplear(group);
 
   return {
     group, alvos, caixasEstudo: estudo.caixas, raiosCampus: () => meio.raios(), capsulaDentro: (id) => meio.capsulaDentro(id), estilhacos: () => meio.estilhacos(),

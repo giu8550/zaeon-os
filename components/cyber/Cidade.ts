@@ -20,6 +20,7 @@ import type { PisoOclusor } from "./oclusaoPisos";
 import { rotDaSala, espelhoDe, ALTURA_LOUNGE, BOIA_ILHOTA, CAPELA, CAPELA_NA_ZAEON, inicioDaPonta, ESTACOES_NA_CAPELA, FOGO_NA_BORDA, TORRES_NA_BORDA, CIDADE, GLOBO_CAPELA, ESCADAS, ILHOTAS, alturaDoFio, type NomeSala, TORRES_MURALHA, anguloDaTorre, naAberturaDaEscada } from "@/lib/cyber/ceu";
 import { glowTex } from "./CenaCosmica";
 import { liberar } from "./Landmark";
+import { NEON_HEX, matPreto, tronUiOn } from "@/lib/cyber/neon";
 import { criarEscadasDePedra } from "./EscadaPiramide";
 import { criarSalas, type SalasHandle } from "./Salas";
 import { criarSalaoCosmico, type SalaoCosmicoHandle } from "./TemploCosmico";
@@ -129,6 +130,9 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   const texturas: THREE.Texture[] = [];
   const glow = (a: string, b: string) => { const t = glowTex(a, b); texturas.push(t); return t; };
   const R = CIDADE.bordaR, H = CIDADE.ilhaAltura;
+  // TRON (flag NEXT_PUBLIC_TRON, Etapa 2): o piso fica ESCURO e LIMPO (não uma grade). As linhas ciano só marcam as
+  // ESTRADAS/caminhos da moto (os anéis e raios FORTES, acesos). Off = o piso de vidro de sempre.
+  const tron = tronUiOn();
 
   // luzes: preenchimento frio no interior + fogo rasante quente
   const fria = add(new THREE.PointLight(0x7fe9ff, 2.2, 480)); fria.position.set(0, 55, 0);
@@ -152,19 +156,23 @@ export function criarCidade(opts: { low: boolean; starTex: THREE.Texture; /** o 
   // azuis do coração (CoracaoZaeon) correm por cima dele. Um disco só (uma face, sem bordas): desenhado ANTES de todo
   // transparente e sem gravar profundidade, então o que está embaixo (janelas, estalactites, estrelas) aparece através
   // dele. Continua alvo do clique/câmera (o raycast não olha a opacidade)
-  const piso = add(new THREE.Mesh(new THREE.CircleGeometry(R, low ? 64 : 128), vidro({ color: 0x0a1830, emissive: 0x2a4a80, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3, side: THREE.DoubleSide }, 0.4)), hub, true);   // (dupla face: de baixo, a laje de vidro)
-  piso.rotation.x = -Math.PI / 2; (piso.material as THREE.Material).depthWrite = false; piso.renderOrder = SOB_O_VIDRO + 1;
+  const piso = add(new THREE.Mesh(new THREE.CircleGeometry(R, low ? 64 : 128), tron ? matPreto({ emissiveIntensity: 0.12 }) : vidro({ color: 0x0a1830, emissive: 0x2a4a80, emissiveIntensity: 0.5, roughness: 0.2, metalness: 0.3, side: THREE.DoubleSide }, 0.4)), hub, true);   // TRON: laje preta e limpa (as estradas vêm nas linhas abaixo); senão o vidro de sempre
+  piso.rotation.x = -Math.PI / 2;
+  if (!tron) { (piso.material as THREE.Material).depthWrite = false; piso.renderOrder = SOB_O_VIDRO + 1; }
   // as LINHAS do piso: um padrão REGULAR na escala de gente (antes: 5 anéis com espaços desiguais e 16 raios de 126 m
   // — na Zaeon mega aquilo ficava torto e enorme): anéis finos a cada 18 m da capela até a borda (um mais aceso a cada 3)
   // e 48 raios, também a cada 3 um mais forte
   { const r0 = CIDADE.cidadela.r + 12, passo = 18, aneis: number[] = [], fortes: number[] = [];
     for (let r = r0, k = 0; r < R - 4; r += passo, k++) (k % 3 === 0 ? fortes : aneis).push(r);
     const anelGeo = (lista: number[]) => { const pts: number[] = [], N = low ? 96 : 192; for (const r of lista) for (let i = 0; i < N; i++) { const a0 = (i / N) * Math.PI * 2, a1 = ((i + 1) / N) * Math.PI * 2; pts.push(Math.cos(a0) * r, 0.03, Math.sin(a0) * r, Math.cos(a1) * r, 0.03, Math.sin(a1) * r); } const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(pts), 3)); return g; };
-    add(new THREE.LineSegments(anelGeo(aneis), new THREE.LineBasicMaterial({ color: COLD, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending })));
-    add(new THREE.LineSegments(anelGeo(fortes), new THREE.LineBasicMaterial({ color: COLD, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending })));
+    const corLinha = tron ? NEON_HEX.ciano : COLD;
+    // TRON: nada de grade — só as ESTRADAS. Os anéis/raios finos saem; ficam os FORTES (anéis-via + avenidas), bem acesos.
+    if (!tron) add(new THREE.LineSegments(anelGeo(aneis), new THREE.LineBasicMaterial({ color: corLinha, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending })));
+    add(new THREE.LineSegments(anelGeo(fortes), new THREE.LineBasicMaterial({ color: corLinha, transparent: true, opacity: tron ? 0.8 : 0.32, blending: THREE.AdditiveBlending })));
     const raios: number[] = [], raiosF: number[] = [], NR = 48;
     for (let i = 0; i < NR; i++) { const a = (i / NR) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a); (i % 3 === 0 ? raiosF : raios).push(c * r0, 0.03, s * r0, c * (R - 4), 0.03, s * (R - 4)); }
-    for (const [l, op] of [[raios, 0.1], [raiosF, 0.22]] as const) { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(l), 3)); add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: COLD, transparent: true, opacity: op, blending: THREE.AdditiveBlending }))); } }
+    const gruposRaio: [number[], number][] = tron ? [[raiosF, 0.75]] : [[raios, 0.1], [raiosF, 0.22]];
+    for (const [l, op] of gruposRaio) { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(l), 3)); add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: corLinha, transparent: true, opacity: op, blending: THREE.AdditiveBlending }))); } }
 
   // ── as TORRES da muralha (cristal com a ponta acesa). Os blocos de granizo entre elas saíram: no lugar deles ficam os
   //    TUBOS DE ENSAIO onde quem chega nasce (components/cyber/Bercario, do engine) ──

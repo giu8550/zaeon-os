@@ -55,18 +55,16 @@ export function matPista(f: Fluxo, o: { cor?: THREE.ColorRepresentation; escala?
     uniforms: { ...f, uEsc: { value: esc } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: "uniform mat4 uDoMundo; varying vec3 vL; void main(){ vL = (uDoMundo * modelMatrix * vec4(position, 1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
     fragmentShader: `${ONDA_GLSL} uniform float uEsc; varying vec3 vL;
+      // O ESSENCIAL do Tron: linhas ciano sobre preto. SEM o pulsar branco da onda — esse fica EXCLUSIVO da torre
+      // (components/cyber/TemploMeio). Aqui só um fluxo sutil de luz correndo nas faixas (ciano), nada de flash branco.
       void main(){
         vec2 p = vL.xz / uEsc;
-        // FAIXAS da pista (linhas fortes ao longo de Z) + grade fina
         vec2 g = abs(fract(p / 6.0) - 0.5);
         float faixa = smoothstep(0.045, 0.0, g.x);                 // lanes (ao longo de Z)
         float grade = smoothstep(0.02, 0.0, min(g.x, g.y)) * 0.5;  // grade fina
-        // luz CORRENDO ao longo das faixas (sensação de velocidade)
-        float corre = 0.35 + 0.65 * smoothstep(0.65, 1.0, fract(p.y * 0.08 - uT * 1.2));
-        float linhas = faixa * corre + grade * (0.4 + 0.3 * corre);
-        float w = onda(vL);
-        vec3 cor = uCor * linhas + uFrente * (faixa * 2.2 + 0.2) * w;
-        gl_FragColor = vec4(cor, 1.0);
+        float corre = 0.8 + 0.2 * sin(p.y * 0.05 - uT * 0.45);  // fluxo CALMO e contínuo (senoide lenta), só ciano
+        float linhas = faixa * corre + grade * 0.5;
+        gl_FragColor = vec4(uCor * linhas, 1.0);
       }`,
   });
   if (o.cor != null) (m.uniforms.uCor!.value as THREE.Color).set(o.cor);
@@ -88,11 +86,10 @@ export function matCircuito(f: Fluxo, o: { cor?: THREE.ColorRepresentation } = {
         if (r < 0.5) linha = smoothstep(0.08, 0.0, abs(ff.y - 0.5)); else linha = smoothstep(0.08, 0.0, abs(ff.x - 0.5));
         linha *= step(0.3, h(c + 7.0));
         float no = smoothstep(0.16, 0.08, length(ff - 0.5)) * step(0.75, h(c + 3.0));
-        float pulso = 0.35 + 0.65 * smoothstep(0.7, 1.0, fract(uv.y * 0.05 - uT * 0.25 + r * 0.3));
+        float pulso = 0.55 + 0.3 * sin(uv.y * 0.05 - uT * 0.25 + r * 2.0);  // calmo e contínuo
         float luz = 0.25 + 0.75 * max(0.0, dot(normalize(vN), normalize(vec3(0.4, 0.7, 0.5))));
-        float w = onda(vL);
         vec3 base = vec3(0.01, 0.02, 0.03) * (0.6 + luz);
-        gl_FragColor = vec4(base + uCor * (linha + no) * pulso + uFrente * ((linha + no) * 2.4 + 0.4) * w, 1.0);
+        gl_FragColor = vec4(base + uCor * (linha + no) * pulso, 1.0);   // só ciano; sem o flash branco da onda (torre)
       }`,
   });
   if (o.cor != null) (m.uniforms.uCor!.value as THREE.Color).set(o.cor);

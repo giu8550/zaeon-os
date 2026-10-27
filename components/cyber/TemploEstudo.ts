@@ -11,6 +11,7 @@
  */
 import * as THREE from "three";
 import { ANDARES_ESTUDO, CARACOL, LUMINARIAS_ESTUDO, PLANTAS_ESTUDO, PLATS, aberturasDe, vaoDoAtrio } from "@/lib/cyber/temploCosmico";
+import { NEON_HEX, tronUiOn, dePurplear } from "@/lib/cyber/neon";
 
 export type EstudoHandle = { group: THREE.Group; alvos: THREE.Object3D[]; caixas: THREE.Object3D[]; atualizar(dt: number, t: number): void; dispose(): void };
 
@@ -32,24 +33,27 @@ export function criarLoungesEstudo(o: { low: boolean; paredeMat: THREE.Material 
   const alvos: THREE.Object3D[] = [], caixas: THREE.Object3D[] = [], geos: THREE.BufferGeometry[] = [], mats: THREE.Material[] = [];
   const malha = <G extends THREE.BufferGeometry>(g: G, m: THREE.Material, pai: THREE.Object3D) => { geos.push(g); if (!mats.includes(m)) mats.push(m); const x = new THREE.Mesh(g, m); pai.add(x); return x; };
   const A = ANDARES_ESTUDO, C = CARACOL, seg = o.low ? 48 : 96;
-  const madeira = new THREE.MeshStandardMaterial({ color: 0x6b4a32, roughness: 0.75, metalness: 0.05 });
-  const tapete = new THREE.MeshStandardMaterial({ color: 0x2a2440, emissive: 0x161028, emissiveIntensity: 0.4, roughness: 0.95, side: THREE.DoubleSide });
-  const forro = new THREE.MeshStandardMaterial({ color: 0x4a3222, emissive: 0x1c0f06, emissiveIntensity: 0.6, roughness: 0.8, side: THREE.DoubleSide });
-  const parede = new THREE.MeshStandardMaterial({ color: 0x2b2130, emissive: 0x0e0812, emissiveIntensity: 0.5, roughness: 0.85, metalness: 0.05, side: THREE.DoubleSide });
-  const latao = new THREE.MeshStandardMaterial({ color: 0xc9a25a, emissive: 0x3a2808, emissiveIntensity: 0.5, roughness: 0.35, metalness: 0.85 });
+  // TRON: a Sala de Estudos em preto + ciano. A cor quente vem de materiais E de um shader (janelas) → recolorido na FONTE.
+  const tron = tronUiOn();
+  const esc = (c: number) => (tron ? 0x05070c : c), escE = (c: number) => (tron ? 0x020507 : c), neo = (c: number) => (tron ? NEON_HEX.ciano : c);
+  const madeira = new THREE.MeshStandardMaterial({ color: esc(0x6b4a32), roughness: 0.75, metalness: 0.05 });
+  const tapete = new THREE.MeshStandardMaterial({ color: esc(0x2a2440), emissive: escE(0x161028), emissiveIntensity: 0.4, roughness: 0.95, side: THREE.DoubleSide });
+  const forro = new THREE.MeshStandardMaterial({ color: esc(0x4a3222), emissive: escE(0x1c0f06), emissiveIntensity: 0.6, roughness: 0.8, side: THREE.DoubleSide });
+  const parede = new THREE.MeshStandardMaterial({ color: esc(0x2b2130), emissive: escE(0x0e0812), emissiveIntensity: 0.5, roughness: 0.85, metalness: 0.05, side: THREE.DoubleSide });
+  const latao = new THREE.MeshStandardMaterial({ color: esc(0xc9a25a), emissive: tron ? 0x06202a : 0x3a2808, emissiveIntensity: 0.5, roughness: 0.35, metalness: 0.85 });
   const metal = new THREE.MeshStandardMaterial({ color: 0xd8dce6, roughness: 0.3, metalness: 0.8 });
-  const quente = new THREE.MeshBasicMaterial({ color: 0xffd9a0 }), vaso = new THREE.MeshStandardMaterial({ color: 0xe8e4dc, roughness: 0.6 });
-  const folha = new THREE.MeshStandardMaterial({ color: 0x2f8a4a, emissive: 0x0c2a14, emissiveIntensity: 0.5, roughness: 0.8 });
+  const quente = new THREE.MeshBasicMaterial({ color: neo(0xffd9a0) }), vaso = new THREE.MeshStandardMaterial({ color: esc(0xe8e4dc), roughness: 0.6 });
+  const folha = new THREE.MeshStandardMaterial({ color: esc(0x2f8a4a), emissive: escE(0x0c2a14), emissiveIntensity: 0.5, roughness: 0.8 });
   const vidro = new THREE.MeshStandardMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.14, roughness: 0.1, metalness: 0.2, side: THREE.DoubleSide, depthWrite: false });
-  const sanca = aditivo(0xffc070, 0.55), friso = aditivo(0xffc070, 0.7);
+  const sanca = aditivo(neo(0xffc070), 0.55), friso = aditivo(neo(0xffc070), 0.7);
   // as JANELAS (por fora): a faixa quente acesa com os caixilhos — de longe, a rotunda é uma lanterna de 3 andares
   const janela = new THREE.ShaderMaterial({
     side: THREE.FrontSide,
     vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
     fragmentShader: `varying vec2 vUv;
       void main(){ float c = step(0.14, fract(vUv.x * 64.0)) * step(0.1, vUv.y) * step(vUv.y, 0.9), m = step(0.48, abs(vUv.y - 0.5)) + step(fract(vUv.x * 64.0), 0.14);
-        vec3 luz = mix(vec3(1.0, 0.72, 0.42), vec3(1.0, 0.86, 0.6), vUv.y);
-        gl_FragColor = vec4(mix(vec3(0.08, 0.05, 0.06), luz * 0.95, c * (1.0 - clamp(m, 0.0, 1.0))), 1.0); }`,
+        vec3 luz = ${tron ? "mix(vec3(0.12,0.85,1.0), vec3(0.45,1.0,1.0), vUv.y)" : "mix(vec3(1.0,0.72,0.42), vec3(1.0,0.86,0.6), vUv.y)"};
+        gl_FragColor = vec4(mix(vec3(0.02, 0.03, 0.04), luz * 0.95, c * (1.0 - clamp(m, 0.0, 1.0))), 1.0); }`,
   });
   mats.push(janela);
   const luzes: THREE.InstancedMesh[] = [], lustres: THREE.Object3D[] = [];
@@ -172,6 +176,8 @@ export function criarLoungesEstudo(o: { low: boolean; paredeMat: THREE.Material 
     fechar(gotas); fechar(fios); luzes.push(gotas);
     const nucleo = malha(new THREE.SphereGeometry(0.7, 16, 12), quente, lus); nucleo.position.y = -1.2;
   }
+  // TRON: a Sala de Estudos também zera o roxo → ciano/preto (vermelho/verde ficam intactos).
+  if (tronUiOn()) dePurplear(group);
   return {
     group, alvos, caixas,
     atualizar(dt, t) {
