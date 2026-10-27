@@ -283,6 +283,14 @@ export function OverlayTour({ alvo, evita, titulo, fala, passo, total, acao, onP
                 </button>
               </span>
             )}
+            {/* #629: nas dicas, quanto falta ("2 de 5") e um jeito de pular todas — sem perguntar (é só dica) */}
+            {dica && total > 1 && <span className="mr-auto whitespace-nowrap text-[11px] font-medium tabular-nums text-[#c3cbea]">{passo + 1} de {total}</span>}
+            {dica && total > 1 && onPular && (
+              <button type="button" onClick={(e) => { e.stopPropagation(); onPular(); }}
+                className="rounded-full px-2.5 py-1 text-[12px] font-medium text-[#c3cbea] transition-colors hover:text-white focus-visible:outline focus-visible:outline-1">
+                Pular dicas
+              </button>
+            )}
             {onPular && !confirmando && !dica && (
               <button type="button" onClick={(e) => { e.stopPropagation(); setConfirmando(true); }} ref={acao || !ultimaPagina ? undefined : principal}
                 className="rounded-full px-2.5 py-1 text-[12px] font-medium text-[#c3cbea] transition-colors hover:text-white focus-visible:outline focus-visible:outline-1">

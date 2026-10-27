@@ -107,3 +107,12 @@ describe("#626 · o percurso com os nomes do botão", async () => {
     expect(estadoPercursoAtual()).toBe("ativa");
   });
 });
+
+describe("#629 · antes do pedido, desenho nenhum conta", async () => {
+  const { proximoPedido } = await import("./tourSala");
+  it("desenho começando/ficando pronto sem pedido não muda o estado", () => {
+    expect(proximoPedido(null, { tipo: "desenho", fase: "comecou", kind: "diagram" })).toBeNull();
+    expect(proximoPedido(null, { tipo: "desenho", fase: "falhou", kind: "diagram" })).toBeNull();
+    expect(proximoPedido(null, { tipo: "fim" })).toBeNull();
+  });
+});

@@ -11,6 +11,7 @@ import { tourDoLabAtivo } from "@/lib/onboarding/tourSala";
 import { escritorioCowork } from "@/lib/canal/flags";
 import { geracaoDosTours } from "@/lib/onboarding/geracaoTour";
 import { dicaAtiva } from "@/lib/onboarding/dicas";
+import { esperarVistos, vistosJaLidos } from "@/lib/onboarding/vistosConta";
 import { passosDoEscritorio, deveMostrarTourEscritorio, marcarTourEscritorioVisto, tourEscritorioVisto } from "@/lib/onboarding/tourEscritorio";
 
 const SEM_ALVOS: string[] = [];
@@ -23,10 +24,11 @@ export default function TourEscritorio({ naAba, noTutorial }: { naAba: boolean; 
   // a aba abriu: espera o canal montar antes de começar
   useEffect(() => {
     if (!naAba) { setI(null); return; }
-    const t = setTimeout(() => {
-      if (deveMostrarTourEscritorio({ naAba, noTutorial, largura: window.innerWidth, visto: tourEscritorioVisto(), outroTour: getTour().active || tourDoLabAtivo() || dicaAtiva() })) { geracao.current = geracaoDosTours(); setI(0); }
-    }, 1200);
-    return () => clearTimeout(t);
+    // #629: antes de decidir, pergunta à conta se a pessoa já viu
+    let vivo = true;
+    const decidir = () => { if (vivo && deveMostrarTourEscritorio({ naAba, noTutorial, largura: window.innerWidth, visto: tourEscritorioVisto(), outroTour: getTour().active || tourDoLabAtivo() || dicaAtiva() })) { geracao.current = geracaoDosTours(); setI(0); } };
+    const t = setTimeout(() => { if (vistosJaLidos()) decidir(); else void esperarVistos().then(decidir); }, 1200);
+    return () => { vivo = false; clearTimeout(t); };
   }, [naAba, noTutorial]);
   const passo = i === null ? null : passos[i] ?? null;
   const { alvo, evita } = useDestaque(passo?.alvos ?? SEM_ALVOS, SEM_ALVOS, !!passo);

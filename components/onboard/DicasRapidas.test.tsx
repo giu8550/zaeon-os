@@ -6,21 +6,31 @@ import DicasRapidas from "@/components/onboard/DicasRapidas";
 import { DICAS_PERFIL } from "@/lib/onboarding/dicas";
 import { reverToursDoLab } from "@/lib/onboarding/reverTours";
 
+// #629: a conta (User.toursVistos) já respondeu — os tours decidem na hora (o caminho com espera tem teste próprio)
+vi.mock("@/lib/onboarding/vistosConta", async (orig) => ({ ...(await orig<typeof import("@/lib/onboarding/vistosConta")>()), vistosJaLidos: () => true, esperarVistos: () => Promise.resolve() }));
+
 const cartao = () => document.querySelector("[data-tour-cartao]") as HTMLElement | null;
 const abrir = () => { render(<DicasRapidas lugar="perfil" dicas={DICAS_PERFIL} />); act(() => { vi.advanceTimersByTime(1300); }); };
 
-beforeEach(() => { localStorage.clear(); vi.useFakeTimers(); Object.defineProperty(window, "innerWidth", { value: 1280, configurable: true }); });
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+// #629: a dica cujo alvo não está na tela é pulada — os testes põem na tela tudo que as dicas apontam
+const ALVOS = ["perfil-habilidades", "perfil-foto", "perfil-editar", "perfil-skin", "blueprint-lista", "blueprint-fases", "blueprint-prancha", "blueprint-critico", "blueprint-legenda"];
+beforeEach(() => {
+  localStorage.clear(); vi.useFakeTimers(); Object.defineProperty(window, "innerWidth", { value: 1280, configurable: true });
+  for (const a of ALVOS) { const el = document.createElement("div"); el.setAttribute("data-tour", a); el.setAttribute("data-alvo-teste", ""); document.body.appendChild(el); }
+});
+afterEach(() => { cleanup(); vi.useRealTimers(); document.querySelectorAll("[data-alvo-teste]").forEach((el) => el.remove()); });
+const entendi = () => fireEvent.click(screen.getByRole("button", { name: /Entendi/ }));
 
 describe("#618 · DicasRapidas", () => {
   it("uma dica por vez com \"Entendi\"; a última fecha e marca como vista", () => {
     abrir();
     expect(cartao()!.textContent).toMatch(/habilidades/);
-    expect(cartao()!.textContent).not.toMatch(/Passo|Pular|Minimizar/);
-    fireEvent.click(screen.getByRole("button", { name: /Entendi/ }));
-    expect(cartao()!.textContent).toMatch(/Editar/);
-    fireEvent.click(screen.getByRole("button", { name: /Entendi/ }));
-    expect(cartao()).toBeNull();
+    expect(cartao()!.textContent).not.toMatch(/Passo|Minimizar/);
+    expect(cartao()!.textContent).toMatch(/1 de 4/);                    // #629: quanto falta
+    entendi(); expect(cartao()!.textContent).toMatch(/Clica na tua foto pra trocar/);
+    entendi(); expect(cartao()!.textContent).toMatch(/nome e o curso/);
+    entendi(); expect(cartao()!.textContent).toMatch(/visual do teu personagem/);
+    entendi(); expect(cartao()).toBeNull();
     expect(localStorage.getItem("zaeon.dica.perfil.v1")).toBe("1");
     cleanup(); abrir();
     expect(cartao()).toBeNull();
@@ -58,15 +68,15 @@ describe("#618 · DicasRapidas", () => {
     const { dicaAtiva } = await import("@/lib/onboarding/dicas");
     abrir();
     expect(dicaAtiva()).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: /Entendi/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Entendi/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Pular dicas" }));
     expect(dicaAtiva()).toBe(false);
   });
   it("fundador não tem botão de skin: a dica não fala dele", async () => {
     const { dicasDoPerfil } = await import("@/lib/onboarding/dicas");
-    expect(dicasDoPerfil({ fundador: false })[1]!.texto).toMatch(/skin/);
-    expect(dicasDoPerfil({ fundador: true })[1]!.texto).not.toMatch(/skin/);
-    expect(dicasDoPerfil({ fundador: true })[1]!.texto).toMatch(/foto/);
+    expect(dicasDoPerfil({ fundador: false }).map((d) => d.alvo)).toContain('[data-tour="perfil-skin"]');
+    expect(dicasDoPerfil({ fundador: true }).map((d) => d.alvo)).not.toContain('[data-tour="perfil-skin"]');
+    // #629: uma coisa por dica — nenhuma fala de foto E editar juntas
+    for (const d of dicasDoPerfil({ fundador: false })) expect(/foto/.test(d.texto) && /nome/.test(d.texto)).toBe(false);
   });
 });
 
@@ -74,14 +84,17 @@ describe("#618 · dicas da Sala de Estudos (blueprint)", () => {
   it("falam das 4 fases, dos críticos e da prova; o \"Rever tutorial\" traz de volta", async () => {
     const { DICAS_SALA } = await import("@/lib/onboarding/dicas");
     render(<DicasRapidas lugar="sala-estudos" dicas={DICAS_SALA} />); act(() => { vi.advanceTimersByTime(1300); });
-    expect(cartao()!.textContent).toMatch(/blueprint/);
-    fireEvent.click(screen.getByRole("button", { name: /Entendi/ }));
-    expect(cartao()!.textContent).toMatch(/4 fases.*críticos.*prova/s);
-    fireEvent.click(screen.getByRole("button", { name: /Entendi/ }));
+    expect(cartao()!.textContent).toMatch(/blueprint aqui/);
+    expect(cartao()!.textContent).toMatch(/1 de 5/);
+    entendi(); expect(cartao()!.textContent).toMatch(/4 fases/);
+    entendi(); expect(cartao()!.textContent).toMatch(/máquina/);
+    entendi(); expect(cartao()!.textContent).toMatch(/críticos travam a fase.*prova/s);
+    entendi(); expect(cartao()!.textContent).toMatch(/cores dos fios/);
+    entendi();
     expect(localStorage.getItem("zaeon.dica.sala-estudos.v1")).toBe("1");
     act(() => { reverToursDoLab(); });
     act(() => { vi.advanceTimersByTime(1300); });
-    expect(cartao()!.textContent).toMatch(/blueprint/);   // reaparece com a tela aberta
+    expect(cartao()!.textContent).toMatch(/blueprint aqui/);   // reaparece com a tela aberta
   });
 });
 
@@ -94,5 +107,22 @@ describe("#626 · Rever tutorial abre uma conversa nova", () => {
     expect((ouvir.mock.calls[0]![0] as CustomEvent).detail).toEqual({ sala: "estudos", nova: true });
     expect(JSON.parse(localStorage.getItem("zaeon.conversa.pedido.estudos")!)).toEqual({ sala: "estudos", nova: true });
     window.removeEventListener(EVT_PEDIDO_CONVERSA, ouvir);
+  });
+});
+
+describe("#629 · dicas que se ajustam à tela", () => {
+  it("a dica cujo alvo não está na tela (blueprint sem crítico) é pulada", async () => {
+    const { DICAS_SALA } = await import("@/lib/onboarding/dicas");
+    document.querySelector('[data-tour="blueprint-critico"]')!.remove();
+    render(<DicasRapidas lugar="sala-estudos" dicas={DICAS_SALA} />); act(() => { vi.advanceTimersByTime(1300); });
+    entendi(); entendi(); entendi();                            // lista → fases → máquina → (crítico não existe)
+    act(() => { vi.advanceTimersByTime(700); });
+    expect(cartao()!.textContent).toMatch(/cores dos fios/);
+  });
+  it("\"Pular dicas\" fecha todas de uma vez e marca como vistas", () => {
+    abrir();
+    fireEvent.click(screen.getByRole("button", { name: "Pular dicas" }));
+    expect(cartao()).toBeNull();
+    expect(localStorage.getItem("zaeon.dica.perfil.v1")).toBe("1");
   });
 });

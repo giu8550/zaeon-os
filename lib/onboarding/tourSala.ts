@@ -10,6 +10,7 @@ import type { AbaEstudos } from "@/lib/chat/conversasNav";
 import { EVT_ABRIR_DOC, KINDS_EM_ABA } from "@/lib/chat/documentos";
 import type { EstadoBolinha } from "@/lib/map/bolinha";
 import { geracaoValida } from "@/lib/onboarding/geracaoTour";
+import { CHAVE_LOCAL, salvarVistoNaConta } from "@/lib/onboarding/vistosConta";
 
 /** o chat da Sala de Estudos mandou uma pergunta (components/study/StudyCoworkChat) */
 export const EVT_PERGUNTA_CHAT = "zaeon:chat:pergunta";
@@ -40,6 +41,8 @@ export type PedidoDesenho = null | "enviado" | "desenhando" | "semDesenho";
 export type EventoPedido = { tipo: "pergunta" } | { tipo: "desenho"; fase: FaseDesenho; kind: string } | { tipo: "fim" };
 export function proximoPedido(atual: PedidoDesenho, ev: EventoPedido): PedidoDesenho {
   if (ev.tipo === "pergunta") return "enviado";
+  // #629: antes do pedido, desenho nenhum conta — o "brinde" da resposta do passo 1 ficava pronto aqui e pulava o passo
+  if (atual === null) return null;
   if (ev.tipo === "desenho") {
     if (!KINDS_VISUAIS.includes(ev.kind)) return atual;
     return ev.fase === "comecou" ? "desenhando" : ev.fase === "falhou" ? "semDesenho" : atual;
@@ -53,7 +56,9 @@ export const AVISO_PEDIDO: Record<"enviado" | "desenhando", string> = {
 export const TAREFA_SEM_DESENHO = "Dessa vez não saiu o desenho. Pede de novo, ou clica em “Já fiz” pra seguir.";
 
 /** o botão de enviar do chat é um ↑ (CoworkComposer) — o texto usa o MESMO símbolo */
-export const TAREFA_ENVIAR = "Agora é só apertar ↑ ou Enter";
+export const TAREFA_ENVIAR = "Quando terminar, aperta ↑ ou Enter";
+/** #629: o contorno só vai pro ↑ depois de a pessoa PARAR de digitar por um instante (uma letra não é um pedido) */
+export const ESPERA_DIGITAR_MS = 1500;
 /** #613: o botão do percurso mudou de estado (detail: EstadoBolinha) — o cartão diz "gerando…" e depois "pronto" */
 export const EVT_PERCURSO_ESTADO = "zaeon:percurso:estado";
 
@@ -150,7 +155,7 @@ export function avisarEstadoPercurso(estado: EstadoBolinha): void {
 }
 
 // v2: o roteiro novo — quem só viu o passeio antigo (v1) ganha o novo uma vez
-const CHAVE = "zaeon.tour.sala.v2";
+const CHAVE = CHAVE_LOCAL.sala;   // "zaeon.tour.sala.v2" (#629: a conta guarda também — lib/onboarding/vistosConta)
 /** #613: "Rever tutorial do laboratório" (Configurações) */
 export const esquecerTourSala = () => { try { localStorage.removeItem(CHAVE); } catch { /* ignore */ } };
 export const tourSalaVisto = (): boolean => { try { return localStorage.getItem(CHAVE) === "1"; } catch { return true; } };
@@ -158,6 +163,7 @@ export const tourSalaVisto = (): boolean => { try { return localStorage.getItem(
 export const marcarTourSalaVisto = (geracao?: string) => {
   if (!geracaoValida(geracao)) return;
   try { localStorage.setItem(CHAVE, "1"); } catch { /* ignore */ }
+  salvarVistoNaConta("sala");
   try { void fetch("/api/onboard/tour", { method: "POST" }).catch(() => {}); } catch { /* sem rede */ }
 };
 /** mostra o tour? Nunca no tutorial (a missão tem o tour dela), nunca no celular (a sidebar some), uma vez só */

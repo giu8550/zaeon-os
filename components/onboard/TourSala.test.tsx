@@ -6,6 +6,9 @@ import TourEscritorio from "@/components/onboard/TourEscritorio";
 import { EVT_PERGUNTA_CHAT, EVT_PERCURSO_ABERTO } from "@/lib/onboarding/tourSala";
 import { EVT_ABRIR_DOC } from "@/lib/chat/documentos";
 
+// #629: a conta (User.toursVistos) já respondeu — os tours decidem na hora (o caminho com espera tem teste próprio)
+vi.mock("@/lib/onboarding/vistosConta", async (orig) => ({ ...(await orig<typeof import("@/lib/onboarding/vistosConta")>()), vistosJaLidos: () => true, esperarVistos: () => Promise.resolve() }));
+
 const disparar = (tipo: string, detail?: unknown) => act(() => { window.dispatchEvent(new CustomEvent(tipo, { detail })); });
 const cartao = () => document.querySelector("[data-tour-cartao]") as HTMLElement | null;
 
@@ -36,8 +39,9 @@ describe("TourSala — o tour do laboratório", () => {
     expect(cartao()?.textContent).toMatch(/blueprint/);
     fireEvent.click(ateBotao("Bora"));
     expect(cartao()?.textContent).toMatch(/diagrama interativo/);
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Faz um diagrama interativo disso" });   // #629: o desenho só conta depois do pedido
     disparar(EVT_ABRIR_DOC, { studioKind: "quiz" });           // um documento que não é visual não conta
-    expect(cartao()?.textContent).toMatch(/diagrama interativo/);
+    expect(document.querySelector("[data-tour-minimizado]")?.textContent).toMatch(/Pedido enviado/);   // ainda no passo 3
     disparar(EVT_ABRIR_DOC, { studioKind: "diagram" });
     expect(cartao()?.textContent).toMatch(/percurso/);
     disparar(EVT_PERCURSO_ABERTO);
@@ -224,6 +228,7 @@ describe("#613 · diagrama e percurso não travam o tour", () => {
   };
   it("a IA respondeu com uma aula: o passo do diagrama anda do mesmo jeito", () => {
     ateDiagrama();
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Faz um diagrama interativo disso" });   // #629: o desenho só conta depois do pedido
     disparar(EVT_ABRIR_DOC, { studioKind: "aula" });
     expect(cartao()?.textContent).toMatch(/percurso/);
   });
@@ -234,6 +239,7 @@ describe("#613 · diagrama e percurso não travam o tour", () => {
   });
   it("o percurso: gerando… e depois pronto, abre o mapa", () => {
     ateDiagrama();
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Faz um diagrama interativo disso" });   // #629: o desenho só conta depois do pedido
     disparar(EVT_ABRIR_DOC, { studioKind: "diagram" });
     paginaFinal();
     const sv = () => document.querySelector("[data-tour-sua-vez]")?.textContent ?? "";
@@ -312,7 +318,7 @@ describe("#618 · o contorno anda junto com a pessoa", () => {
   const caixa = (el: HTMLElement, x: number, y: number, w: number, h: number) => {
     el.getBoundingClientRect = () => ({ x, y, left: x, top: y, width: w, height: h, right: x + w, bottom: y + h, toJSON: () => ({}) }) as DOMRect;
   };
-  it("campo vazio → contorno no campo; DIGITANDO → no ↑ com a etiqueta \"Enviar\" e \"Agora é só apertar ↑\"; apagou → volta pro campo", async () => {
+  it("campo vazio → contorno no campo; DIGITANDO → no ↑ com a etiqueta \"Enviar\" e \"Quando terminar, aperta ↑\" (só depois de parar de digitar); apagou → volta pro campo", async () => {
     const { useAvisoTextoDoChat } = await import("@/components/onboard/useAvisoTextoDoChat");
     const { useState } = await import("react");
     // um chat de mentira com o MESMO aviso que o StudyCoworkChat usa (campo de verdade, digitação de verdade)
@@ -334,10 +340,17 @@ describe("#618 · o contorno anda junto com a pessoa", () => {
     act(() => { vi.advanceTimersByTime(100); });
     expect(anel()!.style.width).toBe("862px");          // o campo (+6 de cada lado)
     expect(sv()).toMatch(/Escreve um tema/);
+    fireEvent.change(screen.getByLabelText("mensagem"), { target: { value: "quer" } });
+    act(() => { vi.advanceTimersByTime(500); });
+    expect(anel()!.style.width).toBe("862px");          // #629: ainda digitando → o contorno fica no campo
+    expect(sv()).not.toMatch(/aperta ↑/);
     fireEvent.change(screen.getByLabelText("mensagem"), { target: { value: "Quero estudar sobre: python" } });
-    act(() => { vi.advanceTimersByTime(100); });
-    expect(anel()!.style.width).toBe("52px");           // o ➤
-    expect(sv()).toMatch(/Agora é só apertar ↑ ou Enter/);
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(anel()!.style.width).toBe("862px");          // cada letra recomeça a espera
+    act(() => { vi.advanceTimersByTime(600); });
+    act(() => { vi.advanceTimersByTime(100); });         // o destaque remede no quadro seguinte
+    expect(anel()!.style.width).toBe("52px");           // parou de digitar → o ↑
+    expect(sv()).toMatch(/Quando terminar, aperta ↑ ou Enter/);
     expect(sv()).not.toMatch(/exemplo/);                                       // #626: o exemplo sai da frente
     expect(document.querySelector("[data-tour-etiqueta]")?.textContent).toBe("Enviar");
     fireEvent.change(screen.getByLabelText("mensagem"), { target: { value: "" } });
@@ -429,8 +442,45 @@ describe("#626 · percurso já pronto antes do tour começar", () => {
     abrir(<TourSala noTutorial={false} />);
     disparar(EVT_PERGUNTA_CHAT, { prompt: "Quero estudar sobre: fotossíntese" });
     fireEvent.click(ateBotao("Bora"));
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Faz um diagrama interativo disso" });   // #629: o desenho só conta depois do pedido
     disparar(EVT_ABRIR_DOC, { studioKind: "diagram" });
     for (let k = 0; k < 6 && screen.queryByRole("button", { name: "Continuar" }); k++) fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
     expect(document.querySelector("[data-tour-sua-vez]")?.textContent).toMatch(/Pronto!.*“Ver mapa”/);
+  });
+});
+
+describe("#629 · o exemplo vai direto pro ↑", () => {
+  it("usar o exemplo não espera a pausa (não tem o que terminar de escrever)", async () => {
+    const { useAvisoTextoDoChat } = await import("@/components/onboard/useAvisoTextoDoChat");
+    const { useState, useEffect } = await import("react");
+    function Chat() {
+      const [v, setV] = useState("");
+      useAvisoTextoDoChat(v);
+      useEffect(() => { const on = (e: Event) => setV((e as CustomEvent).detail.texto); window.addEventListener("zaeon:chat:preencher", on); return () => window.removeEventListener("zaeon:chat:preencher", on); }, []);
+      return <div data-tour="composer-estudos"><button data-tour="enviar">↑</button></div>;
+    }
+    render(<Chat />);
+    abrir(<TourSala noTutorial={false} />);
+    for (let k = 0; k < 6 && screen.queryByRole("button", { name: "Continuar" }); k++) fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    fireEvent.click(screen.getByRole("button", { name: /ou usa o exemplo/ }));
+    act(() => { vi.advanceTimersByTime(50); });
+    expect(document.querySelector("[data-tour-sua-vez]")?.textContent).toMatch(/Quando terminar, aperta ↑/);
+  });
+});
+
+describe("#629 · o desenho de brinde não pula o passo 3", () => {
+  it("documento aberto ANTES do pedido (o brinde da resposta do passo 1) é ignorado; depois do pedido, conta", () => {
+    abrir(<TourSala noTutorial={false} />);
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Quero estudar sobre: fotossíntese" });
+    fireEvent.click(ateBotao("Bora"));
+    expect(cartao()?.textContent).toMatch(/diagrama/);
+    disparar("zaeon:chat:desenho", { fase: "comecou", kind: "diagram" });   // o brinde
+    disparar("zaeon:chat:desenho", { fase: "pronto", kind: "diagram" });
+    disparar(EVT_ABRIR_DOC, { studioKind: "diagram" });
+    expect(screen.getByText("Passo 3 de 5")).toBeTruthy();                   // não pulou
+    expect(cartao()).not.toBeNull();                                          // nem minimizou
+    disparar(EVT_PERGUNTA_CHAT, { prompt: "Faz um diagrama interativo disso" });
+    disparar(EVT_ABRIR_DOC, { studioKind: "diagram" });
+    expect(cartao()?.textContent).toMatch(/percurso/);
   });
 });

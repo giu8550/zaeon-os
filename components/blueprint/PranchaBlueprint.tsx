@@ -43,6 +43,8 @@ export default function PranchaBlueprint({ id, doc, acoes, onFixar, sobre, skin 
     guarda(k, el.offsetHeight);
   }, [guarda]);
   const { caixas, fios } = useMemo(() => layoutBlueprint(doc, (k) => alturas[k] ?? ALTURA_PADRAO), [doc, alturas]);
+  // #629: o 1º crítico ganha a marcação das dicas da Sala de Estudos (components/onboard/DicasRapidas)
+  const primeiroCritico = caixas.find((c) => c.id.startsWith("critico:"))?.id;
 
   // ── arrastar (fundo = pan; carimbo = mover e fixar o card) ──
   const arrasto = useRef<{ tipo: "pan" | "card"; id?: string; x0: number; y0: number; ox: number; oy: number } | null>(null);
@@ -187,7 +189,7 @@ export default function PranchaBlueprint({ id, doc, acoes, onFixar, sobre, skin 
         {caixas.map((c0) => {
           const c = pos(c0);
           return (
-            <div key={c.id} ref={(el) => medir(c.id, el)} className="absolute" style={{ left: c.x, top: c.y, width: c.w, zIndex: arrastando?.id === c.id ? 50 : 1 }}>
+            <div key={c.id} ref={(el) => medir(c.id, el)} data-tour={c.id === primeiroCritico ? "blueprint-critico" : undefined} className="absolute" style={{ left: c.x, top: c.y, width: c.w, zIndex: arrastando?.id === c.id ? 50 : 1 }}>
               {/* o TAMANHO DA LETRA: o conteúdo cresce por dentro (zoom) numa largura menor, então o card mantém a
                   largura da planta e só fica mais alto — a altura medida refaz o layout */}
               <div style={letra !== 1 ? { zoom: letra, width: c.w / letra } : undefined}>
@@ -206,7 +208,7 @@ export default function PranchaBlueprint({ id, doc, acoes, onFixar, sobre, skin 
         <button type="button" className="ml-1 rounded-sm border border-sky-300/40 px-2 py-1 hover:bg-white/10" title="Voltar pro foco (a figura e o estudo)" onClick={() => { mexeu.current = true; encaixar(false); }}>◎</button>
         <button type="button" className="rounded-sm border border-sky-300/40 px-2 py-1 hover:bg-white/10" title="Ver a prancha inteira" onClick={() => { mexeu.current = true; encaixar(true); }}>⤢</button>
       </div>
-      <div className="pointer-events-none absolute bottom-3 left-3 z-[90] font-mono text-[10.5px] tracking-[0.16em] text-sky-200/55">
+      <div data-tour="blueprint-legenda" className="pointer-events-none absolute bottom-3 left-3 z-[90] font-mono text-[10.5px] tracking-[0.16em] text-sky-200/55">
         <span style={{ color: corNaSkin(skin, COR.passo) }}>━ PERCURSO</span> &nbsp; <span>━ PRÁTICA</span> &nbsp; <span style={{ color: corNaSkin(skin, COR.critico) }}>━ CRÍTICO (TRAVA A FASE)</span> &nbsp; ⟶ DA ESQUERDA PRA DIREITA
       </div>
     </div>
