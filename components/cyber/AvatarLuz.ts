@@ -656,7 +656,8 @@ export function criarAvatarLuz(armaduraHex: string, starTex: THREE.Texture, low:
         // MONTADO: tronco inclinado pra frente (moto esportiva) e mãos/pés no lugar por IK de 2 ossos
         grupo.updateWorldMatrix(true, false); grupo.getWorldQuaternion(qG);
         frente.set(0, 0, -1).applyQuaternion(qG); lateral.crossVectors(cima, frente).normalize();
-        if (lombar && pescoco) { dirAlvo.copy(frente).multiplyScalar(0.62).addScaledVector(cima, 0.78).normalize(); apontar(lombar, pescoco, dirAlvo, montado.w); }
+        // tronco BEM pra frente, deitado sobre o tanque (pose de moto esportiva — o dono: "meio curvado pra frente")
+        if (lombar && pescoco) { dirAlvo.copy(frente).multiplyScalar(0.92).addScaledVector(cima, 0.42).normalize(); apontar(lombar, pescoco, dirAlvo, montado.w); }
         for (const o of pernas) {   // joelhos pra frente e um pouco pra fora (abraçando a moto)
           polo.copy(frente).addScaledVector(lateral, 0.35 * o.lado).addScaledVector(cima, 0.2);
           ik(o.coxa, o.canela, o.pe, o.lado > 0 ? montado.peE : montado.peD, polo, montado.w);

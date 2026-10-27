@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { NEON_HEX, aditivo, matPreto } from "@/lib/cyber/neon";
 import { criarFluxo, atualizarFluxo, matPista, matCircuito } from "@/lib/cyber/fluxoNeon";
+import { criarMoto } from "@/components/cyber/Moto";
 
 const CORES_DEMO = ["#ff7fb0", "#4aa3ff", "#5fd08a", "#ffbe54", "#b48cff", "#49d9d9", "#ff8a65"];
 
@@ -61,60 +62,37 @@ export default function BancadaTron() {
     const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.6, 0.4, 32), matPreto()); pedestal.position.y = 0.2; trajeG.add(pedestal);
     const anelPedestal = new THREE.Mesh(new THREE.TorusGeometry(3.3, 0.06, 8, 48), aditivo(corUser, 0.9)); anelPedestal.rotation.x = Math.PI / 2; anelPedestal.position.y = 0.42; trajeG.add(anelPedestal);
 
-    // MOTO MONO-PNEU + RASTRO (placeholder: uma roda vertical + casco preto + frisos na cor do usuário)
-    const moto = new THREE.Group(); scene.add(moto);
-    const rodaRaio = 2.6;
-    const pneu = new THREE.Mesh(new THREE.TorusGeometry(rodaRaio, 0.5, 12, 40), matPreto({ metalness: 0.6 })); pneu.rotation.y = Math.PI / 2; moto.add(pneu);
-    const aro = new THREE.Mesh(new THREE.TorusGeometry(rodaRaio, 0.12, 8, 48), aditivo(corUser, 1)); aro.rotation.y = Math.PI / 2; moto.add(aro);
-    const casco = new THREE.Mesh(new THREE.BoxGeometry(5.2, 1.1, 1.3), matPreto({ metalness: 0.6 })); casco.position.set(0, rodaRaio + 0.2, 0); moto.add(casco);
-    const friso = new THREE.Mesh(new THREE.BoxGeometry(5.0, 0.12, 0.14), aditivo(corUser, 0.95)); friso.position.set(0, rodaRaio + 0.7, 0.66); moto.add(friso);
-
-    // RASTRO: muro de luz que fica pra trás (ring buffer de pontos → fita de quads)
-    const NR = 90, rastroPos = new Float32Array(NR * 2 * 3), rastroCor = new Float32Array(NR * 2 * 3);
-    const rastroGeo = new THREE.BufferGeometry();
-    rastroGeo.setAttribute("position", new THREE.BufferAttribute(rastroPos, 3));
-    rastroGeo.setAttribute("color", new THREE.BufferAttribute(rastroCor, 3));
-    const idx: number[] = []; for (let i = 0; i < NR - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
-    rastroGeo.setIndex(idx);
-    const rastroMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-    const rastro = new THREE.Mesh(rastroGeo, rastroMat); rastro.frustumCulled = false; scene.add(rastro);
-    const pts: THREE.Vector3[] = Array.from({ length: NR }, () => new THREE.Vector3());
-    let nPts = 0; const ALT = 2.4; const corTmp = new THREE.Color();
+    // MOTO: a REAL (components/cyber/Moto.criarMoto) — assim a bancada mostra EXATAMENTE a moto do mundo (lightcycle
+    // Tron: duas rodas hubless + casco preto + neon na cor do dono). Escalada pra caber na bancada (a moto é ~2 m).
+    // escala 1 (a moto de verdade, ~2 m): assim o MURO DE LUZ dela (gerado em metros de mundo) sai no tamanho certo.
+    const motoH = criarMoto({ cor: corUser, low: false, estilo: 0 });
+    const moto = motoH.group; scene.add(moto);
+    // os materiais de neon/casco pra recolorir quando o dono troca de cor (sem reconstruir a moto)
+    const frisoMats: THREE.MeshBasicMaterial[] = [];
+    moto.traverse((o) => { const m = (o as THREE.Mesh).material; for (const mm of Array.isArray(m) ? m : [m]) { if (mm && (mm as THREE.Material).userData?.friso) frisoMats.push(mm as THREE.MeshBasicMaterial); } });
+    const corTmp = new THREE.Color();
+    // o RASTRO é o da PRÓPRIA moto (motoH.atualizar desenha o muro de luz no mundo) — sem fita de placeholder aqui.
 
     const ro = new ResizeObserver(() => { const w = host.clientWidth, h = host.clientHeight; if (w && h) { R.setSize(w, h); cam.aspect = w / h; cam.updateProjectionMatrix(); } });
     ro.observe(host);
 
-    let raf = 0; const t0 = performance.now(); let paradoAng = 0;
+    let raf = 0; const t0 = performance.now(); let paradoAng = 0, tAnt = 0;
     const loop = () => {
-      const t = (performance.now() - t0) / 1000;
+      const t = (performance.now() - t0) / 1000; const dt = Math.min(0.05, t - tAnt); tAnt = t;
       atualizarFluxo(fluxo, t);
       // aplica a cor do usuário escolhida (traje + moto)
       const cu = corTmp.set(corRef.current);
       (matLinhaTraje as THREE.MeshBasicMaterial).color.copy(cu);
-      (aro.material as THREE.MeshBasicMaterial).color.copy(cu);
-      (friso.material as THREE.MeshBasicMaterial).color.copy(cu);
-      // a moto corre num círculo
-      paradoAng += 0.012; const Rc = 11, mx = Math.cos(paradoAng) * Rc, mz = Math.sin(paradoAng) * Rc;
+      for (const fm of frisoMats) fm.color.copy(cu);
+      // a moto (de verdade, ~2 m) corre num círculo pequeno NO CHÃO — ela se anima e desenha o muro de luz sozinha
+      paradoAng += 0.007; const Rc = 2.6, mx = Math.cos(paradoAng) * Rc, mz = Math.sin(paradoAng) * Rc;
       moto.position.set(mx, 0, mz);
       moto.rotation.y = -paradoAng + Math.PI / 2;
-      pneu.rotation.x -= 0.25;
-      // empurra ponto no rastro
-      const base = pts[nPts % NR]!; base.set(mx, 0.05, mz); nPts++;
-      const vis = Math.min(nPts, NR);
-      for (let i = 0; i < vis; i++) {
-        const p = pts[(nPts - vis + i + NR) % NR]!; const o = i * 6;
-        rastroPos[o] = p.x; rastroPos[o + 1] = p.y; rastroPos[o + 2] = p.z;
-        rastroPos[o + 3] = p.x; rastroPos[o + 4] = p.y + ALT; rastroPos[o + 5] = p.z;
-        const a = i / vis;                         // cauda(0) → cabeça(1)
-        const f = (0.15 + 0.85 * a);
-        rastroCor[o] = cu.r * f; rastroCor[o + 1] = cu.g * f; rastroCor[o + 2] = cu.b * f;
-        rastroCor[o + 3] = cu.r * f * 0.5; rastroCor[o + 4] = cu.g * f * 0.5; rastroCor[o + 5] = cu.b * f * 0.5;
-      }
-      rastroGeo.setDrawRange(0, Math.max(0, (vis - 1) * 6));
-      (rastroGeo.attributes.position as THREE.BufferAttribute).needsUpdate = true;
-      (rastroGeo.attributes.color as THREE.BufferAttribute).needsUpdate = true;
-      // câmera orbitando devagar
-      const ca = t * 0.08; cam.position.set(Math.sin(ca) * 36, 15, Math.cos(ca) * 36); cam.lookAt(0, 4, 0);
+      motoH.atualizar({ dt, t, voando: false, vel: 26, curva: 0.007 });
+      // câmera perto, girando devagar em volta do centro — enquadra a moto inteira e mostra rodas + muro de todo lado
+      const orb = t * 0.22, rCam = 5;
+      cam.position.set(Math.cos(orb) * rCam, 1.9, Math.sin(orb) * rCam);
+      cam.lookAt(mx * 0.5, 0.9, mz * 0.5);
       R.render(scene, cam);
       raf = requestAnimationFrame(loop);
     };

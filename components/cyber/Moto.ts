@@ -24,6 +24,7 @@ import * as THREE from "three";
 import { fundirEstaticos } from "./lotes";
 import { ESCALA_MOTO, MOTO } from "@/lib/cyber/motos";
 import { rompeuBarreira, supersonico } from "@/lib/cyber/motoFisica";
+import { tronUiOn } from "@/lib/cyber/neon";
 
 /** a BORDA brilhante (fresnel) do cone de vapor e da casca da onda de choque: `uA` = intensidade, `uAneis` = anéis
  *  correndo (o cone) */
@@ -205,8 +206,11 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
   corpo.scale.setScalar(ESCALA_MOTO);   // proporção de moto de verdade pro avatar (~2 m): tudo (inclusive as âncoras) escala junto
   const estilo = ESTILOS_MOTO[(((o.estilo ?? 0) % 3) + 3) % 3]!;
   const acento = new THREE.Color(o.cor), seg = o.low ? 8 : 16;
-  // PINTURA na cor da vaga (clara e metálica), detalhes escuros, cromado, frisos de luz, vidro, banco
-  const pintura = new THREE.MeshStandardMaterial({ color: acento.clone().lerp(new THREE.Color(0xffffff), 0.3), roughness: 0.24, metalness: 0.6, emissive: acento, emissiveIntensity: 0.14 });
+  const tron = tronUiOn();   // TRON: moto PRETA (casco) + neon na COR DO DONO (os frisos `brilho`), estilo lightcycle
+  // PINTURA: no Tron, casco preto gloss (a cor fica só no neon); senão, a cor da vaga (clara e metálica)
+  const pintura = tron
+    ? new THREE.MeshStandardMaterial({ color: 0x05070c, roughness: 0.3, metalness: 0.75, emissive: 0x000000 })
+    : new THREE.MeshStandardMaterial({ color: acento.clone().lerp(new THREE.Color(0xffffff), 0.3), roughness: 0.24, metalness: 0.6, emissive: acento, emissiveIntensity: 0.14 });
   const escuro = new THREE.MeshStandardMaterial({ color: 0x1c2436, roughness: 0.38, metalness: 0.7, emissive: 0x0a1020, emissiveIntensity: 0.6 });
   const cromado = new THREE.MeshStandardMaterial({ color: 0x9aa4ba, roughness: 0.16, metalness: 0.95, emissive: 0x141a28, emissiveIntensity: 0.4 });
   const brilho = new THREE.MeshBasicMaterial({ color: acento, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending });
@@ -273,19 +277,44 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
   peca(new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.05, 0.12), escuro), 0, 1.16, 0.7);
   const painel = peca(new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.06), brilho), 0, 1.2, 0.62); painel.rotation.x = -1.0;
 
-  // ───────────── PODS de sustentação (sem rodas) + garfo, balança, quadro ─────────────
-  for (const [k, d] of PODS.entries()) {
-    const pod = peca(new THREE.Mesh(casco([
-      { z: d.z + d.c, w: 0.015, yt: d.y + 0.015, yb: d.y - 0.015 }, { z: d.z + d.c * 0.6, w: d.w * 0.85, yt: d.y + d.h * 0.85, yb: d.y - d.h * 0.8 },
-      { z: d.z, w: d.w, yt: d.y + d.h, yb: d.y - d.h }, { z: d.z - d.c * 0.6, w: d.w * 0.8, yt: d.y + d.h * 0.8, yb: d.y - d.h * 0.85 },
-      { z: d.z - d.c, w: 0.02, yt: d.y + 0.02, yb: d.y - 0.02 },
-    ], o.low), k === 0 ? pintura : escuro), 0, 0, 0); alvos.push(pod);
-    const cinta = peca(new THREE.Mesh(new THREE.TorusGeometry(1, 0.014, 4, seg * 3), brilho), 0, d.y, d.z); cinta.scale.set(d.w + 0.004, d.h + 0.004, 1);   // a cinta de luz
-  }
-  for (const s of [-1, 1]) {
-    barra([s * 0.12, 1.12, 0.7], [s * 0.1, PODS[0].y + 0.06, PODS[0].z - 0.05], 0.032, cromado);   // GARFO inclinado até o pod da frente
-    barra([s * 0.13, 0.66, 0.0], [s * 0.12, PODS[1].y + 0.04, PODS[1].z + 0.12], 0.04, escuro);    // BALANÇA (do motor até o pod de trás)
-    barra([s * 0.09, 1.08, 0.66], [s * 0.1, 0.72, 0.36], 0.03, escuro);        // QUADRO: da caixa de direção até o motor
+  // ───────────── RODAGEM ─────────────
+  if (tron) {
+    // LIGHTCYCLE do TRON: DUAS rodas de PNEU GORDO (não é aro fino vazado) — frente e trás —, pneu preto fosco e BEM
+    // grosso + cubo (roda) + neon na COR DO DONO na banda de rodagem, nas duas paredes laterais e no aro do cubo.
+    const pneuMat = new THREE.MeshStandardMaterial({ color: 0x05070d, roughness: 0.65, metalness: 0.25 });
+    const roda = (z: number, R: number, tube: number) => {
+      const yc = R + tube - 0.02;                           // a base do pneu encosta em y≈0 (fica no chão)
+      const g2 = new THREE.Group(); g2.position.set(0, yc, z); g2.rotation.y = Math.PI / 2; corpo.add(g2);   // o eixo do torus vira +x
+      const nS = o.low ? 12 : 24, nT = o.low ? 36 : 72;
+      const pneu = new THREE.Mesh(new THREE.TorusGeometry(R, tube, nS, nT), pneuMat);   // PNEU gordo (tube grande)
+      pneu.userData.roda = true; g2.add(pneu); alvos.push(pneu);
+      g2.add(new THREE.Mesh(new THREE.TorusGeometry(R + tube - 0.015, 0.022, 6, nT), brilho));   // banda de rodagem (tread) acesa
+      for (const dz of [-tube * 0.72, tube * 0.72]) { const a = new THREE.Mesh(new THREE.TorusGeometry(R + 0.01, 0.016, 4, nT), brilho); a.position.z = dz; g2.add(a); }   // as duas PAREDES do pneu
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.4, R * 0.4, tube * 1.5, nS), escuro); hub.rotation.z = Math.PI / 2; g2.add(hub);   // o CUBO (miolo cheio, não vazado)
+      g2.add(new THREE.Mesh(new THREE.TorusGeometry(R * 0.4, 0.018, 6, nS * 2), brilho));   // aro de luz no cubo
+      return { yc, z, tube };
+    };
+    const rF = roda(1.08, 0.3, 0.19), rR = roda(-1.04, 0.33, 0.21);   // pneus GORDOS mas MENORES (proporção do lightcycle); traseira um tiquinho maior
+    // garfo/balança: do corpo até a LATERAL de cada roda — escuros/cromados
+    for (const s of [-1, 1]) {
+      barra([s * 0.14, 1.04, 0.5], [s * (rF.tube + 0.03), rF.yc, rF.z], 0.032, cromado);    // garfo dianteiro
+      barra([s * 0.13, 0.64, -0.12], [s * (rR.tube + 0.03), rR.yc, rR.z], 0.05, escuro);    // balança traseira
+    }
+  } else {
+    // PODS de sustentação (sem rodas) + garfo, balança, quadro
+    for (const [k, d] of PODS.entries()) {
+      const pod = peca(new THREE.Mesh(casco([
+        { z: d.z + d.c, w: 0.015, yt: d.y + 0.015, yb: d.y - 0.015 }, { z: d.z + d.c * 0.6, w: d.w * 0.85, yt: d.y + d.h * 0.85, yb: d.y - d.h * 0.8 },
+        { z: d.z, w: d.w, yt: d.y + d.h, yb: d.y - d.h }, { z: d.z - d.c * 0.6, w: d.w * 0.8, yt: d.y + d.h * 0.8, yb: d.y - d.h * 0.85 },
+        { z: d.z - d.c, w: 0.02, yt: d.y + 0.02, yb: d.y - 0.02 },
+      ], o.low), k === 0 ? pintura : escuro), 0, 0, 0); alvos.push(pod);
+      const cinta = peca(new THREE.Mesh(new THREE.TorusGeometry(1, 0.014, 4, seg * 3), brilho), 0, d.y, d.z); cinta.scale.set(d.w + 0.004, d.h + 0.004, 1);   // a cinta de luz
+    }
+    for (const s of [-1, 1]) {
+      barra([s * 0.12, 1.12, 0.7], [s * 0.1, PODS[0].y + 0.06, PODS[0].z - 0.05], 0.032, cromado);   // GARFO inclinado até o pod da frente
+      barra([s * 0.13, 0.66, 0.0], [s * 0.12, PODS[1].y + 0.04, PODS[1].z + 0.12], 0.04, escuro);    // BALANÇA (do motor até o pod de trás)
+      barra([s * 0.09, 1.08, 0.66], [s * 0.1, 0.72, 0.36], 0.03, escuro);        // QUADRO: da caixa de direção até o motor
+    }
   }
   // o MOTOR EXPOSTO (sem carenagem embaixo): o cárter com o miolo de energia aceso, dois CILINDROS em V com aletas e os
   // ESCAPAMENTOS cromados descendo por baixo do banco até a rabeta
@@ -347,6 +376,7 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: tH, color: acento.clone(), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
   halo.userData.semLote = true; peca(halo, 0, rabo.y - 0.04, rabo.z - 0.3);
   const saida = new THREE.Object3D(); peca(saida, 0, rabo.y - 0.04, rabo.z - 0.32);
+  const saidaChao = new THREE.Object3D(); peca(saidaChao, 0, 0.02, rabo.z - 0.1);   // TRON: o muro de luz sai RENTE AO CHÃO, atrás da roda traseira
   for (const s of [-1, 1]) {   // de MANOBRA nas laterais do nariz: acendem na curva, do lado de fora
     const zM = 1.36, xM = larguraEm(zM) + 0.01;
     peca(new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, 0.14), escuro), s * (xM - 0.01), 0.95, zM);
@@ -381,7 +411,10 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
   const pontos = { maoE: ancora(0.38, 1.14, 0.6), maoD: ancora(-0.38, 1.14, 0.6), peE: ancora(0.3, 0.68, -0.22), peD: ancora(-0.3, 0.68, -0.22) };
 
   // ───────────── RASTRO de energia + FAÍSCAS (no MUNDO: ficam pra trás enquanto a moto anda) ─────────────
-  const N = o.low ? 16 : 36, NF = o.low ? 12 : 28, RASTRO_SEG = 0.3, RASTRO_M = 8;   // o rastro dura ~0,3 s (por TEMPO, não por quadro) e no máximo 8 m
+  // o rastro: fora do Tron é a fitinha curta (~0,3 s / 8 m, só no ar/quente). No TRON vira o MURO DE LUZ do lightcycle:
+  // persiste mais (3 s / 80 m), aparece NO CHÃO também e é um paredão vertical fino na cor do dono.
+  const N = tron ? (o.low ? 48 : 96) : (o.low ? 16 : 36), NF = o.low ? 12 : 28;
+  const RASTRO_SEG = tron ? 3.0 : 0.3, RASTRO_M = tron ? 80 : 8, RESET_M = tron ? 200 : 40;
   type Onda = { g: THREE.Group; anel: THREE.Mesh; casca: THREE.Mesh; t: number };
   let mundo: { grupo: THREE.Group; fita: THREE.Mesh; pf: THREE.Points; pontos: { p: THREE.Vector3; t: number }[]; faiscas: { p: THREE.Vector3; v: THREE.Vector3; vida: number; max: number }[]; onda: Onda } | null = null;
   const criarMundo = (raiz: THREE.Object3D) => {
@@ -446,28 +479,42 @@ export function criarMoto(o: { cor: string; low: boolean; estilo?: number }): Mo
       vapor.visible = aVapor + flash > 0.01;
       if (vapor.visible) { vaporMat.uniforms.uA!.value = aVapor + flash * 1.6; vaporMat.uniforms.uT!.value = t; vapor.scale.set(1 + 0.25 * flash, 1 + 0.1 * supSuave, 1 + 0.25 * flash); }
 
-      // RASTRO + FAÍSCAS: só com calor (parada, nem cria)
-      if (!mundo && q < 0.12) return;
+      // RASTRO + FAÍSCAS. Fora do Tron: só com calor (parada, nem cria). No Tron: sempre que a moto se MOVE (chão ou ar).
+      const movendo = vel > 1.5;
+      if (!tron && !mundo && q < 0.12) return;
+      if (tron && !mundo && !movendo) return;
       let raiz: THREE.Object3D = g, vis = true; for (let p: THREE.Object3D | null = g; p; p = p.parent) { if (!p.visible) vis = false; raiz = p; }
       if (raiz === g) return;   // ainda fora da cena
       mundo ??= criarMundo(raiz);
       if (mundo.grupo.parent !== raiz) raiz.add(mundo.grupo);
       mundo.grupo.visible = vis;
-      g.updateWorldMatrix(true, true); saida.getWorldPosition(vS); corpo.getWorldQuaternion(q4);
+      g.updateWorldMatrix(true, true); (tron ? saidaChao : saida).getWorldPosition(vS); corpo.getWorldQuaternion(q4);
       vUp.set(0, 1, 0).applyQuaternion(q4); vLado.set(1, 0, 0).applyQuaternion(q4); vFr.set(0, 0, 1).applyQuaternion(q4);
       const pts = mundo.pontos;
-      if (pts.length && pts[0]!.p.distanceTo(vS) > 40) pts.length = 0;   // teletransporte (pool, montou noutra moto): recomeça
+      if (pts.length && pts[0]!.p.distanceTo(vS) > RESET_M) pts.length = 0;   // teletransporte (pool, montou noutra moto): recomeça
       const novo = pts.length >= N ? pts.pop()! : { p: new THREE.Vector3(), t: 0 }; novo.p.copy(vS); novo.t = t; pts.unshift(novo);
       // só os últimos ~0,3 s e no máximo `RASTRO_M` de comprimento: a câmera da moto fica ~11 m atrás — mais longo, a fita
       // passava por baixo dela e virava uma faixa enorme na tela
       while (pts.length > 2 && (t - pts[pts.length - 1]!.t > RASTRO_SEG || pts[pts.length - 1]!.p.distanceTo(vS) > RASTRO_M)) pts.pop();
       const pos = mundo.fita.geometry.attributes.position as THREE.BufferAttribute, cor = mundo.fita.geometry.attributes.color as THREE.BufferAttribute;
-      const larg = (0.025 + 0.1 * q + 0.06 * boostSuave) * (voando ? 1 : 0), ult = pts.length - 1;
+      // TRON: MURO vertical (alto e fino) na cor do dono, do chão pra cima, brilho ~constante. Fora dele: a fitinha de antes.
+      const largV = tron ? 0.7 + 0.25 * boostSuave : (0.025 + 0.1 * q + 0.06 * boostSuave) * (voando ? 1 : 0);
+      const largH = tron ? 0.045 : largV;
+      const ult = pts.length - 1;
       for (let i = 0; i < N; i++) {
-        const p = pts[Math.min(i, ult)]!.p, f = ult > 0 ? 1 - Math.min(i, ult) / ult : 0, w = larg * (0.3 + 0.7 * f), luz = q * q * f * f * 0.55;
-        temperatura(Math.min(1, q * (0.5 + 0.6 * f)), acento, corT).multiplyScalar(luz);
-        pos.setXYZ(i * 4, p.x + vUp.x * w, p.y + vUp.y * w, p.z + vUp.z * w); pos.setXYZ(i * 4 + 1, p.x - vUp.x * w, p.y - vUp.y * w, p.z - vUp.z * w);
-        pos.setXYZ(i * 4 + 2, p.x + vLado.x * w, p.y + vLado.y * w, p.z + vLado.z * w); pos.setXYZ(i * 4 + 3, p.x - vLado.x * w, p.y - vLado.y * w, p.z - vLado.z * w);
+        const p = pts[Math.min(i, ult)]!.p, f = ult > 0 ? 1 - Math.min(i, ult) / ult : 0;
+        if (tron) {
+          const wV = largV * (0.55 + 0.45 * f), wH = largH;
+          corT.copy(acento).multiplyScalar(0.35 + 0.65 * f);   // cor do dono, constante (some devagar na cauda)
+          // o muro sobe DO CHÃO: a base fica no ponto, o topo wV acima (não centrado no ponto)
+          pos.setXYZ(i * 4, p.x, p.y, p.z); pos.setXYZ(i * 4 + 1, p.x, p.y + wV * 2, p.z);
+          pos.setXYZ(i * 4 + 2, p.x + vLado.x * wH, p.y + wV, p.z + vLado.z * wH); pos.setXYZ(i * 4 + 3, p.x - vLado.x * wH, p.y + wV, p.z - vLado.z * wH);
+        } else {
+          const w = largV * (0.3 + 0.7 * f), luz = q * q * f * f * 0.55;
+          temperatura(Math.min(1, q * (0.5 + 0.6 * f)), acento, corT).multiplyScalar(luz);
+          pos.setXYZ(i * 4, p.x + vUp.x * w, p.y + vUp.y * w, p.z + vUp.z * w); pos.setXYZ(i * 4 + 1, p.x - vUp.x * w, p.y - vUp.y * w, p.z - vUp.z * w);
+          pos.setXYZ(i * 4 + 2, p.x + vLado.x * w, p.y + vLado.y * w, p.z + vLado.z * w); pos.setXYZ(i * 4 + 3, p.x - vLado.x * w, p.y - vLado.y * w, p.z - vLado.z * w);
+        }
         for (let j = 0; j < 4; j++) cor.setXYZ(i * 4 + j, corT.r, corT.g, corT.b);
       }
       pos.needsUpdate = true; cor.needsUpdate = true;

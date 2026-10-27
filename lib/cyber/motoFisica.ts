@@ -22,6 +22,10 @@
 import { VOO, chaoDoVoo, resolverVoo, type EstadoVoo, type Pilar } from "./voo";
 import { ALTURA_LOUNGE, CIDADE } from "./ceu";
 import { CHAO, naPraca } from "./praca";
+import { tronOn } from "./neon";
+
+/** TRON: a altura de cruzeiro do lightcycle — colado ao chão (m). */
+const CRUZEIRO_TRON = 0.4;
 
 /** o CÉU DA ZAEON pra moto: até a borda da plataforma mais distante (+ folga), o teto é o início da ponta da capela
  *  (+ uma folga pra passar por cima do guarda-corpo das plataformas e pousar nelas) */
@@ -90,7 +94,11 @@ export function passoMoto(s: EstadoMoto, c: ComandoMoto, dt: number, solidos: Pi
   // rente ao chão a moto não anda (tem que decolar, igual à nave) — mas o guidão gira ela no lugar pra mirar
   // (no ESPAÇO — o caminho até um buraco negro, os asteroides: sem teto baixo, sobe e desce LIVRE e rápido; o dono,
   //  out/2026: "o espaço não está subindo bem a moto — devemos subir independente do eixo contra os asteroides")
-  const chao = chaoDoVoo(s, solidos), rente = s.y - chao < VOO.decolar, tetoAqui = espaco ? teto : tetoDaMoto(s, chao);
+  // TRON (lightcycle): a moto RODA NO CHÃO — "decola" quase rente (anda colada no piso), e um cruzeiro cola ela em
+  // ~CRUZEIRO_TRON m enquanto dirige/anda. Fora do Tron é a moto voadora de sempre (tem que subir pra andar).
+  const tron = tronOn();
+  const decolar = tron && !espaco ? 0.12 : VOO.decolar;
+  const chao = chaoDoVoo(s, solidos), rente = s.y - chao < decolar, tetoAqui = espaco ? teto : tetoDaMoto(s, chao);
   const fx = Math.sin(s.yaw), fz = Math.cos(s.yaw), lx = Math.cos(s.yaw), lz = -Math.sin(s.yaw);
   let frente = s.vx * fx + s.vz * fz, lado = s.vx * lx + s.vz * lz;
   // BOOST: só com a moto andando pra frente, no ar e com tanque; esvazia aceso, recarrega apagado
@@ -133,6 +141,14 @@ export function passoMoto(s: EstadoMoto, c: ComandoMoto, dt: number, solidos: Pi
   const acima = s.y - tetoAqui;
   if (acima > 1) ty = Math.min(ty, -Math.min(P.planaMax, P.planaMin + acima * 0.05));
   let vy = s.vy + (ty - s.vy) * Math.min(1, dt * (espaco ? P.inerciaV * 1.8 : P.inerciaV));
+  // TRON: a moto é de CHÃO por padrão. Sem segurar subir/descer: dirigindo/andando ela COLA em ~0,4 m do piso
+  // (lightcycle) e anda; parada ela ASSENTA no chão (pousa, dá pra descer). Segurar subir = voa; pousa/descer = desce.
+  if (tron && !espaco && !c.subir && !c.descer) {
+    const querAndar = Math.abs(acel) > 0.01 || Math.abs(giroCmd) > 0.01 || Math.hypot(s.vx, s.vz) > 2;
+    const alvoY = chao + (querAndar ? CRUZEIRO_TRON : 0);   // dirigindo: cruzeiro rente; parado: desce pro chão e pousa
+    const kv = clamp((alvoY - s.y) * 4, -P.desce, P.sobe);
+    vy = s.vy + (kv - s.vy) * Math.min(1, dt * P.inerciaV * 1.5);
+  }
   if (vy > 0 && s.y + vy * dt > tetoAqui) vy = Math.max(0, (tetoAqui - s.y) / dt) * 0.5;   // encosta no teto macio
   // INCLINAÇÃO de moto: tan θ = v·ω / g (g de jogo — ver PILOTAGEM.g) (deita pro lado de DENTRO da curva); no chão, reta
   const alvo = rente ? 0 : clamp(-Math.atan((frente2 * omega) / P.g), -P.inclinaMax, P.inclinaMax);

@@ -20,6 +20,7 @@ import { estadoDoRitual, type EstadoShow } from "@/lib/cyber/showLounge";
 import { linhasDoRecado } from "@/lib/cyber/recado";
 import type { PisoOclusor } from "./oclusaoPisos";
 import { criarMatsTrono, montarNucleoFluido, montarTrono, type MatsTrono } from "./TronoFluido";
+import { NEON_HEX, matPreto, tronUiOn, dePurplear } from "@/lib/cyber/neon";
 
 /** o tema de cada sala (sem placa com nome: os espaços falam por si) — todas a céu aberto, com guarda-corpo */
 const TEMA: Record<NomeSala, { piso: number; brilho: number; cor: string; alt: number; aberto: boolean }> = {
@@ -77,6 +78,8 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
   };
   const caixa = (pai: THREE.Object3D, w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); pai.add(m); return m; };
   const basica = (cor: number, op = 1, aditivo = false) => new THREE.MeshBasicMaterial({ color: cor, transparent: op < 1 || aditivo, opacity: op, blending: aditivo ? THREE.AdditiveBlending : THREE.NormalBlending, depthWrite: !aditivo, side: THREE.DoubleSide });
+  // TRON (flag NEXT_PUBLIC_TRON, Etapa 2): o piso das salas fica ESCURO e LIMPO (sem grade) + o friso de borda em ciano.
+  const tron = tronUiOn();
   const escuro = new THREE.MeshStandardMaterial({ color: 0x0d1220, roughness: 0.45, metalness: 0.5, emissive: 0x0a1226, emissiveIntensity: 0.5 });
   const gelo = new THREE.MeshStandardMaterial({ color: 0x9fd8ff, roughness: 0.15, metalness: 0.1, emissive: 0x1f5fa8, emissiveIntensity: 0.55 });
   const cristalMat = new THREE.MeshStandardMaterial({ color: 0xd6f4ff, roughness: 0.05, metalness: 0, emissive: 0x3aa8ff, emissiveIntensity: 0.55, transparent: true, opacity: 0.62 });
@@ -586,19 +589,19 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     // o DECK: o disco cortado na frente, extrudado pra cima (forma no plano: y = −z da sala)
     const sh = new THREE.Shape(); sh.moveTo(-xf, -zf); sh.lineTo(xf, -zf); sh.absarc(0, 0, R, fr, Math.PI - fr, false);
     const dg = new THREE.ExtrudeGeometry(sh, { depth: h, bevelEnabled: false, curveSegments: o.low ? 32 : 72 }); dg.rotateX(-Math.PI / 2);
-    const topoMat = new THREE.MeshStandardMaterial({ color: 0x170b2c, emissive: 0x1a0d36, emissiveIntensity: 0.7, roughness: 0.35, metalness: 0.45 });
-    const ladoMat = new THREE.MeshStandardMaterial({ color: 0x0b0f1e, emissive: 0x0c1430, emissiveIntensity: 0.5, roughness: 0.5, metalness: 0.6 });
+    const topoMat = new THREE.MeshStandardMaterial({ color: tron ? 0x05070c : 0x170b2c, emissive: tron ? 0x06121c : 0x1a0d36, emissiveIntensity: tron ? 0.5 : 0.7, roughness: 0.35, metalness: 0.45 });
+    const ladoMat = new THREE.MeshStandardMaterial({ color: tron ? 0x04060a : 0x0b0f1e, emissive: tron ? 0x05101c : 0x0c1430, emissiveIntensity: 0.5, roughness: 0.5, metalness: 0.6 });
     const deck = new THREE.Mesh(dg, [topoMat, ladoMat]); g.add(deck); alvos.push(deck);
     // o rejunte de luz do deck (anéis concêntricos fininhos em volta da pista, como um palco de show)
-    for (const rr of [24, 36, 48]) { const a = new THREE.Mesh(new THREE.RingGeometry(rr - 0.06, rr + 0.06, o.low ? 48 : 96, 1, 0.25, Math.PI - 0.5), basica(0x7a5aff, 0.35, true)); a.rotation.x = -Math.PI / 2; a.position.set(0, h + 0.01, -12); g.add(a); }
+    for (const rr of [24, 36, 48]) { const a = new THREE.Mesh(new THREE.RingGeometry(rr - 0.06, rr + 0.06, o.low ? 48 : 96, 1, 0.25, Math.PI - 0.5), basica(tron ? NEON_HEX.ciano : 0x7a5aff, 0.35, true)); a.rotation.x = -Math.PI / 2; a.position.set(0, h + 0.01, -12); g.add(a); }
     // a frente do deck: faixa de LED na quina, frisos verticais no espelho e o guarda-corpo de vidro (menos na rampa)
     const { meia, len } = DECK.rampa;
     for (const sx of [-1, 1]) {
       const w = xf - meia, cx = sx * (meia + w / 2);
-      caixa(g, w, 0.07, 0.07, basica(0xb98cff, 0.95, true), cx, h - 0.04, zf + 0.04);
+      caixa(g, w, 0.07, 0.07, basica(tron ? NEON_HEX.ciano : 0xb98cff, 0.95, true), cx, h - 0.04, zf + 0.04);
       caixa(g, w, 1.1, 0.06, o.paredeMat, cx, h + 0.55, zf + 0.1);
       caixa(g, w, 0.05, 0.08, basica(0x66e6ff, 0.9, true), cx, h + 1.1, zf + 0.1);
-      for (let x = meia + 1.5; x < xf - 1; x += 3) caixa(g, 0.06, h - 0.4, 0.04, basica(FESTA[Math.floor(x / 3) % FESTA.length]!, 0.55, true), sx * x, h / 2, zf + 0.03);
+      for (let x = meia + 1.5; x < xf - 1; x += 3) caixa(g, 0.06, h - 0.4, 0.04, basica(tron ? NEON_HEX.ciano : FESTA[Math.floor(x / 3) % FESTA.length]!, 0.55, true), sx * x, h / 2, zf + 0.03);
     }
     // a RAMPA: a laje inclinada, os degraus de luz e os corrimãos de vidro dos lados
     const L = Math.hypot(len, DECK.h), ang = Math.atan2(DECK.h, len), rampa = new THREE.Group(); rampa.position.set(0, 0.16 + DECK.h / 2, zf + len / 2); rampa.rotation.x = ang; g.add(rampa);
@@ -661,16 +664,18 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
   }
 
   for (const nome of (o.apenas ?? Object.keys(CIDADE.salas)) as NomeSala[]) {
-    const s = CIDADE.salas[nome], tema = TEMA[nome], porta = s.porta ?? CIDADE.salaParede.porta, ALT = tema.alt;
+    const s = CIDADE.salas[nome], temaBase = TEMA[nome], porta = s.porta ?? CIDADE.salaParede.porta, ALT = temaBase.alt;
+    // TRON: a sala toda em ciano sobre preto (piso escuro + brilho/frisos/pórtico ciano). Off = o tema de sempre.
+    const tema = tron ? { ...temaBase, piso: NEON_HEX.preto, brilho: NEON_HEX.ciano, cor: "#bfeaff" } : temaBase;
     const g = new THREE.Group(); g.position.set(s.x, s.y ?? 0, s.z); g.rotation.y = rotDaSala(s); (o.paiDaSala?.(nome) ?? ilha).add(g);   // (cada sala no grupo do NÍVEL dela — components/cyber/Cidade)   // o lounge: lá no alto
     if (espelhoDe(s)) {   // o Templo Cósmico: o lounge ESPELHADO (lib/cyber/ceu `espelhoDe`) — o texto da TV e do recado desespelha
       g.scale.x = -1;
       for (const t of [texTV, texRecado]) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.needsUpdate = true; }
     }
     // piso + friso de luz
-    const piso = new THREE.Mesh(new THREE.CylinderGeometry(s.r, s.r + 0.2, 0.16, o.low ? 32 : 48), new THREE.MeshStandardMaterial({ color: tema.piso, emissive: tema.piso, emissiveIntensity: 0.6, roughness: 0.5, metalness: 0.3 }));
+    const piso = new THREE.Mesh(new THREE.CylinderGeometry(s.r, s.r + 0.2, 0.16, o.low ? 32 : 48), tron ? matPreto({ emissiveIntensity: 0.15 }) : new THREE.MeshStandardMaterial({ color: tema.piso, emissive: tema.piso, emissiveIntensity: 0.6, roughness: 0.5, metalness: 0.3 }));
     piso.position.y = 0.08; g.add(piso); alvos.push(piso);
-    const friso = new THREE.Mesh(new THREE.RingGeometry(s.r - 0.32, s.r - 0.18, 64), basica(tema.brilho, 0.7, true)); friso.rotation.x = -Math.PI / 2; friso.position.y = 0.17; g.add(friso);
+    const friso = new THREE.Mesh(new THREE.RingGeometry(s.r - 0.32, s.r - 0.18, 64), basica(tron ? NEON_HEX.ciano : tema.brilho, tron ? 0.9 : 0.7, true)); friso.rotation.x = -Math.PI / 2; friso.position.y = 0.17; g.add(friso);
     // parede de vidro com a PORTA em +z local (no CylinderGeometry: x = r·sen θ, z = r·cos θ → +z é θ = 0)
     // (o LOUNGE tem também a SAÍDA pra escadaria do templo, à direita — lib/cyber/templo)
     const arcos: [number, number][] = nome === "lounge" ? (() => { const sd = saidaDoLounge(s.r), th = Math.PI / 2 - sd.ang; return [[NIVEIS_SEPARADOS ? 0 : porta, th - sd.meia], [th + sd.meia, Math.PI * 2 - (NIVEIS_SEPARADOS ? 0 : porta)]]; })() : NIVEIS_SEPARADOS ? [[0, Math.PI * 2]] : [[porta, Math.PI * 2 - porta]];   // (níveis separados: a parede fecha onde a escada chegava)
@@ -698,6 +703,8 @@ export function criarSalas(ilha: THREE.Group, o: Opts): SalasHandle {
     for (const c of [...g.children]) if (c !== piso) acima.add(c);
     g.add(acima); g.userData.lote = "limite";
     plataformas.push({ acima, r: s.r + 0.2, topo: 0.16 });
+    // TRON: zera o roxo da sala toda (deck, DJ, móveis, frisos) → ciano/preto. Vermelho/verde ficam (escadas protegidas).
+    if (tron) dePurplear(g);
   }
   return {
     plataformas,

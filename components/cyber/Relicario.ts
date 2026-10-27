@@ -13,6 +13,7 @@ import * as THREE from "three";
 import { glowTex } from "./CenaCosmica";
 import { HOLO_FRAG, HOLO_VERT } from "./HoloZaeon";
 import { RITMO_RELICARIO, faseDoRelicario } from "@/lib/cyber/relicario";
+import { tronUiOn, dePurplear } from "@/lib/cyber/neon";
 
 export type RelicarioHandle = {
   group: THREE.Group;
@@ -168,6 +169,8 @@ export function criarRelicario(o: { low: boolean }): RelicarioHandle {
   let cena: { t0: number; aceito: boolean; titulo: string; nome: string; placaVeredito: boolean } | null = null, estado: Estado = "idle", troca = 0, k = 0;
   const usar = (e: Estado) => { const tx = texsZ[e] ?? texsZ.think ?? texsZ.idle; if (tx && uni.uMap.value !== tx) uni.uMap.value = tx; estado = e; };
   const s3 = (x: number) => { const c = Math.max(0, Math.min(1, x)); return c * c * (3 - 2 * c); };
+
+  if (tronUiOn()) dePurplear(g);   // TRON: o Relicário do Saber em ciano/preto
 
   return {
     group: g, alvos,
