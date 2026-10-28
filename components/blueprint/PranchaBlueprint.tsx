@@ -5,6 +5,7 @@
  * solto (`onFixar`), e "reorganizar" no card do estudo solta tudo. As alturas são medidas do DOM e realimentam o layout.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useAlturas } from "./useAlturas";
 import { caixaDoFoco, layoutBlueprint, type Caixa, type Fio } from "@/lib/blueprint/layout";
 import { CSS_BARBIE, CSS_CARTOLINA, FiltrosRabisco, PAPEL, ROSA, SkinProvider, corNaSkin, type Skin } from "./skin";
 import type { DocBlueprint } from "@/lib/blueprint/tipos";
@@ -22,9 +23,8 @@ export default function PranchaBlueprint({ id, doc, acoes, onFixar, sobre, skin 
   const raiz = useRef<HTMLDivElement>(null);
   const [cam, setCam] = useState({ x: 0, y: 0, z: 0.8 });
   const mexeu = useRef(false);   // a pessoa mexeu na câmera (pan/zoom): para de reenquadrar sozinho
-  const [alturas, setAlturas] = useState<Record<string, number>>({});
-  useEffect(() => { setAlturas({}); }, [id]);   // os ids dos módulos ("passo:p1"…) se repetem entre blueprints
-  const guarda = useCallback((k: string, h: number) => setAlturas((a) => (Math.abs((a[k] ?? 0) - h) > 1 ? { ...a, [k]: h } : a)), []);
+  // #631: as medidas dos cards entram de uma vez (antes, uma por card = N redesenhos ao abrir) — components/blueprint/useAlturas
+  const { alturas, guarda } = useAlturas(id);
   // um card muda de altura sozinho (a ficha da figura aparece, a letra cresce, um vídeo carrega): o ResizeObserver
   // refaz o layout na hora — medir só quando a prancha re-renderiza deixava os lados por cima da figura
   const observador = useRef<ResizeObserver | null>(null), vistos = useRef(new Map<Element, string>());
