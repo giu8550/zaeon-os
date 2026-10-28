@@ -292,3 +292,12 @@ describe("dispensa · #560 'vocês duas' tira só as duas últimas", () => {
     expect(quemFoiDispensada("as duas podem ir", [aura, zaeon, zen], 1, ["aura"], ["aura"])).toEqual(["aura", "zaeon"]);
   });
 });
+
+describe("#635 · o 'Chamar de volta' manda '@teo pode voltar'", () => {
+  it("não é despedida: o Téo volta e responde", () => {
+    const ags = [{ agentKey: "teo", nome: "Téo" }, { agentKey: "aura", nome: "Aura" }];
+    const r = saidasDaMensagem("@teo pode voltar", { alvos: ["teo"], naConversa: [], agentes: ags, humanos: 1 });
+    expect(r.dispensadas).toEqual([]);
+    expect(r.respondem).toEqual(["teo"]);
+  });
+});
