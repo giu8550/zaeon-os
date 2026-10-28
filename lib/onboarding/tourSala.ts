@@ -73,6 +73,8 @@ export type PassoSala = {
   fala: string;
   /** onde fica o destaque (o 1º seletor que existir na tela) */
   alvos: string[];
+  /** #638: o que o cartão também não pode cobrir (o 1º seletor que existir na tela) */
+  evitar?: string[];
   /** antes de mostrar, o laboratório vai pra esta sala (e sub-aba / vista do Marketplace) */
   ir?: { tab: "sala-de-estudos" | "pesquisa"; aba?: AbaEstudos; vista?: "vitrine" | "pesquisar" };
   /** passo de AÇÃO: anda quando um destes eventos chega (sem botão de seguir) */
@@ -113,6 +115,8 @@ export const PASSOS_SALA: PassoSala[] = [
     fala: "Pronto — teu estudo nasceu! 🎉 Agora, aqui no chat, pede um diagrama interativo (ex.: “faz um diagrama interativo disso”). Ver o assunto desenhado fixa o conhecimento de um jeito que o texto sozinho não alcança." },
   { id: "gerar-percurso", precisaMapa: true, ir: { tab: "sala-de-estudos", aba: "meus-estudos" },
     alvos: ['[data-tour="gerar-percurso"]'],
+    // #638: com um documento aberto, o cartão não cobre a barra de cima dele (o "Exportar" do diagrama)
+    evitar: ['[data-tour="doc-topo"]'],
     avancaEm: [{ evento: EVT_PERCURSO_ABERTO }],
     suaVez: "Clica no botão do mapa, em cima da conversa, pra gerar; quando ficar pronto, clica de novo pra abrir",
     dica: "📍 Gere o percurso e abra o mapa",

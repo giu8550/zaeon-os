@@ -577,9 +577,10 @@ export default function ResearchChat({
           documento aberto no topo); sem ela, fica aqui, à esquerda do chat. */}
       {barraConversas && (destinoConversas ? createPortal(barraConversas, destinoConversas) : barraConversas)}
       <div className="relative flex-1 min-w-0 flex flex-col">
-      {/* Topo do chat: a bolinha do cérebro e o A−/A+ do texto, JUNTOS à direita (#633). */}
+      {/* Topo do chat: o A−/A+ do texto e a bolinha do cérebro, JUNTOS à direita (#633) — a bolinha DEPOIS das letras. */}
       <div className={`shrink-0 ${compacto ? "px-3" : "px-4 sm:px-6"} pt-2 flex items-center gap-2 min-h-[36px]`}>
         <div className="flex-1" />
+        <ChatZoom escala={zoom.escala} menor={zoom.menor} maior={zoom.maior} />
         {comAbas && cerebro.ligado && (() => {
           const bolinha = (
             <BolinhaCerebro
@@ -597,7 +598,6 @@ export default function ResearchChat({
           // no topo da sala (sem nome, só o sinal que gira quando um percurso está pronto pra nascer)
           return slotTopo ? createPortal(bolinha, slotTopo) : bolinha;
         })()}
-        <ChatZoom escala={zoom.escala} menor={zoom.menor} maior={zoom.maior} />
       </div>
       {/* ÁREA do chat (mensagens + composer). O cérebro abre em OVERLAY `absolute inset-0 z-50` DENTRO
           dela — cobre mensagens e composer de propósito (visão focada) e nunca nasce atrás/abaixo do

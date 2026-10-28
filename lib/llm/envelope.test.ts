@@ -110,6 +110,13 @@ describe("gerarJson", () => {
     const d = deps({ vertex: async (_r, modelo) => ({ texto: "```json\n{\"a\":1}\n```", usage: USAGE_VAZIO, modelo }) });
     expect(await gerarJson<{ a: number }>({ user: "x", ctx }, d)).toEqual({ a: 1 });
   });
+  it("#634: o ``` de DENTRO da resposta (bloco de código) fica — com ou sem a cerca em volta", async () => {
+    const corpo = JSON.stringify({ nucleo: "Veja:\n```python\n# soma\nx = 1\n```\nfim" });
+    for (const texto of [corpo, "```json\n" + corpo + "\n```", "```\n" + corpo + "\n```"]) {
+      const d = deps({ vertex: async (_r, modelo) => ({ texto, usage: USAGE_VAZIO, modelo }) });
+      expect((await gerarJson<{ nucleo: string }>({ user: "x", ctx }, d)).nucleo).toBe("Veja:\n```python\n# soma\nx = 1\n```\nfim");
+    }
+  });
   it("vazio → erro diagnóstico com finishReason; inválido → resposta_nao_json", async () => {
     const d1 = deps({ vertex: async (_r, modelo) => ({ texto: "", usage: USAGE_VAZIO, finishReason: "MAX_TOKENS", modelo }) });
     await expect(gerarJson({ user: "x", ctx }, d1)).rejects.toThrow(/resposta vazia \(finishReason=MAX_TOKENS\)/);
