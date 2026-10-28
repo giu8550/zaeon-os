@@ -236,6 +236,8 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   // o CÉREBRO da conversa ativa (o mesmo da Sala de Pesquisa — HANDOFF_CEREBRO_AURA §3): o turno já marca a conversa
   // como estudável (lib/map/gatekeeper, pelo `cartolinaScopeId`); aqui entram a bolinha ("Gerar mapa") e o painel
   const [cerebroAberto, setCerebroAberto] = useState(false);
+  // #640: a altura medida da barra das abas (as telas por cima começam nela)
+  const [topoPastas, setTopoPastas] = useState(46);
   const cerebro = useCerebro(abaAtiva, { aberto: cerebroAberto });
   // #613: o tour do laboratório acompanha o botão do percurso (gerando → pronto)
   useEffect(() => { avisarEstadoPercurso(cerebro.estado); }, [cerebro.estado]);
@@ -1220,13 +1222,13 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         return slotSidebar ? createPortal(lista, slotSidebar) : lista;
       })()}
       {/* ── COLUNA CENTRAL: conversa + composer ── */}
-      <div ref={colunaRef} className={`relative flex-1 min-w-0 flex flex-col ${CORPO_DA_PASTA}`} onDragOver={soltar.onDragOver} onDragLeave={soltar.onDragLeave} onDrop={(e) => { if (e.dataTransfer.files?.length || e.dataTransfer.getData("text/zaeon-file")) soltar.onDrop(e); }}>
+      <div ref={colunaRef} style={{ "--topo-pastas": `${topoPastas}px` } as React.CSSProperties} className={`relative flex-1 min-w-0 flex flex-col ${CORPO_DA_PASTA}`} onDragOver={soltar.onDragOver} onDragLeave={soltar.onDragLeave} onDrop={(e) => { if (e.dataTransfer.files?.length || e.dataTransfer.getData("text/zaeon-file")) soltar.onDrop(e); }}>
         {arrastando && <AvisoSoltar />}
 
         {/* ⟁ Árvore de habilidades — drawer opt-in por cima da conversa (não troca a tela) */}
         {treeOpen && (
           // acima dos documentos/editor (z-30/35) — antes ela abria por baixo de um documento aberto; expandida = o chat inteiro
-          <div className={`absolute top-[46px] bottom-0 right-0 z-[38] w-full ${treeExpandida ? "" : "sm:w-[460px]"} shadow-[-24px_0_60px_-30px_rgba(15,23,42,0.5)]`}>
+          <div className={`absolute top-[var(--topo-pastas,46px)] bottom-0 right-0 z-[38] w-full ${treeExpandida ? "" : "sm:w-[460px]"} shadow-[-24px_0_60px_-30px_rgba(15,23,42,0.5)]`}>
             <SkillTreePanel
               expandida={treeExpandida}
               onExpandir={setTreeExpandida}
@@ -1259,7 +1261,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
             fora dele, a gaveta à direita de antes. */}
         {trabalhoAberto && TCC_CROSS_ON && (
           <div className={CHAT_UNICO
-            ? "absolute inset-x-0 bottom-0 top-[46px] z-[35]"
+            ? "absolute inset-x-0 bottom-0 top-[var(--topo-pastas,46px)] z-[35]"
             : "absolute inset-y-0 right-0 z-40 w-full sm:w-[min(620px,100%)] shadow-[-24px_0_60px_-30px_rgba(15,23,42,0.5)]"}>
             <TccPanel
               key={trabalhoAberto}
@@ -1272,7 +1274,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
 
         {reaAberto && REA_BP_ON && (
           <div className={CHAT_UNICO
-            ? "absolute inset-x-0 bottom-0 top-[46px] z-[36]"
+            ? "absolute inset-x-0 bottom-0 top-[var(--topo-pastas,46px)] z-[36]"
             : "absolute inset-y-0 right-0 z-40 w-full sm:w-[min(640px,100%)] shadow-[-24px_0_60px_-30px_rgba(15,23,42,0.5)]"}>
             <ReaBlueprintView key={reaAberto} id={reaAberto} onFechar={() => setReaAberto(null)} />
           </div>
@@ -1302,6 +1304,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
             puxar a aba traz a pasta pra frente (components/chat/PastasEmpilhadas). As conversas ficam na barra da esquerda:
             trocar de conversa lá não abre/fecha documento aqui, e vice-versa. */}
         <PastasEmpilhadas
+          // #640: o documento, o mapa, o trabalho, o REA e a árvore começam onde a barra TERMINA (era 46 px fixo —
+          // com o "Ver mapa" a barra ficou mais alta e eles cortavam a parte de baixo das abas)
+          aoMedirAltura={setTopoPastas}
           pastas={[
             { id: "conversa", rotulo: "Conversa", titulo: "A conversa", icone: <span className="text-cyan-600 dark:text-cyan-300">⟁</span> },
             ...docs.map((d): Pasta => {
@@ -1339,7 +1344,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         {/* o painel do MAPA: por cima da conversa (abaixo da linha de cima, que segue mostrando a bolinha) */}
         <AnimatePresence>
           {cerebro.ligado && cerebroAberto && (
-            <div key="cerebro" className="absolute inset-x-0 bottom-0 top-[46px] z-40">
+            <div key="cerebro" className="absolute inset-x-0 bottom-0 top-[var(--topo-pastas,46px)] z-40">
               <CerebroPanel
                 st={cerebro}
                 onFechar={() => setCerebroAberto(false)}
@@ -1354,7 +1359,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
 
         {/* O documento aberto ocupa a sala (abaixo da linha de Documentos); a conversa fica montada embaixo. */}
         {docs.map((d) => (
-          <div key={d.artifactId} className="absolute inset-x-0 bottom-0 top-[46px] z-30 bg-white dark:bg-[#070b14]" style={{ display: docAtivo === d.artifactId ? undefined : "none" }}>
+          <div key={d.artifactId} className="absolute inset-x-0 bottom-0 top-[var(--topo-pastas,46px)] z-30 bg-white dark:bg-[#070b14]" style={{ display: docAtivo === d.artifactId ? undefined : "none" }}>
             <DocumentoArtefato doc={d} />
           </div>
         ))}

@@ -11,12 +11,14 @@
  * "Abrir numa aba" usa o mesmo arquivo; o botão do bloco baixa o .html (abre offline).
  */
 import { useEffect, useState } from "react";
-import { Maximize2, Minimize2, ExternalLink } from "lucide-react";
+import { Maximize2, Minimize2, ExternalLink, RotateCw } from "lucide-react";
 
 export default function DiagramView({ artifactId, titulo, cheio = false }: { artifactId: string; titulo?: string; /** ocupa a aba inteira (documento) */ cheio?: boolean }) {
   const [alto, setAlto] = useState(false);
   const [html, setHtml] = useState<string | null>(null);
   const [erro, setErro] = useState(false);
+  // #640: "Tentar de novo" sem fechar e abrir o documento
+  const [tentativa, setTentativa] = useState(0);
   const url = `/api/studio/${artifactId}/file`;
 
   useEffect(() => {
@@ -28,10 +30,23 @@ export default function DiagramView({ artifactId, titulo, cheio = false }: { art
       .then((t) => { if (vivo) setHtml(t); })
       .catch(() => { if (vivo) setErro(true); });
     return () => { vivo = false; };
-  }, [url]);
+  }, [url, tentativa]);
 
   const altura = cheio ? "h-full" : alto ? "h-[78vh]" : "h-[440px]";
-  if (erro) return <div className="text-[12px] text-slate-500 dark:text-white/50 px-1 py-3">Não consegui abrir o diagrama agora.</div>;
+  if (erro) {
+    return (
+      <div className={`flex flex-col items-center justify-center gap-2 px-1 py-3 text-[12px] text-slate-500 dark:text-white/50 ${cheio ? "h-full" : ""}`}>
+        <span>Não consegui abrir o diagrama agora.</span>
+        <button
+          type="button"
+          onClick={() => setTentativa((n) => n + 1)}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 font-semibold text-slate-700 hover:border-cyan-400/60 dark:border-white/15 dark:text-white/80"
+        >
+          <RotateCw size={12} /> Tentar de novo
+        </button>
+      </div>
+    );
+  }
   if (html === null) {
     return <div className={`w-full ${altura} rounded-xl border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/[0.04] animate-pulse`} aria-label="Carregando o diagrama" />;
   }
@@ -44,7 +59,8 @@ export default function DiagramView({ artifactId, titulo, cheio = false }: { art
         referrerPolicy="no-referrer"
         className={`w-full rounded-xl border border-slate-200 dark:border-white/10 bg-[#020617] transition-[height] ${altura}`}
       />
-      <div className="absolute top-2 left-2 flex gap-1">
+      {/* #640: na aba inteira o título do diagrama mora no canto de cima à esquerda — os botões vão pro de baixo */}
+      <div className={`absolute ${cheio ? "bottom-2 left-2" : "top-2 left-2"} flex gap-1`}>
         {!cheio && <button
           type="button"
           onClick={() => setAlto((v) => !v)}

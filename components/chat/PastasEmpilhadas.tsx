@@ -8,7 +8,7 @@
  * GERANDO: enquanto a Aura responde na pasta da frente (`gerando` = id dela), o friso vira um SCANNER — uma luz nasce
  * no começo da aba e corre até o fim, em loop, até a resposta acabar. Com movimento reduzido: só o friso mais aceso.
  */
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 export type Pasta = {
   id: string;
@@ -29,7 +29,7 @@ const CSS_VARREDURA = `
 @media (prefers-reduced-motion: reduce) { .pe-varre { display: none } }
 `;
 
-export default function PastasEmpilhadas({ pastas, ativa, gerando = null, onAbrir, antes, depois, rotulo = "Documentos da conversa" }: {
+export default function PastasEmpilhadas({ pastas, ativa, gerando = null, onAbrir, antes, depois, rotulo = "Documentos da conversa", aoMedirAltura }: {
   /** a 1ª é a CONVERSA; as demais, os documentos (na ordem em que abriram) */
   pastas: Pasta[];
   ativa: string;
@@ -41,10 +41,22 @@ export default function PastasEmpilhadas({ pastas, ativa, gerando = null, onAbri
   /** à direita (o ＋, a gaveta de diagramas, o A−/A+) */
   depois?: ReactNode;
   rotulo?: string;
+  /** #640: a altura de VERDADE desta barra (cresce com o "Ver mapa") — quem abre telas por cima começa nela */
+  aoMedirAltura?: (px: number) => void;
 }) {
   const n = pastas.length;
+  const barra = useRef<HTMLDivElement>(null);
+  const medir = useRef(aoMedirAltura);
+  medir.current = aoMedirAltura;
+  useEffect(() => {
+    const el = barra.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => medir.current?.(Math.round(el.getBoundingClientRect().height)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   return (
-    <div className="relative shrink-0 flex items-end gap-2 px-3 pt-2.5 min-h-[46px] bg-slate-100/80 dark:bg-black/30">
+    <div ref={barra} className="relative shrink-0 flex items-end gap-2 px-3 pt-2.5 min-h-[46px] bg-slate-100/80 dark:bg-black/30">
       {gerando && <style>{CSS_VARREDURA}</style>}
       {antes}
       <div role="tablist" aria-label={rotulo} className="flex min-w-0 flex-1 items-end overflow-x-auto overflow-y-hidden no-scrollbar pl-1 pt-1">
