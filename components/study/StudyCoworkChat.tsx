@@ -1328,10 +1328,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
             setTrabalhoAberto(null); setCartolinaAberta(false);
             setDocAtivo(id === "conversa" ? null : id);
           }}
-          // chat único: o MAPA da conversa mora no canto de cima à ESQUERDA (onde ficava na Sala de Pesquisa)
-          antes={CHAT_UNICO ? bolinhaMapa : undefined}
+          // #633: o botão do MAPA (o cérebro) mora à DIREITA, do lado do A−/A+ — os controles da conversa juntos
           depois={<>
-            {!CHAT_UNICO && bolinhaMapa}
+            {bolinhaMapa}
             <ChatZoom escala={zoom.escala} menor={zoom.menor} maior={zoom.maior} />
           </>}
         />
