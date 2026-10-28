@@ -10,10 +10,16 @@ import AgentAvatar from "@/components/agents/AgentAvatar";
 import { textoDigitando } from "@/lib/canal/presenca";
 import { TXT_MUDO, TXT_2, VIDRO_BOLHA } from "@/lib/canal/vidro";
 
-export function LinhaSistema({ texto, hora }: { texto: string; hora?: string }) {
+export function LinhaSistema({ texto, hora, acao }: { texto: string; hora?: string; /** #635: "Chamar de volta" */ acao?: { rotulo: string; onClick: () => void } }) {
   return (
-    <div role="status" className="flex items-center justify-center gap-2 py-1">
+    <div role="status" className="flex flex-wrap items-center justify-center gap-2 py-1">
       <span className={`px-3 py-1 rounded-full text-[11.5px] bg-slate-500/10 dark:bg-white/[0.06] ${TXT_2}`}>{texto}</span>
+      {acao && (
+        <button type="button" onClick={acao.onClick}
+          className="px-3 py-1 rounded-full text-[11.5px] font-semibold border border-blue-500/40 text-blue-700 hover:bg-blue-500/10 dark:border-cyan-300/40 dark:text-cyan-200 dark:hover:bg-cyan-300/10">
+          {acao.rotulo}
+        </button>
+      )}
       {hora && <span className={`text-[10px] ${TXT_MUDO}`}>{hora}</span>}
     </div>
   );
