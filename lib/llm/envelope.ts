@@ -232,9 +232,15 @@ async function viaGateway(req: GerarReq, modelo: string, url: string, key: strin
   };
 }
 
+/** Tira SÓ a cerca ```json em VOLTA do JSON. Antes apagava todo ``` do texto — inclusive o ```python de DENTRO da
+ *  resposta da Aura, e o código saía como parágrafo, com o `# comentário` virando título (#634). */
+export function semCercaJson(texto: string): string {
+  return String(texto ?? "").trim().replace(/^```(?:json)?[ \t]*\n?/i, "").replace(/\n?```$/, "").trim();
+}
+
 /** O texto de uma resposta json:true parseia? (cercas ```json toleradas, como no gerarJson). */
 export function textoJsonValido(texto: string): boolean {
-  const t = String(texto ?? "").replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
+  const t = semCercaJson(texto);
   if (!t) return false;
   try { JSON.parse(t); return true; } catch { return false; }
 }
@@ -394,7 +400,7 @@ export async function gerarJsonStreamRes<T>(req: GerarReq, onTexto: (acumulado: 
 }
 
 function parsearJsonRes<T>(res: GerarRes): { valor: T; res: GerarRes } {
-  const cleaned = res.texto.replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
+  const cleaned = semCercaJson(res.texto);
   if (!cleaned) throw new ErroLlm("outro", res.provedor, new Error(`Gemini retornou resposta vazia (finishReason=${res.finishReason ?? "?"})`));
   // LaTeX com UMA barra dentro do JSON ("$\frac{a}{b}$", "$\rightarrow$") viraria form feed/retorno de carro no
   // parse — os "caracteres errados" nas fórmulas e reações dos trabalhos. lib/llm/latexJson repara antes.
