@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach } from "vitest";
-import { render, cleanup, waitFor } from "@testing-library/react";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { render, cleanup, waitFor, fireEvent } from "@testing-library/react";
 import ChatMarkdown from "./ChatMarkdown";
 
 afterEach(() => cleanup());
@@ -49,5 +49,27 @@ describe("ChatMarkdown — geometria", () => {
     expect(container.querySelector("ellipse")).not.toBeNull();
     expect(container.querySelector("line[marker-end]")).not.toBeNull();
     expect(container.textContent).toContain("ABC");
+  });
+});
+
+describe("ChatMarkdown — bloco de código (#634)", () => {
+  it("vira a caixa de código: linguagem, Copiar, sem crases e o # do Python não vira título", () => {
+    const { container, getByText } = render(<ChatMarkdown text={"Assim:\n```python\n# soma\nx = a * b\n```\nPronto."} />);
+    const caixa = container.querySelector("[data-bloco-codigo]");
+    expect(caixa).not.toBeNull();
+    expect(caixa!.querySelector("pre code")!.textContent).toBe("# soma\nx = a * b");
+    expect(getByText("python")).toBeTruthy();
+    expect(getByText("Copiar")).toBeTruthy();
+    expect(container.textContent).not.toContain("```");
+    expect(container.querySelector(".font-semibold")).toBeNull();   // nada de título nem negrito
+    expect(container.textContent).toContain("Pronto.");
+  });
+  it("Copiar põe o código na área de transferência", async () => {
+    const escrever = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: escrever }, configurable: true });
+    const { getByText } = render(<ChatMarkdown text={"```js\nlet a = 1;\n```"} />);
+    fireEvent.click(getByText("Copiar"));
+    await waitFor(() => expect(getByText("Copiado")).toBeTruthy());
+    expect(escrever).toHaveBeenCalledWith("let a = 1;");
   });
 });

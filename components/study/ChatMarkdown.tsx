@@ -3,6 +3,7 @@
 import React from "react";
 import Formula from "@/components/chat/Formula";
 import GraficoFuncao from "@/components/chat/GraficoFuncao";
+import BlocoCodigo from "@/components/chat/BlocoCodigo";
 import { segmentarBlocos, segmentarInline } from "@/lib/chat/matematica";
 
 /**
@@ -17,6 +18,7 @@ import { segmentarBlocos, segmentarInline } from "@/lib/chat/matematica";
  * Matemática (lib/chat/matematica): $…$ / \(…\) inline e $…$ / \[…\] em destaque viram KaTeX;
  * um bloco ```grafico {json} vira gráfico de função (SVG). Links [rótulo](https://…) viram link
  * (só http/https, nova aba). A matemática é separada ANTES do markdown: o `*` de "a*b" não vira itálico.
+ * Bloco de código (```lang … ```, #634) também sai antes: vira a caixa do BlocoCodigo, com o de dentro cru.
  */
 
 // ── inline: fórmula ($…$) primeiro; no resto, ***x*** / **x** / *x* / `code` / [link](https://…) ──
@@ -44,7 +46,7 @@ function inlineMarkdown(s: string): React.ReactNode[] {
     } else if (m[4] !== undefined) {
       out.push(<em key={k++}>{m[4]}</em>);
     } else if (m[5] !== undefined) {
-      out.push(<code key={k++} className="rounded bg-black/[0.06] dark:bg-white/10 px-1.5 py-0.5 text-[0.9em] font-mono">{m[5]}</code>);
+      out.push(<code key={k++} className="rounded border border-black/10 dark:border-white/10 bg-black/[0.06] dark:bg-white/10 px-1.5 py-0.5 text-[0.9em] font-mono text-cyan-800 dark:text-cyan-200">{m[5]}</code>);
     } else if (m[6] !== undefined) {
       out.push(<a key={k++} href={m[7]} target="_blank" rel="noopener noreferrer" className="font-medium text-cyan-700 dark:text-cyan-300 underline underline-offset-2 hover:opacity-80">{m[6]}</a>);
     }
@@ -63,6 +65,7 @@ export default function ChatMarkdown({ text }: { text: string }) {
       {pedacos.map((b, i) =>
         b.tipo === "formula" ? <Formula key={i} latex={b.conteudo} display />
         : b.tipo === "grafico" ? <GraficoFuncao key={i} json={b.conteudo} />
+        : b.tipo === "codigo" ? <BlocoCodigo key={i} codigo={b.conteudo} lang={b.lang} />
         : <MarkdownDeLinhas key={i} text={b.conteudo.replace(/^\n|\n$/g, "")} />,
       )}
     </div>

@@ -51,3 +51,11 @@ describe("RichText — matemática (chat de PDF / resumos da Sala de Pesquisa)",
     expect(container.querySelectorAll("img")).toHaveLength(0);
   });
 });
+
+describe("RichText — bloco de código (#634)", () => {
+  it("```lang vai pro ChatMarkdown e vira a caixa de código", () => {
+    const { container } = render(<RichText text={"Resumo:\n```js\nconst x = 1;\n```"} />);
+    expect(container.querySelector("[data-bloco-codigo] pre code")!.textContent).toBe("const x = 1;");
+    expect(container.textContent).not.toContain("```");
+  });
+});
