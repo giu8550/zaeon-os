@@ -126,7 +126,8 @@ export default function SalaBlueprint({ inicialId }: { inicialId?: string | null
         {atual && <DicasRapidas lugar="sala-estudos" dicas={DICAS_SALA} />}
         {atual ? (
           <PranchaBlueprint id={atual.id} doc={atual.doc} onFixar={B.fixar} skin={skin} letra={letra}
-            acoes={{ podeEditar: podeEscrever(atual.papel), avaliando, abrirVideo: setVideoAberto,
+            // #631 (revisão): enquanto o blueprint clicado carrega, a prancha de antes fica só pra ver (não edita)
+            acoes={{ podeEditar: podeEscrever(atual.papel) && !B.carregando, avaliando, abrirVideo: setVideoAberto,
               avaliar: podeEscrever(atual.papel) && precisaAvaliar(atual.doc) ? () => { setAvaliando(true); void enviar(null, "").finally(() => setAvaliando(false)); } : undefined, recompor: atual.papel === "dono" ? B.recompor : undefined, recompondo: B.recompondo, reorganizar: B.reorganizar, temFixos: Object.keys(atual.doc.fixos).length > 0,
               extra: podeEscrever(atual.papel) ? (id) => { const c = id.startsWith("critico:") ? atual.doc.criticos.find((k) => `critico:${k.id}` === id) : undefined; return c ? <ProvaForm criticoId={c.id} tipo={c.tipoProva} enviar={enviar} /> : undefined; } : undefined }}
             sobre={<>

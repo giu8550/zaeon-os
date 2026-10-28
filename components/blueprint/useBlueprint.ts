@@ -30,11 +30,14 @@ export function useBlueprint(inicialId?: string | null) {
   // os blueprints já abertos nesta visita (voltar num deles não espera o servidor)
   const guardados = useRef(new Map<string, BlueprintCliente>());
   const idAnterior = useRef<string | null>(null);   // só TROCAS entram no cronômetro (a recarga de 20 s não)
+  // #631 (revisão): o blueprint que está NA TELA — as edições vão pra ele, não pro recém-clicado que ainda carrega
+  const idNaTela = useRef<string | null>(null);
   // toda escrita no `atual` passa por aqui: guarda e só troca o objeto se mudou alguma coisa
   const setAtual = useCallback((v: BlueprintCliente | null | ((a: BlueprintCliente | null) => BlueprintCliente | null)) => {
     setAtualCru((a) => {
       const n = typeof v === "function" ? v(a) : v;
       if (n) guardados.current.set(n.id, n);
+      idNaTela.current = n?.id ?? null;
       return n && !mudouBlueprint(a, n) && a ? a : n;
     });
   }, []);
@@ -73,7 +76,9 @@ export function useBlueprint(inicialId?: string | null) {
   }, [recarregar]);
 
   const patch = useCallback(async (corpo: unknown, otimista: (d: DocBlueprint) => DocBlueprint) => {
-    const id = idAtual.current; if (!id) return;
+    // #631 (revisão): a prancha na tela é a que gerou a edição — com outro blueprint carregando, gravar no
+    // `idAtual` mudava o blueprint ERRADO; e, se a seleção já é outra, a edição não vale
+    const id = idNaTela.current; if (!id || id !== idAtual.current) return;
     setAtual((a) => (a && a.id === id ? { ...a, doc: otimista(a.doc) } : a));
     voo(id, 1);
     const r = await json<{ blueprint: BlueprintCliente }>(`/api/blueprint/${id}`, { method: "PATCH", body: JSON.stringify(corpo) });

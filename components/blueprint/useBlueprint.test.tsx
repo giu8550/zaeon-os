@@ -60,6 +60,21 @@ describe("#631 · useBlueprint", () => {
     await soltar("a");
     await waitFor(() => expect(result.current.atual?.rev).toBe(2));   // mudou de verdade: troca
   });
+  it("revisão: arrastar na prancha de ANTES enquanto o novo carrega não grava no blueprint errado", async () => {
+    const { result } = renderHook(() => useBlueprint());
+    await waitFor(() => expect(pendentes.a).toBeTruthy());
+    await soltar("a");
+    await waitFor(() => expect(result.current.atual?.id).toBe("a"));
+    act(() => { void result.current.abrir("b"); });     // "b" ainda carregando; "a" na tela
+    act(() => { void result.current.fixar("passo:p1", 10, 20); });
+    const patches = (fetch as any).mock.calls.filter((c: any[]) => c[1]?.method === "PATCH");
+    expect(patches).toHaveLength(0);                       // nem no "b" (errado), nem no "a" (já não é a seleção)
+    await soltar("b");
+    await waitFor(() => expect(result.current.atual?.id).toBe("b"));
+    act(() => { void result.current.fixar("passo:p1", 10, 20); });
+    const depois = (fetch as any).mock.calls.filter((c: any[]) => c[1]?.method === "PATCH");
+    expect(depois.map((c: any[]) => c[0])).toEqual(["/api/blueprint/b"]);   // com o "b" na tela, vai pro "b"
+  });
   it("mudouBlueprint", () => {
     expect(mudouBlueprint(null, bp("a"))).toBe(true);
     expect(mudouBlueprint(bp("a"), bp("a"))).toBe(false);
