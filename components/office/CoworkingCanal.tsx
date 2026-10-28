@@ -32,7 +32,9 @@ import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
 import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, EV_HUMANO_DIGITANDO, EV_REMOVIDO, type MensagemWire } from "@/lib/canal/wire";
 import { comFotoDaLista, type AvisoMensagem } from "@/lib/canal/aviso";
-import { quemRespondeSemArroba } from "@/lib/canal/alvo";
+import { linhasChamaveis, quemRespondeSemArroba } from "@/lib/canal/alvo";
+import { mostraParar } from "@/lib/canal/parar";
+import { Square } from "lucide-react";
 import { deveAvisarDigitando, podarDigitando, quemDigita, estaNoFim, vigiaReconexao, TTL_DIGITANDO_MS, type Digitando } from "@/lib/canal/presenca";
 import { LinhaSistema, AvisoDigitando } from "./Presenca";
 import AgendaBandeja from "./AgendaBandeja";
@@ -410,9 +412,10 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   }, [aberta, texto, caret]);
 
   // ─── enviar ───
-  const enviar = useCallback(async () => {
+  // `textoFixo` (#635, "Chamar de volta"): manda essa frase sem mexer no que a pessoa está escrevendo
+  const enviar = useCallback(async (textoFixo?: string) => {
     const guardados = anexos.filter((a) => a.estado === "guardado").map((a) => a.nome);
-    const t = mensagemComAnexos(texto, guardados);
+    const t = textoFixo ?? mensagemComAnexos(texto, guardados);
     if (!t || !ativoId || enviando || subindo) return;
     setEnviando(true);
     try {
@@ -431,8 +434,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
         setEstadoAgente((m) => ({ ...m, ...Object.fromEntries(alvos.map((k) => [k, "digitando" as EstadoAgente])) }));
       }
       setDet((d) => (d && !d.mensagens.some((x) => x.id === m.id) ? { ...d, mensagens: [...d.mensagens, m] } : d));
-      setTexto("");
-      setAnexos([]);
+      if (textoFixo === undefined) { setTexto(""); setAnexos([]); }
       ultimoAvisoDigitando.current = null; // a próxima mensagem volta a avisar na primeira tecla
       setErro(null);
       // agentes na barra: os chamados entram, a dispensada sai (#440 — o servidor manda a lista final)
@@ -449,6 +451,16 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       inputRef.current?.focus();
     }
   }, [texto, anexos, subindo, ativoId, enviando, pedirPermissao]);
+
+  // ─── #635: "■ Parar" — a resposta de quem está escrevendo não entra no canal (se forem várias, para todas) ───
+  const parar = useCallback(async () => {
+    if (!ativoId || !digitando.length) return;
+    const quem = [...digitando];
+    for (const k of quem) delete agenteAte.current[k];
+    setDigitando([]);
+    const r = await fetch(`/api/canal/${ativoId}/parar`, { method: "POST", headers: H, body: JSON.stringify({ agentes: quem }) }).catch(() => null);
+    if (!r?.ok) setErro("Não deu pra parar a resposta agora.");
+  }, [ativoId, digitando]);
 
   const aoTeclar = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (aberta && sugestoes.length) {
@@ -603,6 +615,10 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   // conversa com outras pessoas, a agente só responde quem estava falando com ela (lib/canal/alvo.ts).
   const quemResponde = quemRespondeSemArroba(det.mensagens.filter((m) => !m.id.startsWith("efemera-")), agentes.map((a) => a.agentKey), meuId, humanosNoCanal(canal));
   const agenteAtivo = agentes.find((a) => a.agentKey === quemResponde) ?? null;
+  // #635: as linhas "saiu da conversa" que ganham "Chamar de volta" — só a ÚLTIMA saída de cada agente que ainda está fora
+  const chamavel = linhasChamaveis(det.mensagens, agentes.map((a) => a.agentKey));
+  // #635: alguém está escrevendo e a caixa está vazia → o ↑ vira "■ Parar"
+  const podeParar = mostraParar(digitando.length, texto, anexos.some((a) => a.estado === "guardado"));
 
   return (
     <div className="w-full h-full min-h-0 flex flex-col p-2 sm:p-4" style={zoom.style}>
@@ -706,7 +722,9 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
         {/* mensagens */}
         <div ref={listaRef} data-testid="lista-mensagens" className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-3 sm:px-5 py-4 flex flex-col gap-3" onClick={() => setMenu(null)}>
           {det.mensagens.map((m) => (m.autorTipo === "sistema"
-            ? <LinhaSistema key={m.id} texto={m.texto} hora={hora(m.createdAt)} /> // #423: "fulano entrou no escritório"
+            ? <LinhaSistema key={m.id} texto={m.texto} hora={hora(m.createdAt)} // #423: "fulano entrou no escritório"
+                // #635: "Téo saiu da conversa" (e ele ainda está fora) → "Chamar de volta", sem precisar digitar o @
+                acao={chamavel.has(m.id) ? { rotulo: "Chamar de volta", onClick: () => void enviar(`@${m.autorId} pode voltar`) } : undefined} />
             : <Bolha key={m.id} m={m} minha={m.autorTipo === "humano" && m.autorId === meuId} aliases={aliases} />))}
           {digitando.map((k) => {
             const a = agentes.find((x) => x.agentKey === k);
@@ -778,10 +796,18 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
               className={`flex-1 min-h-[44px] max-h-[140px] px-4 py-3 rounded-2xl resize-none text-[14px] leading-5 bg-white/70 dark:bg-white/[0.06] border border-white/70 dark:border-white/10 ${TXT} placeholder:text-slate-400 dark:placeholder:text-white/35 outline-none focus:border-blue-400/70 dark:focus:border-cyan-300/50`}
               style={{ height: Math.min(140, 24 + 20 * Math.max(1, texto.split("\n").length)) }}
             />
-            <button type="button" onClick={() => void enviar()} disabled={(!texto.trim() && !anexos.some((a) => a.estado === "guardado")) || enviando || subindo} aria-label="Enviar"
-              className={`${TOQUE} rounded-2xl text-[15px] font-black transition-all disabled:opacity-40 bg-blue-600 text-white dark:bg-cyan-400 dark:text-slate-900 shadow-[0_8px_24px_-8px_rgba(37,99,235,0.6)] dark:shadow-[0_8px_24px_-8px_rgba(34,211,238,0.5)] hover:scale-[1.03] active:scale-95`}>
-              ↑
-            </button>
+            {podeParar ? (
+              <button type="button" onClick={() => void parar()} aria-label="Parar a resposta" title="Parar a resposta"
+                className={`${TOQUE} rounded-2xl grid place-items-center text-white transition-all hover:scale-[1.03] active:scale-95 shadow-[0_8px_24px_-8px_rgba(225,29,72,0.6)]`}
+                style={{ background: "linear-gradient(135deg,#e11d48,#f43f5e)" }}>
+                <Square size={14} className="fill-current" />
+              </button>
+            ) : (
+              <button type="button" onClick={() => void enviar()} disabled={(!texto.trim() && !anexos.some((a) => a.estado === "guardado")) || enviando || subindo} aria-label="Enviar"
+                className={`${TOQUE} rounded-2xl text-[15px] font-black transition-all disabled:opacity-40 bg-blue-600 text-white dark:bg-cyan-400 dark:text-slate-900 shadow-[0_8px_24px_-8px_rgba(37,99,235,0.6)] dark:shadow-[0_8px_24px_-8px_rgba(34,211,238,0.5)] hover:scale-[1.03] active:scale-95`}>
+                ↑
+              </button>
+            )}
           </div>
           {erro && erro !== "403" && <p role="alert" className="mt-1.5 px-1 text-[11.5px] text-rose-600 dark:text-rose-300">{erro}</p>}
         </div>

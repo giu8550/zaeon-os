@@ -91,6 +91,36 @@ describe("agent-turn · executarTurno", () => {
     expect(upsert).toHaveBeenCalledTimes(1);
     expect(upsert.mock.calls[0]![0].where).toEqual({ agentKey_userId: { agentKey: "aura", userId: B } });
   });
+  it("#635: apertaram '■ Parar' enquanto ele escrevia → a resposta NÃO entra no canal (e o balão some)", async () => {
+    const msgs = [msg({ autorId: A, texto: "@aura explica tudo de cálculo", mencoes: ["aura"] })];
+    const { prisma, criadas } = fakePrisma(canal, msgs);
+    const eventos: any[] = [];
+    const gerar = vi.fn().mockImplementation(async () => {
+      msgs.push(msg({ autorTipo: "sistema", autorId: "parar", texto: "Ana interrompeu a resposta" }));
+      return "Uma resposta bem longa…";
+    });
+    const r = await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A, mensagemId: msgs[0]!.id }, { prisma, gerar, publicar: async (c, ev, p) => { eventos.push([c, ev, p]); } });
+    expect(r).toEqual({ ok: false, motivo: "parou" });
+    expect(criadas).toHaveLength(0);
+    expect(eventos.map((e) => e[1])).toEqual([EV_DIGITANDO, EV_DIGITANDO]);
+    expect(eventos[1]![2]).toEqual({ agentKey: "aura", estado: "ocioso" });
+  });
+  it("#635: a agente foi dispensada enquanto escrevia → a resposta atrasada NÃO entra; um 'Parar' antigo não atrapalha", async () => {
+    const antigo = msg({ autorTipo: "sistema", autorId: "parar", texto: "Ana interrompeu a resposta" });
+    const msgs = [antigo, msg({ autorId: A, texto: "@aura e a introdução?", mencoes: ["aura"] })];
+    const { prisma, criadas } = fakePrisma(canal, msgs);
+    const gerar = vi.fn().mockImplementation(async () => {
+      msgs.push(msg({ autorTipo: "sistema", autorId: "aura", texto: "Aura Prime saiu da conversa" }));
+      return "Sobre a introdução…";
+    });
+    const r = await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A, mensagemId: msgs[1]!.id }, { prisma, gerar, publicar: async () => {} });
+    expect(r).toEqual({ ok: false, motivo: "saiu" });
+    expect(criadas).toHaveLength(0);
+    // sem a saída: o "Parar" de ANTES da mensagem não cancela
+    msgs.pop();
+    const ok = await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A, mensagemId: msgs[1]!.id }, { prisma, gerar: vi.fn().mockResolvedValue("Sobre a introdução…"), publicar: async () => {} });
+    expect(ok.ok).toBe(true);
+  });
   it("vários usuários no mesmo canal: o agente enxerga cada pessoa pelo nome e responde a quem o chamou", async () => {
     const m1 = msg({ autorId: A, texto: "@aura resume o capítulo 2", mencoes: ["aura"] });
     const r1 = msg({ autorTipo: "agente", autorId: "aura", texto: "O capítulo 2 trata de…", mencoes: [] });
@@ -426,5 +456,17 @@ describe("agent-turn · #562 memória profunda com privacidade", () => {
     const memoria = { lembrar: async () => { throw new Error("atlas fora"); }, guardar: async () => { throw new Error("atlas fora"); } };
     const r = await executarTurno({ canalId: CANAL, agentKey: "aura", userId: A }, { prisma, gerar: async () => "Oi!", publicar: async () => {}, memoria });
     expect(r.ok).toBe(true);
+  });
+});
+
+describe("#635 · o que o agente do canal ouve", () => {
+  it("não promete o que não faz (kanban, e-mail…) e escreve fórmula em $…$, fora de crases", async () => {
+    const { HONESTIDADE, FORMULAS } = await import("./agent-turn");
+    const b = blocoCanal({ id: CANAL, ownerId: A, titulo: "T", acesso: "turma", membros: [], agentes: ["aura"] } as any, { agentKey: "teo", nome: "Téo" } as any, [], ["Ana"]);
+    expect(b).toContain(HONESTIDADE);
+    expect(b).toContain(FORMULAS);
+    expect(HONESTIDADE).toMatch(/kanban/);
+    expect(HONESTIDADE).toMatch(/Nunca diga/);
+    expect(FORMULAS).toMatch(/Nunca coloque fórmula dentro de crases/);
   });
 });

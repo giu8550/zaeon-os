@@ -19,6 +19,7 @@ import { limparSaidaAgente } from "@/lib/canal/saida";
 import { estadoDeFase, PULSO_AGENTE_MS, type EstadoAgente } from "@/lib/canal/estadoAgente";
 import { proximoDaCadeia, podePassar } from "@/lib/canal/encadear";
 import { estaForaDaConversa } from "@/lib/canal/alvo";
+import { respostaCancelada } from "@/lib/canal/parar";
 import { agentesDasSalas } from "@/lib/canal/agentesSalas";
 import { escopoDaMemoria, SUPERFICIE_ESCRITORIO } from "@/lib/canal/memoria";
 import type { StructuredAnswer } from "@/lib/agent/contracts";
@@ -50,7 +51,7 @@ export type CanalRow = { id: string; ownerId: string; titulo: string; acesso: st
 export type TurnoPrisma = {
   canal: { findUnique(a: { where: { id: string } }): Promise<CanalRow | null> };
   canalMensagem: {
-    findMany(a: { where: { canalId: string }; orderBy: { createdAt: "desc" }; take: number }): Promise<MsgRow[]>;
+    findMany(a: { where: { canalId: string; createdAt?: { gt: Date } }; orderBy: { createdAt: "desc" }; take: number }): Promise<MsgRow[]>;
     create(a: { data: { canalId: string; autorTipo: string; autorId: string; texto: string; mencoes: string[] } }): Promise<MsgRow>;
   };
   agentProfile: { findMany(a?: unknown): Promise<{ agentKey: string; tipo: string; nome: string; avatarUrl: string | null; bio: string | null; ativo: boolean; ordem: number }[]> };
@@ -108,7 +109,7 @@ export type TurnoDeps = {
 
 export type TurnoResult =
   | { ok: true; mensagem: MensagemWire; encadeado?: string | null }
-  | { ok: false; motivo: "canal" | "gate" | "agente" | "vazio" | "erro" | "teto"; erro?: string };
+  | { ok: false; motivo: "canal" | "gate" | "agente" | "vazio" | "erro" | "teto" | "parou" | "saiu"; erro?: string };
 
 // ───────────────────────────── helpers PUROS (exportados p/ teste) ─────────────────────────────
 
@@ -134,6 +135,18 @@ export function montarObjetivo(msgs: MsgRow[], agentKey: string, mensagemId: str
   const limpo = semMencoes(alvo.texto, aliases);
   return limpo || alvo.texto.trim();
 }
+
+/** #635: o que o agente do canal NÃO consegue fazer — nunca prometer; dizer o que a pessoa pode fazer. */
+export const HONESTIDADE =
+  "O que você consegue: conversar e escrever AQUI no canal. Você NÃO consegue agir fora dele: não cria, move nem edita cards " +
+  "de kanban/board, não manda e-mail, WhatsApp ou mensagem pra ninguém, não mexe em agenda, arquivos ou sistemas. Nunca diga " +
+  "que vai fazer (ou que fez) uma dessas coisas. Em vez disso, diga o que a PESSOA pode fazer — e, se ajudar, já entregue o " +
+  "texto pronto (ex.: \"Não consigo criar o card, mas você pode criar com este título e descrição: …\").";
+
+/** #635: fórmulas desenhadas — LaTeX entre $ … $, nunca dentro de crases (aí vira código e sai cru). */
+export const FORMULAS =
+  "Fórmula, conta ou unidade com símbolo: escreva em LaTeX entre $ … $ (na linha) ou $$ … $$ (destacada), ex.: $v = \\frac{d}{t}$. " +
+  "Nunca coloque fórmula dentro de crases (`…`) nem de bloco de código.";
 
 /** Bloco de contexto do canal (vai no systemContext do harness). */
 export function blocoCanal(
@@ -164,6 +177,10 @@ export function blocoCanal(
       ? `Você foi chamado(a) por @${opts.chamadoPor.agentKey} (${opts.chamadoPor.nome}) para a parte da sua área: responda essa parte e feche com 1 a 3 próximos passos curtos.`
       : "",
     "Formato: conversa de canal — responda em 1ª pessoa, como " + agente.nome + ", direto ao ponto, em poucos parágrafos curtos (sem cabeçalhos). Fale só do que te pediram; não repita a pergunta; não se apresente.",
+    // #635: o Téo prometeu "vou criar o card no board" — os agentes só conversam aqui
+    HONESTIDADE,
+    // #635: a fórmula saía crua — dentro de crases ela vira código
+    FORMULAS,
   ].filter(Boolean).join("\n");
 }
 
@@ -263,6 +280,8 @@ export async function executarTurno(input: TurnoInput, deps: TurnoDeps): Promise
 
   const desc = await prisma.canalMensagem.findMany({ where: { canalId: canal.id }, orderBy: { createdAt: "desc" }, take: N_CONTEXTO });
   const msgs = [...desc].reverse();
+  // #635: o corte do "■ Parar" e da saída — o que chegar depois da mensagem que convocou (ou de agora) cancela
+  const corte = msgs.find((m) => m.id === input.mensagemId)?.createdAt ?? new Date();
   const humanoIds = [...new Set(msgs.filter((m) => m.autorTipo === "humano").map((m) => m.autorId))];
   const humanos = humanoIds.length ? await prisma.user.findMany({ where: { id: { in: humanoIds } }, select: { id: true, name: true } }).catch(() => []) : [];
   const nomes = new Map<string, string>();
@@ -310,6 +329,10 @@ export async function executarTurno(input: TurnoInput, deps: TurnoDeps): Promise
     // G6 (Fatia 7): nunca persistir imagem remota/HTML vindo do modelo (texto limpo sai idêntico).
     const texto = limparSaidaAgente((await gerar({ agente: agenteComCanal, objective, history, canal, userId: input.userId, onFase, memoria: lembranca, memoriaDe: escopo.dono })).trim());
     if (!texto) throw new Error("resposta vazia");
+    // #635: enquanto escrevia, a pessoa apertou "■ Parar" ou dispensou esta agente → a resposta não entra no canal
+    const recentes = await prisma.canalMensagem.findMany({ where: { canalId: canal.id, createdAt: { gt: corte } }, orderBy: { createdAt: "desc" }, take: N_CONTEXTO }).catch(() => []);
+    const cancelada = respostaCancelada(recentes, agente.agentKey, corte);
+    if (cancelada) return { ok: false, motivo: cancelada };
     const row = await prisma.canalMensagem.create({ data: { canalId: canal.id, autorTipo: "agente", autorId: agente.agentKey, texto, mencoes: [] } });
     // guarda o turno no fim (fire-and-forget: nunca segura nem derruba a resposta)
     void memoria.guardar({ dono: escopo.dono, alaEscrita: escopo.alaEscrita, scopeId: canal.id, prompt: objective, resposta: texto }).catch(() => undefined);

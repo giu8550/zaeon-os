@@ -14,6 +14,10 @@
  * #438: agente DISPENSADA ("pode ir", "tchau"… — lib/canal/dispensa.ts) deixa a linha de sistema
  * "Zenita saiu da conversa" (autorTipo "sistema", autorId = agentKey). Depois dela, sem @ ninguém responde
  * (nem o primeiro oi da Aura): a agente volta só quando alguém chamar com @.
+ *
+ * #635: quem está FORA se decide só pelas linhas "saiu"/"voltou" — uma fala da agente depois do "saiu" (a resposta
+ * que ela já estava escrevendo quando foi dispensada e chegou atrasada) NÃO a traz de volta. Antes trazia: o Téo
+ * saía, a resposta atrasada dele caía depois da linha e a próxima mensagem sem @ ia pra ele.
  */
 
 export const AGENTE_PADRAO = "aura";
@@ -53,10 +57,16 @@ export function estaForaDaConversa(historico: readonly MsgResumo[], agentKey: st
   for (let i = historico.length - 1; i >= 0; i--) {
     const m = historico[i]!;
     if (m.autorId !== agentKey) continue;
-    if (m.autorTipo === "agente" || voltouParaConversa(m, [agentKey])) return false;
+    // #635: só as linhas contam — a fala atrasada não traz de volta (ela volta pela linha "voltou", que o @ grava)
+    if (voltouParaConversa(m, [agentKey])) return false;
     if (saiuDaConversa(m, [agentKey])) return true;
   }
   return false;
+}
+
+/** #635: as agentes que estão fora da conversa agora (saíram e não voltaram). */
+export function foraDaConversa(historico: readonly MsgResumo[], disponiveis: readonly string[]): Set<string> {
+  return new Set(disponiveis.filter((k) => estaForaDaConversa(historico, k)));
 }
 
 /**
@@ -64,9 +74,11 @@ export function estaForaDaConversa(historico: readonly MsgResumo[], agentKey: st
  * que ele tenha saído da conversa depois. A tela usa pra dizer "Zenita responde" no campo de mensagem.
  */
 export function agenteDaVez(historico: readonly MsgResumo[], disponiveis: readonly string[]): string | null {
+  const fora = foraDaConversa(historico, disponiveis);
   for (let i = historico.length - 1; i >= 0; i--) {
     const m = historico[i]!;
     if (saiuDaConversa(m, disponiveis)) return null;
+    if (m.autorTipo === "agente" && fora.has(m.autorId)) continue;   // #635: a fala atrasada de quem já saiu
     if ((m.autorTipo === "agente" && disponiveis.includes(m.autorId)) || voltouParaConversa(m, disponiveis)) return m.autorId;
   }
   return null;
@@ -90,10 +102,12 @@ export function resolverAlvos(e: EntradaAlvo): SaidaAlvo {
   if (e.mencoes.length) return { alvos: [...e.mencoes], implicito: false };
 
   // último agente (ainda convocável) que falou no canal — ou a saída dele (#438)
+  const fora = foraDaConversa(e.historico, e.disponiveis);
   let idx = -1;
   for (let i = e.historico.length - 1; i >= 0; i--) {
     const m = e.historico[i]!;
     if (saiuDaConversa(m, e.disponiveis)) return { alvos: [], implicito: true };
+    if (m.autorTipo === "agente" && fora.has(m.autorId)) continue;   // #635: a fala atrasada de quem já saiu
     if ((m.autorTipo === "agente" && e.disponiveis.includes(m.autorId)) || voltouParaConversa(m, e.disponiveis)) { idx = i; break; }
   }
 
@@ -123,4 +137,20 @@ export function resolverAlvos(e: EntradaAlvo): SaidaAlvo {
  */
 export function quemRespondeSemArroba(historico: readonly MsgResumo[], disponiveis: readonly string[], eu: string, humanos: number): string | null {
   return resolverAlvos({ mencoes: [], historico: [...historico], remetenteId: eu, disponiveis: [...disponiveis], humanos }).alvos[0] ?? null;
+}
+
+/**
+ * #635: as linhas "Fulana saiu da conversa" que ganham o botão "Chamar de volta" — a ÚLTIMA saída de cada agente que
+ * AINDA está fora (voltou depois → a linha perde o botão; saídas antigas da mesma agente também não têm).
+ */
+export function linhasChamaveis(historico: readonly (MsgResumo & { id: string })[], disponiveis: readonly string[]): Set<string> {
+  const out = new Set<string>();
+  const visto = new Set<string>();
+  for (let i = historico.length - 1; i >= 0; i--) {
+    const m = historico[i]!;
+    if (m.autorTipo !== "sistema" || !disponiveis.includes(m.autorId) || visto.has(m.autorId)) continue;
+    visto.add(m.autorId);   // a linha mais recente (saiu OU voltou) desta agente decide
+    if (saiuDaConversa(m, disponiveis)) out.add(m.id);
+  }
+  return out;
 }

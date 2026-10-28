@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolverAlvos, agenteDaVez, estaForaDaConversa, quemRespondeSemArroba, AGENTE_PADRAO, type MsgResumo, agentesPorRecencia } from "./alvo";
+import { resolverAlvos, agenteDaVez, estaForaDaConversa, quemRespondeSemArroba, AGENTE_PADRAO, type MsgResumo, agentesPorRecencia, linhasChamaveis } from "./alvo";
 
 const A = "a".repeat(24), B = "b".repeat(24);
 const DISP = ["aura", "zaeon", "medicina"];
@@ -82,9 +82,25 @@ describe("alvo · #438 agente dispensada sai da conversa", () => {
     expect(resolverAlvos({ ...base, mencoes: ["medicina"], historico: dispensou }).alvos).toEqual(["medicina"]);
   });
 
-  it("voltou com @ e respondeu: sem @ ela continua sendo a da vez", () => {
-    const voltou = [...dispensou, h("humano", A), h("agente", "medicina")];
+  it("voltou com @ (a linha 'voltou', #440) e respondeu: sem @ ela continua sendo a da vez", () => {
+    const voltouLinha: MsgResumo = { autorTipo: "sistema", autorId: "medicina", texto: "Osler voltou para a conversa" };
+    const voltou = [...dispensou, h("humano", A), voltouLinha, h("agente", "medicina")];
     expect(resolverAlvos({ ...base, historico: voltou }).alvos).toEqual(["medicina"]);
+  });
+
+  it("#635: a resposta ATRASADA (já estava escrevendo quando saiu) não traz de volta — sem @, ninguém responde", () => {
+    // o caso do Téo: "@teo sai" → despedida → "saiu" → a resposta da pergunta anterior chega depois
+    const atrasada = [...dispensou, h("agente", "medicina")];
+    expect(resolverAlvos({ ...base, historico: atrasada }).alvos).toEqual([]);
+    expect(agenteDaVez(atrasada, DISP)).toBeNull();
+    expect(resolverAlvos({ ...base, historico: [...atrasada, h("humano", A)] }).alvos).toEqual([]);
+  });
+
+  it("#635: com outra agente na conversa depois que uma saiu, a atrasada não rouba a vez", () => {
+    // a Aura falou depois do "saiu" do Osler; a resposta atrasada do Osler chega por último → a vez segue da Aura
+    const hist = [...dispensou, h("humano", A), h("agente", "aura"), h("agente", "medicina")];
+    expect(resolverAlvos({ ...base, historico: hist }).alvos).toEqual(["aura"]);
+    expect(agenteDaVez(hist, DISP)).toBe("aura");
   });
 
   it("'fulano entrou' (sistema com o id de uma PESSOA) não conta como saída de agente", () => {
@@ -103,10 +119,11 @@ describe("alvo · #440 a agente voltou", () => {
   const saiu: MsgResumo = { autorTipo: "sistema", autorId: "medicina", texto: "Osler saiu da conversa" };
   const voltou: MsgResumo = { autorTipo: "sistema", autorId: "medicina", texto: "Osler voltou para a conversa" };
 
-  it("está fora: saiu e não voltou; voltou ou falou depois → está dentro", () => {
+  it("está fora: saiu e não voltou; só a linha 'voltou' traz de volta", () => {
     expect(estaForaDaConversa([h("agente", "medicina"), saiu], "medicina")).toBe(true);
     expect(estaForaDaConversa([h("agente", "medicina"), saiu, voltou], "medicina")).toBe(false);
-    expect(estaForaDaConversa([saiu, h("agente", "medicina")], "medicina")).toBe(false);
+    // #635: falar depois do "saiu" (a resposta atrasada) NÃO é voltar — só a linha "voltou" (que o @ grava)
+    expect(estaForaDaConversa([saiu, h("agente", "medicina")], "medicina")).toBe(true);
     expect(estaForaDaConversa([h("agente", "aura")], "medicina")).toBe(false); // nunca entrou: não é "voltar"
     expect(estaForaDaConversa([saiu], "aura")).toBe(false);                   // a saída é de outra agente
   });
@@ -142,5 +159,14 @@ describe("alvo · #560 agentes pela ordem em que falaram", () => {
       { autorTipo: "sistema", autorId: "zenita", texto: "Zenita voltou para a conversa" },
     ];
     expect(agentesPorRecencia(h, ["aura", "teo", "zenita", "nina"])).toEqual(["zenita", "aura", "teo"]);
+  });
+});
+
+describe("alvo · #635 'Chamar de volta'", () => {
+  const sai = (id: string, k: string, nome: string): MsgResumo & { id: string } => ({ id, autorTipo: "sistema", autorId: k, texto: `${nome} saiu da conversa` });
+  const volta = (id: string, k: string, nome: string): MsgResumo & { id: string } => ({ id, autorTipo: "sistema", autorId: k, texto: `${nome} voltou para a conversa` });
+  it("só a ÚLTIMA saída de quem ainda está fora ganha o botão", () => {
+    const hist = [sai("s1", "teo", "Téo"), volta("v1", "teo", "Téo"), sai("s2", "teo", "Téo"), sai("s3", "aura", "Aura"), volta("v2", "aura", "Aura"), { id: "x", autorTipo: "sistema", autorId: "parar", texto: "Ana interrompeu a resposta" }];
+    expect([...linhasChamaveis(hist, ["teo", "aura"])]).toEqual(["s2"]);
   });
 });

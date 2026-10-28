@@ -70,3 +70,14 @@ describe("segmentarBlocos — bloco de código (#634)", () => {
     expect(temBlocoDeCodigo("só `inline`")).toBe(false);
   });
 });
+
+describe("segmentarInline — cifrões escapados (#635)", () => {
+  it("\$…\$ com comando LaTeX dentro é fórmula (o $60\text{ s}$ que saiu cru no Escritório)", () => {
+    expect(segmentarInline("espere \$60\text{ s}\$ e tente")).toEqual([
+      { tipo: "texto", conteudo: "espere " }, { tipo: "formula", conteudo: "60\text{ s}" }, { tipo: "texto", conteudo: " e tente" },
+    ]);
+  });
+  it("dinheiro escapado continua dinheiro", () => {
+    expect(segmentarInline("custa \$5 e \$10")).toEqual([{ tipo: "texto", conteudo: "custa $5 e $10" }]);
+  });
+});

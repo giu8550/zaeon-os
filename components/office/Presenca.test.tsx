@@ -45,3 +45,17 @@ describe("AvisoDigitando (balão)", () => {
     expect(container.innerHTML).toBe("");
   });
 });
+
+describe("LinhaSistema · #635 'Chamar de volta'", () => {
+  it("com a ação, a linha 'saiu' ganha o botão; clicar chama", async () => {
+    const { fireEvent } = await import("@testing-library/react");
+    let chamou = 0;
+    render(<LinhaSistema texto="Téo saiu da conversa" hora="16:02" acao={{ rotulo: "Chamar de volta", onClick: () => { chamou++; } }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Chamar de volta" }));
+    expect(chamou).toBe(1);
+  });
+  it("sem a ação, nada de botão (as outras linhas)", () => {
+    render(<LinhaSistema texto="Ana interrompeu a resposta" />);
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+});
