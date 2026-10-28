@@ -8,10 +8,11 @@ import type { ResumoBlueprint } from "@/lib/blueprint/server";
 import { podeEscrever } from "@/lib/cartolina/access";
 import { COR } from "./Modulos";
 import PranchaBlueprint from "./PranchaBlueprint";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NOME_FASE } from "@/lib/blueprint/tipos";
 import { precisaAvaliar } from "@/lib/blueprint/fases";
 import { useBlueprint } from "./useBlueprint";
+import { telaDesenhou } from "./cronometro";
 import DicasRapidas from "@/components/onboard/DicasRapidas";
 import { DICAS_SALA } from "@/lib/onboarding/dicas";
 import { CSS_BARBIE, LETRAS, MAO, PAPEL, REDONDA, ROSA, SKINS, corNaSkin, useLetraEscolhida, useSkinEscolhida, type Skin } from "./skin";
@@ -69,6 +70,11 @@ export default function SalaBlueprint({ inicialId }: { inicialId?: string | null
   const ligado = papel ? { background: PAPEL.tinta, color: "#efe7d3" } : rosa ? { background: "linear-gradient(135deg,#ff4fa3,#e6007e)", color: "#fff" } : { background: "rgba(127,224,255,.2)", color: "#fff" };
   const desligado = { color: papel ? PAPEL.tintaSuave : rosa ? ROSA.tintaSuave : "rgba(186,230,253,.75)" };
   const { lista, atual } = B;
+  // #631: a marcação segue o CLIQUE (não espera o servidor) — antes parecia que o clique não tinha pegado
+  const marcado = B.selecionado ?? atual?.id;
+  // #631: o cronômetro fecha no quadro seguinte ao desenho da prancha nova
+  const idDesenhado = atual?.id;
+  useEffect(() => { if (!idDesenhado) return; const q = requestAnimationFrame(() => { telaDesenhou(idDesenhado); }); return () => cancelAnimationFrame(q); }, [idDesenhado]);
   const [aviso, setAviso] = useState<string | null>(null), [avaliando, setAvaliando] = useState(false), [videoAberto, setVideoAberto] = useState<string | null>(null);
   const enviar = async (criticoId: string | null, url: string) => {
     const r = await B.enviarProva(criticoId, url);
@@ -98,7 +104,8 @@ export default function SalaBlueprint({ inicialId }: { inicialId?: string | null
         {lista === null && <span className="self-center font-mono text-[11px] text-sky-200/50">carregando…</span>}
         {lista?.map((b, k) => (
           <button key={b.id} type="button" data-tour={k === 0 ? "blueprint-lista" : undefined} onClick={() => void B.abrir(b.id)} className="min-w-[190px] flex-none rounded-[3px] border px-2.5 py-1.5 text-left font-mono transition hover:bg-white/5"
-            style={{ borderColor: corNaSkin(skin, atual?.id === b.id ? COR.estudo : "rgba(127,224,255,.25)"), background: atual?.id === b.id ? (papel || rosa ? "rgba(255,255,255,.5)" : "rgba(127,224,255,.08)") : undefined }}>
+            aria-pressed={marcado === b.id}
+            style={{ borderColor: corNaSkin(skin, marcado === b.id ? COR.estudo : "rgba(127,224,255,.25)"), background: marcado === b.id ? (papel || rosa ? "rgba(255,255,255,.5)" : "rgba(127,224,255,.08)") : undefined }}>
             <b className="block max-w-[240px] truncate text-[12px] text-sky-50">{b.titulo}</b>
             <small className="text-[10px] text-sky-200/70">
               {b.area} · {b.aguardandoMentor ? <span style={{ color: corNaSkin(skin, "#ffd36b") }}>aguardando mentor</span> : <>fase {b.fase}{b.criticosAbertos ? <> · <span style={{ color: corNaSkin(skin, COR.critico) }}>{b.criticosAbertos} crítico{b.criticosAbertos > 1 ? "s" : ""}</span></> : null}</>}
@@ -107,12 +114,20 @@ export default function SalaBlueprint({ inicialId }: { inicialId?: string | null
           </button>
         ))}
       </div>
-      <div className="relative min-h-0 flex-1" data-tour="blueprint-prancha">
+      <div className="relative min-h-0 flex-1" data-tour="blueprint-prancha" aria-busy={B.carregando}>
+        {/* #631: clicou noutro blueprint e ele ainda não chegou: avisa (a prancha de antes fica até a nova chegar) */}
+        {B.carregando && (
+          <div role="status" className="pointer-events-none absolute left-1/2 top-3 z-[97] -translate-x-1/2 rounded border px-3 py-1 font-mono text-[11.5px] text-sky-50"
+            style={{ background: "rgba(5,22,42,.92)", borderColor: "rgba(127,224,255,.4)" }}>
+            carregando o blueprint…
+          </div>
+        )}
         {/* #618: dicas rápidas na 1ª vez (só com um blueprint aberto — sem nenhum, o aviso da tela já explica) */}
         {atual && <DicasRapidas lugar="sala-estudos" dicas={DICAS_SALA} />}
         {atual ? (
           <PranchaBlueprint id={atual.id} doc={atual.doc} onFixar={B.fixar} skin={skin} letra={letra}
-            acoes={{ podeEditar: podeEscrever(atual.papel), avaliando, abrirVideo: setVideoAberto,
+            // #631 (revisão): enquanto o blueprint clicado carrega, a prancha de antes fica só pra ver (não edita)
+            acoes={{ podeEditar: podeEscrever(atual.papel) && !B.carregando, avaliando, abrirVideo: setVideoAberto,
               avaliar: podeEscrever(atual.papel) && precisaAvaliar(atual.doc) ? () => { setAvaliando(true); void enviar(null, "").finally(() => setAvaliando(false)); } : undefined, recompor: atual.papel === "dono" ? B.recompor : undefined, recompondo: B.recompondo, reorganizar: B.reorganizar, temFixos: Object.keys(atual.doc.fixos).length > 0,
               extra: podeEscrever(atual.papel) ? (id) => { const c = id.startsWith("critico:") ? atual.doc.criticos.find((k) => `critico:${k.id}` === id) : undefined; return c ? <ProvaForm criticoId={c.id} tipo={c.tipoProva} enviar={enviar} /> : undefined; } : undefined }}
             sobre={<>

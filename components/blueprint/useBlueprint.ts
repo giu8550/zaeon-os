@@ -3,12 +3,20 @@
  * useBlueprint — os dados da Sala de Estudos como BLUEPRINT (lib/blueprint): a lista pro seletor do topo e o blueprint
  * aberto. A Zaeon recompõe no servidor a cada turno do chat, então relemos ao voltar pra aba e a cada 20 s com a página
  * visível (o chat e a sala são abas da mesma tela). Arrastar e "reorganizar" são otimistas (PATCH em seguida).
+ * #631: trocar de blueprint era lento e "mudo" — agora o clique MARCA na hora (`selecionado`, com `carregando` até a
+ * prancha chegar), o que já foi aberto fica GUARDADO (voltar nele é instantâneo; a leitura do servidor atualiza por
+ * trás) e uma leitura que não mudou nada (mesmo `rev`) não troca o objeto — a prancha não se redesenha à toa a cada 20 s.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BlueprintView, ResumoBlueprint } from "@/lib/blueprint/server";
 import type { Avaliacao, DocBlueprint } from "@/lib/blueprint/tipos";
+import { comecarTroca, servidorRespondeu } from "./cronometro";
 
 export type BlueprintCliente = Omit<BlueprintView, "updatedAt"> & { updatedAt: string };
+
+/** a leitura nova muda alguma coisa? (mesmo blueprint, mesmo `rev` e mesmo papel = nada pra redesenhar) */
+export const mudouBlueprint = (a: BlueprintCliente | null, b: BlueprintCliente) =>
+  !a || a.id !== b.id || a.rev !== b.rev || a.updatedAt !== b.updatedAt || a.papel !== b.papel;
 const RELER_MS = 20_000;
 
 async function json<T>(url: string, init?: RequestInit): Promise<T | null> {
@@ -17,7 +25,22 @@ async function json<T>(url: string, init?: RequestInit): Promise<T | null> {
 
 export function useBlueprint(inicialId?: string | null) {
   const [lista, setLista] = useState<ResumoBlueprint[] | null>(null);
-  const [atual, setAtual] = useState<BlueprintCliente | null>(null);
+  const [atual, setAtualCru] = useState<BlueprintCliente | null>(null);
+  const [selecionado, setSelecionado] = useState<string | null>(inicialId ?? null);
+  // os blueprints já abertos nesta visita (voltar num deles não espera o servidor)
+  const guardados = useRef(new Map<string, BlueprintCliente>());
+  const idAnterior = useRef<string | null>(null);   // só TROCAS entram no cronômetro (a recarga de 20 s não)
+  // #631 (revisão): o blueprint que está NA TELA — as edições vão pra ele, não pro recém-clicado que ainda carrega
+  const idNaTela = useRef<string | null>(null);
+  // toda escrita no `atual` passa por aqui: guarda e só troca o objeto se mudou alguma coisa
+  const setAtual = useCallback((v: BlueprintCliente | null | ((a: BlueprintCliente | null) => BlueprintCliente | null)) => {
+    setAtualCru((a) => {
+      const n = typeof v === "function" ? v(a) : v;
+      if (n) guardados.current.set(n.id, n);
+      idNaTela.current = n?.id ?? null;
+      return n && !mudouBlueprint(a, n) && a ? a : n;
+    });
+  }, []);
   const [recompondo, setRecompondo] = useState(false);
   const idAtual = useRef<string | null>(inicialId ?? null);
   const ocupado = useRef<Record<string, number>>({});   // escritas em voo POR blueprint: não sobrescreve o otimista com uma leitura velha
@@ -26,9 +49,15 @@ export function useBlueprint(inicialId?: string | null) {
 
   const abrir = useCallback(async (id: string) => {
     idAtual.current = id;
+    setSelecionado(id);   // #631: marca no clique
+    const guardado = guardados.current.get(id);
+    if (id !== idAnterior.current) comecarTroca(id, !!guardado);   // #631: o cronômetro (desligado por padrão)
+    idAnterior.current = id;
+    if (guardado && !emVoo(id)) setAtual(guardado);   // já visto: aparece na hora; o servidor confere por trás
     const r = await json<{ blueprint: BlueprintCliente }>(`/api/blueprint/${id}`);
+    servidorRespondeu(id);
     if (r?.blueprint && idAtual.current === id && !emVoo(id)) setAtual(r.blueprint);
-  }, []);
+  }, [setAtual]);
 
   const recarregar = useCallback(async () => {
     const r = await json<{ blueprints: ResumoBlueprint[] }>("/api/blueprint");
@@ -47,7 +76,9 @@ export function useBlueprint(inicialId?: string | null) {
   }, [recarregar]);
 
   const patch = useCallback(async (corpo: unknown, otimista: (d: DocBlueprint) => DocBlueprint) => {
-    const id = idAtual.current; if (!id) return;
+    // #631 (revisão): a prancha na tela é a que gerou a edição — com outro blueprint carregando, gravar no
+    // `idAtual` mudava o blueprint ERRADO; e, se a seleção já é outra, a edição não vale
+    const id = idNaTela.current; if (!id || id !== idAtual.current) return;
     setAtual((a) => (a && a.id === id ? { ...a, doc: otimista(a.doc) } : a));
     voo(id, 1);
     const r = await json<{ blueprint: BlueprintCliente }>(`/api/blueprint/${id}`, { method: "PATCH", body: JSON.stringify(corpo) });
@@ -82,5 +113,7 @@ export function useBlueprint(inicialId?: string | null) {
     return { ok: r.ok, motivo: r.motivo, avaliacao: r.avaliacao };
   }, [atual, recarregar]);
 
-  return { lista, atual, abrir, recarregar, fixar, reorganizar, recompor, recompondo, enviarProva, setAtual };
+  // #631: clicou e a prancha ainda é a de antes (o servidor não respondeu)
+  const carregando = !!selecionado && atual?.id !== selecionado;
+  return { lista, atual, selecionado, carregando, abrir, recarregar, fixar, reorganizar, recompor, recompondo, enviarProva, setAtual };
 }
