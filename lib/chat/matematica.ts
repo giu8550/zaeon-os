@@ -49,7 +49,14 @@ export function segmentarInline(linha: string): PedacoInline[] {
       const fim = s.indexOf("\\)", i + 2);
       if (fim > i + 2) { empurraTexto(); out.push({ tipo: "formula", conteudo: s.slice(i + 2, fim).trim() }); i = fim + 2; continue; }
     }
-    if (s[i] === "\\" && s[i + 1] === "$") { buf += "$"; i += 2; continue; }   // \$ = cifrão literal
+    if (s[i] === "\\" && s[i + 1] === "$") {
+      // #635: \$60\text{ s}\$ — o modelo "escapou" os cifrões de uma fórmula. Com um COMANDO LaTeX dentro (\text,
+      // \frac…) é fórmula; sem (\$5 e \$10) segue cifrão de dinheiro.
+      const fim = s.indexOf("\\$", i + 2);
+      const dentro = fim > i + 2 ? s.slice(i + 2, fim) : "";
+      if (dentro.trim() && /\\[A-Za-z]+/.test(dentro)) { empurraTexto(); out.push({ tipo: "formula", conteudo: dentro.trim() }); i = fim + 2; continue; }
+      buf += "$"; i += 2; continue;   // \$ = cifrão literal
+    }
     if (s[i] === "$" && s[i + 1] !== "$") {
       const antes = s.slice(Math.max(0, i - 2), i);
       const abre = !/\s/.test(s[i + 1] ?? " ") && !/(?:R|US|U\$S)$/i.test(antes.trim()) && !/[A-Za-z]$/.test(antes);
