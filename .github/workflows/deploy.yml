@@ -89,6 +89,10 @@ jobs:
           GOOGLE_PROJECT_ID_VALUE: ${{ secrets.GOOGLE_PROJECT_ID_VALUE }}
           # Bearer do cron diário de evals do Octa (.github/workflows/octa-evals.yml manda o mesmo secret).
           OCTA_CRON_SECRET: ${{ secrets.OCTA_CRON_SECRET }}
+          # #641: o Redis do limitador de uso (src/lib/ratelimit). Antes só vivia no `.env` do VPS — trocar a credencial
+          # exigia entrar no servidor. Preenchidos, vão pro .env.secrets (que vence o .env); vazios, o .env decide.
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
           # opções (push usa defaults; dispatch respeita os inputs)
           WITH_VOICE: ${{ github.event.inputs.with_voice || vars.DEPLOY_WITH_VOICE || 'false' }}
           DB_PUSH: ${{ github.event.inputs.db_push || 'true' }}
@@ -150,7 +154,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           command_timeout: 25m
-          envs: GOOGLE_CREDENTIALS_B64,GOOGLE_PROJECT_ID_VALUE,OCTA_CRON_SECRET,WITH_VOICE,DB_PUSH,DEPLOY_BRANCH,APP_URL,BETA_DOMAIN,ACME_EMAIL,NEXT_PUBLIC_ESCRITORIO_COWORK,NEXT_PUBLIC_AGENTS_ADMIN,NEXT_PUBLIC_AGENT_AVATARS,NEXT_PUBLIC_UNIFIED_RESEARCH_ROOM,NEXT_PUBLIC_MAP_HARNESS,NEXT_PUBLIC_LOUNGE_3D,NEXT_PUBLIC_CYBER_AVATAR_GLB,NEXT_PUBLIC_CYBER_LANDMARKS,NEXT_PUBLIC_AURA_ECONOMY,NEXT_PUBLIC_REALTIME,NEXT_PUBLIC_VOZ,NEXT_PUBLIC_MOBILE_UI,NEXT_PUBLIC_PROJETOS,NEXT_PUBLIC_MENTORES_TAB,NEXT_PUBLIC_OCTA_CODE,NEXT_PUBLIC_OCTA_REA,MAP_HARNESS,ESTUDO_GATEKEEPER,AURA_ECONOMY,NEXT_PUBLIC_CHAT_UNICO,CHAT_UNICO,NEXT_PUBLIC_BLUEPRINT_PRATICO,BLUEPRINT_PRATICO,GITHUB_TOKEN_BLUEPRINT,NEXT_PUBLIC_VIDEO_DOC,VIDEO_DOC,NEXT_PUBLIC_REA_BLUEPRINT,REA_BLUEPRINT
+          envs: GOOGLE_CREDENTIALS_B64,GOOGLE_PROJECT_ID_VALUE,OCTA_CRON_SECRET,UPSTASH_REDIS_REST_URL,UPSTASH_REDIS_REST_TOKEN,WITH_VOICE,DB_PUSH,DEPLOY_BRANCH,APP_URL,BETA_DOMAIN,ACME_EMAIL,NEXT_PUBLIC_ESCRITORIO_COWORK,NEXT_PUBLIC_AGENTS_ADMIN,NEXT_PUBLIC_AGENT_AVATARS,NEXT_PUBLIC_UNIFIED_RESEARCH_ROOM,NEXT_PUBLIC_MAP_HARNESS,NEXT_PUBLIC_LOUNGE_3D,NEXT_PUBLIC_CYBER_AVATAR_GLB,NEXT_PUBLIC_CYBER_LANDMARKS,NEXT_PUBLIC_AURA_ECONOMY,NEXT_PUBLIC_REALTIME,NEXT_PUBLIC_VOZ,NEXT_PUBLIC_MOBILE_UI,NEXT_PUBLIC_PROJETOS,NEXT_PUBLIC_MENTORES_TAB,NEXT_PUBLIC_OCTA_CODE,NEXT_PUBLIC_OCTA_REA,MAP_HARNESS,ESTUDO_GATEKEEPER,AURA_ECONOMY,NEXT_PUBLIC_CHAT_UNICO,CHAT_UNICO,NEXT_PUBLIC_BLUEPRINT_PRATICO,BLUEPRINT_PRATICO,GITHUB_TOKEN_BLUEPRINT,NEXT_PUBLIC_VIDEO_DOC,VIDEO_DOC,NEXT_PUBLIC_REA_BLUEPRINT,REA_BLUEPRINT
           script: |
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
@@ -184,6 +188,20 @@ jobs:
             else
               echo "::warning::GOOGLE_CREDENTIALS_B64 vazio — mantendo .env.secrets atual (se houver)."
               touch .env.secrets
+            fi
+            # #641: Upstash (limitador de uso) a partir dos Secrets — troca as linhas antigas, mantém o resto do arquivo.
+            # Só com os DOIS preenchidos (meio par = Redis quebrado; aí o .env do VPS continua valendo).
+            if [ -n "${UPSTASH_REDIS_REST_URL:-}" ] && [ -n "${UPSTASH_REDIS_REST_TOKEN:-}" ]; then
+              grep -v '^UPSTASH_REDIS_REST_' .env.secrets > .env.secrets.tmp || true
+              {
+                cat .env.secrets.tmp
+                echo "UPSTASH_REDIS_REST_URL=${UPSTASH_REDIS_REST_URL}"
+                echo "UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN}"
+              } > .env.secrets
+              rm -f .env.secrets.tmp
+              echo "→ Upstash: credencial dos Secrets gravada no .env.secrets"
+            else
+              echo "→ Upstash: Secrets vazios — vale o .env do VPS"
             fi
 
             # Serviços do deploy: enxuto por padrão; completo se WITH_VOICE=true.
