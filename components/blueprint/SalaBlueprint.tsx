@@ -8,10 +8,11 @@ import type { ResumoBlueprint } from "@/lib/blueprint/server";
 import { podeEscrever } from "@/lib/cartolina/access";
 import { COR } from "./Modulos";
 import PranchaBlueprint from "./PranchaBlueprint";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NOME_FASE } from "@/lib/blueprint/tipos";
 import { precisaAvaliar } from "@/lib/blueprint/fases";
 import { useBlueprint } from "./useBlueprint";
+import { telaDesenhou } from "./cronometro";
 import DicasRapidas from "@/components/onboard/DicasRapidas";
 import { DICAS_SALA } from "@/lib/onboarding/dicas";
 import { CSS_BARBIE, LETRAS, MAO, PAPEL, REDONDA, ROSA, SKINS, corNaSkin, useLetraEscolhida, useSkinEscolhida, type Skin } from "./skin";
@@ -71,6 +72,9 @@ export default function SalaBlueprint({ inicialId }: { inicialId?: string | null
   const { lista, atual } = B;
   // #631: a marcação segue o CLIQUE (não espera o servidor) — antes parecia que o clique não tinha pegado
   const marcado = B.selecionado ?? atual?.id;
+  // #631: o cronômetro fecha no quadro seguinte ao desenho da prancha nova
+  const idDesenhado = atual?.id;
+  useEffect(() => { if (!idDesenhado) return; const q = requestAnimationFrame(() => { telaDesenhou(idDesenhado); }); return () => cancelAnimationFrame(q); }, [idDesenhado]);
   const [aviso, setAviso] = useState<string | null>(null), [avaliando, setAvaliando] = useState(false), [videoAberto, setVideoAberto] = useState<string | null>(null);
   const enviar = async (criticoId: string | null, url: string) => {
     const r = await B.enviarProva(criticoId, url);

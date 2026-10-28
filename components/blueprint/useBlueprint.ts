@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BlueprintView, ResumoBlueprint } from "@/lib/blueprint/server";
 import type { Avaliacao, DocBlueprint } from "@/lib/blueprint/tipos";
+import { comecarTroca, servidorRespondeu } from "./cronometro";
 
 export type BlueprintCliente = Omit<BlueprintView, "updatedAt"> & { updatedAt: string };
 
@@ -28,6 +29,7 @@ export function useBlueprint(inicialId?: string | null) {
   const [selecionado, setSelecionado] = useState<string | null>(inicialId ?? null);
   // os blueprints já abertos nesta visita (voltar num deles não espera o servidor)
   const guardados = useRef(new Map<string, BlueprintCliente>());
+  const idAnterior = useRef<string | null>(null);   // só TROCAS entram no cronômetro (a recarga de 20 s não)
   // toda escrita no `atual` passa por aqui: guarda e só troca o objeto se mudou alguma coisa
   const setAtual = useCallback((v: BlueprintCliente | null | ((a: BlueprintCliente | null) => BlueprintCliente | null)) => {
     setAtualCru((a) => {
@@ -46,8 +48,11 @@ export function useBlueprint(inicialId?: string | null) {
     idAtual.current = id;
     setSelecionado(id);   // #631: marca no clique
     const guardado = guardados.current.get(id);
+    if (id !== idAnterior.current) comecarTroca(id, !!guardado);   // #631: o cronômetro (desligado por padrão)
+    idAnterior.current = id;
     if (guardado && !emVoo(id)) setAtual(guardado);   // já visto: aparece na hora; o servidor confere por trás
     const r = await json<{ blueprint: BlueprintCliente }>(`/api/blueprint/${id}`);
+    servidorRespondeu(id);
     if (r?.blueprint && idAtual.current === id && !emVoo(id)) setAtual(r.blueprint);
   }, [setAtual]);
 
