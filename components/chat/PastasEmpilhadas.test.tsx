@@ -38,3 +38,21 @@ describe("PastasEmpilhadas — friso durante a geração", () => {
     expect(container.querySelectorAll("[data-friso]")).toHaveLength(1);
   });
 });
+
+describe("#640: a altura de verdade da barra", () => {
+  it("avisa a altura medida (e de novo quando ela muda), pra quem abre telas por cima começar nela", async () => {
+    const { vi } = await import("vitest");
+    let avisar: () => void = () => {};
+    const original = (globalThis as any).ResizeObserver;
+    (globalThis as any).ResizeObserver = class { constructor(cb: () => void) { avisar = cb; } observe() {} disconnect() {} };
+    const altura = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ height: 56.4 } as DOMRect);
+    const medidas: number[] = [];
+    render(<PastasEmpilhadas pastas={pastas} ativa="doc" onAbrir={() => {}} aoMedirAltura={(h) => medidas.push(h)} />);
+    avisar();
+    altura.mockReturnValue({ height: 46 } as DOMRect);
+    avisar();
+    expect(medidas).toEqual([56, 46]);
+    altura.mockRestore();
+    (globalThis as any).ResizeObserver = original;
+  });
+});
