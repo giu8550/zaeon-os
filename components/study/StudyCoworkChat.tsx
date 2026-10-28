@@ -1328,10 +1328,11 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
             setTrabalhoAberto(null); setCartolinaAberta(false);
             setDocAtivo(id === "conversa" ? null : id);
           }}
-          // #633: o botão do MAPA (o cérebro) mora à DIREITA, do lado do A−/A+ — os controles da conversa juntos
+          // #633: o botão do MAPA (o cérebro) mora à DIREITA, do lado do A−/A+ — os controles da conversa juntos;
+          // e vem DEPOIS das letras: A− A+ [Ver mapa]
           depois={<>
-            {bolinhaMapa}
             <ChatZoom escala={zoom.escala} menor={zoom.menor} maior={zoom.maior} />
+            {bolinhaMapa}
           </>}
         />
 

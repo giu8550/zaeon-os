@@ -116,3 +116,11 @@ describe("#629 · antes do pedido, desenho nenhum conta", async () => {
     expect(proximoPedido(null, { tipo: "fim" })).toBeNull();
   });
 });
+
+describe("#638: o passo do percurso não cobre a barra do documento", () => {
+  it("evita a faixa do topo do documento aberto", () => {
+    const p = PASSOS_SALA.find((x) => x.id === "gerar-percurso")!;
+    expect(p.alvos).toEqual(['[data-tour="gerar-percurso"]']);
+    expect(p.evitar).toEqual(['[data-tour="doc-topo"]']);
+  });
+});

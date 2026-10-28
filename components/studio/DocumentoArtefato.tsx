@@ -8,7 +8,20 @@ import type { DocArtefato } from "@/lib/chat/documentos";
 // o leitor carrega o pdf.js — só quando um livro é aberto
 const LeitorDocumento = dynamic(() => import("@/components/chat/LeitorDocumento"), { ssr: false, loading: () => <div className="h-full animate-pulse bg-slate-100 dark:bg-white/[0.03]" /> });
 
-export default function DocumentoArtefato({ doc }: { doc: Pick<DocArtefato, "studioKind" | "artifactId" | "titulo" | "data"> }) {
+type Doc = Pick<DocArtefato, "studioKind" | "artifactId" | "titulo" | "data">;
+
+export default function DocumentoArtefato({ doc }: { doc: Doc }) {
+  return (
+    <div className="relative h-full">
+      {/* #638: a faixa da barra de cima do documento (o "Exportar" do diagrama mora DENTRO do iframe) — o cartão do
+          tutorial não cobre; invisível e sem pegar clique */}
+      <div data-tour="doc-topo" aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-20" />
+      <Conteudo doc={doc} />
+    </div>
+  );
+}
+
+function Conteudo({ doc }: { doc: Doc }) {
   if (doc.studioKind === "diagram") {
     return <div className="h-full p-3"><DiagramView artifactId={doc.artifactId} titulo={doc.titulo} cheio /></div>;
   }

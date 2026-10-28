@@ -133,7 +133,7 @@ export default function TourSala({ noTutorial }: { noTutorial: boolean }) {
   const usarExemplo = (texto: string) => { veioDoExemplo.current = true; preencherChat(texto); };
   const mandar = !!passo?.noChat && temTexto;
   const alvos = useMemo(() => (mandar ? [ALVO_ENVIAR] : passo?.alvos ?? SEM_ALVOS), [mandar, passo]);
-  const { alvo, evita } = useDestaque(alvos, mandar ? EVITA_CHAT : SEM_ALVOS, !!passo);
+  const { alvo, evita } = useDestaque(alvos, mandar ? EVITA_CHAT : passo?.evitar ?? SEM_ALVOS, !!passo);
   if (!passo || i === null) return null;
   const ultimo = i === passos.length - 1;
   return (
