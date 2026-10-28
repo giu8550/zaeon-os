@@ -1,7 +1,7 @@
 /**
  * lib/chat/matematica.ts — onde está a matemática num texto de resposta. PURO, seguro em streaming.
  *
- * Blocos (podem ocupar várias linhas):  $$ … $$ · \[ … \] · ```grafico {json} ```
+ * Blocos (podem ocupar várias linhas):  $$ … $$ · \[ … \] · ```grafico {json} ``` · ```lang código ```
  * Inline (dentro de uma linha):          $ … $ · \( … \)
  *
  * Regras do `$` inline (as do remark-math/pandoc, pra não confundir com dinheiro):
@@ -12,21 +12,24 @@
 export type Bloco =
   | { tipo: "texto"; conteudo: string }
   | { tipo: "formula"; conteudo: string }          // display ($$ / \[)
-  | { tipo: "grafico"; conteudo: string };         // JSON cru do ```grafico (validado no componente)
+  | { tipo: "grafico"; conteudo: string }          // JSON cru do ```grafico (validado no componente)
+  | { tipo: "codigo"; conteudo: string; lang: string };  // ```lang … ``` (#634) — o de dentro fica CRU: nem $ nem * viram nada
 
 export type PedacoInline = { tipo: "texto"; conteudo: string } | { tipo: "formula"; conteudo: string };
 
-/** Separa o texto em blocos de display/gráfico e texto comum. */
+/** Separa o texto em blocos de display/gráfico/código e texto comum. */
 export function segmentarBlocos(texto: string): Bloco[] {
   const s = String(texto ?? "");
   const out: Bloco[] = [];
-  const re = /(\$\$)([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|```(?:grafico|gráfico|plot)[ \t]*\n([\s\S]*?)```/g;
+  // o ```grafico vem antes do código comum; o código sem fecho (streaming) vai até o fim — sem `# comentário` virar título
+  const re = /```(?:grafico|gráfico|plot)[ \t]*\n([\s\S]*?)```|```[ \t]*(?!grafico|gráfico|plot)([\w#+.-]*)[^\n]*\n([\s\S]*?)(?:\n?```|$)|(\$\$)([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]/g;
   let ultimo = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(s))) {
     if (m.index > ultimo) out.push({ tipo: "texto", conteudo: s.slice(ultimo, m.index) });
-    if (m[4] !== undefined) out.push({ tipo: "grafico", conteudo: m[4].trim() });
-    else out.push({ tipo: "formula", conteudo: String(m[2] ?? m[3]).trim() });
+    if (m[1] !== undefined) out.push({ tipo: "grafico", conteudo: m[1].trim() });
+    else if (m[3] !== undefined) out.push({ tipo: "codigo", conteudo: m[3].replace(/\n+$/, ""), lang: m[2].toLowerCase() });
+    else out.push({ tipo: "formula", conteudo: String(m[5] ?? m[6]).trim() });
     ultimo = m.index + m[0].length;
   }
   if (ultimo < s.length) out.push({ tipo: "texto", conteudo: s.slice(ultimo) });
@@ -77,6 +80,13 @@ export function segmentarInline(linha: string): PedacoInline[] {
 /** O texto tem fórmula ou gráfico? (o modo revista desenha em canvas e não comporta). */
 export function temMatematica(texto: string): boolean {
   const s = String(texto ?? "");
-  if (segmentarBlocos(s).some((b) => b.tipo !== "texto")) return true;
-  return s.split("\n").some((l) => segmentarInline(l).some((p) => p.tipo === "formula"));
+  const blocos = segmentarBlocos(s);
+  if (blocos.some((b) => b.tipo === "formula" || b.tipo === "grafico")) return true;
+  // o $ de dentro de um bloco de código é código, não fórmula
+  return blocos.some((b) => b.tipo === "texto" && b.conteudo.split("\n").some((l) => segmentarInline(l).some((p) => p.tipo === "formula")));
+}
+
+/** O texto tem bloco de código (```)? Como a matemática, só o ChatMarkdown desenha (o canvas da revista não). */
+export function temBlocoDeCodigo(texto: string): boolean {
+  return segmentarBlocos(String(texto ?? "")).some((b) => b.tipo === "codigo");
 }

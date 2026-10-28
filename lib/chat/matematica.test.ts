@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { segmentarBlocos, segmentarInline, temMatematica } from "./matematica";
+import { segmentarBlocos, segmentarInline, temBlocoDeCodigo, temMatematica } from "./matematica";
 
 describe("segmentarBlocos", () => {
   it("$$…$$ e \\[…\\] multilinha viram fórmula em destaque", () => {
@@ -40,5 +40,33 @@ describe("segmentarInline", () => {
     expect(temMatematica("a $x^2$")).toBe(true);
     expect(temMatematica("```grafico\n{}\n```")).toBe(true);
     expect(temMatematica("R$ 10")).toBe(false);
+  });
+});
+
+describe("segmentarBlocos — bloco de código (#634)", () => {
+  it("```python … ``` vira código com a linguagem; o de dentro fica cru", () => {
+    const b = segmentarBlocos("Veja:\n```python\n# soma\nx = a * b  # $5\n```\nfim");
+    expect(b).toEqual([
+      { tipo: "texto", conteudo: "Veja:\n" },
+      { tipo: "codigo", conteudo: "# soma\nx = a * b  # $5", lang: "python" },
+      { tipo: "texto", conteudo: "\nfim" },
+    ]);
+  });
+  it("sem linguagem vale; ```grafico continua gráfico", () => {
+    expect(segmentarBlocos("```\nls -la\n```")).toEqual([{ tipo: "codigo", conteudo: "ls -la", lang: "" }]);
+    expect(segmentarBlocos('```grafico\n{"funcoes":["x"]}\n```')[0].tipo).toBe("grafico");
+  });
+  it("streaming: código sem fecho vai até o fim (o # não vira título); ```grafico sem fecho segue texto", () => {
+    expect(segmentarBlocos("a\n```py\nprint(1)\n# ainda")).toEqual([
+      { tipo: "texto", conteudo: "a\n" }, { tipo: "codigo", conteudo: "print(1)\n# ainda", lang: "py" },
+    ]);
+    expect(segmentarBlocos('```grafico\n{"f"')).toEqual([{ tipo: "texto", conteudo: '```grafico\n{"f"' }]);
+  });
+  it("$$ dentro do código não vira fórmula; código não conta como matemática", () => {
+    const s = "```js\nconst p = '$$a$$';\n```";
+    expect(segmentarBlocos(s)).toEqual([{ tipo: "codigo", conteudo: "const p = '$$a$$';", lang: "js" }]);
+    expect(temMatematica(s)).toBe(false);
+    expect(temBlocoDeCodigo(s)).toBe(true);
+    expect(temBlocoDeCodigo("só `inline`")).toBe(false);
   });
 });

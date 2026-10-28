@@ -102,6 +102,7 @@ export function conteudoSemLatex(conteudo: string): string {
   return segmentarBlocos(conteudo).map((b) => {
     if (b.tipo === "formula") return latexParaTexto(b.conteudo);
     if (b.tipo === "grafico") return "";
+    if (b.tipo === "codigo") return "```" + b.lang + "\n" + b.conteudo + "\n```";
     return b.conteudo.split("\n").map((linha) =>
       segmentarInline(linha).map((p) => (p.tipo === "formula" ? latexParaTexto(p.conteudo) : p.conteudo)).join(""),
     ).join("\n");

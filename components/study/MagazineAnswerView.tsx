@@ -33,7 +33,7 @@ import {
   type DestaqueMedido,
 } from "@/lib/magazine/destaque";
 import "katex/dist/katex.min.css";
-import { temMatematica } from "@/lib/chat/matematica";
+import { temBlocoDeCodigo, temMatematica } from "@/lib/chat/matematica";
 import {
   montarLayout, obstaculoCapitular, topoDaLinha, baselineNaLinha,
   type Obstaculo, type Resultado, type Metricas,
@@ -72,6 +72,8 @@ export function podeVirarRevista(a: StructuredAnswer | undefined, temArtefato: b
   if (!corpo) return false;
   // a revista desenha o corpo em CANVAS: fórmula LaTeX e ```grafico só existem no ChatMarkdown
   if (temMatematica(corpo)) return false;
+  // nem bloco de código (#634): no canvas virava prosa de revista, sem a caixa
+  if (temBlocoDeCodigo(corpo)) return false;
   // link clicável (lista de livros, fontes) só existe no ChatMarkdown — o canvas desenha texto puro
   if (a?.livros?.length || /\[[^\]]+\]\(https?:\/\//.test(corpo)) return false;
   const palavras = contarPalavras(corpo);
