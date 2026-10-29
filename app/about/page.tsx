@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import MacSplash from "@/components/ui/MacSplash";
 import { PLAN_INFO } from "@/lib/plans";
 import PdaEquipe from "@/components/about/PdaEquipe";
+import FundoDroids from "@/components/about/FundoDroids";
 // Sem este import o i18n só inicializa se outra página (home) já o carregou: num acesso direto
 // ou F5 em /about o `isInitialized` ficava falso e a página parava no splash, em branco.
 import "@/src/i18n";
@@ -493,15 +494,9 @@ export default function AboutUsPage() {
                 </span>
             </button>
 
-            {/* ── Fundo parallax ── */}
+            {/* ── Fundo parallax: os droids passeando pelo Templo Cósmico (a imagem fica de reserva — celular, sem WebGL) ── */}
             <motion.div className="fixed inset-0 z-[190]" style={{ y: backgroundY }}>
-                <Image
-                    src="/about/about-us-room.png"
-                    alt="Zaeon"
-                    fill
-                    priority
-                    className="object-cover opacity-60"
-                />
+                <FundoDroids png="/about/about-us-room.png" />
                 <div className="absolute inset-0 z-20 bg-gradient-to-t from-[#030014] via-[#030014]/50 to-transparent" />
             </motion.div>
 
