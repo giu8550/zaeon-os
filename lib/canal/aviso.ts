@@ -46,10 +46,41 @@ export function avisoDaMensagem(m: MensagemWire, limite = LIMITE_AVISO_BYTES): A
  * Na TELA: a mensagem chegou sem foto (porque a foto é guardada inteira) → usa a da lista de pessoas do canal
  * (que veio no carregamento normal, sem limite). Agente e quem já tem foto no aviso ficam como estão.
  */
+/**
+ * #645: na conversa que a tela BAIXA (GET /api/canal/[id]), a foto guardada inteira (data:…) não vai em cada mensagem —
+ * vai uma vez só, na lista de pessoas, e a tela completa com `comFotoDaLista`. Antes, a mesma foto descia dezenas de
+ * vezes (1–3 MB num canal comum; com internet lenta, o "Abrindo o canal…" demorava). Foto por link (https) fica.
+ */
+export function semFotoEmbutida<T extends { autorAvatar?: string | null }>(m: T): T {
+  return m.autorAvatar?.startsWith("data:") ? { ...m, autorAvatar: null } : m;
+}
+
 export function comFotoDaLista<T extends { autorTipo: string; autorId: string; autorAvatar?: string | null }>(
   m: T, pessoas: readonly { id: string; avatar?: string | null }[],
 ): T {
   if (m.autorAvatar || m.autorTipo === "agente") return m;
   const p = pessoas.find((x) => x.id === m.autorId);
   return p?.avatar ? { ...m, autorAvatar: p.avatar } : m;
+}
+
+type MsgFoto = { id: string; autorTipo: string; autorId: string; autorAvatar?: string | null };
+type PessoaFoto = { id: string; avatar?: string | null };
+
+/** #645: a conversa baixada com as fotos completadas pela lista de pessoas (a foto inteira veio uma vez só). */
+export function comFotos<M extends MsgFoto, P extends PessoaFoto>(c: { mensagens: M[]; pessoas: P[] }, eu?: P): M[] {
+  const lista = eu ? [...c.pessoas, eu] : c.pessoas;
+  return c.mensagens.map((m) => comFotoDaLista(m, lista));
+}
+
+/**
+ * #645: junta o que chegou (GET …?desde=) na conversa que a tela já tem — sem baixar as 60 mensagens de novo a cada
+ * aviso. Mensagem repetida não entra duas vezes; pessoa nova (ou com foto nova) atualiza a lista.
+ */
+export function juntarParcial<M extends MsgFoto, P extends PessoaFoto>(
+  atual: { mensagens: M[]; pessoas: P[] }, novo: { mensagens: M[]; pessoas: P[] },
+): { mensagens: M[]; pessoas: P[] } {
+  const pessoas = [...atual.pessoas.filter((p) => !novo.pessoas.some((n) => n.id === p.id)), ...novo.pessoas];
+  const ja = new Set(atual.mensagens.map((m) => m.id));
+  const chegaram = novo.mensagens.filter((m) => !ja.has(m.id)).map((m) => comFotoDaLista(m, pessoas));
+  return { pessoas, mensagens: [...atual.mensagens, ...chegaram] };
 }

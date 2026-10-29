@@ -31,7 +31,7 @@ import { avisarTrabalhoIA } from "@/lib/ui/monitorIA";
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
 import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, EV_HUMANO_DIGITANDO, EV_REMOVIDO, type MensagemWire } from "@/lib/canal/wire";
-import { comFotoDaLista, type AvisoMensagem } from "@/lib/canal/aviso";
+import { comFotoDaLista, comFotos, juntarParcial, type AvisoMensagem } from "@/lib/canal/aviso";
 import { linhasChamaveis, quemRespondeSemArroba } from "@/lib/canal/alvo";
 import { avisoDeQuemParou, mostraParar } from "@/lib/canal/parar";
 import { Square } from "lucide-react";
@@ -245,7 +245,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     meuIdRef.current = d.eu.id;
     const nome = d.eu.nome || "";
     meusAliases.current = [nome, nome.split(/\s+/)[0] ?? ""].filter(Boolean);
-    setDet(d);
+    // #645: a foto inteira de cada pessoa veio uma vez só (em `pessoas`) — completa as mensagens com ela
+    setDet({ ...d, mensagens: comFotos(d, d.eu) });
     setDigitando([]);
     setEstadoAgente({});
     setPessoasDigitando({});
@@ -253,6 +254,20 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     try { localStorage.setItem(LS_ULTIMO, id); } catch { /* ignore */ }
   }, []);
   useEffect(() => { if (ativoId) void carregarDetalhe(ativoId); }, [ativoId, carregarDetalhe]);
+
+  // #645: um aviso (alguém entrou, "Téo saiu…", resposta longa demais pro tempo real) → busca SÓ o que chegou depois da
+  // última mensagem da tela, não as 60 de novo. Sem nada na tela ainda, carrega tudo.
+  const detRef = useRef<Detalhe | null>(null);
+  detRef.current = det;
+  const atualizarDesde = useCallback(async (id: string) => {
+    const atual = detRef.current;
+    const ult = atual?.canal.id === id ? [...atual.mensagens].reverse().find((m) => !m.id.startsWith("efemera-")) : undefined;
+    if (!ult) return carregarDetalhe(id);
+    const r = await fetch(`/api/canal/${id}?desde=${encodeURIComponent(ult.createdAt)}`, { cache: "no-store" }).catch(() => null);
+    if (!r?.ok) return carregarDetalhe(id);
+    const novo: Detalhe = await r.json();
+    setDet((d) => (d && d.canal.id === id ? { ...d, canal: novo.canal, agentes: novo.agentes, ...juntarParcial(d, novo) } : d));
+  }, [carregarDetalhe]);
 
   // ─── badge no título da aba ───
   const totalNaoLidas = useMemo(() => Object.values(naoLidas).reduce((a, b) => a + b, 0), [naoLidas]);
@@ -304,7 +319,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       ch.bind(EV_MENSAGEM, (m: AvisoMensagem) => {
         aoChegar(m, c.id);
         // #425: "fulano entrou" no canal aberto → recarrega o canal (a foto nova aparece na barra, sem F5)
-        if (m.autorTipo === "sistema" && c.id === ativoRef.current) void carregarDetalhe(c.id);
+        if (m.autorTipo === "sistema" && c.id === ativoRef.current) void atualizarDesde(c.id);
       });
       // #468: o dono me tirou deste escritório → paro de ouvir e ele some da minha lista (sem esperar o F5)
       ch.bind(EV_REMOVIDO, (d: { userId?: string }) => {
@@ -356,7 +371,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     if (aberto) {
       // #438: aviso leve (mensagem grande demais pro tempo real) → busca a conversa; senão entra na lista, com a
       // foto da lista de pessoas quando o aviso veio sem ela (foto guardada inteira não vai pelo Pusher)
-      if (m.cortada) void carregarDetalhe(canalId);
+      if (m.cortada) void atualizarDesde(canalId);
       else setDet((d) => (d && !d.mensagens.some((x) => x.id === m.id) ? { ...d, mensagens: [...d.mensagens, comFotoDaLista(m, d.pessoas)] } : d));
       if (m.autorTipo === "agente") setDigitando((prev) => prev.filter((k) => k !== m.autorId));
       // a mensagem da pessoa chegou: ela parou de "digitar"
@@ -372,7 +387,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       corpo: (() => { const t = m.cortada ? "Mensagem nova" : m.texto; return canal && !aberto ? `${canal.titulo} · ${t}` : t; })(),
       onClick: () => { setAtivoId(canalId); try { window.dispatchEvent(new CustomEvent("zaeon:set-tab", { detail: "escritorio" })); } catch { /* ignore */ } },
     });
-  }, [notificar, carregarDetalhe]);
+  }, [notificar, atualizarDesde]);
 
   // ─── autoscroll ───
   useEffect(() => { fimRef.current?.scrollIntoView({ block: "end" }); }, [det?.mensagens.length, digitando.length]);

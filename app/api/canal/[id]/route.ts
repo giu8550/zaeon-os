@@ -11,8 +11,9 @@ import { isAgentKey } from "@/lib/agents/roster";
 import { anunciarEntrada } from "@/lib/canal/presenca";
 import { entrarComoMembro, sairComoMembro, type DbAtomico } from "@/lib/canal/atomico";
 import { EV_MENSAGEM, EV_REMOVIDO, publicarPusher } from "@/lib/canal/realtime";
+import { semFotoEmbutida } from "@/lib/canal/aviso";
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: { id: string } }) {
   const off = exigirFlag(); if (off) return off;
   const u = await sessaoUsuario();
   if (!u) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -21,18 +22,25 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   if (!canal) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (!podeLer(canal, u.id)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  // #645: `?desde=<ISO>` → só o que chegou depois (a tela não baixa as 60 mensagens de novo a cada aviso); as pessoas,
+  // só quem escreveu essas mensagens (as outras a tela já tem)
+  const desde = new Date(new URL(req.url).searchParams.get("desde") ?? "");
+  const parcial = !Number.isNaN(+desde);
   const [desc, agentes] = await Promise.all([
-    prisma.canalMensagem.findMany({ where: { canalId: canal.id }, orderBy: { createdAt: "desc" }, take: 60 }),
+    prisma.canalMensagem.findMany({ where: { canalId: canal.id, ...(parcial ? { createdAt: { gt: desde } } : {}) }, orderBy: { createdAt: "desc" }, take: 60 }),
     agentesDoCanal(u.id, canal.agentes),
   ]);
   const msgs = [...desc].reverse();
-  const gente = await pessoas([canal.ownerId, ...canal.membros, ...(canal.dmCom ? [canal.dmCom] : []), ...msgs.filter((m) => m.autorTipo !== "agente").map((m) => m.autorId)]); // humano e o aviso "fulano entrou" (#423)
+  const autores = msgs.filter((m) => m.autorTipo !== "agente").map((m) => m.autorId); // humano e o aviso "fulano entrou" (#423)
+  const gente = await pessoas(parcial ? autores : [canal.ownerId, ...canal.membros, ...(canal.dmCom ? [canal.dmCom] : []), ...autores]);
   return NextResponse.json({
     canal: { ...canal, souDono: canal.ownerId === u.id },
     eu: { id: u.id, nome: u.name || "Você", avatar: u.image ?? null },
-    mensagens: msgs.map((m) => paraWire(m, gente, agentes)),
+    // #645: a foto guardada inteira vai uma vez só (em `pessoas`/`eu`), não em cada mensagem
+    mensagens: msgs.map((m) => semFotoEmbutida(paraWire(m, gente, agentes))),
     agentes: agentesPublicos(agentes),
     pessoas: [...gente.values()],
+    ...(parcial ? { parcial: true } : {}),
   });
 }
 
