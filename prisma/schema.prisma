@@ -1153,6 +1153,37 @@ model AgentChannel {
   @@map("agent_channels")
 }
 
+// ── CANAIS SOCIAIS da Zaeon no mundo real (F0 de docs/PLANO_AGENTES_MUNDO_REAL.md) ──
+// Instagram / X / LinkedIn. Separado de `AgentChannel` DE PROPÓSITO: a decisão do dono
+// (2026-10-29, "Opção A") é UMA CONTA INSTITUCIONAL por rede, com os agentes assinando o
+// post — então a credencial pertence à REDE, não ao agente. `AgentChannel` tem
+// @@unique([agentKey,tipo]) e é o model certo pro WhatsApp (cada agente com chip próprio
+// via ChipFlow); forçar as sociais lá tornaria essa unicidade sem sentido e misturaria o
+// caminho do WhatsApp, que já está em produção. Qual agente FALA é do post (fase F2), não
+// do canal. Contrato em lib/canais/tipos.ts; governança em lib/canais/politica.ts.
+model CanalSocial {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  rede          String    @unique // instagram | x | linkedin (lib/canais/tipos REDES_SOCIAIS)
+  estado        String    @default("nao_conectado") // nao_conectado|conectando|conectado|precisa_autorizar|restrito|pausado|erro
+  capacidades   String[]  // publicar | responder | dm — o que ESTE canal pode hoje (⊆ CAPACIDADES_DA_REDE)
+  escopos       String[]  // escopos OAuth concedidos pela plataforma
+  tokenRef      String?   // 🔒 NOME da env/secret com o token — NUNCA o valor (padrão Connector.authRef)
+  tokenExpiraEm DateTime?
+  contaExterna  String?   // id/handle da conta institucional na rede (informativo)
+  limiteDia     Int       @default(2) // teto NOSSO (governança local); TETO_DIA_PADRAO em politica.ts
+  enviadosHoje  Int       @default(0)
+  diaContagem   String?   // YYYY-MM-DD (BRT) a que enviadosHoje se refere — mesma convenção do AgentChannel
+  pausadoAte    DateTime? // backoff pós-erro (pausaAposErro)
+  autoPublicar  Boolean   @default(false) // aprovação humana é o DEFAULT; opt-in POR CANAL, nunca global
+  ultimoEnvioEm DateTime?
+  ultimoErro    String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([estado])
+  @@map("canais_sociais")
+}
+
 // Avatar vivo gerado no ADMIN (Etapa B): um quadro por (agente, estado, tamanho). Os sets da
 // Etapa A ficam em public/avatars (build); este sobrepõe. tamanho: "g" (512) | "p" (160) |
 // "base" (1024, só estado "base" — pra rerolar expressões depois sem trocar o personagem).
