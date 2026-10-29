@@ -93,8 +93,13 @@ export function podeEnviar(e: EstadoEnvio, cap: Capacidade, agora: Date, tz: str
  * irreversível. `autoPublicar` é por canal, e nem ele dispensa a política acima.
  */
 export function precisaAprovacao(canal: { autoPublicar?: boolean | null }, env: Record<string, string | undefined> = process.env): boolean {
-  if (/^(0|off|false|nao|não|no)$/i.test(String(env.CANAIS_AUTO_PUBLICAR ?? "").trim())) return true; // trava global vence
+  if (aprovacaoForcada(env)) return true; // trava global vence o opt-in do canal
   return !canal.autoPublicar;
+}
+
+/** A trava global está puxada? (`CANAIS_AUTO_PUBLICAR=0` → nada publica sem gente, nem canal com opt-in.) */
+export function aprovacaoForcada(env: Record<string, string | undefined> = process.env): boolean {
+  return /^(0|off|false|nao|não|no)$/i.test(String(env.CANAIS_AUTO_PUBLICAR ?? "").trim());
 }
 
 /** Os canais externos estão ligados? `CANAIS_EXTERNOS=0` = volta a ser só WhatsApp, como hoje. */
