@@ -12,6 +12,7 @@
 import { useEffect, useRef, useState } from "react";
 import { EVT_ZAEON_ESCREVENDO, gerandoAgora, nomeDaPersona, type PersonaId } from "@/lib/research/zaeonEventos";
 import type { DaCena, ParaCena } from "./avatarMensagens";
+import { segurarPrecarga } from "@/lib/cyber/precarga";
 
 const CIANO = "#7fe8ff";
 /** dá pra rodar a cena num worker? (OffscreenCanvas transferível + WebGL nele) */
@@ -64,9 +65,16 @@ export default function ZaeonDocumentos({ persona, lendo = false, reagir = 0 }: 
     const cv = document.createElement("canvas"); cv.className = "absolute inset-0 block h-full w-full"; el.prepend(cv);
     const w = new Worker(new URL("./avatar.worker.ts", import.meta.url), { type: "module" });
     worker.current = w;
+    // enquanto ela CARREGA (e de novo a cada troca de persona), a pré-carga do cyberespaço espera — ela é uma por aba
+    // e segue quando a pessoa vem da landing pro chat, roubando a banda (curta) da avatar (lib/cyber/precarga)
+    let soltar: (() => void) | null = null;
     w.onmessage = (e: MessageEvent<DaCena>) => {
       const m = e.data;
-      if (m.tipo === "estado") setEstado(m.estado);
+      if (m.tipo === "estado") {
+        if (m.estado === "carregando") soltar ??= segurarPrecarga();
+        else { soltar?.(); soltar = null; }
+        setEstado(m.estado);
+      }
       else if (m.tipo === "diag" && process.env.NODE_ENV !== "production") (window as unknown as { __avatarDiag?: DaCena }).__avatarDiag = m;
     };
     w.onerror = (ev) => { console.warn("[avatar] o worker caiu:", ev.message); setEstado("erro"); };
@@ -83,6 +91,7 @@ export default function ZaeonDocumentos({ persona, lendo = false, reagir = 0 }: 
     if (process.env.NODE_ENV !== "production") (window as unknown as { __avatarWorker?: Worker }).__avatarWorker = w;
     return () => {
       ro.disconnect(); io.disconnect(); document.removeEventListener("visibilitychange", avisar);
+      soltar?.(); soltar = null;
       w.postMessage({ tipo: "fim" } satisfies ParaCena); setTimeout(() => w.terminate(), 500); worker.current = null; cv.remove();
     };
   }, [podeIniciar]);

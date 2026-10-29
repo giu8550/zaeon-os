@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { existsSync } from "fs";
 import { join } from "path";
-import { _reiniciarPrecarga, aguentaPesados, manifesto, ouvirPrecarga, precarregarCyber, urlsDosCorpos, urlsDosSons } from "./precarga";
+import { _reiniciarPrecarga, aguentaPesados, manifesto, ouvirPrecarga, precarregarCyber, segurarPrecarga, urlsDosCorpos, urlsDosSons } from "./precarga";
 
 describe("precarga do cyberespaço", () => {
   beforeEach(() => _reiniciarPrecarga());
@@ -47,5 +47,40 @@ describe("precarga do cyberespaço", () => {
     for (let i = 1; i < vistos.length; i++) expect(vistos[i]).toBeGreaterThanOrEqual(vistos[i - 1] - 1e-9);
     // começar de novo não reinicia (singleton)
     expect(precarregarCyber().pronto).toBe(true);
+  });
+
+  it("a TRAVA: com uma cena 3D da página carregando, nada novo começa e os corpos em andamento voltam pra fila", async () => {
+    const comecou: string[] = [], abortados: string[] = [];
+    // um download que só termina quando a gente manda (ou quando é cancelado)
+    const pendentes = new Map<string, () => void>();
+    const baixarImpl = (url: string, avancar: (d: number) => void, tamanho: (n: number) => void, sinal?: AbortSignal) =>
+      new Promise<number>((ok) => {
+        comecou.push(url); tamanho(100);
+        pendentes.set(url, () => { avancar(100); ok(100); });
+        sinal?.addEventListener("abort", () => { abortados.push(url); pendentes.delete(url); ok(-1); });
+      });
+    const espera = (ms = 5) => new Promise((r) => setTimeout(r, ms));
+    precarregarCyber({ importarCodigo: async () => ({}), ambiente: { largura: 1440 }, baixarImpl, concorrencia: 1 });
+    await espera();
+    // os sons vão primeiro; termina eles até o primeiro corpo começar
+    while (!comecou.some((u) => u.endsWith(".vrm"))) { const [u, fim] = [...pendentes.entries()][0]!; pendentes.delete(u); fim(); await espera(); }
+    const corpo = comecou.find((u) => u.endsWith(".vrm"))!;
+    // a vitrine começou a carregar: o corpo em andamento é cancelado e nada novo começa
+    const soltar = segurarPrecarga();
+    await espera();
+    expect(abortados).toEqual([corpo]);
+    const antes = comecou.length;
+    await espera(20);
+    expect(comecou.length).toBe(antes);
+    // a vitrine ficou pronta: a fila volta, começando pelo corpo cancelado
+    soltar();
+    await espera();
+    expect(comecou[antes]).toBe(corpo);
+    // soltar de novo não faz nada (e uma trava com tempo máximo solta sozinha)
+    soltar();
+    const soltarSozinha = segurarPrecarga({ maxMs: 10 });
+    await espera(30);
+    expect(comecou.length).toBeGreaterThan(antes);
+    soltarSozinha();
   });
 });

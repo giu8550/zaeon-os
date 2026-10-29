@@ -13,6 +13,12 @@
  *
  * Progresso ponderado por BYTES: cada arquivo pesa o `content-length` (ou uma estimativa pelo tipo até a resposta
  * chegar), então a barra anda no ritmo da rede, não "um arquivo = um passo".
+ *
+ * A TRAVA (`segurarPrecarga`, out/2026): a banda do servidor é curta (~250 KB/s por arquivo) e os corpos daqui (61 MB)
+ * roubavam a de quem está NA TELA — a Zaeon do hero e a avatar do chat ficavam minutos "chegando" (a pré-carga é uma
+ * por aba e segue quando a pessoa vai pro chat). Enquanto uma cena 3D da página carrega, nenhum arquivo novo começa e
+ * os CORPOS em andamento são cancelados e voltam pro começo da fila; quando ela fica pronta (ou no tempo máximo), a
+ * fila segue de onde parou.
  */
 import { PASTA_SONS, SONS } from "./audio";
 import { CORPOS_FORA_DO_MAPA, CORPOS_VRM, CORPO_DO_FUNDADOR } from "./estiloAvatar";
@@ -90,10 +96,39 @@ function emitir(parcial: Partial<EstadoPrecarga>) {
 
 const ROTULO: Record<TipoItem, string> = { codigo: "carregando o motor do cyberespaço", som: "afinando os sons", textura: "baixando a Terra", corpo: "despertando os avatares" };
 
-/** lê o corpo inteiro contando bytes (pra barra); devolve os bytes lidos. Nunca lança. */
-async function baixar(url: string, aoAvancar: (delta: number) => void, aoSaberTamanho: (n: number) => void): Promise<number> {
+// ── a TRAVA: quem está carregando uma cena 3D na página agora (a vitrine do hero, a avatar do chat) ──
+const travas = new Set<symbol>();
+let soltarFila: (() => void) | null = null, filaPresa: Promise<void> | null = null;
+/** os downloads em andamento (pra cancelar os corpos quando alguém trava) */
+const emCurso = new Map<string, { tipo: TipoItem; abortar: () => void }>();
+/** resolve quando não houver trava */
+function liberada(): Promise<void> {
+  if (!travas.size) return Promise.resolve();
+  if (!filaPresa) filaPresa = new Promise<void>((ok) => { soltarFila = ok; });
+  return filaPresa;
+}
+/**
+ * Segura a pré-carga enquanto uma cena 3D da PÁGINA carrega (ela tem prioridade na banda): nada novo começa e os
+ * corpos em andamento voltam pra fila. Devolve o `soltar` (idempotente); `maxMs` = solta sozinha depois disso (uma
+ * cena que nunca fica pronta não prende a pré-carga pra sempre).
+ */
+export function segurarPrecarga(o: { maxMs?: number } = {}): () => void {
+  const id = Symbol("trava");
+  travas.add(id);
+  for (const c of emCurso.values()) if (c.tipo === "corpo") c.abortar();
+  const soltar = () => {
+    if (!travas.delete(id)) return;
+    clearTimeout(tempo);
+    if (!travas.size && soltarFila) { const s = soltarFila; soltarFila = null; filaPresa = null; s(); }
+  };
+  const tempo = setTimeout(soltar, o.maxMs ?? 120_000);
+  return soltar;
+}
+
+/** lê o corpo inteiro contando bytes (pra barra); devolve os bytes lidos, ou −1 se foi CANCELADO (a trava). Nunca lança. */
+async function baixar(url: string, aoAvancar: (delta: number) => void, aoSaberTamanho: (n: number) => void, sinal?: AbortSignal): Promise<number> {
   try {
-    const res = await fetch(url, { cache: "force-cache", ...( { priority: "low" } as RequestInit) });
+    const res = await fetch(url, { cache: "force-cache", signal: sinal, ...( { priority: "low" } as RequestInit) });
     const len = Number(res.headers.get("content-length") || 0);
     if (len > 0) aoSaberTamanho(len);
     if (!res.ok) return 0;
@@ -106,7 +141,7 @@ async function baixar(url: string, aoAvancar: (delta: number) => void, aoSaberTa
       lidos += value.byteLength; aoAvancar(value.byteLength);
     }
     return lidos;
-  } catch { return 0; }
+  } catch { return sinal?.aborted ? -1 : 0; }
 }
 
 /**
@@ -152,14 +187,21 @@ export function precarregarCyber(opts: {
     const n = Math.max(1, Math.min(opts.concorrencia ?? 3, fila.length));
     const trabalhador = async () => {
       for (;;) {
+        await liberada();   // (uma cena 3D da página carregando: espera ela)
         const item = fila.shift();
         if (!item) return;
         atualizar(ROTULO[item.tipo]);
-        await baixarFn(
+        const ctl = new AbortController();
+        emCurso.set(item.url, { tipo: item.tipo, abortar: () => ctl.abort() });
+        const lidos = await baixarFn(
           item.url,
-          (delta) => { feito.set(item.url, (feito.get(item.url) ?? 0) + delta); atualizar(); },
+          (delta) => { if (!ctl.signal.aborted) { feito.set(item.url, (feito.get(item.url) ?? 0) + delta); atualizar(); } },
           (len) => { peso.set(item.url, len); atualizar(); },
+          ctl.signal,
         );
+        emCurso.delete(item.url);
+        // CANCELADO pela trava: volta pro começo da fila (e a barra devolve o que tinha contado dele)
+        if (lidos < 0 || ctl.signal.aborted) { feito.delete(item.url); fila.unshift(item); continue; }
         // falhou ou veio sem corpo: conta como concluído (o engine tenta de novo ao entrar)
         feito.set(item.url, Math.max(feito.get(item.url) ?? 0, peso.get(item.url) ?? 0));
         atualizar();
@@ -181,6 +223,7 @@ function lerAmbiente(): { largura: number; saveData?: boolean; effectiveType?: s
 /** só pra testes */
 export function _reiniciarPrecarga() {
   iniciada = false;
+  travas.clear(); emCurso.clear(); soltarFila = null; filaPresa = null;
   estado = { progresso: 0, pronto: false, etapa: "", comCorpos: false, bytes: 0, total: 0 };
   ouvintes.clear();
 }

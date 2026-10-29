@@ -13,6 +13,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DaCena, ParaCena } from "@/components/research/avatarMensagens";
+import { segurarPrecarga } from "@/lib/cyber/precarga";
 
 /** o que ela fala quando clicam nela: as 3 saudações + as 10 falas da landing (scripts/avatars/gerar-saudacao.mjs
  *  zaeon-landing — o dono: "ela tem que falar outras frases, e não apenas essa") */
@@ -90,9 +91,16 @@ export default function ZaeonVitrine({ className = "" }: { className?: string })
     const cv = document.createElement("canvas"); cv.className = "absolute inset-0 block h-full w-full"; el.prepend(cv);
     const w = new Worker(new URL("../research/avatar.worker.ts", import.meta.url), { type: "module" });
     worker.current = w;
+    // enquanto ela CARREGA, a pré-carga do cyberespaço espera (lib/cyber/precarga `segurarPrecarga`): a banda do
+    // servidor é curta e os 61 MB dela deixavam a Zaeon minutos sem aparecer
+    let soltar: (() => void) | null = null;
     w.onmessage = (e: MessageEvent<DaCena>) => {
       const m = e.data;
-      if (m.tipo === "estado") setEstado(m.estado);
+      if (m.tipo === "estado") {
+        if (m.estado === "carregando") soltar ??= segurarPrecarga();
+        else { soltar?.(); soltar = null; }
+        setEstado(m.estado);
+      }
       else if (m.tipo === "diag" && process.env.NODE_ENV !== "production") (window as unknown as { __vitrineDiag?: DaCena }).__vitrineDiag = m;
     };
     w.onerror = (ev) => { console.warn("[vitrine] o worker caiu:", ev.message); setEstado("erro"); };
@@ -117,6 +125,7 @@ export default function ZaeonVitrine({ className = "" }: { className?: string })
     return () => {
       ro.disconnect(); io.disconnect(); document.removeEventListener("visibilitychange", avisar);
       window.removeEventListener("pointermove", mexe); document.documentElement.removeEventListener("pointerleave", sai); if (raf) cancelAnimationFrame(raf);
+      soltar?.(); soltar = null;
       w.postMessage({ tipo: "fim" } satisfies ParaCena); setTimeout(() => w.terminate(), 500); worker.current = null; cv.remove();
     };
   }, [podeIniciar]);
