@@ -59,7 +59,10 @@ export function segmentarInline(linha: string): PedacoInline[] {
     }
     if (s[i] === "$" && s[i + 1] !== "$") {
       const antes = s.slice(Math.max(0, i - 2), i);
-      const abre = !/\s/.test(s[i + 1] ?? " ") && !/(?:R|US|U\$S)$/i.test(antes.trim()) && !/[A-Za-z]$/.test(antes);
+      // #645: "R $" (R solto, a palavra é só o R/US) é dinheiro; o "r" do fim de "por $3,6$" NÃO — antes, o trim() fazia
+      // qualquer palavra terminada em r ("por", "multiplicar") virar "R$" e a fórmula saía crua
+      const moeda = /(?:^|[^A-Za-z])(?:R|US)\s?$/i.test(s.slice(Math.max(0, i - 4), i));
+      const abre = !/\s/.test(s[i + 1] ?? " ") && !moeda && !/[A-Za-z]$/.test(antes);
       if (abre) {
         let j = i + 1;
         let fim = -1;

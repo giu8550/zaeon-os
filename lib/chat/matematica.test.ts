@@ -81,3 +81,15 @@ describe("segmentarInline — cifrões escapados (#635)", () => {
     expect(segmentarInline("custa \$5 e \$10")).toEqual([{ tipo: "texto", conteudo: "custa $5 e $10" }]);
   });
 });
+
+describe("segmentarInline — #645 'por $…$'", () => {
+  it("palavra terminada em r antes do $ não é 'R$': 'multiplicar por $3,6$' é fórmula", () => {
+    expect(segmentarInline("basta multiplicar por $3,6$, o que dá")).toEqual([
+      { tipo: "texto", conteudo: "basta multiplicar por " }, { tipo: "formula", conteudo: "3,6" }, { tipo: "texto", conteudo: ", o que dá" },
+    ]);
+    expect(segmentarInline("divida por $x$")).toEqual([{ tipo: "texto", conteudo: "divida por " }, { tipo: "formula", conteudo: "x" }]);
+  });
+  it("dinheiro continua dinheiro: 'R $10' e 'US $5'", () => {
+    expect(segmentarInline("custa R $10 e US $5$").every((p) => p.tipo === "texto")).toBe(true);
+  });
+});
