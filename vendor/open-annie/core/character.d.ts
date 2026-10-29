@@ -22,6 +22,8 @@ export class Character {
   listening: boolean;
   speaking: boolean;
   current: { name: string; idle: boolean; kind: string; endsAt: number } | null;
+  /** pra onde os OLHOS vão: a câmera + `off` (x, y), até `until` (s) — depois disso ele sorteia outro olhar */
+  gaze: { target: THREE.Object3D; until: number; off: THREE.Vector3 };
   /** (Zaeon) a camada por cima da pose, antes da colisão e do vrm.update */
   overlay?: ((c: Character, now: number, dt: number) => void) | null;
   playClip(name: string, o?: { energy?: Energia }): boolean;

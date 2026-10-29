@@ -26,6 +26,8 @@ import type { PersonaId } from "@/lib/research/zaeonEventos";
 import type { DaCena } from "./avatarMensagens";
 import { criarSequencias, type ResultadoSeq } from "./avatarSequencias";
 import type { Sequencia } from "@/lib/research/sequenciaAvatar";
+import { momentoVitrine, type FaseVitrine } from "@/lib/research/roteiroVitrine";
+import { criarBlueprints, type Blueprints } from "./blueprints";
 
 const PACOTE = "/zaeon/movimento/annie-blender/";
 /** onde o HOLOGRAMA flutua (metros: x do centro do corpo; y e z a partir do peito, +z = pra frente) e quanto ela
@@ -54,8 +56,14 @@ const DE_VEZ_EM_QUANDO = ["fidget_glance", "think", "g_minishrug", "fidget_hair"
 const LER_POR = 4.5;
 
 type Modo = "ler";
+/** quem a cena carrega: as personas do chat ou a ZAEON (a vitrine do hero da landing) */
+export type IdCorpoAvatar = PersonaId | "zaeon";
 export type CenaAvatar = {
-  persona: (id: PersonaId) => void;
+  persona: (id: IdCorpoAvatar) => void;
+  /** o cursor no canvas (−1..1; null = fora) — a VITRINE olha pra ele descansando */
+  olhar: (x: number | null, y: number | null) => void;
+  /** a voz dela tocando na página: o volume (0..1) abre a boca; `falando` liga a camada de fala do personagem */
+  fala: (v: number, falando: boolean) => void;
   sinais: (lendo: boolean, escrevendo: boolean) => void;
   reagir: () => void;
   gesto: () => void;
@@ -71,7 +79,10 @@ export type CenaAvatar = {
 const pedirQuadro: (f: () => void) => number = typeof requestAnimationFrame === "function" ? (f) => requestAnimationFrame(f) : (f) => setTimeout(f, 16) as unknown as number;
 const cancelarQuadro = (id: number) => (typeof cancelAnimationFrame === "function" ? cancelAnimationFrame(id) : clearTimeout(id));
 
-export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: { largura: number; altura: number; dpr: number; persona: PersonaId; aoEstado: (e: "carregando" | "pronto" | "erro") => void }): CenaAvatar | null {
+/** `vitrine` = o HERO da landing (lib/research/roteiroVitrine): em vez de esperar o chat, ela roda sozinha o laço pensa →
+ *  pesquisa → gera o BLUEPRINT de um entregável → alimenta a árvore → descansa (olhando o cursor); `quadro` = a altura
+ *  (m) do enquadramento fechado, a partir do topo da cabeça (o painel usa 0,92 — da cintura pra cima) */
+export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: { largura: number; altura: number; dpr: number; persona: IdCorpoAvatar; vitrine?: boolean; quadro?: number; aoEstado: (e: "carregando" | "pronto" | "erro") => void }): CenaAvatar | null {
   let R: THREE.WebGLRenderer;
   try { R = new THREE.WebGLRenderer({ canvas: canvas as HTMLCanvasElement, antialias: true, alpha: true, powerPreference: "low-power" }); }
   catch { o.aoEstado("erro"); return null; }
@@ -92,7 +103,7 @@ export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: 
     const w = Math.max(1, larg), h = Math.max(1, alt);
     if (tamanhoMudou) { R.setSize(w, h, false); tamanhoMudou = false; }
     cam.aspect = w / h;
-    const tv = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)), H = Math.max(0.92, 0.36 / cam.aspect) * (1 + 1.05 * abrir), d = H / 2 / tv;
+    const tv = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)), H = Math.max(o.quadro ?? 0.92, 0.36 / cam.aspect) * (1 + 1.05 * abrir), d = H / 2 / tv;
     // fechada: o topo do quadro acima da cabeça (da cintura pra cima); aberta: ELA no centro, com as telas em volta
     const centro = THREE.MathUtils.lerp(alturaTopo + subir - H / 2, alturaTopo + subir - 0.5, abrir), baixo = 0.1 * abrir;   // (aberta, um tiquinho de baixo pra cima)
     cam.position.set(Math.sin(orbita) * d, centro + 0.04 - baixo, Math.cos(orbita) * d); cam.lookAt(0, centro, 0); cam.updateProjectionMatrix();
@@ -103,8 +114,15 @@ export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: 
   const estrela = glowTex("rgba(255,255,255,1)", "rgba(190,215,255,0.5)");
   const tab = criarTabletLounge({ luz: COR_LUZ, estrela, holograma: true, corpo: new THREE.MeshBasicMaterial() });
   cena.add(tab.tablet, tab.particulas);
-  const seqs = criarSequencias(cena, estrela);
+  const seqs = criarSequencias(cena, estrela, { energiaDaCabeca: o.vitrine });
   let gerandoDesde: number | null = null;
+  // ── a VITRINE (o hero): o roteiro roda sozinho desde `vitrineDesde`; o BLUEPRINT do entregável; o cursor ──
+  const bps: Blueprints | null = o.vitrine ? criarBlueprints(cena, estrela) : null;
+  let vitrineDesde: number | null = null, faseUlt: FaseVitrine | null = null, cicloUlt = -1, pesoGerar = 0;
+  const voz = { v: 0, falando: false, era: false };
+  const mouse = { x: 0, y: 0, tem: false }, alvoOlhar = new THREE.Vector3(), pCab = new THREE.Vector3(1e9, 0, 0), raio = new THREE.Vector3(), pArvore = new THREE.Vector3();
+  /** pra onde a vitrine olha agora (mundo) e com que peso: descansando, o cursor; gerando, o blueprint */
+  const olharVitrine = { peso: 0, yaw: 0, pitch: 0 };
   const qx = new THREE.Quaternion(), eul = new THREE.Euler(), pPeito = new THREE.Vector3();
   // o último resultado das sequências (o corpo — dentro do update do personagem — usa o do quadro anterior)
   let seqUlt: ResultadoSeq | null = null;
@@ -141,7 +159,7 @@ export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: 
   const sinais = { lendo: false, escrevendo: false };
   // ── o ESTADO de quem está no painel: TUDO que pode ficar "preso" mora aqui e é zerado na troca ──
   const st = { peso: { ler: 0 } as Record<Modo, number>, wTab: 0, lerAte: 0, proxGesto: 0, rostoEm: 0 };
-  const zerar = () => { st.peso.ler = 0; st.wTab = 0; st.lerAte = 0; st.proxGesto = performance.now() / 1000 + 6 + Math.random() * 6; st.rostoEm = 0; tab.animar(0, 0); seqs.zerar(); seqUlt = null; if (abrir || orbita || subir) { abrir = 0; orbita = 0; subir = 0; enquadrar(); } };
+  const zerar = () => { faseUlt = null; cicloUlt = -1; pesoGerar = 0; olharVitrine.peso = 0; olharVitrine.yaw = 0; olharVitrine.pitch = 0; st.peso.ler = 0; st.wTab = 0; st.lerAte = 0; st.proxGesto = performance.now() / 1000 + 6 + Math.random() * 6; st.rostoEm = 0; tab.animar(0, 0); seqs.zerar(); seqUlt = null; if (abrir || orbita || subir) { abrir = 0; orbita = 0; subir = 0; enquadrar(); } };
   let acoes: { gesto: () => void; reagir: () => void } | null = null;
 
   const pacote = fetchPack(new URL(PACOTE, self.location.origin).href);
@@ -151,8 +169,8 @@ export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: 
     if (vrm) { cena.remove(vrm.scene); descartar(vrm); }
     vrm = null; c = null; acoes = null; zerar();
   };
-  let pedido = 0, carregado: PersonaId | null = null, pendente: PersonaId | null = null;
-  const carregar = async (id: PersonaId) => {
+  let pedido = 0, carregado: IdCorpoAvatar | null = null, pendente: IdCorpoAvatar | null = null;
+  const carregar = async (id: IdCorpoAvatar) => {
     if (id === carregado) return;
     const meu = ++pedido; carregado = id;
     soltarCorpo(); o.aoEstado("carregando");                // a anterior sai NA HORA (com o que estava fazendo)
@@ -174,6 +192,12 @@ export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: 
         pes?.quaternion.multiply(qx.setFromEuler(eul.set(r.cabecaTilt * 0.5, r.olhar * 0.3 * r.maosPeso, 0)));
         cab?.quaternion.multiply(qx.setFromEuler(eul.set(r.cabecaTilt * 0.7, r.olhar * 0.45 * r.maosPeso, 0)));
       }
+      // a VITRINE: a cabeça vira pro cursor (descansando) ou pro blueprint (gerando) — o pescoço leva um terço
+      if (o.vitrine && olharVitrine.peso > 0.01) {
+        const pes = hu.getNormalizedBoneNode("neck"), cab = hu.getNormalizedBoneNode("head"), p = olharVitrine.peso;
+        pes?.quaternion.multiply(qx.setFromEuler(eul.set(olharVitrine.pitch * 0.35 * p, olharVitrine.yaw * 0.35 * p, 0)));
+        cab?.quaternion.multiply(qx.setFromEuler(eul.set(olharVitrine.pitch * 0.65 * p, olharVitrine.yaw * 0.65 * p, 0)));
+      }
       const k = 1 - Math.exp(-dt * 6);
       const quer: Modo | null = !sinais.escrevendo && (sinais.lendo || now < st.lerAte) ? "ler" : null;
       st.peso.ler += ((quer ? 1 : 0) - st.peso.ler) * k;
@@ -192,9 +216,10 @@ export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: 
       reagir: () => { if (Math.random() < 0.55) { st.lerAte = performance.now() / 1000 + LER_POR; ch.setFace("curious", 0.8); } else gesto("think"); },
     };
     zerar();
+    if (o.vitrine) vitrineDesde = performance.now() / 1000 + 1.2;   // (um respiro antes do primeiro "pensar")
     o.aoEstado("pronto"); tocar();
   };
-  const trocar = (id: PersonaId) => {
+  const trocar = (id: IdCorpoAvatar) => {
     // REGRA: nada de baixar um corpo (~12 MB) enquanto uma resposta está chegando — a anterior sai na hora e a nova
     // espera a resposta acabar (sinais → escrevendo false)
     if (sinais.escrevendo && id !== carregado) { pedido++; soltarCorpo(); carregado = null; pendente = id; o.aoEstado("carregando"); return; }
@@ -214,21 +239,53 @@ export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: 
     ultimoQuadro = t0;
     const dt = Math.min(0.05, relogio.getDelta()), agora = t0 / 1000;
     if (c && vrm) {
-      const lendoAgora = !sinais.escrevendo && (sinais.lendo || agora < st.lerAte), ocupada = sinais.escrevendo || lendoAgora;
+      // a VITRINE: em que fase do roteiro ela está (e o tempo que as sequências da conversa entendem)
+      const mv = o.vitrine && vitrineDesde !== null ? momentoVitrine(agora - vitrineDesde) : null;
+      if (mv && (mv.fase !== faseUlt || mv.ciclo !== cicloUlt)) {
+        if (mv.fase === "gerar") { c.playClip("g_offer_both"); c.setFace("proud", 0.85); st.rostoEm = agora + 3; }
+        else if (mv.fase === "descansar") { c.setFace("happy", 0.7); st.proxGesto = agora + 2 + Math.random() * 2; }
+        faseUlt = mv.fase; cicloUlt = mv.ciclo;
+      }
+      const lendoAgora = !sinais.escrevendo && (sinais.lendo || agora < st.lerAte), ocupada = sinais.escrevendo || lendoAgora || (!!mv && mv.fase !== "descansar");
       // o PILOTO: sem nada pra fazer, de tempos em tempos um gesto leve (ela nunca fica parada)
       if (agora > st.proxGesto) {
         if (!ocupada && c.current?.idle !== false) { const g = DE_VEZ_EM_QUANDO[Math.floor(Math.random() * DE_VEZ_EM_QUANDO.length)]!; if (g === "nod") c.gesture("nod"); else c.playClip(g); c.setFace(ROSTO_DO_GESTO[g] ?? "happy", 0.6); }
-        st.proxGesto = agora + 14 + Math.random() * 12;
+        st.proxGesto = agora + (o.vitrine ? 3.5 + Math.random() * 3 : 14 + Math.random() * 12);
       }
+      // a VITRINE olha: descansando/pensando, o CURSOR (o raio da câmera por ele, no meio do caminho até o rosto);
+      // gerando, o BLUEPRINT; pesquisando, as sequências mandam (varre as telas)
+      if (mv) {
+        const centroBp = bps?.centro() ?? null;
+        let quer = 0;
+        if (mv.fase === "gerar" && centroBp) { alvoOlhar.copy(centroBp); quer = 0.9; }
+        else if ((mv.fase === "descansar" || mv.fase === "pensar" || mv.fase === "alimentar") && mouse.tem && pCab.x < 1e8) {
+          raio.set(mouse.x, mouse.y, 0.5).unproject(cam).sub(cam.position).normalize();
+          const meio = (cam.position.z - pCab.z) / 2;
+          alvoOlhar.copy(cam.position).addScaledVector(raio, meio / Math.max(0.05, -raio.z)); quer = mv.fase === "alimentar" ? 0.4 : 1;
+        }
+        olharVitrine.peso += (quer - olharVitrine.peso) * (1 - Math.exp(-dt * 4));
+        if (quer > 0 && pCab.x < 1e8) {
+          const vx = alvoOlhar.x - pCab.x, vy = alvoOlhar.y - pCab.y, vz = Math.max(0.05, alvoOlhar.z - pCab.z);
+          const yaw = THREE.MathUtils.clamp(Math.atan2(vx, vz), -0.75, 0.75), pitch = THREE.MathUtils.clamp(Math.atan2(-vy, Math.hypot(vx, vz)), -0.4, 0.5);
+          const k = 1 - Math.exp(-dt * 7); olharVitrine.yaw += (yaw * 0.6 - olharVitrine.yaw) * k; olharVitrine.pitch += (pitch * 0.6 - olharVitrine.pitch) * k;
+          // os OLHOS (o gaze do personagem): o resto do caminho
+          c.gaze.off.set(alvoOlhar.x - cam.position.x, alvoOlhar.y - cam.position.y, 0); c.gaze.until = agora + 0.4;
+        }
+      }
+      // a FALA (clicaram nela): a boca no volume da voz — e a camada de fala do personagem gesticula junto
+      if (voz.falando || voz.era) { c.setMouth({ aa: voz.v * 0.9, oh: voz.v * 0.3, ih: voz.v * 0.2, ou: 0, ee: 0 }, voz.falando); voz.era = voz.falando; }
       c.update(agora, dt);
       // GERANDO: as 3 sequências (o gesto e o rosto de cada uma no começo dela; ela flutua; a câmera abre)
-      const r = seqs.atualizar({ agora, dt, gerandoHa: gerandoDesde === null ? null : agora - gerandoDesde, vrm, cam }); seqUlt = r;
+      const r = seqs.atualizar({ agora, dt, gerandoHa: mv ? mv.gerandoHa : gerandoDesde === null ? null : agora - gerandoDesde, vrm, cam }); seqUlt = r;
       if (r.nova && r.seq) { const n = NA_SEQUENCIA[r.seq]; c.playClip(n.clipe); c.setFace(n.rosto, 0.85); st.rostoEm = agora + 2.5; }
       // a câmera abre e fica em três-quartos (ela fica de pé: o ângulo é que mostra a cena)
       const subirAgora = 0;
-      if (Math.abs(r.abrir - abrir) > 0.001 || Math.abs(r.orbita - orbita) > 0.001 || Math.abs(subirAgora - subir) > 0.001) { abrir = r.abrir; orbita = r.orbita; subir = subirAgora; enquadrar(); }
+      // (a vitrine abre um pouco a câmera gerando: o blueprint inteiro na frente do peito)
+      pesoGerar += ((mv?.fase === "gerar" || (mv?.fase === "alimentar" && mv.u < 0.4) ? 1 : 0) - pesoGerar) * (1 - Math.exp(-dt * 1.6));
+      const abrirAgora = Math.max(r.abrir, pesoGerar * 0.62);
+      if (Math.abs(abrirAgora - abrir) > 0.001 || Math.abs(r.orbita - orbita) > 0.001 || Math.abs(subirAgora - subir) > 0.001) { abrir = abrirAgora; orbita = r.orbita; subir = subirAgora; enquadrar(); }
       // o ROSTO do modo (de vez em quando: o envelope das expressões cuida da transição)
-      if (agora > st.rostoEm && ocupada) { c.setFace(r.seq ? NA_SEQUENCIA[r.seq].rosto : "curious", 0.7); st.rostoEm = agora + 3; }
+      if (agora > st.rostoEm && ocupada) { c.setFace(r.seq ? NA_SEQUENCIA[r.seq].rosto : mv?.fase === "gerar" ? "proud" : "curious", 0.7); st.rostoEm = agora + 3; }
       // o HOLOGRAMA de LEITURA: materializa como o tablet do lounge, à frente do peito, virado pra quem vê
       st.wTab = Math.max(0, Math.min(1, st.wTab + (lendoAgora ? dt / TABLET.materializa : -dt / TABLET.some)));
       const peito = vrm.humanoid.getRawBoneNode("upperChest") ?? vrm.humanoid.getRawBoneNode("chest");
@@ -239,6 +296,12 @@ export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: 
       }
       tab.animar(st.wTab, agora);
       tab.tablet.scale.multiplyScalar(0.78);   // (um pouco menor que o do lounge: aqui a câmera está perto)
+      // a VITRINE: o blueprint do entregável (na frente do peito; ao alimentar, voa pro pé da árvore)
+      if (bps && mv && peito) {
+        peito.getWorldPosition(pPeito); pArvore.set(0, pPeito.y - 0.22, pPeito.z + 0.3);
+        bps.atualizar({ agora, dt, fase: mv.fase, u: mv.u, entregavel: mv.entregavel, peito: pPeito, arvore: pArvore, cam });
+      }
+      vrm.humanoid.getRawBoneNode("head")?.getWorldPosition(pCab);
     }
     R.render(cena, cam);
     const custo = performance.now() - t0;
@@ -256,6 +319,8 @@ export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: 
 
   return {
     persona: trocar,
+    fala: (v, falando) => { voz.v = Math.max(0, Math.min(1, v)); voz.falando = falando; },
+    olhar: (x, y) => { if (x === null || y === null) mouse.tem = false; else { mouse.x = x; mouse.y = y; mouse.tem = true; } },
     sinais: (lendo, escrevendo) => {
       const mudou = escrevendo !== sinais.escrevendo;
       if (escrevendo && !sinais.escrevendo) gerandoDesde = performance.now() / 1000;   // a resposta começou: o roteiro
@@ -273,10 +338,10 @@ export function criarCenaAvatar(canvas: OffscreenCanvas | HTMLCanvasElement, o: 
       const s = (performance.now() - medDesde) / 1000, r: DaCena = { tipo: "diag", quadros: medQuadros, msPorQuadro: medQuadros ? +(medMs / medQuadros).toFixed(2) : 0, fps: +(medQuadros / Math.max(0.001, s)).toFixed(1), sequencias: { ...seqs.estado(), qualidade, mediaMs: +mediaMs.toFixed(2), gerandoHa: gerandoDesde === null ? null : +(performance.now() / 1000 - gerandoDesde).toFixed(1) } };
       medQuadros = 0; medMs = 0; medDesde = performance.now(); return r;
     },
-    saltar: (t) => { if (gerandoDesde !== null) gerandoDesde = performance.now() / 1000 - t; },
+    saltar: (t) => { if (o.vitrine) vitrineDesde = performance.now() / 1000 - t; else if (gerandoDesde !== null) gerandoDesde = performance.now() / 1000 - t; },
     destruir: () => {
       vivo = false; pedido++; if (raf) cancelarQuadro(raf); raf = 0;
-      soltarCorpo(); seqs.dispose(); tab.dispose(); estrela.dispose();
+      soltarCorpo(); seqs.dispose(); bps?.dispose(); tab.dispose(); estrela.dispose();
       R.dispose(); R.forceContextLoss();
     },
   };

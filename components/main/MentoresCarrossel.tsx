@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import TrilhoCarrossel from "@/components/ui/TrilhoCarrossel";
 import Cracha, { useHolofote, type DadosCracha } from "@/components/agents/Cracha";
 import { intercalar, montarVitrine, nativosVitrine, type AgenteVitrine, type PerfilPublico } from "@/lib/agents/nativos";
 import { agentAvatars } from "@/lib/canal/flags";
@@ -65,26 +66,6 @@ export default function MentoresCarrossel({ className = "", semRotulo = false, l
     const trilhoRef = useRef<HTMLDivElement>(null);
     // HOLOFOTE: um crachá visível por vez fica "em cena" (pula, dá um oi, sorri, faz caras)
     const cena = useHolofote(trilhoRef, vitrine.length * 2);
-    /** o crachá cujo centro está mais perto do MEIO do trilho (borda destacada na passagem) */
-    const [centro, setCentro] = useState(-1);
-    const [podeVoltar, setPodeVoltar] = useState(false);
-    const [podeAvancar, setPodeAvancar] = useState(true);
-    const [semMovimento, setSemMovimento] = useState(false);
-    /** Arrasto em curso ou foco dentro do trilho (hover NAO entra aqui, de proposito). */
-    const pausadoRef = useRef(false);
-    /** Marca a rolagem causada pelo proprio passo automatico. */
-    const programaticoRef = useRef(false);
-    /** Ate quando o passo automatico deve ficar quieto depois de um toque. */
-    const esperaAteRef = useRef(0);
-
-    useEffect(() => {
-        const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-        const sync = () => setSemMovimento(mq.matches);
-        sync();
-        mq.addEventListener("change", sync);
-        return () => mq.removeEventListener("change", sync);
-    }, []);
-
     useEffect(() => {
         let vivo = true;
         // Perfis (AgentProfile: crachá, ativo, ordem, foto) — só com NEXT_PUBLIC_AGENT_AVATARS=1; falha = padrão.
@@ -106,181 +87,25 @@ export default function MentoresCarrossel({ className = "", semRotulo = false, l
         };
     }, []);
 
-    const sincronizarSetas = useCallback(() => {
-        const el = trilhoRef.current;
-        if (!el) return;
-        setPodeVoltar(el.scrollLeft > 8);
-        setPodeAvancar(el.scrollLeft + el.clientWidth < el.scrollWidth - 8);
-    }, []);
-
-    /** Handler do evento `scroll`: mantém as setas em dia. */
-    const aoRolar = useCallback(() => {
-        sincronizarSetas();
-    }, [sincronizarSetas]);
-
-    useEffect(() => {
-        sincronizarSetas();
-        const el = trilhoRef.current;
-        if (!el) return;
-        el.addEventListener("scroll", aoRolar, { passive: true });
-        window.addEventListener("resize", sincronizarSetas);
-        return () => {
-            el.removeEventListener("scroll", aoRolar);
-            window.removeEventListener("resize", sincronizarSetas);
-        };
-    }, [sincronizarSetas, aoRolar, mentores.length]);
-
-    /** Largura de um passo = um cartao real medido agora, nunca um numero chutado. */
-    const passoAtual = (el: HTMLElement) => {
-        const cartao = el.firstElementChild as HTMLElement | null;
-        return cartao ? cartao.getBoundingClientRect().width + 16 : el.clientWidth * 0.8;
-    };
-
-    const andar = (direcao: 1 | -1) => {
-        const el = trilhoRef.current;
-        if (!el) return;
-        esperaAteRef.current = Date.now() + 5000; // seta clicada → deixa a pessoa olhar
-        el.scrollBy({ left: passoAtual(el) * direcao, behavior: "smooth" });
-    };
-
-    /**
-     * O trilho anda sozinho: um passo a cada 3.2s, voltando ao inicio na ponta.
-     *
-     * O QUE O SEGURA -- e o que DELIBERADAMENTE nao segura:
-     *
-     * - ARRASTO / FOCO: enquanto a pessoa esta com o dedo no trilho ou navegando
-     *   por teclado dentro dele, o passo fica quieto.
-     * - ROLAGEM MANUAL: depois que ela mesma empurra, o passo espera 8s antes de
-     *   voltar a mandar. Sem isso um toque no celular brigaria com o timer meio
-     *   segundo depois. `programaticoRef` separa a rolagem que este efeito
-     *   causou da que veio do dedo -- as duas disparam o mesmo evento `scroll`,
-     *   entao sem essa marca nao da pra distinguir uma da outra.
-     * - FORA DA TELA: senao o trilho corre ate o fim enquanto ninguem olha e
-     *   quem rola ate aqui encontra a prateleira parada no ultimo cartao.
-     *
-     * NAO pausa no hover, e essa e a correcao desta versao. A primeira tentativa
-     * pausava, e na pratica o carrossel ficava PARADO: o trilho ocupa quase toda
-     * a largura util da secao, entao o ponteiro esta em cima dele praticamente
-     * o tempo todo em que a pessoa esta olhando para essa parte da pagina. Pausar
-     * no hover faz sentido num menu que revela conteudo; aqui os cartoes nao tem
-     * nada escondido atras do ponteiro, e o efeito colateral era o recurso
-     * inteiro parecer que nao existe.
-     *
-     * A checagem de visibilidade e um `getBoundingClientRect` no proprio tick, e
-     * nao um IntersectionObserver, por dois motivos: e uma leitura a cada 3.2s
-     * (nao por quadro), e nao depende de callback -- um observer criado enquanto
-     * a aba esta em segundo plano pode receber um unico callback "fora da tela" e
-     * nunca mais ser chamado, deixando o trilho travado para sempre.
-     *
-     * `prefers-reduced-motion` desliga o passo; as setas continuam.
-     */
-    // Rede de seguranca: se o dedo/mouse solta FORA do trilho, o `pointerup` do
-    // elemento nunca chega e o passo ficaria pausado para sempre. O do documento
-    // sempre chega.
-    useEffect(() => {
-        const soltou = () => {
-            // So conta se o arrasto tinha COMECADO no trilho; senao um clique
-            // qualquer na pagina silenciaria o carrossel por 8s.
-            if (!pausadoRef.current) return;
-            pausadoRef.current = false;
-            esperaAteRef.current = Date.now() + 8000;
-        };
-        document.addEventListener("pointerup", soltou);
-        document.addEventListener("pointercancel", soltou);
-        return () => {
-            document.removeEventListener("pointerup", soltou);
-            document.removeEventListener("pointercancel", soltou);
-        };
-    }, []);
-
-    useEffect(() => {
-        if (semMovimento) return;
-        const el = trilhoRef.current;
-        if (!el) return;
-
-        // Glide CONTÍNUO e suave. Antes pulava 1 cartão a cada 3,2s com snap-mandatory
-        // — daí a sensação abrupta/estalada. Agora avança poucos px por frame; a lista
-        // é DUPLICADA no render, então ao cruzar a 1ª metade voltamos o equivalente e o
-        // loop fica sem costura (invisível, pois a 2ª cópia está idêntica naquele ponto).
-        const VEL = 0.5; // px por frame (~30px/s a 60fps): presente, sem distrair
-        let raf = 0, quadro = 0;
-        const passo = () => {
-            raf = requestAnimationFrame(passo);
-            if (document.hidden) return;
-            const r = el.getBoundingClientRect();
-            if (!(r.bottom > 0 && r.top < window.innerHeight)) return;
-            // quem está passando pelo MEIO (medido a cada 6 quadros — barato; vale mesmo com o trilho parado/arrastado)
-            if (++quadro % 6 === 0) {
-                const meioX = r.left + r.width / 2;
-                let melhor = -1, dist = Infinity;
-                [...el.children].forEach((c, i) => {
-                    const b = c.getBoundingClientRect();
-                    const d = Math.abs(b.left + b.width / 2 - meioX);
-                    if (d < dist) { dist = d; melhor = i; }
-                });
-                setCentro((atual) => (atual === melhor ? atual : melhor));
-            }
-            if (pausadoRef.current) return;
-            if (Date.now() < esperaAteRef.current) return;
-            el.scrollLeft += VEL;
-            const meia = el.scrollWidth / 2;
-            if (meia > 0 && el.scrollLeft >= meia) el.scrollLeft -= meia;
-        };
-        raf = requestAnimationFrame(passo);
-        return () => cancelAnimationFrame(raf);
-    }, [semMovimento, mentores.length]);
-
     return (
-        <div className={className}>
-            <div className="mb-6 flex items-end justify-between gap-6">
-                {semRotulo ? <span /> : (
+        // a mecânica (glide contínuo, destaque no meio, setas) mora no TrilhoCarrossel — a dos blueprints anda igual
+        <TrilhoCarrossel
+            className={className}
+            n={vitrine.length}
+            chave={mentores.length}
+            trilhoRef={trilhoRef}
+            rotuloSetas={{ anterior: "Mentores anteriores", proximo: "Próximos mentores" }}
+            rotulo={semRotulo ? undefined : (
                 <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-slate-500 dark:text-slate-500">
                     {nativos.length} nativos · {mentores.length} mentores
                     {aoVivo ? " · ao vivo da sala de plugins" : ""}
                 </p>
-                )}
-
-                {/* As setas sao conveniencia de desktop. No celular o dedo ja faz isso,
-                    e um par de botoes so rouba largura de tela. */}
-                <div className="hidden md:flex gap-2">
-                    <Seta direcao="anterior" ativa={podeVoltar} onClick={() => andar(-1)} />
-                    <Seta direcao="proximo" ativa={podeAvancar} onClick={() => andar(1)} />
-                </div>
-            </div>
-
-            {/* O trilho fica DENTRO da calha da pagina, entao o primeiro cartao nasce
-                na mesma margem do titulo e o ultimo visivel e cortado na borda do
-                container -- e o corte que diz "tem mais", sem precisar de texto.
-                Nao sangra ate a borda da tela de proposito: fazer isso exige 100vw,
-                que inclui a barra de rolagem e devolve a pagina a rolagem horizontal
-                que acabou de ser consertada. */}
-            <div
-                ref={trilhoRef}
-                onPointerDown={() => {
-                    pausadoRef.current = true;
-                }}
-                onPointerUp={() => {
-                    pausadoRef.current = false;
-                    esperaAteRef.current = Date.now() + 8000;
-                }}
-                onWheel={() => {
-                    esperaAteRef.current = Date.now() + 5000;
-                }}
-                onFocusCapture={() => {
-                    pausadoRef.current = true;
-                }}
-                onBlurCapture={() => {
-                    pausadoRef.current = false;
-                }}
-                className="flex gap-4 overflow-x-auto pb-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            >
-                {/* Lista DUPLICADA: alimenta o loop sem costura do glide contínuo. */}
-                {/* `dark`: os cards dos agentes são VIDRO PRETO nos dois temas (contraste melhor no claro) */}
-                {[...vitrine, ...vitrine].map((m, i) => (
-                    <div key={`${m.slug}-${i}`} className="dark shrink-0"><Cracha d={dadosCracha(m, i % vitrine.length)} emCena={i === cena} noCentro={leve && i === centro} leve={leve} estavel /></div>
-                ))}
-            </div>
-        </div>
+            )}
+            // `dark`: os cards dos agentes são VIDRO PRETO nos dois temas (contraste melhor no claro)
+            render={(i, { indice, noCentro }) => (
+                <div key={`${vitrine[i]!.slug}-${indice}`} className="dark shrink-0"><Cracha d={dadosCracha(vitrine[i]!, i)} emCena={indice === cena} noCentro={leve && noCentro} leve={leve} estavel /></div>
+            )}
+        />
     );
 }
 
@@ -300,28 +125,4 @@ function dadosCracha(m: AgenteVitrine, indice: number): DadosCracha {
         educacional: !!m.guardrail,
         redes: m.redes,
     };
-}
-
-function Seta({
-    direcao,
-    ativa,
-    onClick,
-}: {
-    direcao: "anterior" | "proximo";
-    ativa: boolean;
-    onClick: () => void;
-}) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            disabled={!ativa}
-            aria-label={direcao === "anterior" ? "Mentores anteriores" : "Próximos mentores"}
-            className="grid h-9 w-9 place-items-center rounded-full border border-slate-200 dark:border-white/12 bg-white/70 dark:bg-white/[0.05] text-slate-700 dark:text-white/80 transition-opacity disabled:opacity-25 hover:bg-white dark:hover:bg-white/[0.10]"
-        >
-            <span aria-hidden="true" className="text-sm leading-none">
-                {direcao === "anterior" ? "←" : "→"}
-            </span>
-        </button>
-    );
 }

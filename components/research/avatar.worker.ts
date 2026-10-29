@@ -22,11 +22,13 @@ self.onmessage = (e: MessageEvent<ParaCena>) => {
   switch (m.tipo) {
     case "iniciar":
       cena?.destruir();
-      cena = criarCenaAvatar(m.canvas, { largura: m.largura, altura: m.altura, dpr: m.dpr, persona: m.persona, aoEstado: (estado) => enviar({ tipo: "estado", estado }) });
+      cena = criarCenaAvatar(m.canvas, { largura: m.largura, altura: m.altura, dpr: m.dpr, persona: m.persona, vitrine: m.vitrine, quadro: m.quadro, aoEstado: (estado) => enviar({ tipo: "estado", estado }) });
       break;
     case "tamanho": cena?.tamanho(m.largura, m.altura); break;
     case "visivel": cena?.visivel(m.visivel); break;
     case "persona": cena?.persona(m.persona); break;
+    case "olhar": cena?.olhar(m.x, m.y); break;
+    case "fala": cena?.fala(m.v, m.falando); break;
     case "sinais": cena?.sinais(m.lendo, m.escrevendo); break;
     case "reagir": cena?.reagir(); break;
     case "gesto": cena?.gesto(); break;

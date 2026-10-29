@@ -1,7 +1,9 @@
 "use client";
 
 /**
- * GlitchTexto — o "glitch chinês": as letras se revelam passando por ideogramas (CJK) que piscam até assentar
+ * GlitchTexto — o glitch do sub-header: as letras se revelam passando por "Zaeon" EM CHINÊS — 泽安, como no locale
+ * zh (o dono, out/2026: "coloque todos para serem sempre 'zaeon'… coloca zaeon em chinês") — o trecho ainda não
+ * revelado repete 泽安, deslizando a cada quadro, até assentar
  * na frase; e uma PALAVRA que gira (ideias → estudos → trabalhos → pesquisas) passando pelo mesmo ruído a cada
  * troca. Por cima, o recorte holográfico da casa (`.cyber-glitch`, definido no hero).
  *
@@ -10,11 +12,13 @@
  */
 import { useEffect, useRef, useState } from "react";
 
-const GLIFOS = "知識學習構築交付創造研究思想工作進化未來智慧數據驗證真理光";
+const RUIDO = "泽安";
+/** o ideograma de 泽安 na posição `i` (deslocado por `passo`: o ruído desliza) */
+const letra = (i: number, passo: number) => RUIDO[(i + passo) % RUIDO.length]!;
 
 function ruido(n: number) {
   let s = "";
-  for (let i = 0; i < n; i++) s += GLIFOS[Math.floor(Math.random() * GLIFOS.length)];
+  for (let i = 0; i < n; i++) s += letra(i, 0);
   return s;
 }
 
@@ -26,11 +30,13 @@ function useScramble(alvo: string, ms: number, ativo: boolean) {
     cancelAnimationFrame(raf.current);
     if (!ativo) { setVis(alvo); return; }
     const t0 = performance.now();
+    let quadro = 0;
     const passo = (t: number) => {
       const k = Math.min(1, (t - t0) / ms);
       const fixas = Math.floor(k * alvo.length);
       let s = alvo.slice(0, fixas);
-      for (let i = fixas; i < alvo.length; i++) s += alvo[i] === " " ? " " : GLIFOS[Math.floor(Math.random() * GLIFOS.length)];
+      quadro++;
+      for (let i = fixas; i < alvo.length; i++) s += alvo[i] === " " ? " " : letra(i - fixas, Math.floor(quadro / 3));
       setVis(s);
       if (k < 1) raf.current = requestAnimationFrame(passo);
     };

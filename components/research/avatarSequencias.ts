@@ -139,7 +139,9 @@ export type Sequencias = {
   dispose: () => void;
 };
 
-export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequencias {
+/** `energiaDaCabeca` = a esfera de energia (a luz roxa) NASCE da cabeça dela e sobe (a vitrine do hero); sem isso, ela
+ *  nasce de onde a aranha estava (o painel do lab: "a aranha vira energia") */
+export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture, o: { energiaDaCabeca?: boolean } = {}): Sequencias {
   const descartaveis: { dispose: () => void }[] = [];
   const guarda = <T extends { dispose: () => void }>(x: T) => { descartaveis.push(x); return x; };
   const raiz = new THREE.Group(); cena.add(raiz);
@@ -148,8 +150,12 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
   const aux = new THREE.Vector3(), aux2 = new THREE.Vector3(), joelho = new THREE.Vector3();
 
   // ── OLHOS ──
-  const olhos = [0, 1].map(() => { const s = new THREE.Sprite(brilhoMat(CIANO, true)); s.scale.setScalar(0.05); s.renderOrder = 10; raiz.add(s); return s; });
-  const nucleos = [0, 1].map(() => { const s = new THREE.Sprite(brilhoMat(new THREE.Color("#ffffff"), true)); s.scale.setScalar(0.016); s.renderOrder = 11; raiz.add(s); return s; });
+  // (mistura NORMAL, não aditiva: ciano somado à pele clara do anime vira branco e o brilho some — tingido, ele aparece)
+  const brilhoOlho = (cor: THREE.Color) => guarda(new THREE.SpriteMaterial({ map: estrela, color: cor, transparent: true, opacity: 0, depthWrite: false, depthTest: false }));
+  const olhos = [0, 1].map(() => { const s = new THREE.Sprite(brilhoOlho(CIANO)); s.scale.setScalar(0.03); s.renderOrder = 10; raiz.add(s); return s; });
+  const nucleos = [0, 1].map(() => { const s = new THREE.Sprite(brilhoOlho(new THREE.Color("#00cfff"))); s.scale.setScalar(0.01); s.renderOrder = 11; raiz.add(s); return s; });
+  /** onde fica cada olho no referencial da cabeça (m): pro lado e pra frente do rosto (a altura vem do osso do olho) */
+  const OLHO = { lado: 0.031, frente: 0.078 };
 
   // ── REDE: o palco da busca (centrado no peito dela; segue a altura dela) ──
   const rede = new THREE.Group(); raiz.add(rede);
@@ -437,7 +443,7 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
   // ── o estado (zerado a cada troca de avatar) ──
   const w = { olhos: 0, rede: 0, aranha: 0, energia: 0, arvore: 0, cerebro: 0, abrir: 0, digitar: 0, telepatia: 0, leitura: 0, feitico: 0, telecinese: 0, portal: 0, constelacao: 0, maos: 0 };
   let ultimaSeq: Sequencia | null = null, ultimoCiclo = -1, proxSinapse = 0, inicioGeracao = 0, lado = 1;
-  const peito = new THREE.Vector3(), quadrilV = new THREE.Vector3(), pOlho = new THREE.Vector3(), paraCam = new THREE.Vector3(), camDir = new THREE.Vector3(), camDireita = new THREE.Vector3(), camCima = new THREE.Vector3();
+  const peito = new THREE.Vector3(), quadrilV = new THREE.Vector3(), pOlho = new THREE.Vector3(), camDir = new THREE.Vector3(), camDireita = new THREE.Vector3(), camCima = new THREE.Vector3();
   const zerar = () => {
     for (const k of Object.keys(w) as (keyof typeof w)[]) w[k] = 0;
     ultimaSeq = null; ultimoCiclo = -1; ar.iniciada = false; en.ativa = false; ali.tela = -1; ali.fome = 0; drenada.clear();
@@ -491,17 +497,23 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
     h.getRawBoneNode("hips")?.getWorldPosition(quadrilV);
     cam.getWorldDirection(camDir); camDireita.crossVectors(camDir, cam.up).normalize(); camCima.crossVectors(camDireita, camDir).normalize();
 
-    // OLHOS: nos ossos dos olhos (ou na frente da cabeça), puxados um tiquinho pra câmera
+    // OLHOS: um brilho em CADA olho, na superfície do rosto. Os ossos dos olhos do VRoid ficam quase no meio (±1,6 cm,
+    // dentro da cabeça) — a luz ia pro meio da testa e os dois brilhos viravam um só (o dono: "aparece luz no meio da
+    // testa; acerta duas luzes nos olhos"). Agora: a ALTURA vem do osso do olho, a posição é no referencial da cabeça
+    // (segue o giro dela), afastada pros lados e trazida pra frente do rosto; e os brilhos são pequenos (não se fundem).
     const pulso = 0.75 + 0.25 * Math.sin(agora * (ultimaSeq === "pensar" ? 9 : 4));
+    const cabRaw = h.getRawBoneNode("head");
     (["leftEye", "rightEye"] as const).forEach((osso, i) => {
-      const n = h.getRawBoneNode(osso);
-      if (n) n.getWorldPosition(pOlho); else pOlho.copy(cabeca).add(aux.set(i ? -0.03 : 0.03, 0.03, 0.06));
-      paraCam.copy(cam.position).sub(pOlho).normalize();
-      pOlho.addScaledVector(paraCam, 0.03);
+      const n = h.getRawBoneNode(osso), lado = i ? -1 : 1;
+      if (cabRaw) {
+        let alt = 0.066;
+        if (n) { n.getWorldPosition(pOlho); cabRaw.worldToLocal(pOlho); alt = pOlho.y; }
+        pOlho.set(lado * OLHO.lado, alt, OLHO.frente); cabRaw.localToWorld(pOlho);
+      } else pOlho.copy(cabeca).add(aux.set(lado * OLHO.lado, 0.066, OLHO.frente));
       olhos[i]!.position.copy(pOlho); nucleos[i]!.position.copy(pOlho);
       (olhos[i]!.material as THREE.SpriteMaterial).opacity = w.olhos * pulso;
       (nucleos[i]!.material as THREE.SpriteMaterial).opacity = w.olhos * 0.9;
-      olhos[i]!.scale.setScalar(0.05 + 0.05 * w.olhos * pulso);
+      olhos[i]!.scale.setScalar(0.022 + 0.018 * w.olhos * pulso);
     });
 
     // os ANÉIS sob ela (a levitação toda)
@@ -634,7 +646,8 @@ export function criarSequencias(cena: THREE.Scene, estrela: THREE.Texture): Sequ
     const vEn = w.energia, comEnergia = vEn > 0.01;
     esfera.visible = raios.visible = raios2.visible = comEnergia; for (const p of pontas) p.visible = comEnergia;
     if (comEnergia) {
-      if (!en.ativa) { en.ativa = true; en.desde = agora; en.de.copy(ar.iniciada ? aux.copy(ar.pos).add(rede.position) : aux.set(0, peito.y, -0.5)); en.proxRaio = 0; }
+      if (!en.ativa) { en.ativa = true; en.desde = agora; en.de.copy(o.energiaDaCabeca ? aux.copy(cabeca).add(aux2.set(0, 0.13, 0)) : ar.iniciada ? aux.copy(ar.pos).add(rede.position) : aux.set(0, peito.y, -0.5)); en.proxRaio = 0; }
+      if (o.energiaDaCabeca && agora - en.desde < 1.4) en.de.copy(cabeca).add(aux2.set(0, 0.13, 0));   // (nasce do topo da cabeça — e acompanha ela enquanto sai)
       const u = sstep((agora - en.desde) / 1.4);
       en.pos.lerpVectors(en.de, aux.set(-lado * 0.28, peito.y + 0.42, -0.22), u);   // (por cima, do lado oposto à câmera: não some atrás da cabeça) en.pos.y += Math.sin(agora * 1.7) * 0.015;
       esfera.position.copy(en.pos);

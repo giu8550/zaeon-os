@@ -349,7 +349,10 @@
     },
     "landing": {
         "hero_tagline": "More than conversations with chatbots and open tabs — here you build <hl>ideas that become finished products</hl>.",
-        "knowledge_title": "Turn your knowledge into a real-world asset.",
+        "knowledge_title": "Turn your idea into reality.",
+        "privacidade_titulo": "Build your idea with privacy.",
+        "privacidade_texto": "Share knowledge with high-tier scientists, backed by verifiable credentials.",
+        "privacidade_fecho": "No one needs to know who you are, nor what you do.",
         "flow": {
             "ideas": "ideas",
             "projects": "projects",
@@ -365,7 +368,16 @@
             "image_alt": "Preview of the blueprint {{title}}",
             "tags": "Tags",
             "cta_view": "View in the game",
-            "cta_create": "Create your own"
+            "cta_create": "Create your own",
+            "example_badge": "Example",
+            "examples": {
+                "foguete": { "title": "Sounding rocket", "desc": "Body, nose cone, fins and nozzle — sized from propulsion papers." },
+                "motor": { "title": "Jet engine", "desc": "Fan, compressor and exhaust cone, with the shaft and main dimensions." },
+                "pcb": { "title": "PCB", "desc": "Processor, memory, traces and connector — ready for fabrication." },
+                "fonte": { "title": "Power supply", "desc": "Enclosure, fan, cooling fins and power socket." },
+                "bateria": { "title": "Battery", "desc": "Cylindrical cell with terminals, charge indicator and dimensions." },
+                "solar": { "title": "Solar panel", "desc": "Cell grid, tilt and mount, calculated for the local sun." }
+            }
         }
     }
 }

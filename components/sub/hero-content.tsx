@@ -2,20 +2,20 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Trans, useTranslation } from "react-i18next";
+import { useTranslation } from "react-i18next";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { ChatBubbleLeftRightIcon, PlayIcon, UserPlusIcon } from "@heroicons/react/24/outline";
+import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
 
 // Componentes Internos
 import MenuNavigation from "@/components/sub/MenuNavigation";
-import LiquidGlassButton from "@/components/ui/LiquidGlassButton";
 import StarBackground from "@/components/main/star-background";
 import MolecularText from "@/components/ui/MolecularText";
 import { LAB_ROTA, copyEntrada } from "@/lib/ui/loungeHub";
 import GlitchTexto from "@/components/ui/GlitchTexto";
 import { precarregarCyber } from "@/lib/cyber/precarga";
-import ZaeonPersonagem from "@/components/main/ZaeonPersonagem";
+import ZaeonCard from "@/components/main/ZaeonCard";
 
 /** o botão do cyberespaço (lá embaixo, em cima do módulo) pede o login daqui quando a pessoa está deslogada */
 export const EVENTO_ABRIR_LOGIN = "zaeon:abrir-login";
@@ -78,7 +78,7 @@ function LogoModelo({ slug, name, org }: { slug: string; name: string; org?: str
 
 // H1 (v4): a promessa — "Evolua sua vida." + "com conhecimento." (a palavra em destaque).
 // O sub-header traz os três verbos com o glitch chinês e a palavra que gira (ideias, estudos, trabalhos, pesquisas).
-const FRASE_COMPLETA = "Evolua sua vida. com conhecimento.";
+const FRASE_COMPLETA = "Evolua sua vida com conhecimento.";
 const GIRO = ["ideias", "estudos", "trabalhos", "pesquisas"];
 /** pra onde "Iniciar chat" leva quem já está logado: o chat da Aura (Sala de Estudos) */
 const CHAT_ROTA = "/research-lab?tab=sala-de-estudos";
@@ -114,8 +114,8 @@ export default function HeroPage() {
         <StarBackground />
       </div>
 
-      {/* a ZAEON em 3D (components/main/ZaeonPersonagem): à direita do texto, de frente pra quem chega — só no computador */}
-      <ZaeonPersonagem className="absolute bottom-0 right-[1%] top-[6%] z-[5] hidden w-[min(32vw,460px)] md:block xl:right-[3%]" />
+      {/* a ZAEON na moldura do Figma (ZaeonCard → ZaeonVitrine: pensa, pesquisa e gera blueprints em laço) — só no computador */}
+      <ZaeonCard className="absolute bottom-[4%] right-[1%] top-[4%] z-[5] hidden w-[min(30vw,400px)] md:block xl:right-[3%]" />
 
       {/* ========================================= */}
       {/* HERO v2 — TODAS AS IAS, FEITO PRA CIÊNCIA */}
@@ -138,20 +138,21 @@ export default function HeroPage() {
             {/* Uma linha só, sem quebrar: tamanho FLUÍDO (clamp por vw) cresce com a tela
                 e encolhe no mobile em vez de quebrar a frase. whitespace-nowrap trava a
                 linha inteira (inclusive os espaços entre as palavras). */}
-            <h1 className="text-[clamp(2.25rem,6.2vw,5.75rem)] font-bold tracking-tight text-slate-900 dark:text-white leading-[1.05] z-10 relative">
+            <h1 className="text-[clamp(2.25rem,5.2vw,4.75rem)] font-[family-name:var(--font-space)] font-semibold tracking-[-0.02em] text-slate-900 dark:text-white leading-[1.08] z-10 relative">
               <span className="sr-only">{FRASE_COMPLETA}</span>
               <span aria-hidden="true">
                 <span className="whitespace-nowrap">
                   <MolecularText text="Evolua" />{" "}
                   <MolecularText text="sua" delay={0.12} />{" "}
-                  <MolecularText text="vida." delay={0.24} />
+                  <MolecularText text="vida" delay={0.24} />{" "}
+                  <MolecularText text="com" delay={0.36} />
                 </span>
                 <br />
                 <span className="whitespace-nowrap">
-                  <MolecularText text="com" delay={0.36} />{" "}
-                  <span className="text-cyan-600 dark:text-cyan-400">
-                    <MolecularText text="conhecimento." delay={0.46} />
+                  <span className="text-cyan-600 dark:text-[#67d8f2]">
+                    <MolecularText text="conhecimento" delay={0.46} />
                   </span>
+                  <MolecularText text="." delay={0.56} />
                 </span>
               </span>
             </h1>
@@ -166,13 +167,17 @@ export default function HeroPage() {
                 className="overflow-hidden"
               >
                   {/* sub-header: os três verbos com o GLITCH CHINÊS + a palavra que gira (ideias, estudos, trabalhos, pesquisas) */}
-                  <p className="max-w-2xl text-base sm:text-lg md:text-xl text-slate-900 dark:text-white font-light leading-relaxed">
+                  <p className="max-w-2xl text-base sm:text-lg text-slate-900 dark:text-white font-light leading-relaxed">
                     <GlitchTexto
                       texto="Aprenda, construa, entregue"
                       palavras={GIRO}
                       classePalavra="font-normal text-cyan-700 dark:text-cyan-200"
                       delay={0.5}
                     />
+                  </p>
+                  {/* a frase do Figma: o que tem aqui dentro, numa linha */}
+                  <p className="mt-3 max-w-[520px] text-base leading-relaxed text-slate-700 dark:text-slate-400">
+                    Todas as principais IAs, pesquisa em bases reais e um mundo 3D para estudar acompanhado.
                   </p>
               </motion.div>
             )}
@@ -214,17 +219,6 @@ export default function HeroPage() {
           )}
         </AnimatePresence>
 
-        {/* o ACEITE: mais do que chat e abas abertas — aqui as ideias viram produtos finais (copy em landing.hero_tagline) */}
-        {!showChatbox && (
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.45 }}
-            className="mt-4 max-w-xl text-sm leading-relaxed text-slate-700 dark:text-white/70">
-            <Trans
-              i18nKey="landing.hero_tagline"
-              defaults="Mais do que conversas com chats e abas abertas, aqui você constrói <hl>ideias que viram produtos finais</hl>."
-              components={{ hl: <span className="font-semibold text-cyan-700 dark:text-cyan-300" /> }}
-            />
-          </motion.p>
-        )}
 
         {/* MURAL DE MODELOS removido do hero — as IAs agora vivem só na seção
             "Equipados com", abaixo dos cards dos agentes (encryption.tsx). */}

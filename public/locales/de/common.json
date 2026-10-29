@@ -349,7 +349,10 @@
     },
     "landing": {
         "hero_tagline": "Mehr als Gespräche mit Chatbots und offenen Tabs – hier bauen Sie <hl>Ideen, die zu fertigen Produkten werden</hl>.",
-        "knowledge_title": "Machen Sie Ihr Wissen zu einem realen Vermögenswert.",
+        "knowledge_title": "Verwandeln Sie Ihre Idee in Realität.",
+        "privacidade_titulo": "Bauen Sie Ihre Idee mit Privatsphäre.",
+        "privacidade_texto": "Teilen Sie Wissen mit Spitzenwissenschaftlern – mit überprüfbaren Nachweisen.",
+        "privacidade_fecho": "Niemand muss wissen, wer Sie sind, noch was Sie tun.",
         "flow": {
             "ideas": "Ideen",
             "projects": "Projekte",
@@ -365,7 +368,16 @@
             "image_alt": "Vorschau des Blueprints {{title}}",
             "tags": "Tags",
             "cta_view": "Im Spiel ansehen",
-            "cta_create": "Erstellen Sie Ihren eigenen"
+            "cta_create": "Erstellen Sie Ihren eigenen",
+            "example_badge": "Beispiel",
+            "examples": {
+                "foguete": { "title": "Höhenforschungsrakete", "desc": "Rumpf, Spitze, Flossen und Düse — ausgelegt anhand von Antriebsstudien." },
+                "motor": { "title": "Strahltriebwerk", "desc": "Fan, Verdichter und Austrittskegel, mit Welle und Hauptmaßen." },
+                "pcb": { "title": "Leiterplatte", "desc": "Prozessor, Speicher, Leiterbahnen und Stecker — bereit für die Fertigung." },
+                "fonte": { "title": "Netzteil", "desc": "Gehäuse, Lüfter, Kühlrippen und Buchse." },
+                "bateria": { "title": "Akku", "desc": "Zylindrische Zelle mit Polen, Ladeanzeige und Maßen." },
+                "solar": { "title": "Solarmodul", "desc": "Zellraster, Neigung und Halterung, berechnet für die Sonne vor Ort." }
+            }
         }
     }
 }

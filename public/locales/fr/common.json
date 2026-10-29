@@ -349,7 +349,10 @@
     },
     "landing": {
         "hero_tagline": "Bien plus que des conversations avec des chatbots et des onglets ouverts : ici, vous construisez <hl>des idées qui deviennent des produits finis</hl>.",
-        "knowledge_title": "Transformez vos connaissances en un actif du monde réel.",
+        "knowledge_title": "Transformez votre idée en réalité.",
+        "privacidade_titulo": "Construisez votre idée en toute confidentialité.",
+        "privacidade_texto": "Partagez vos connaissances avec des scientifiques de haut niveau, grâce à des certifications vérifiables.",
+        "privacidade_fecho": "Personne n'a besoin de savoir qui vous êtes, ni ce que vous faites.",
         "flow": {
             "ideas": "idées",
             "projects": "projets",
@@ -365,7 +368,16 @@
             "image_alt": "Aperçu du blueprint {{title}}",
             "tags": "Étiquettes",
             "cta_view": "Voir dans le jeu",
-            "cta_create": "Créez le vôtre"
+            "cta_create": "Créez le vôtre",
+            "example_badge": "Exemple",
+            "examples": {
+                "foguete": { "title": "Fusée-sonde", "desc": "Corps, coiffe, ailerons et tuyère — dimensionnés à partir d'articles sur la propulsion." },
+                "motor": { "title": "Moteur à réaction", "desc": "Soufflante, compresseur et cône d'échappement, avec l'arbre et les cotes principales." },
+                "pcb": { "title": "Carte PCB", "desc": "Processeur, mémoires, pistes et connecteur — prête pour la fabrication." },
+                "fonte": { "title": "Alimentation", "desc": "Boîtier, ventilateur, ailettes de refroidissement et prise." },
+                "bateria": { "title": "Batterie", "desc": "Cellule cylindrique avec bornes, indicateur de charge et dimensions." },
+                "solar": { "title": "Panneau solaire", "desc": "Grille de cellules, inclinaison et support, calculés pour l'ensoleillement local." }
+            }
         }
     }
 }
