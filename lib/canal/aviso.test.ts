@@ -100,8 +100,9 @@ describe("#645 · foto uma vez só e o que chegou", () => {
   });
   it("juntarParcial: acrescenta só o novo (sem repetir), atualiza a pessoa nova", async () => {
     const { juntarParcial } = await import("./aviso");
-    const atual = { mensagens: [{ id: "1", autorTipo: "humano", autorId: "u1", autorAvatar: "F1" }], pessoas: [{ id: "u1", avatar: "F1" }] };
-    const novo = { mensagens: [{ id: "1", autorTipo: "humano", autorId: "u1", autorAvatar: null }, { id: "2", autorTipo: "sistema", autorId: "u2", autorAvatar: null }], pessoas: [{ id: "u2", avatar: "F2" }] };
+    type M = { id: string; autorTipo: string; autorId: string; autorAvatar: string | null };
+    const atual: { mensagens: M[]; pessoas: { id: string; avatar: string }[] } = { mensagens: [{ id: "1", autorTipo: "humano", autorId: "u1", autorAvatar: "F1" }], pessoas: [{ id: "u1", avatar: "F1" }] };
+    const novo: typeof atual = { mensagens: [{ id: "1", autorTipo: "humano", autorId: "u1", autorAvatar: null }, { id: "2", autorTipo: "sistema", autorId: "u2", autorAvatar: null }], pessoas: [{ id: "u2", avatar: "F2" }] };
     const r = juntarParcial(atual, novo);
     expect(r.mensagens.map((m) => [m.id, m.autorAvatar])).toEqual([["1", "F1"], ["2", "F2"]]);
     expect(r.pessoas.map((p) => p.id)).toEqual(["u1", "u2"]);
