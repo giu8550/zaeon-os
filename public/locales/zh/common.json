@@ -349,7 +349,10 @@
     },
     "landing": {
         "hero_tagline": "不只是和聊天机器人对话、开着一堆标签页——在这里，你打造<hl>能成为最终产品的想法</hl>。",
-        "knowledge_title": "把你的知识变成现实世界的资产。",
+        "knowledge_title": "把你的想法变成现实。",
+        "privacidade_titulo": "在保护隐私的前提下实现你的想法。",
+        "privacidade_texto": "凭借可验证的凭证，与顶尖科学家分享知识。",
+        "privacidade_fecho": "没有人需要知道你是谁，也不需要知道你在做什么。",
         "flow": {
             "ideas": "想法",
             "projects": "项目",
@@ -365,7 +368,16 @@
             "image_alt": "蓝图预览：{{title}}",
             "tags": "标签",
             "cta_view": "在游戏中查看",
-            "cta_create": "创建你自己的"
+            "cta_create": "创建你自己的",
+            "example_badge": "示例",
+            "examples": {
+                "foguete": { "title": "探空火箭", "desc": "箭体、整流罩、尾翼和喷管——依据推进论文确定尺寸。" },
+                "motor": { "title": "喷气发动机", "desc": "风扇、压气机和尾锥，含转轴与主要尺寸。" },
+                "pcb": { "title": "PCB 电路板", "desc": "处理器、内存、走线和连接器——可直接投产。" },
+                "fonte": { "title": "电源", "desc": "机箱、风扇、散热片和电源插座。" },
+                "bateria": { "title": "电池", "desc": "带电极、电量指示和尺寸的圆柱电芯。" },
+                "solar": { "title": "太阳能板", "desc": "按当地日照计算的电池片网格、倾角和支架。" }
+            }
         }
     }
 }

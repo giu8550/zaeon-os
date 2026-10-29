@@ -13,15 +13,10 @@
 import Link from "next/link";
 import { useId } from "react";
 import { motion } from "framer-motion";
-import { TituloSecao } from "@/components/layout/secao";
+import { useTranslation } from "react-i18next";
 import SolanaMark from "@/components/solana/SolanaMark";
-import IconeCredencial, { type NomeIcone } from "@/components/solana/IconesCredencial";
-
-const CARDS: { icone: NomeIcone; t: string; d: string }[] = [
-  { icone: "privacidade", t: "Sua identidade fica com você", d: "Nome, e-mail e documentos nunca vão pra blockchain. O que sobe é só a prova: o quê, quando e um ponteiro." },
-  { icone: "credencial", t: "Sua conquista vai com você", d: "Cada título validado vira uma credencial soulbound na sua carteira — portável, intransferível e à prova de adulteração." },
-  { icone: "revisor", t: "Validado por gente, não por robô", d: "Só um professor vinculado ou a instituição chancela. Sem revisão humana, nada vira credencial." },
-];
+import { TituloSecao } from "@/components/layout/secao";
+import TextoRevelado from "@/components/ui/TextoRevelado";
 
 /* ───────── o desenho ───────── */
 function ImpressaoSolana() {
@@ -125,57 +120,40 @@ function ImpressaoSolana() {
 }
 
 export default function SolanaPrivacidade() {
+  const { t } = useTranslation();
   return (
     <section id="privacidade" aria-labelledby="privacidade-titulo" className="zaeon-borda relative z-40 w-full scroll-mt-28 pt-6 pb-16 md:pb-24">
-      {/* o CARD ANIMADO da Solana vem PRIMEIRO; o título fica EMBAIXO dele (o dono, out/2026) */}
+      {/* primeiro a PROMESSA (o dono, out/2026: antes do módulo da Solana "pra fazer mais sentido"), SEM card — só o título
+          e os subtítulos, como as outras seções da landing; depois a PROVA (o módulo animado), o selo e os links */}
+      <div id="privacidade-titulo">
+        <TituloSecao className="font-display" forte={t("landing.privacidade_titulo", "Construa sua ideia com privacidade.")} />
+      </div>
+      <p className="mt-6 max-w-[620px] font-display text-base md:text-lg font-light leading-relaxed text-slate-900 dark:text-white">
+        <TextoRevelado texto={t("landing.privacidade_texto", "Compartilhe conhecimento com cientistas de alto nível, com credenciais verificáveis.")} delay={0.2} />
+      </p>
+      <p className="mt-3 max-w-[620px] font-display text-base md:text-lg font-light leading-relaxed text-slate-600 dark:text-white/65">
+        <TextoRevelado texto={t("landing.privacidade_fecho", "Ninguém precisa saber quem você é, nem o que você faz.")} delay={0.35} />
+      </p>
+
+      {/* o módulo ANIMADO da Solana: a digital some atrás da prova */}
       <motion.div
         initial={{ opacity: 0, scale: 0.96 }}
         whileInView={{ opacity: 1, scale: 1 }}
         viewport={{ once: true, margin: "-60px" }}
         transition={{ duration: 0.6 }}
-        className="dark mx-auto w-full max-w-3xl rounded-[2rem] border border-cyan-400/25 bg-[#0b1733]/80 backdrop-blur-md p-4 md:p-8 shadow-[0_0_40px_rgba(6,182,212,0.12)]"
+        className="dark mx-auto mt-10 w-full max-w-3xl rounded-[2rem] border border-cyan-400/25 bg-[#0b1733]/80 backdrop-blur-md p-4 md:p-8 shadow-[0_0_40px_rgba(6,182,212,0.12)]"
       >
         <ImpressaoSolana />
       </motion.div>
-      <div id="privacidade-titulo" className="mt-6">
-        <TituloSecao className="font-display" forte="Privacidade e segurança," fraco="construído na Solana." />
-      </div>
-      {/* o selo da Solana logo após o título */}
-      <div className="mt-5 inline-flex w-fit items-center gap-3 rounded-full border border-white/15 bg-black/80 px-4 py-2 shadow-[0_0_30px_rgba(220,31,255,0.15)]">
+      {/* o selo da Solana logo após o módulo */}
+      <div className="mt-6 inline-flex w-fit items-center gap-3 rounded-full border border-white/15 bg-black/80 px-4 py-2 shadow-[0_0_30px_rgba(220,31,255,0.15)]">
         <SolanaMark size={15} wordmark />
         <span className="h-4 w-px bg-white/15" />
         <span className="text-[9px] font-black uppercase tracking-[0.25em] text-white/80">credenciais verificáveis</span>
       </div>
-
-      <div className="mt-8">
-        {/* cards */}
-        <div className="flex flex-col gap-6">
-          <ul className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {CARDS.map((c, i) => (
-              <motion.li
-                key={c.t}
-                initial={{ opacity: 0, x: -16 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true, margin: "-40px" }}
-                transition={{ duration: 0.45, delay: i * 0.08 }}
-                className="dark flex items-start gap-4 rounded-2xl border border-cyan-400/25 bg-[#0f1f44]/80 backdrop-blur-md p-4 shadow-[0_0_24px_rgba(6,182,212,0.12)]"
-              >
-                <span className="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-400/30 bg-cyan-500/10 text-cyan-300">
-                  <IconeCredencial name={c.icone} size={20} />
-                </span>
-                <span>
-                  <span className="block font-display text-[15px] font-semibold text-white leading-tight">{c.t}</span>
-                  <span className="block mt-1 text-[13px] leading-snug text-white/75">{c.d}</span>
-                </span>
-              </motion.li>
-            ))}
-          </ul>
-          <div className="flex flex-wrap gap-x-6 gap-y-2 text-[11px] font-black uppercase tracking-widest">
-            <Link href="/about/about-us" className="text-cyan-700 dark:text-cyan-300 hover:text-cyan-500 underline underline-offset-4 decoration-cyan-500/40">Como a verificação funciona →</Link>
-            <Link href="/docs#privacidade" className="text-slate-700 dark:text-white/70 hover:text-cyan-500 underline underline-offset-4 decoration-white/20">O que vai pra blockchain →</Link>
-          </div>
-        </div>
-
+      <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-[11px] font-black uppercase tracking-widest">
+        <Link href="/about/about-us" className="text-cyan-700 dark:text-cyan-300 hover:text-cyan-500 underline underline-offset-4 decoration-cyan-500/40">Como a verificação funciona →</Link>
+        <Link href="/docs#privacidade" className="text-slate-700 dark:text-white/70 hover:text-cyan-500 underline underline-offset-4 decoration-white/20">O que vai pra blockchain →</Link>
       </div>
     </section>
   );

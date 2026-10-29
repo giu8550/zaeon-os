@@ -349,7 +349,10 @@
     },
     "landing": {
         "hero_tagline": "Más que conversaciones con chats y pestañas abiertas: aquí construyes <hl>ideas que se convierten en productos finales</hl>.",
-        "knowledge_title": "Convierte tu conocimiento en un activo del mundo real.",
+        "knowledge_title": "Convierte tu idea en realidad.",
+        "privacidade_titulo": "Construye tu idea con privacidad.",
+        "privacidade_texto": "Comparte conocimiento con científicos de alto nivel, con credenciales verificables.",
+        "privacidade_fecho": "Nadie necesita saber quién eres, ni qué haces.",
         "flow": {
             "ideas": "ideas",
             "projects": "proyectos",
@@ -365,7 +368,16 @@
             "image_alt": "Vista previa del blueprint {{title}}",
             "tags": "Etiquetas",
             "cta_view": "Ver en el juego",
-            "cta_create": "Crea el tuyo"
+            "cta_create": "Crea el tuyo",
+            "example_badge": "Ejemplo",
+            "examples": {
+                "foguete": { "title": "Cohete de sondeo", "desc": "Fuselaje, cono, aletas y tobera — dimensionados a partir de artículos de propulsión." },
+                "motor": { "title": "Motor a reacción", "desc": "Ventilador, compresor y cono de salida, con el eje y las cotas principales." },
+                "pcb": { "title": "Placa PCB", "desc": "Procesador, memorias, pistas y conector — lista para fabricar." },
+                "fonte": { "title": "Fuente de alimentación", "desc": "Gabinete, ventilador, aletas de disipación y toma de corriente." },
+                "bateria": { "title": "Batería", "desc": "Celda cilíndrica con polos, indicador de carga y dimensiones." },
+                "solar": { "title": "Panel solar", "desc": "Rejilla de celdas, inclinación y soporte, calculados para el sol del lugar." }
+            }
         }
     }
 }

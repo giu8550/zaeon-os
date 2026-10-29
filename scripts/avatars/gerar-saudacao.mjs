@@ -7,6 +7,7 @@
  *
  *   node --env-file=.env scripts/avatars/gerar-saudacao.mjs aura
  *   node --env-file=.env scripts/avatars/gerar-saudacao.mjs --todos
+ *   node --env-file=.env scripts/avatars/gerar-saudacao.mjs zaeon-landing   (as falas do hero da landing)
  */
 import { writeFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
@@ -20,6 +21,20 @@ const SAUDACOES = {
     "Oi! Eu sou a Aura. Pode falar comigo, tô aqui pra te ajudar.",
     "Oi, que bom te ver! Me conta: o que a gente vai estudar hoje?",
     "E aí! Manda a tua dúvida que a gente resolve junto.",
+  ] },
+  // as FALAS da Zaeon no hero da landing (clicar nela — components/main/ZaeonVitrine): mesma voz, outros arquivos
+  // (public/avatars/zaeon/voz/fala-NN.wav), fora do manifest (as saudações dele continuam as três de cima)
+  "zaeon-landing": { dir: "zaeon", arquivo: "fala", manifest: false, voz: "Sulafat", frases: [
+    "Tô montando o blueprint de mais uma ideia. Quer ver a sua sair do papel?",
+    "Foguete, motor, placa de circuito... tudo começa com uma boa pergunta.",
+    "Me conta uma ideia, que eu pesquiso em bases reais e te devolvo um plano.",
+    "Aqui a gente não só conversa: a gente constrói coisas de verdade.",
+    "Quer estudar acompanhado? No cyberespaço sempre tem alguém por perto.",
+    "Toda pesquisa que eu faço vira um galho novo na sua árvore de conhecimento.",
+    "Pode me chamar quando quiser. Eu tô sempre gerando alguma coisa por aqui.",
+    "A sua ideia fica com você. Ninguém precisa saber o que você está construindo.",
+    "Já pensou transformar o seu trabalho da faculdade num produto de verdade?",
+    "Eu leio os artigos, você fica com as descobertas. Bora começar?",
   ] },
   zaeon: { voz: "Sulafat", frases: [
     "Oi, que bom que você chegou! Me conta o que você quer fazer, que eu te levo pro lugar certo.",
@@ -94,7 +109,8 @@ async function gerar(id) {
   const token = await new GoogleAuth({ credentials: { client_email, private_key }, scopes: ["https://www.googleapis.com/auth/cloud-platform"] }).getAccessToken();
   const model = process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash-tts";
   const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${project}/locations/${location}/publishers/google/models/${model}:generateContent`;
-  const dir = path.resolve("public/avatars", id, "voz");
+  const dirId = cfg.dir ?? id, prefixo = cfg.arquivo ?? "saudacao";
+  const dir = path.resolve("public/avatars", dirId, "voz");
   await mkdir(dir, { recursive: true });
   const urls = [];
   for (let i = 0; i < cfg.frases.length; i++) {
@@ -115,12 +131,13 @@ async function gerar(id) {
       if (!inline) { console.log(`✗ ${n} sem áudio`); break; }
       const rate = parseInt(/rate=(\d+)/.exec(inline.mimeType || "")?.[1] || "24000", 10);
       const wav = /wav/i.test(inline.mimeType || "") ? Buffer.from(inline.data, "base64") : pcmToWav(Buffer.from(inline.data, "base64"), rate);
-      await writeFile(path.join(dir, `saudacao-${n}.wav`), wav);
-      urls.push(`/avatars/${id}/voz/saudacao-${n}.wav`);
+      await writeFile(path.join(dir, `${prefixo}-${n}.wav`), wav);
+      urls.push(`/avatars/${dirId}/voz/${prefixo}-${n}.wav`);
       console.log(`✓ ${id} ${n} (${(wav.length / 1024).toFixed(0)}kb) "${cfg.frases[i]}"`);
       ok = true;
     }
   }
+  if (cfg.manifest === false) { console.log(`${id}: ${urls.length} falas (${cfg.voz}) — fora do manifest`); return; }
   // registra no manifest do avatar (o estúdio preserva `voz` ao salvar)
   const mPath = path.resolve("public/avatars", id, "manifest.json");
   const m = JSON.parse(await readFile(mPath, "utf8"));

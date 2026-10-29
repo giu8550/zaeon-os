@@ -35,17 +35,19 @@ export default function CyberespacoExplica() {
         <TextoRevelado texto="Entre na sua estação de trabalho e conheça um mundo digital além dos prompts." delay={0.2} />
       </p>
 
-      {/* a vista ao vivo (o seu avatar meditando, logado) — o "Conectar" dela é a entrada */}
-      <LoungeJanela />
+      {/* o DESTAQUE do Figma ("Um lugar para estudar junto"): a vista ao vivo (o avatar meditando) na largura toda, o
+          botão de entrar no centro — o "Conectar" dela continua sendo a entrada */}
+      <LoungeJanela destaque />
 
-      <ul className="mt-12 grid gap-4 md:grid-cols-3">
+      {/* os conceitos na POSIÇÃO do Figma: três cards compactos, lado a lado, logo embaixo do painel */}
+      <ul className="mt-4 grid gap-4 md:grid-cols-3">
         {CONCEITOS.map((c) => (
           <li
             key={c.titulo}
-            className="rounded-2xl border border-slate-200 bg-white/60 p-6 backdrop-blur dark:border-white/10 dark:bg-white/[0.03]"
+            className="rounded-xl border border-slate-200 bg-white/60 px-5 py-4 backdrop-blur dark:border-white/[0.08] dark:bg-[#0c111b]/80"
           >
-            <h3 className="font-display text-lg font-semibold text-slate-900 dark:text-white">{c.titulo}</h3>
-            <p className="mt-2 text-sm leading-relaxed text-slate-800 dark:text-white/85">{c.texto}</p>
+            <h3 className="font-display text-[15px] font-semibold text-slate-900 dark:text-white">{c.titulo}</h3>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-slate-700 dark:text-slate-400">{c.texto}</p>
           </li>
         ))}
       </ul>

@@ -111,83 +111,6 @@ const HireAgentsSection = () => {
 // =========================================================================
 // CARROSSEL VERTICAL DE MARCAS IA (Infinite Ticker)
 
-// --- FLUXOGRAMA "LIQUID GLASS" ---
-const ProcessFlowchart = () => {
-    const { t } = useTranslation();
-
-    return (
-        <div className="w-full zaeon-borda pt-20 pb-40 flex flex-col items-center justify-center bg-transparent relative z-40">
-            {/* o card é AZUL nos dois temas → o conteúdo dele usa o estilo escuro (texto claro, logo do MCTI escuro) */}
-            {/* Título */}
-            <h4 className="text-[10px] font-bold uppercase tracking-[0.3em] text-cyan-700 dark:text-cyan-300 mb-10 transition-colors duration-300">
-                <TextoRevelado texto="Produto vencedor" />
-            </h4>
-
-            <div className="dark w-full max-w-[1200px]">
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6 }}
-                className="
-                    relative w-full max-w-[1200px] rounded-[2rem] 
-                    
-                    /* --- AZUL nos dois temas (destaque) --- */
-                    border border-cyan-500/50 bg-[#1e3a8a]/85 backdrop-blur-md shadow-[0_0_30px_rgba(6,182,212,0.25)]
-                    
-                    /* --- MODO ESCURO (Azul Transparente) --- */
-                    dark:border-cyan-500/50 dark:bg-[#1e3a8a]/85 dark:shadow-[0_0_30px_rgba(6,182,212,0.15)]
-                    
-                    flex flex-col items-center justify-center text-center
-                    p-8 md:p-12 gap-8 group overflow-hidden
-                    hover:border-cyan-500/50 transition-all duration-500
-                "
-            >
-                {/* Coluna da Esquerda: Ícone e Texto */}
-                <div className="flex flex-col gap-4 text-center items-center z-10 max-w-2xl">
-                    <h3 className="text-2xl md:text-3xl font-light text-slate-900 dark:text-white leading-tight">
-                        <span className="font-bold text-cyan-600 dark:text-cyan-400 drop-shadow-md dark:drop-shadow-[0_0_10px_rgba(34,211,238,0.3)]">Blockchain</span> como Tecnologia de Uso Inteligente no Ceará
-                    </h3>
-
-                    <p className="text-sm text-slate-700 dark:text-white/90 font-medium leading-relaxed max-w-lg mx-auto">
-                        <a
-                            href="https://programacentelha.com.br/wp-content/uploads/2025/01/CE-Lista-Final-Empresas-Contratadas.pdf"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-cyan-600 dark:text-cyan-400 hover:text-cyan-500 dark:hover:text-cyan-300 font-bold underline underline-offset-4 decoration-cyan-500/50 hover:decoration-cyan-300 transition-all cursor-pointer relative z-50"
-                        >
-                            Programa Centelha (2ª Edição).
-                        </a>
-                    </p>
-                </div>
-
-                {/* Coluna da Direita: Logos MCTI */}
-                <div className="w-full flex flex-col items-center justify-center border-t border-slate-200 dark:border-white/10 pt-8 z-10">
-                    <span className="text-[10px] text-slate-800 dark:text-white/90 uppercase tracking-widest mb-6 font-semibold">Apoio Oficial</span>
-
-                    {/* `h-26` não existe no Tailwind → a caixa tinha altura 0 e o logo (fill) nunca aparecia.
-                        O PNG é 1200×297 (~4:1); as versões _alpha são as oficiais com o fundo (branco/preto) virado transparência. */}
-                    <div className="relative h-16 w-64 transition-all duration-300 group-hover:scale-105 opacity-95 group-hover:opacity-100">
-                        <NextImage
-                            src="/sponsors/MCTI_light_alpha.png"
-                            alt="Ministério da Ciência, Tecnologia e Inovação — Governo do Brasil"
-                            fill
-                            sizes="256px"
-                            className="w-full h-full object-contain block dark:hidden" unoptimized />
-                        <NextImage
-                            src="/sponsors/MCTI_dark_alpha.png"
-                            alt="Ministério da Ciência, Tecnologia e Inovação — Governo do Brasil"
-                            fill
-                            sizes="256px"
-                            className="w-full h-full object-contain hidden dark:block" unoptimized />
-                    </div>
-                </div>
-            </motion.div>
-            </div>
-        </div>
-    );
-};
-
 // --- COMPONENTE PRINCIPAL (PÁGINA) ---
 export default function Encryption() {
     const { t } = useTranslation();
@@ -204,7 +127,7 @@ export default function Encryption() {
         <div className="w-full relative">
             <section id="como-funciona" className="relative z-[30] w-full bg-transparent pt-12 md:pt-16 pb-12 scroll-mt-28">
                 <div className="zaeon-borda">
-                    <TituloSecao className="font-display" forte={t("landing.knowledge_title", "Transforme o seu conhecimento em um ativo do mundo real.")} />
+                    <TituloSecao className="font-display" forte={t("landing.knowledge_title", "Transforme sua ideia em realidade.")} />
 
                     {/* DIAGRAMA VIVO: entrada -> cerebro Zaeon -> saida.
                         O painel nao e enfeite: o ParticleSystem da landing corre
@@ -234,18 +157,15 @@ export default function Encryption() {
                 scroll horizontal na pagina inteira. `clip` em vez de `hidden`
                 porque `hidden` criaria um contexto de rolagem e mataria qualquer
                 `sticky` daqui para dentro. */}
-            {/* NO LUGAR dos agentes: a Solana cobrindo a digital — privacidade e credenciais (v4) */}
-            <SolanaPrivacidade />
-
-            {/* BLUEPRINTS ("Aqui você vale o que você constrói.") ANTES dos agentes — some sozinha sem blueprint publicado */}
+            {/* a ORDEM (o dono, out/2026): BLUEPRINTS ("Aqui você vale o que você constrói.", em carrossel) → a SOLANA
+                (privacidade + a prova) → os AGENTES → as chaves de API com o card do projeto VENCEDOR (Centelha) */}
             <BlueprintsShowcase />
+
+            <SolanaPrivacidade />
 
             <div className="relative z-40 w-full overflow-x-clip flex flex-col items-center justify-center bg-transparent pt-10">
                 <HireAgentsSection />
             </div>
-
-            {/* PENÚLTIMO: o fomento (Centelha), centralizado no desktop */}
-            <ProcessFlowchart />
         </div>
     );
 }
