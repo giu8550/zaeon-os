@@ -14,6 +14,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/src/lib/auth";
 import { redis } from "@/src/lib/redis";
 import { redisEnabled } from "@/src/lib/cache";
+import { comRedis, redisPausado } from "@/lib/redisDisjuntor";
 
 // Limites por "classe" de rota. Ajuste fino aqui.
 const LIMITS = {
@@ -67,9 +68,11 @@ export type Guard = { ok: true } | { ok: false; response: NextResponse };
 export async function guard(req: Request, name: string, bucket: Bucket = "ai-heavy"): Promise<Guard> {
   const rl = limiter(bucket);
   if (!rl) return { ok: true }; // Redis off → não limita
+  if (redisPausado()) return { ok: true }; // #641: o Redis falhou há pouco → nem espera (lib/redisDisjuntor)
   try {
     const id = await callerId(req);
-    const { success, limit, remaining, reset } = await rl.limit(`${name}:${id}`);
+    // #641: com prazo — o Upstash fora segurava cada mensagem ~5 s; agora, no máximo meio segundo (e só a 1ª)
+    const { success, limit, remaining, reset } = await comRedis(() => rl.limit(`${name}:${id}`));
     if (success) return { ok: true };
     const retry = Math.max(1, Math.ceil((reset - Date.now()) / 1000));
     return {

@@ -8,6 +8,7 @@
  */
 import { createHash } from "crypto";
 import { redis } from "@/src/lib/redis";
+import { comRedis } from "@/lib/redisDisjuntor";
 
 export const redisEnabled = !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
 
@@ -20,19 +21,19 @@ export function hashKey(prefix: string, payload: unknown): string {
 /** Lê do cache (ou null). Nunca lança. */
 export async function cacheGet<T>(key: string): Promise<T | null> {
   if (!redisEnabled) return null;
-  try { return (await redis.get<T>(key)) ?? null; } catch { return null; }
+  try { return (await comRedis(() => redis.get<T>(key))) ?? null; } catch { return null; }   // #641: com prazo
 }
 
 /** Grava no cache com TTL (segundos). Nunca lança. */
 export async function cacheSet(key: string, value: unknown, ttlSec: number): Promise<void> {
   if (!redisEnabled) return;
-  try { await redis.set(key, value, { ex: ttlSec }); } catch { /* ignore */ }
+  try { await comRedis(() => redis.set(key, value, { ex: ttlSec })); } catch { /* ignore */ }
 }
 
 /** Invalida uma chave. Nunca lança. */
 export async function cacheDel(key: string): Promise<void> {
   if (!redisEnabled) return;
-  try { await redis.del(key); } catch { /* ignore */ }
+  try { await comRedis(() => redis.del(key)); } catch { /* ignore */ }
 }
 
 /**
