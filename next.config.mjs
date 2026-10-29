@@ -116,7 +116,19 @@ const nextConfig = {
     // não chegaria no aparelho. Vale no servidor custom porque o server.js
     // delega tudo pro app.getRequestHandler().
     async headers() {
+        // os arquivos PESADOS do 3D (os corpos VRM/GLB, os clipes de movimento, os sons, as texturas) saíam com
+        // `max-age=0`: toda visita reconferia, e a banda do servidor é curta (out/2026: ~250 KB/s por arquivo — a
+        // avatar do chat e a Zaeon da landing ficavam minutos "chegando"). Agora o navegador guarda por 1 dia e, por
+        // mais 7, usa o que tem enquanto confere o novo. (Os nomes não têm hash: uma troca de VRM leva até 1 dia pra
+        // chegar em quem já tinha; o manifest.json dos avatares, que o estúdio reescreve, fica de fora.)
+        const CACHE_3D = [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }];
         return [
+            { source: "/avatars/:id/:arquivo(.*\\.(?:vrm|glb))", headers: CACHE_3D },
+            { source: "/avatars/:id/voz/:arquivo(.*\\.(?:wav|mp3|ogg))", headers: CACHE_3D },
+            { source: "/zaeon/movimento/:caminho*", headers: CACHE_3D },
+            { source: "/anim/:caminho*", headers: CACHE_3D },
+            { source: "/assets/sounds/:caminho*", headers: CACHE_3D },
+            { source: "/assets/cyber/:caminho*", headers: CACHE_3D },
             {
                 source: "/sw.js",
                 headers: [
