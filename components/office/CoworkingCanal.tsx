@@ -34,6 +34,7 @@ import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, EV
 import { comFotoDaLista, comFotos, juntarParcial, type AvisoMensagem } from "@/lib/canal/aviso";
 import { linhasChamaveis, quemRespondeSemArroba } from "@/lib/canal/alvo";
 import { avisoDeQuemParou, mostraParar } from "@/lib/canal/parar";
+import Carregando from "@/components/office/Carregando";
 import { Square } from "lucide-react";
 import { deveAvisarDigitando, podarDigitando, quemDigita, estaNoFim, vigiaReconexao, TTL_DIGITANDO_MS, type Digitando } from "@/lib/canal/presenca";
 import { LinhaSistema, AvisoDigitando } from "./Presenca";
@@ -200,11 +201,17 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     void fetch(`/api/canal/${id}/digitando`, { method: "POST" }).then((r) => r.body?.cancel()).catch(() => undefined);
   };
 
+  // #645: o último canal aberto já começa a carregar JUNTO com a lista (antes: lista → depois o canal, um atrás do outro)
+  const adiantado = useRef<{ id: string; resp: Promise<Response | null> } | null>(null);
+
   // ─── canais: carrega; sem nenhum, cria o primeiro (a sala nunca abre vazia) ───
   useEffect(() => {
     let vivo = true;
     (async () => {
       try {
+        let ultimo: string | null = null;
+        try { ultimo = localStorage.getItem(LS_ULTIMO); } catch { /* ignore */ }
+        if (ultimo) adiantado.current = { id: ultimo, resp: fetch(`/api/canal/${ultimo}`, { cache: "no-store" }).catch(() => null) };
         const r = await fetch("/api/canal", { cache: "no-store" });
         if (r.status === 404) { setErro("off"); return; }
         if (!r.ok) throw new Error(String(r.status));
@@ -229,7 +236,10 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
 
   // ─── detalhe do canal ativo (+ marca lido) ───
   const carregarDetalhe = useCallback(async (id: string) => {
-    const r = await fetch(`/api/canal/${id}`, { cache: "no-store" });
+    // #645: o que já começou a carregar junto com a lista (só uma vez; depois, busca normal)
+    const pre = adiantado.current?.id === id ? await adiantado.current.resp : null;
+    adiantado.current = null;
+    const r = pre ?? await fetch(`/api/canal/${id}`, { cache: "no-store" });
     if (!r.ok) {
       // sem acesso a ESTE canal (o dono mudou o acesso, tirou a pessoa…): some da lista e abre o próximo — a tela
       // nunca trava num canal fechado (o seletor, os convites e os outros canais continuam ao alcance)
@@ -601,8 +611,10 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
 
   // ─── render ───
   if (erro === "off") return <Vazio texto="O escritório coworking ainda não está ligado neste ambiente." />;
-  if (carregando) return <Vazio texto="Abrindo o escritório…" />;
-  if (!ativoId || !det) return <Vazio texto={erro === "403" ? "Você não tem acesso a este canal." : "Abrindo o canal…"} />;
+  // #645: demorou → avisa que pode ser a conexão e, mais um pouco, "Tentar de novo"
+  if (carregando) return <Carregando texto="Abrindo o escritório…" onTentar={() => window.location.reload()} />;
+  if ((!ativoId || !det) && erro === "403") return <Vazio texto="Você não tem acesso a este canal." />;
+  if (!ativoId || !det) return <Carregando texto="Abrindo o canal…" onTentar={() => (ativoId ? void carregarDetalhe(ativoId).catch(() => undefined) : window.location.reload())} />;
 
   const canal = det.canal;
   const meuId = det.eu.id;
