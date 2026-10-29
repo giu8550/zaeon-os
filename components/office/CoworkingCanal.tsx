@@ -31,9 +31,10 @@ import { avisarTrabalhoIA } from "@/lib/ui/monitorIA";
 import { montarAliases, mencaoAberta, sugerir } from "@/lib/canal/mention";
 import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
 import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, EV_HUMANO_DIGITANDO, EV_REMOVIDO, type MensagemWire } from "@/lib/canal/wire";
-import { comFotoDaLista, type AvisoMensagem } from "@/lib/canal/aviso";
+import { comFotoDaLista, comFotos, juntarParcial, type AvisoMensagem } from "@/lib/canal/aviso";
 import { linhasChamaveis, quemRespondeSemArroba } from "@/lib/canal/alvo";
-import { mostraParar } from "@/lib/canal/parar";
+import { avisoDeQuemParou, mostraParar } from "@/lib/canal/parar";
+import Carregando from "@/components/office/Carregando";
 import { Square } from "lucide-react";
 import { deveAvisarDigitando, podarDigitando, quemDigita, estaNoFim, vigiaReconexao, TTL_DIGITANDO_MS, type Digitando } from "@/lib/canal/presenca";
 import { LinhaSistema, AvisoDigitando } from "./Presenca";
@@ -68,6 +69,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const [estadoAgente, setEstadoAgente] = useState<Record<string, EstadoAgente>>({});
   // #468: até quando vale o último aviso de cada agente — sem aviso novo no prazo, o "está redigindo…" some sozinho
   const agenteAte = useRef<Record<string, number>>({});
+  // #645: quem eu parei com o ■ — o "escrevendo" atrasado dele não volta (até o turno acabar ou eu chamar de novo)
+  const parados = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!digitando.length) return;
     const t = setInterval(() => {
@@ -198,11 +201,17 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     void fetch(`/api/canal/${id}/digitando`, { method: "POST" }).then((r) => r.body?.cancel()).catch(() => undefined);
   };
 
+  // #645: o último canal aberto já começa a carregar JUNTO com a lista (antes: lista → depois o canal, um atrás do outro)
+  const adiantado = useRef<{ id: string; resp: Promise<Response | null> } | null>(null);
+
   // ─── canais: carrega; sem nenhum, cria o primeiro (a sala nunca abre vazia) ───
   useEffect(() => {
     let vivo = true;
     (async () => {
       try {
+        let ultimo: string | null = null;
+        try { ultimo = localStorage.getItem(LS_ULTIMO); } catch { /* ignore */ }
+        if (ultimo) adiantado.current = { id: ultimo, resp: fetch(`/api/canal/${ultimo}`, { cache: "no-store" }).catch(() => null) };
         const r = await fetch("/api/canal", { cache: "no-store" });
         if (r.status === 404) { setErro("off"); return; }
         if (!r.ok) throw new Error(String(r.status));
@@ -227,7 +236,10 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
 
   // ─── detalhe do canal ativo (+ marca lido) ───
   const carregarDetalhe = useCallback(async (id: string) => {
-    const r = await fetch(`/api/canal/${id}`, { cache: "no-store" });
+    // #645: o que já começou a carregar junto com a lista (só uma vez; depois, busca normal)
+    const pre = adiantado.current?.id === id ? await adiantado.current.resp : null;
+    adiantado.current = null;
+    const r = pre ?? await fetch(`/api/canal/${id}`, { cache: "no-store" });
     if (!r.ok) {
       // sem acesso a ESTE canal (o dono mudou o acesso, tirou a pessoa…): some da lista e abre o próximo — a tela
       // nunca trava num canal fechado (o seletor, os convites e os outros canais continuam ao alcance)
@@ -243,7 +255,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     meuIdRef.current = d.eu.id;
     const nome = d.eu.nome || "";
     meusAliases.current = [nome, nome.split(/\s+/)[0] ?? ""].filter(Boolean);
-    setDet(d);
+    // #645: a foto inteira de cada pessoa veio uma vez só (em `pessoas`) — completa as mensagens com ela
+    setDet({ ...d, mensagens: comFotos(d, d.eu) });
     setDigitando([]);
     setEstadoAgente({});
     setPessoasDigitando({});
@@ -251,6 +264,20 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     try { localStorage.setItem(LS_ULTIMO, id); } catch { /* ignore */ }
   }, []);
   useEffect(() => { if (ativoId) void carregarDetalhe(ativoId); }, [ativoId, carregarDetalhe]);
+
+  // #645: um aviso (alguém entrou, "Téo saiu…", resposta longa demais pro tempo real) → busca SÓ o que chegou depois da
+  // última mensagem da tela, não as 60 de novo. Sem nada na tela ainda, carrega tudo.
+  const detRef = useRef<Detalhe | null>(null);
+  detRef.current = det;
+  const atualizarDesde = useCallback(async (id: string) => {
+    const atual = detRef.current;
+    const ult = atual?.canal.id === id ? [...atual.mensagens].reverse().find((m) => !m.id.startsWith("efemera-")) : undefined;
+    if (!ult) return carregarDetalhe(id);
+    const r = await fetch(`/api/canal/${id}?desde=${encodeURIComponent(ult.createdAt)}`, { cache: "no-store" }).catch(() => null);
+    if (!r?.ok) return carregarDetalhe(id);
+    const novo: Detalhe = await r.json();
+    setDet((d) => (d && d.canal.id === id ? { ...d, canal: novo.canal, agentes: novo.agentes, ...juntarParcial(d, novo) } : d));
+  }, [carregarDetalhe]);
 
   // ─── badge no título da aba ───
   const totalNaoLidas = useMemo(() => Object.values(naoLidas).reduce((a, b) => a + b, 0), [naoLidas]);
@@ -302,7 +329,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       ch.bind(EV_MENSAGEM, (m: AvisoMensagem) => {
         aoChegar(m, c.id);
         // #425: "fulano entrou" no canal aberto → recarrega o canal (a foto nova aparece na barra, sem F5)
-        if (m.autorTipo === "sistema" && c.id === ativoRef.current) void carregarDetalhe(c.id);
+        if (m.autorTipo === "sistema" && c.id === ativoRef.current) void atualizarDesde(c.id);
       });
       // #468: o dono me tirou deste escritório → paro de ouvir e ele some da minha lista (sem esperar o F5)
       ch.bind(EV_REMOVIDO, (d: { userId?: string }) => {
@@ -315,6 +342,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
         if (c.id !== ativoRef.current) return;
         // estado em palavras (pesquisando, investigando, em descanso…); valor desconhecido = "digitando"
         const est = normalizarEstado(d.estado);
+        if (!avisoDeQuemParou(parados.current, d.agentKey, estaAtivo(est))) return;   // #645: o ■ vale com 1 clique
         setEstadoAgente((m) => ({ ...m, [d.agentKey]: est }));
         if (estaAtivo(est)) agenteAte.current[d.agentKey] = Date.now() + PRAZO_AGENTE_MS;
         setDigitando((prev) => (estaAtivo(est) ? [...new Set([...prev, d.agentKey])] : prev.filter((k) => k !== d.agentKey)));
@@ -353,7 +381,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     if (aberto) {
       // #438: aviso leve (mensagem grande demais pro tempo real) → busca a conversa; senão entra na lista, com a
       // foto da lista de pessoas quando o aviso veio sem ela (foto guardada inteira não vai pelo Pusher)
-      if (m.cortada) void carregarDetalhe(canalId);
+      if (m.cortada) void atualizarDesde(canalId);
       else setDet((d) => (d && !d.mensagens.some((x) => x.id === m.id) ? { ...d, mensagens: [...d.mensagens, comFotoDaLista(m, d.pessoas)] } : d));
       if (m.autorTipo === "agente") setDigitando((prev) => prev.filter((k) => k !== m.autorId));
       // a mensagem da pessoa chegou: ela parou de "digitar"
@@ -369,7 +397,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       corpo: (() => { const t = m.cortada ? "Mensagem nova" : m.texto; return canal && !aberto ? `${canal.titulo} · ${t}` : t; })(),
       onClick: () => { setAtivoId(canalId); try { window.dispatchEvent(new CustomEvent("zaeon:set-tab", { detail: "escritorio" })); } catch { /* ignore */ } },
     });
-  }, [notificar, carregarDetalhe]);
+  }, [notificar, atualizarDesde]);
 
   // ─── autoscroll ───
   useEffect(() => { fimRef.current?.scrollIntoView({ block: "end" }); }, [det?.mensagens.length, digitando.length]);
@@ -426,7 +454,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       const m: MensagemWire = j.mensagem;
       // Quem vai responder = os `turnos` do servidor: as @menções OU, sem @, o último agente do canal.
       const alvos: string[] = Array.isArray(j.turnos) ? j.turnos.map((t: { agentKey: string }) => t.agentKey) : (m.mencoes ?? []);
-      for (const k of alvos) meusAgentes.current.add(k);
+      for (const k of alvos) { meusAgentes.current.add(k); parados.current.delete(k); }
       if (alvos.length) {
         for (const k of alvos) agenteAte.current[k] = Date.now() + PRAZO_AGENTE_MS;
         setDigitando((prev) => [...new Set([...prev, ...alvos])]);
@@ -456,7 +484,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const parar = useCallback(async () => {
     if (!ativoId || !digitando.length) return;
     const quem = [...digitando];
-    for (const k of quem) delete agenteAte.current[k];
+    for (const k of quem) { delete agenteAte.current[k]; parados.current.add(k); }
     setDigitando([]);
     const r = await fetch(`/api/canal/${ativoId}/parar`, { method: "POST", headers: H, body: JSON.stringify({ agentes: quem }) }).catch(() => null);
     if (!r?.ok) setErro("Não deu pra parar a resposta agora.");
@@ -583,8 +611,10 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
 
   // ─── render ───
   if (erro === "off") return <Vazio texto="O escritório coworking ainda não está ligado neste ambiente." />;
-  if (carregando) return <Vazio texto="Abrindo o escritório…" />;
-  if (!ativoId || !det) return <Vazio texto={erro === "403" ? "Você não tem acesso a este canal." : "Abrindo o canal…"} />;
+  // #645: demorou → avisa que pode ser a conexão e, mais um pouco, "Tentar de novo"
+  if (carregando) return <Carregando texto="Abrindo o escritório…" onTentar={() => window.location.reload()} />;
+  if ((!ativoId || !det) && erro === "403") return <Vazio texto="Você não tem acesso a este canal." />;
+  if (!ativoId || !det) return <Carregando texto="Abrindo o canal…" onTentar={() => (ativoId ? void carregarDetalhe(ativoId).catch(() => undefined) : window.location.reload())} />;
 
   const canal = det.canal;
   const meuId = det.eu.id;

@@ -117,7 +117,8 @@ export default function SalaBlueprint({ inicialId }: { inicialId?: string | null
       <div className="relative min-h-0 flex-1" data-tour="blueprint-prancha" aria-busy={B.carregando}>
         {/* #631: clicou noutro blueprint e ele ainda não chegou: avisa (a prancha de antes fica até a nova chegar) */}
         {B.carregando && (
-          <div role="status" className="pointer-events-none absolute left-1/2 top-3 z-[97] -translate-x-1/2 rounded border px-3 py-1 font-mono text-[11.5px] text-sky-50"
+          // #645: no MEIO da prancha (antes, colado no topo — centralizado só na largura)
+          <div role="status" className="pointer-events-none absolute left-1/2 top-1/2 z-[97] -translate-x-1/2 -translate-y-1/2 rounded border px-3 py-1 font-mono text-[11.5px] text-sky-50"
             style={{ background: "rgba(5,22,42,.92)", borderColor: "rgba(127,224,255,.4)" }}>
             carregando o blueprint…
           </div>

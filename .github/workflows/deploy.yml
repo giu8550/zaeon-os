@@ -246,6 +246,15 @@ jobs:
             $DC up -d --build $NODEPS $SERVICES
             # web é runtime-only p/ a credencial → recria pra recarregar .env.secrets
             $DC up -d --force-recreate --no-deps web
+            # #645: o WORKER (perfil "worker": turnos do Escritório/chat na fila) é a mesma imagem do web, mas não está
+            # na lista do deploy — se ele estiver de pé, ficava rodando o código ANTIGO (ex.: a resposta de quem saiu da
+            # conversa continuava entrando). Ligado → reconstrói e recria junto; desligado → não sobe nada novo.
+            if docker ps --format '{{.Names}}' | grep -qx zaeon_worker; then
+              echo "→ Worker: atualizando junto com o web…"
+              $DC --profile worker up -d --build --force-recreate --no-deps worker
+            else
+              echo "→ Worker: não está rodando (turnos no web)"
+            fi
             # LiteLLM (gateway): não está na lista do deploy e só lê infra/litellm.config.yaml AO SUBIR — trocar
             # um grupo de modelo (ex.: zaeon-local-lfm2, 2026-10-22) não valia até alguém reiniciar à mão. Recria
             # quando o config OU a definição dele no compose (limite de memória, envs) mudam; senão não encosta
