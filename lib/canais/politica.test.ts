@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   podeEnviar, restamHoje, diaBrt, respeitaQuietHours, precisaAprovacao,
-  canaisExternosLigados, pausaAposErro, TETO_DIA_PADRAO, type EstadoEnvio,
+  canaisExternosLigados, aprovacaoForcada, pausaAposErro, TETO_DIA_PADRAO, type EstadoEnvio,
 } from "./politica";
 
 // 14h BRT (17:00Z) = fora da janela de silêncio · 02h BRT (05:00Z) = dentro
@@ -95,6 +95,10 @@ describe("canais · politica · aprovação e flags", () => {
     for (const v of ["off", "false", "nao", "não"]) {
       expect(precisaAprovacao({ autoPublicar: true }, { CANAIS_AUTO_PUBLICAR: v }), v).toBe(true);
     }
+    // a mesma trava, exposta pro painel mostrar que está puxada
+    expect(aprovacaoForcada({ CANAIS_AUTO_PUBLICAR: "0" })).toBe(true);
+    expect(aprovacaoForcada({})).toBe(false);
+    expect(aprovacaoForcada({ CANAIS_AUTO_PUBLICAR: "1" })).toBe(false);
   });
 
   it("CANAIS_EXTERNOS: ligado por default, 0 desliga", () => {

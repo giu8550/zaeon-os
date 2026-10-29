@@ -14,7 +14,8 @@ import {
     SparklesIcon,
     CpuChipIcon,
     BookOpenIcon,
-    Squares2X2Icon
+    Squares2X2Icon,
+    GlobeAltIcon
 } from "@heroicons/react/24/outline";
 
 
@@ -28,6 +29,7 @@ import AgentsModule from "./modules/AgentsModule";
 import FrotaModule from "./modules/FrotaModule";
 import BaseConhecimentoModule from "./modules/BaseConhecimentoModule";
 import BlueprintsModule from "./modules/BlueprintsModule";
+import CanaisModule from "./modules/CanaisModule";
 import { agentsAdmin } from "@/lib/canal/flags";
 import { adminLabelPlugins } from "@/lib/mentores/rota";
 
@@ -68,7 +70,7 @@ const SidebarItem = ({ icon: Icon, label, active, onClick, isOpen }: any) => (
 
 export default function AdminControlRoom() {
     const router = useRouter();
-    const [activeTab, setActiveTab] = useState<"profiles" | "voice" | "invites" | "reports" | "plugins" | "payments" | "agents" | "frota" | "rag" | "blueprints">("profiles");
+    const [activeTab, setActiveTab] = useState<"profiles" | "voice" | "invites" | "reports" | "plugins" | "payments" | "agents" | "canais" | "frota" | "rag" | "blueprints">("profiles");
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [mounted, setMounted] = useState(false);
 
@@ -135,6 +137,16 @@ export default function AdminControlRoom() {
                             label="Agents"
                             active={activeTab === 'agents'}
                             onClick={() => setActiveTab('agents')}
+                            isOpen={isSidebarOpen}
+                        />
+                    )}
+                    {/* Canais do mundo real (F1, leitura): mesmo portão founder do Agents */}
+                    {agentsAdmin() && (
+                        <SidebarItem
+                            icon={GlobeAltIcon}
+                            label="Canais"
+                            active={activeTab === 'canais'}
+                            onClick={() => setActiveTab('canais')}
                             isOpen={isSidebarOpen}
                         />
                     )}
@@ -205,6 +217,7 @@ export default function AdminControlRoom() {
                         {activeTab === 'reports' && <ReportsModule glassPanel={glassPanel} />}
                         {activeTab === 'plugins' && <PluginsModule glassPanel={glassPanel} />}
                         {activeTab === 'agents' && agentsAdmin() && <AgentsModule glassPanel={glassPanel} />}
+                        {activeTab === 'canais' && agentsAdmin() && <CanaisModule glassPanel={glassPanel} />}
                         {activeTab === 'frota' && <FrotaModule glassPanel={glassPanel} />}
                         {activeTab === 'rag' && <BaseConhecimentoModule glassPanel={glassPanel} />}
                         {activeTab === 'blueprints' && <BlueprintsModule glassPanel={glassPanel} />}
