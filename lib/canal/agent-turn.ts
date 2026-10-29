@@ -310,7 +310,15 @@ export async function executarTurno(input: TurnoInput, deps: TurnoDeps): Promise
   // Estado em palavras: só publica quando MUDA (o harness emite várias vezes a mesma fase).
   let atual: EstadoAgente = "digitando";
   let fim: EstadoAgente = "ocioso";
+  // #645: parou ou saiu enquanto escrevia → para de avisar "escrevendo" (antes o aviso seguia e o balão e o ■ voltavam)
+  let cancelada: "parou" | "saiu" | null = null;
+  const conferir = async () => {
+    if (cancelada) return cancelada;
+    const recentes = await prisma.canalMensagem.findMany({ where: { canalId: canal.id, createdAt: { gt: corte } }, orderBy: { createdAt: "desc" }, take: N_CONTEXTO }).catch(() => []);
+    return (cancelada = respostaCancelada(recentes, agente.agentKey, corte));
+  };
   const onFase = (fase: string) => {
+    if (cancelada) return;
     const e = estadoDeFase(fase);
     if (e === atual) return;
     atual = e;
@@ -318,7 +326,7 @@ export async function executarTurno(input: TurnoInput, deps: TurnoDeps): Promise
   };
   // #468: repete o estado enquanto trabalha — a tela apaga quem ficou sem aviso (lib/canal/estadoAgente)
   const pulso = setInterval(() => {
-    void Promise.resolve(publicar(canal.id, EV_DIGITANDO, { agentKey: agente.agentKey, estado: atual })).catch(() => undefined);
+    void conferir().then((c) => (c ? undefined : publicar(canal.id, EV_DIGITANDO, { agentKey: agente.agentKey, estado: atual }))).catch(() => undefined);
   }, deps.pulsoMs ?? PULSO_AGENTE_MS);
   // #562: de quem é a memória deste turno — a pessoa (conversa só dela) ou o escritório (qualquer outro caso)
   const memoria = deps.memoria ?? memoriaReal;
@@ -330,9 +338,8 @@ export async function executarTurno(input: TurnoInput, deps: TurnoDeps): Promise
     const texto = limparSaidaAgente((await gerar({ agente: agenteComCanal, objective, history, canal, userId: input.userId, onFase, memoria: lembranca, memoriaDe: escopo.dono })).trim());
     if (!texto) throw new Error("resposta vazia");
     // #635: enquanto escrevia, a pessoa apertou "■ Parar" ou dispensou esta agente → a resposta não entra no canal
-    const recentes = await prisma.canalMensagem.findMany({ where: { canalId: canal.id, createdAt: { gt: corte } }, orderBy: { createdAt: "desc" }, take: N_CONTEXTO }).catch(() => []);
-    const cancelada = respostaCancelada(recentes, agente.agentKey, corte);
-    if (cancelada) return { ok: false, motivo: cancelada };
+    const parou = await conferir();
+    if (parou) return { ok: false, motivo: parou };
     const row = await prisma.canalMensagem.create({ data: { canalId: canal.id, autorTipo: "agente", autorId: agente.agentKey, texto, mencoes: [] } });
     // guarda o turno no fim (fire-and-forget: nunca segura nem derruba a resposta)
     void memoria.guardar({ dono: escopo.dono, alaEscrita: escopo.alaEscrita, scopeId: canal.id, prompt: objective, resposta: texto }).catch(() => undefined);

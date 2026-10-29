@@ -30,3 +30,15 @@ export function respostaCancelada(depois: readonly MsgComHora[], agentKey: strin
 
 /** #635: o ↑ vira "■ Parar" quando alguma agente está escrevendo E a caixa está vazia (escrevendo algo, segue ↑). */
 export const mostraParar = (escrevendo: number, texto: string, temAnexo: boolean): boolean => escrevendo > 0 && !texto.trim() && !temAnexo;
+
+/**
+ * #645: o aviso "escrevendo" de uma agente que EU parei com o ■. O turno dela ainda termina por trás (e, num processo
+ * antigo, segue avisando): o aviso ATIVO é ignorado — o balão e o ■ não voltam; o "ocioso" do fim libera a agente.
+ * Muda `parados` (tira a agente quando o turno acaba). true = mostrar o aviso.
+ */
+export function avisoDeQuemParou(parados: Set<string>, agentKey: string, ativo: boolean): boolean {
+  if (!parados.has(agentKey)) return true;
+  if (ativo) return false;
+  parados.delete(agentKey);
+  return true;
+}

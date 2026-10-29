@@ -33,7 +33,7 @@ import { prioridadeDe, deveNotificar } from "@/lib/canal/notificacoes";
 import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, EV_HUMANO_DIGITANDO, EV_REMOVIDO, type MensagemWire } from "@/lib/canal/wire";
 import { comFotoDaLista, type AvisoMensagem } from "@/lib/canal/aviso";
 import { linhasChamaveis, quemRespondeSemArroba } from "@/lib/canal/alvo";
-import { mostraParar } from "@/lib/canal/parar";
+import { avisoDeQuemParou, mostraParar } from "@/lib/canal/parar";
 import { Square } from "lucide-react";
 import { deveAvisarDigitando, podarDigitando, quemDigita, estaNoFim, vigiaReconexao, TTL_DIGITANDO_MS, type Digitando } from "@/lib/canal/presenca";
 import { LinhaSistema, AvisoDigitando } from "./Presenca";
@@ -68,6 +68,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const [estadoAgente, setEstadoAgente] = useState<Record<string, EstadoAgente>>({});
   // #468: até quando vale o último aviso de cada agente — sem aviso novo no prazo, o "está redigindo…" some sozinho
   const agenteAte = useRef<Record<string, number>>({});
+  // #645: quem eu parei com o ■ — o "escrevendo" atrasado dele não volta (até o turno acabar ou eu chamar de novo)
+  const parados = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!digitando.length) return;
     const t = setInterval(() => {
@@ -315,6 +317,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
         if (c.id !== ativoRef.current) return;
         // estado em palavras (pesquisando, investigando, em descanso…); valor desconhecido = "digitando"
         const est = normalizarEstado(d.estado);
+        if (!avisoDeQuemParou(parados.current, d.agentKey, estaAtivo(est))) return;   // #645: o ■ vale com 1 clique
         setEstadoAgente((m) => ({ ...m, [d.agentKey]: est }));
         if (estaAtivo(est)) agenteAte.current[d.agentKey] = Date.now() + PRAZO_AGENTE_MS;
         setDigitando((prev) => (estaAtivo(est) ? [...new Set([...prev, d.agentKey])] : prev.filter((k) => k !== d.agentKey)));
@@ -426,7 +429,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       const m: MensagemWire = j.mensagem;
       // Quem vai responder = os `turnos` do servidor: as @menções OU, sem @, o último agente do canal.
       const alvos: string[] = Array.isArray(j.turnos) ? j.turnos.map((t: { agentKey: string }) => t.agentKey) : (m.mencoes ?? []);
-      for (const k of alvos) meusAgentes.current.add(k);
+      for (const k of alvos) { meusAgentes.current.add(k); parados.current.delete(k); }
       if (alvos.length) {
         for (const k of alvos) agenteAte.current[k] = Date.now() + PRAZO_AGENTE_MS;
         setDigitando((prev) => [...new Set([...prev, ...alvos])]);
@@ -456,7 +459,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const parar = useCallback(async () => {
     if (!ativoId || !digitando.length) return;
     const quem = [...digitando];
-    for (const k of quem) delete agenteAte.current[k];
+    for (const k of quem) { delete agenteAte.current[k]; parados.current.add(k); }
     setDigitando([]);
     const r = await fetch(`/api/canal/${ativoId}/parar`, { method: "POST", headers: H, body: JSON.stringify({ agentes: quem }) }).catch(() => null);
     if (!r?.ok) setErro("Não deu pra parar a resposta agora.");

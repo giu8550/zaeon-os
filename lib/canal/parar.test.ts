@@ -38,3 +38,16 @@ describe("mostraParar (#635)", () => {
     expect(mostraParar(0, "", false)).toBe(false);
   });
 });
+
+describe("avisoDeQuemParou (#645)", () => {
+  it("depois do ■: o 'escrevendo' atrasado é ignorado; o 'ocioso' do fim libera; quem não foi parado passa", async () => {
+    const { avisoDeQuemParou } = await import("./parar");
+    const parados = new Set(["teo"]);
+    expect(avisoDeQuemParou(parados, "teo", true)).toBe(false);
+    expect(avisoDeQuemParou(parados, "teo", true)).toBe(false);
+    expect(avisoDeQuemParou(parados, "aura", true)).toBe(true);
+    expect(avisoDeQuemParou(parados, "teo", false)).toBe(true);   // o turno parado acabou
+    expect(parados.has("teo")).toBe(false);
+    expect(avisoDeQuemParou(parados, "teo", true)).toBe(true);    // o próximo turno aparece normal
+  });
+});
