@@ -1,5 +1,6 @@
 /**
- * POST /api/map/[id]/node/[noId]/apply { evidencia?, validadorId? } — o ALUNO (dono) aplica um nó.
+ * POST /api/map/[id]/node/[noId]/apply { evidencia, validadorId? } — o ALUNO (dono) aplica um nó.
+ * #661: a evidência é OBRIGATÓRIA (antes, OK com a caixa vazia avançava a etapa e rendia AURA).
  * Modo humana → abre MapaValidacao pendente pro professor vinculado (409 se não há professor).
  * Outros modos → gate automático (AURA node_applied pesada pelo arquétipo).
  */
@@ -23,6 +24,7 @@ export async function POST(req: Request, { params }: { params: { id: string; noI
   if (!noId) return falha("invalid");
   const b = await req.json().catch(() => ({}));
   const evidencia = typeof b?.evidencia === "string" && b.evidencia.trim() ? b.evidencia.trim().slice(0, 4000) : null;
+  if (!evidencia) return NextResponse.json({ error: "Conte como você aplicou esta etapa.", motivo: "sem_evidencia" }, { status: 400 });
   const validadorId = typeof b?.validadorId === "string" && OID.test(b.validadorId) ? b.validadorId : null;
   const out = await aplicarNo(depsReais(), r.mapa, noId, evidencia, validadorId);
   if (!out.ok) {

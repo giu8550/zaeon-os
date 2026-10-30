@@ -75,3 +75,12 @@ describe("completudes / quantoFaltaConcluir", () => {
   });
   it("MIN_PASSOS é o contrato do normalizador", () => expect(MIN_PASSOS).toBe(3));
 });
+
+describe("andamentoDoPercurso (#661)", () => {
+  it("diz a etapa atual, o fim do percurso e nada sem percurso", async () => {
+    const { andamentoDoPercurso } = await import("./backbone");
+    expect(andamentoDoPercurso(["a", "b", "c"], "b")).toBe("Etapa 2 de 3");
+    expect(andamentoDoPercurso(["a", "b", "c"], null)).toBe("Percurso concluído");
+    expect(andamentoDoPercurso([], "a")).toBeNull();
+  });
+});

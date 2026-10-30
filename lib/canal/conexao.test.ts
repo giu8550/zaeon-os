@@ -41,3 +41,10 @@ describe("mensagem enviando (#657)", () => {
     expect(chegouAoVivo([minha("m9")], minha("m9"), "eu")).toHaveLength(1);
   });
 });
+
+describe("mensagemDeErro · HTTP cru (#661)", () => {
+  it("HTTP 500 vira frase; erro de verdade da rota fica", () => {
+    expect(mensagemDeErro(new Error("HTTP 500"), "o mapa não foi gerado")).toBe("Algo deu errado — o mapa não foi gerado.");
+    expect(mensagemDeErro(new Error("Sem tópico pra gerar o cérebro."), "x")).toBe("Sem tópico pra gerar o cérebro.");
+  });
+});

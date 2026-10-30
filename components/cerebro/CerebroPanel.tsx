@@ -8,10 +8,11 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { RefreshCw, Sparkles, MessageSquare, ChevronDown, History } from "lucide-react";
+import { RefreshCw, Sparkles, MessageSquare, ChevronDown, History, X } from "lucide-react";
 import { pedirConversa } from "@/lib/chat/conversasNav";
 import { ARQUETIPOS } from "@/lib/map/arquetipo";
-import { proximoDoBackbone } from "@/lib/map/backbone";
+import { andamentoDoPercurso, proximoDoBackbone } from "@/lib/map/backbone";
+import { mensagemDeErro } from "@/lib/canal/conexao";
 import { ROTULO } from "@/lib/map/bolinha";
 import { useIsMobile } from "@/lib/ui/useIsMobile";
 import type { MapaNo } from "@/lib/map/tipos";
@@ -26,7 +27,7 @@ const CerebroCanvas = dynamic(() => import("./CerebroCanvas"), { ssr: false, loa
 const COR: Record<string, string> = { a_conquistar: "#e88a2e", aprendido: "#78beff", aplicado: "#aadcff", validado: "#e0f4ff" };
 
 export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }: {
-  st: CerebroState & { gerar: (t?: string) => Promise<void>; refetch: (r?: string[]) => Promise<void> };
+  st: CerebroState & { gerar: (t?: string) => Promise<void>; refazer: () => Promise<void>; refetch: (r?: string[]) => Promise<void> };
   onFechar: () => void;
   onGerar?: () => void;
   onAbrirMensagem?: (msgId: string, no: MapaNo) => void;
@@ -37,18 +38,22 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
   const [aviso, setAviso] = useState<string | null>(null);
   // "Apliquei": o aluno marca o próximo nó do percurso como aplicado (com evidência). Modo humana →
   // vai pra fila do professor; outros modos → o gate é automático.
+  // #661: a evidência é obrigatória e é escrita numa caixinha do mapa (antes: a janelinha cinza do navegador, que
+  // aceitava OK com ela vazia)
+  const [caixa, setCaixa] = useState<MapaNo | null>(null);
+  const [evidencia, setEvidencia] = useState("");
+  const [confirmarRefazer, setConfirmarRefazer] = useState(false);
   const aplicar = async (no: MapaNo) => {
-    if (!mapa) return;
-    const evidencia = window.prompt(`Como você aplicou "${no.label}"? Descreva a evidência (dados, resultado, link):`) ?? null;
-    if (evidencia === null) return;
+    if (!mapa || !evidencia.trim()) return;
     setAplicando(no.id); setAviso(null);
     try {
-      const r = await fetch(`/api/map/${mapa.id}/node/${encodeURIComponent(no.id)}/apply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ evidencia }) });
+      const r = await fetch(`/api/map/${mapa.id}/node/${encodeURIComponent(no.id)}/apply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ evidencia: evidencia.trim() }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d?.error || `HTTP ${r.status}`);
       setAviso(d.validacao ? "Enviado pra validação do seu professor." : "Aplicado! O percurso avançou.");
+      setCaixa(null); setEvidencia("");
       await st.refetch([no.id]);
-    } catch (e: any) { setAviso(e?.message ?? "Não deu."); } finally { setAplicando(null); }
+    } catch (e: any) { setAviso(mensagemDeErro(e, "sua aplicação não foi enviada")); } finally { setAplicando(null); }
   };
   const proximo = useMemo(() => (mapa ? proximoDoBackbone({ nos: mapa.nos, backbone: mapa.backbone, modoValidacao: mapa.modoValidacao }) : null), [mapa]);
   const { regioes, sinapses } = useMemo(() => (mapa ? regioesDoMapa(mapa.nos, mapa.backbone, proximo?.id ?? null, ARQUETIPOS[mapa.tipoTopico].gateHumano, st.recentes, mapa.arestas) : { regioes: [], sinapses: [] }), [mapa, proximo, st.recentes]);
@@ -58,12 +63,13 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
   const membros = useMemo(() => (mapa && ficha ? mapa.nos.filter((n) => n.id !== ficha.id && n.regiao === ficha.id && (n.drawers?.length ?? 0) > 0) : []), [mapa, ficha]);
   const aoRegiao = (r: RegiaoVisual) => setFichaId((cur) => (cur === r.id ? null : r.id));
   // Esc fecha (o clique fora e a bolinha são tratados por quem monta o painel — o mapa é modal, sem "x").
-  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); if (fichaId) setFichaId(null); else onFechar(); } }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [fichaId, onFechar]);
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); if (confirmarRefazer) setConfirmarRefazer(false); else if (caixa) setCaixa(null); else if (fichaId) setFichaId(null); else onFechar(); } }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [confirmarRefazer, caixa, fichaId, onFechar]);
   const gerar = onGerar ?? (() => void st.gerar());
   // o tour do laboratório (lib/onboarding/tourSala) anda quando o mapa do percurso abre PRONTO
   const temMapa = !!mapa;
   useEffect(() => { if (temMapa) window.dispatchEvent(new CustomEvent(EVT_PERCURSO_ABERTO)); }, [temMapa]);
   const [anteriores, setAnteriores] = useState(false);
+  const andamento = mapa && st.estado === "ativa" ? andamentoDoPercurso(mapa.backbone, proximo?.id) : null;
 
   return (
     <motion.div
@@ -73,12 +79,20 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
     >
       {/* SEM barra, título nem "x" no topo: o botão CIRCULAR que gera/retraça e "mapas anteriores" flutuam por cima
           do cérebro; sair = clicar fora (quem monta o painel) ou Esc */}
-      <div className="absolute left-3 top-3 z-20 flex items-center gap-2">
+      <div className="absolute left-3 top-3 z-20 flex flex-wrap items-center gap-2">
+        {/* #661: sair do mapa à vista (clicar fora e Esc continuam valendo, mas ninguém descobria) */}
         <button
-          onClick={st.estado === "gerando" ? undefined : gerar}
+          type="button"
+          onClick={onFechar}
+          className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1.5 text-[11px] font-bold text-[#dbe8ff] hover:border-white/30 hover:text-white"
+        >
+          <X size={13} /> Voltar à conversa
+        </button>
+        <button
+          onClick={st.estado === "gerando" ? undefined : mapa?.backbone.length ? () => setConfirmarRefazer(true) : gerar}
           disabled={st.estado === "gerando"}
-          aria-label={mapa?.backbone.length ? "Retraçar o percurso" : ROTULO[st.estado === "oculta" ? "vazia" : st.estado] || "Gerar o percurso"}
-          title={mapa?.backbone.length ? "Retraçar o percurso" : "Gerar o percurso"}
+          aria-label={mapa?.backbone.length ? "Refazer o percurso" : ROTULO[st.estado === "oculta" ? "vazia" : st.estado] || "Gerar o percurso"}
+          title={mapa?.backbone.length ? "Refazer o percurso" : "Gerar o percurso"}
           className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full border border-cyan-300/40 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25 disabled:opacity-70"
         >
           {st.estado === "gerando" ? <span className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-cyan-300" aria-hidden /> : null}
@@ -91,7 +105,21 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
         >
           <History size={13} /> Mapas anteriores
         </button>
+        {/* #661: em que etapa a pessoa está */}
+        {andamento && <span data-andamento className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-bold text-[#9fe0ff]">{andamento}</span>}
       </div>
+      {/* #661: refazer pede confirmação, porque as etapas podem mudar */}
+      {confirmarRefazer && st.estado === "ativa" && (
+        <div data-confirma-refazer className="absolute left-3 top-14 z-30 w-[min(360px,88vw)] rounded-2xl border border-cyan-300/40 bg-[rgba(10,21,38,.97)] p-3 shadow-2xl">
+          <p className="text-[13px] font-bold text-cyan-100">Refazer o percurso?</p>
+          <p className="mt-1 text-[12px] text-[#9fb6e0]">O que você já estudou fica guardado, mas as etapas podem mudar.</p>
+          <div className="mt-2 flex justify-end gap-2">
+            <button type="button" onClick={() => setConfirmarRefazer(false)} className="rounded-lg px-3 py-1.5 text-[12px] font-bold text-[#9fb6e0] hover:text-white">Cancelar</button>
+            <button type="button" onClick={() => { setConfirmarRefazer(false); void st.refazer(); }} className="rounded-lg border border-cyan-300/40 bg-cyan-500/15 px-3 py-1.5 text-[12px] font-bold text-cyan-100 hover:bg-cyan-500/25">Refazer</button>
+          </div>
+        </div>
+      )}
+      {st.estado === "ativa" && st.erro && <p role="alert" className="absolute bottom-3 left-3 z-20 max-w-[min(420px,88vw)] rounded-xl bg-[rgba(10,21,38,.95)] px-3 py-2 text-[12px] text-amber-100">{st.erro}</p>}
       {/* sub-aba: as GAVETAS dos mapas gerados antes (abre embaixo dos botões) */}
       {anteriores && <div className="absolute left-3 top-14 z-20 w-[min(420px,88vw)] overflow-hidden rounded-2xl border border-white/10 shadow-2xl"><MapasAnteriores atualId={mapa?.id ?? null} onFechar={() => setAnteriores(false)} /></div>}
 
@@ -158,13 +186,37 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
         {mapa && st.estado === "ativa" && proximo && (
           <div data-cerebro-acao className="absolute right-3 top-3 flex flex-col items-end gap-1">
             <button
-              onClick={() => void aplicar(proximo)}
+              onClick={() => { setAviso(null); setCaixa(proximo); }}
               disabled={aplicando === proximo.id || proximo.estado === "aplicado"}
               className="rounded-xl border border-amber-300/50 bg-amber-500/15 px-3 py-1.5 text-[12px] font-bold text-amber-100 hover:bg-amber-500/25 disabled:opacity-50"
               title={proximo.estado === "aplicado" ? "Aguardando validação" : `Marcar "${proximo.label}" como aplicado`}
             >
               {proximo.estado === "aplicado" ? "⏳ aguardando validação" : `✓ Apliquei: ${proximo.label}`}
             </button>
+            {caixa && (
+              <form
+                data-caixa-apliquei
+                onSubmit={(e) => { e.preventDefault(); void aplicar(caixa); }}
+                className="w-[min(400px,86vw)] rounded-2xl border border-amber-300/40 bg-[rgba(10,21,38,.97)] p-3 shadow-2xl"
+              >
+                <label htmlFor="evidencia-apliquei" className="block text-[13px] font-bold text-amber-100">Como você aplicou esta etapa?</label>
+                <p className="mt-0.5 mb-2 truncate text-[11.5px] text-[#9fb6e0]" title={caixa.label}>{caixa.label}</p>
+                <textarea
+                  id="evidencia-apliquei"
+                  autoFocus
+                  rows={3}
+                  maxLength={4000}
+                  value={evidencia}
+                  onChange={(e) => setEvidencia(e.target.value)}
+                  placeholder="Conte o que você fez: um resultado, um link, um trecho de código…"
+                  className="w-full resize-y rounded-xl border border-[rgba(120,170,255,.35)] bg-white/[0.04] px-2.5 py-2 text-[12.5px] text-[#dbe8ff] outline-none placeholder:text-[#7f93b8] focus:border-amber-300/60"
+                />
+                <div className="mt-2 flex justify-end gap-2">
+                  <button type="button" onClick={() => setCaixa(null)} className="rounded-xl border border-white/20 px-3 py-1.5 text-[12px] font-bold text-[#dbe8ff] hover:bg-white/10">Cancelar</button>
+                  <button type="submit" disabled={!evidencia.trim() || aplicando === caixa.id} className="rounded-xl border border-amber-300/50 bg-amber-500/20 px-3 py-1.5 text-[12px] font-bold text-amber-100 hover:bg-amber-500/30 disabled:opacity-40">✓ Enviar</button>
+                </div>
+              </form>
+            )}
             {aviso && <span className="rounded-lg bg-black/50 px-2 py-1 text-[11px] text-[#cfe0ff]">{aviso}</span>}
           </div>
         )}
@@ -209,7 +261,7 @@ function MapasAnteriores({ atualId, onFechar }: { atualId: string | null; onFech
     fetch("/api/map?lista=1", { cache: "no-store" })
       .then(async (r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then((d) => { if (vivo) setLista(Array.isArray(d?.mapas) ? d.mapas : []); })
-      .catch((e) => { if (vivo) { setErro(e?.message ?? "falha"); setLista([]); } });
+      .catch((e) => { if (vivo) { setErro(mensagemDeErro(e, "os mapas não foram carregados")); setLista([]); } });
     return () => { vivo = false; };
   }, []);
   const abrir = (m: MapaResumo) => {
@@ -219,7 +271,7 @@ function MapasAnteriores({ atualId, onFechar }: { atualId: string | null; onFech
   return (
     <div className="shrink-0 max-h-[46%] overflow-y-auto border-b border-white/10 bg-[#070c1f] px-3 py-2">
       {lista === null && <p className="px-1 py-2 text-[12px] text-[#9fb6e0]">Carregando os mapas…</p>}
-      {erro && <p className="px-1 py-2 text-[12px] text-rose-300">Não deu pra listar: {erro}</p>}
+      {erro && <p className="px-1 py-2 text-[12px] text-rose-300">{erro}</p>}
       {lista && lista.length === 0 && !erro && <p className="px-1 py-2 text-[12px] text-[#9fb6e0]">Nenhum mapa gerado ainda.</p>}
       <ul className="flex flex-col gap-1">
         {(lista ?? []).map((m) => {

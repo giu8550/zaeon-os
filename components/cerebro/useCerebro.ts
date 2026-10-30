@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type PusherClient from "pusher-js";
 import { estadoDaBolinha, type EstadoBolinha } from "@/lib/map/bolinha";
+import { mensagemDeErro } from "@/lib/canal/conexao";
 import { canalCerebro, EV_ERRO, EV_GERADO, EV_TURNO } from "@/lib/map/realtime";
 import type { MapaView } from "@/lib/map/tipos";
 
@@ -27,6 +28,8 @@ export type CerebroState = {
 };
 
 const POLL_MS = 3000;
+/** #661: refazer sem resposta depois disso (sem Pusher, ou o servidor caiu no meio) = falhou, e o mapa atual volta. */
+const REFAZER_MAX_MS = 90_000;
 
 export function useCerebro(scopeId: string | null, opts: { aberto?: boolean } = {}) {
   const [st, setSt] = useState<CerebroState>({ mapa: null, estado: "oculta", tituloSugerido: null, gerando: false, erro: null, recentes: [] });
@@ -34,6 +37,17 @@ export function useCerebro(scopeId: string | null, opts: { aberto?: boolean } = 
   const pusherRef = useRef<PusherClient | null>(null);
   const canalRef = useRef<string | null>(null);
   const on = mapPanelOn();
+  // #661: refazendo = o mapa antigo ainda tem percurso, então "tem backbone" não diz que acabou; acaba quando o
+  // updatedAt mudar (ou no evento). Guarda o updatedAt de quando o refazer começou.
+  const refazendoRef = useRef<string | null>(null);
+  const timerRefazer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // o aviso de que o refazer falhou sobrevive aos refetchs (o poll o apagaria em 3 s), até a próxima tentativa
+  const avisoRefazer = useRef<string | null>(null);
+  const fimRefazer = useCallback(() => {
+    refazendoRef.current = null;
+    if (timerRefazer.current) clearTimeout(timerRefazer.current);
+    timerRefazer.current = null;
+  }, []);
 
   const refetch = useCallback(async (recentes: string[] = []) => {
     if (!on || !scopeId) return;
@@ -42,14 +56,15 @@ export function useCerebro(scopeId: string | null, opts: { aberto?: boolean } = 
       if (!r.ok) { setSt((s) => ({ ...s, erro: r.status === 404 ? null : `HTTP ${r.status}` })); return; }
       const d = await r.json();
       const mapa: MapaCliente | null = d.mapa ?? null;
-      if (mapa?.backbone?.length) gerandoRef.current = false;
+      if (mapa?.backbone?.length && mapa.updatedAt !== refazendoRef.current) { gerandoRef.current = false; fimRefazer(); }
       const estado = estadoDaBolinha({ estudavel: !!d.estudavel, mapaId: mapa?.id ?? null, temMapa: !!mapa, backbone: mapa?.backbone?.length ?? 0, gerando: gerandoRef.current });
-      setSt({ mapa, estado, tituloSugerido: d.tituloSugerido ?? null, gerando: gerandoRef.current, erro: null, recentes });
+      setSt({ mapa, estado, tituloSugerido: d.tituloSugerido ?? null, gerando: gerandoRef.current, erro: avisoRefazer.current, recentes });
     } catch (e: any) { setSt((s) => ({ ...s, erro: e?.message ?? "falha" })); }
-  }, [on, scopeId]);
+  }, [on, scopeId, fimRefazer]);
 
   // Conversa trocou → zera e recarrega.
-  useEffect(() => { gerandoRef.current = false; setSt({ mapa: null, estado: "oculta", tituloSugerido: null, gerando: false, erro: null, recentes: [] }); void refetch(); }, [refetch]);
+  useEffect(() => { gerandoRef.current = false; fimRefazer(); avisoRefazer.current = null; setSt({ mapa: null, estado: "oculta", tituloSugerido: null, gerando: false, erro: null, recentes: [] }); void refetch(); }, [refetch, fimRefazer]);
+  useEffect(() => fimRefazer, [fimRefazer]);
 
   // Pusher: assina o canal do mapa (privado; auth em /api/map/pusher-auth).
   useEffect(() => {
@@ -67,11 +82,11 @@ export function useCerebro(scopeId: string | null, opts: { aberto?: boolean } = 
       canalRef.current = nome;
       const ch = p.subscribe(nome);
       ch.bind(EV_TURNO, (ev: { novos?: string[]; tocados?: string[] }) => void refetch([...(ev.novos ?? []), ...(ev.tocados ?? [])]));
-      ch.bind(EV_GERADO, () => { gerandoRef.current = false; void refetch(); });
-      ch.bind(EV_ERRO, (ev: { motivo?: string }) => { gerandoRef.current = false; setSt((s) => ({ ...s, gerando: false, estado: "vazia", erro: ev?.motivo ?? "falhou" })); });
+      ch.bind(EV_GERADO, () => { gerandoRef.current = false; fimRefazer(); void refetch(); });
+      ch.bind(EV_ERRO, (ev: { motivo?: string }) => { gerandoRef.current = false; fimRefazer(); avisoRefazer.current = ev?.motivo ?? "falhou"; setSt((s) => ({ ...s, gerando: false, estado: s.mapa?.backbone?.length ? "ativa" : "vazia", erro: ev?.motivo ?? "falhou" })); });
     })();
     return () => { vivo = false; };
-  }, [on, st.mapa?.id, refetch]);
+  }, [on, st.mapa?.id, refetch, fimRefazer]);
   useEffect(() => () => { try { pusherRef.current?.disconnect(); } catch { /* ignore */ } pusherRef.current = null; canalRef.current = null; }, []);
 
   // Poll de fallback: gerando (sempre) ou painel aberto sem Pusher.
@@ -85,6 +100,7 @@ export function useCerebro(scopeId: string | null, opts: { aberto?: boolean } = 
   const gerar = useCallback(async (topico?: string) => {
     if (!on || !scopeId || gerandoRef.current) return;
     gerandoRef.current = true;
+    avisoRefazer.current = null;
     setSt((s) => ({ ...s, gerando: true, estado: "gerando", erro: null }));
     try {
       const r = await fetch("/api/map/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scopeId, ...(topico ? { topico } : {}) }) });
@@ -94,9 +110,28 @@ export function useCerebro(scopeId: string | null, opts: { aberto?: boolean } = 
       void refetch();
     } catch (e: any) {
       gerandoRef.current = false;
-      setSt((s) => ({ ...s, gerando: false, estado: s.mapa ? "vazia" : "sugerida", erro: e?.message ?? "falhou" }));
+      setSt((s) => ({ ...s, gerando: false, estado: s.mapa ? "vazia" : "sugerida", erro: mensagemDeErro(e, "o mapa não foi gerado") }));
     }
   }, [on, scopeId, refetch]);
+
+  /** #661: o ↻ — pede um percurso novo (`force`); o que já foi estudado fica. Falhou → o mapa atual volta, com o aviso. */
+  const atualizadoEm = st.mapa?.updatedAt ?? null;
+  const refazer = useCallback(async () => {
+    if (!on || !scopeId || gerandoRef.current) return;
+    const falhou = (erro: string) => {
+      gerandoRef.current = false; fimRefazer(); avisoRefazer.current = erro;
+      setSt((s) => ({ ...s, gerando: false, estado: s.mapa?.backbone?.length ? "ativa" : "vazia", erro }));
+    };
+    gerandoRef.current = true;
+    avisoRefazer.current = null;
+    refazendoRef.current = atualizadoEm;
+    timerRefazer.current = setTimeout(() => falhou("Não deu para refazer o mapa agora — o seu continua aqui."), REFAZER_MAX_MS);
+    setSt((s) => ({ ...s, gerando: true, estado: "gerando", erro: null }));
+    try {
+      const r = await fetch("/api/map/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scopeId, force: true }) });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d?.error || `HTTP ${r.status}`); }
+    } catch (e: any) { falhou(mensagemDeErro(e, "o mapa não foi refeito")); }
+  }, [on, scopeId, atualizadoEm, fimRefazer]);
 
   /** depois de um TURNO do chat: o servidor decide se a conversa é estudável (lib/map/gatekeeper) em segundo plano, com
    *  uma chamada de IA de até ~8 s — então confere em 3 tempos (uma vez só, cedo demais, a bolinha não aparecia até trocar
@@ -109,5 +144,5 @@ export function useCerebro(scopeId: string | null, opts: { aberto?: boolean } = 
   }, [on, scopeId, refetch]);
   useEffect(() => () => { for (const t of timersTurno.current) clearTimeout(t); }, []);
 
-  return { ...st, refetch, gerar, conferirDepoisDoTurno, ligado: on };
+  return { ...st, refetch, gerar, refazer, conferirDepoisDoTurno, ligado: on };
 }

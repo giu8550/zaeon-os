@@ -7,7 +7,7 @@
  * Ligações entre nós = FILAMENTOS NEURAIS (nunca reta): feixes de fios curvos que atravessam o cérebro,
  * balançam devagar e acendem com pulsos de luz no sentido do percurso; os do nó selecionado brilham mais.
  */
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { EstadoNo, MapaAresta, MapaNo } from "@/lib/map/tipos";
 
 export type RegiaoVisual = {
@@ -18,6 +18,24 @@ export type RegiaoVisual = {
 /** Sinapse entre regiões = aresta de memória entre nós de regiões diferentes (azul pulsante). */
 export type Sinapse = { a: number; b: number; peso: number };
 const AMARELO = "#ffd56b", AZUL = "#49b6ff";
+
+/** #661: a explicação da etiqueta ao passar o mouse (o aluno não sabia o que é "1 gaveta" nem "chancela"). PURO. */
+export function dicaDaEtiqueta(n: Pick<RegiaoVisual, "gavetas" | "gate">): string {
+  const partes = ["Clique para ver o que é esta etapa e o que falta para concluir."];
+  if (n.gavetas) partes.push(n.gavetas > 1 ? `${n.gavetas} gavetas: lembranças da sua conversa guardadas nesta etapa.` : "1 gaveta: uma lembrança da sua conversa guardada nesta etapa.");
+  if (n.gate) partes.push("Chancela: esta etapa precisa da validação de um professor.");
+  return partes.join("\n");
+}
+
+/** #661: a legenda das cores das etapas (a mesma ordem do andamento). */
+export const LEGENDA: { rotulo: string; cor: string }[] = [
+  { rotulo: "A conquistar", cor: "#e88a2e" },
+  { rotulo: "Etapa atual", cor: "#ffbe54" },
+  { rotulo: "Aprendida", cor: "#78beff" },
+  { rotulo: "Aplicada", cor: "#aadcff" },
+  { rotulo: "Validada", cor: "#e0f4ff" },
+];
+const CHAVE_GIROU = "zaeon.mapa.girou";
 
 type Cor = "natocado" | "progresso" | "aprendido" | "aplicado" | "validado";
 const SCOL: Record<Cor, string> = { natocado: "#e88a2e", progresso: "#ffbe54", aprendido: "#78beff", aplicado: "#aadcff", validado: "#e0f4ff" };
@@ -121,6 +139,8 @@ export default function CerebroCanvas({ regioes, sinapses = [], onRegiao, destaq
   const regioesRef = useRef(regioes); regioesRef.current = regioes;
   const sinapsesRef = useRef(sinapses); sinapsesRef.current = sinapses;
   const destaqueRef = useRef(destaque); destaqueRef.current = destaque;
+  // #661: a dica "Arraste para girar" só até o primeiro giro
+  const [girou, setGirou] = useState(() => { try { return localStorage.getItem(CHAVE_GIROU) === "1"; } catch { return false; } });
   const nReg = Math.max(1, regioes.length);
   const nuvem = useMemo(() => (typeof window === "undefined" ? null : construirNuvem(nReg)), [nReg]);
 
@@ -219,6 +239,7 @@ export default function CerebroCanvas({ regioes, sinapses = [], onRegiao, destaq
         // linha conectora: do nó até a borda do board mais próxima
         const ax = q.sx < x ? x - hw : x + hw;
         ctx.globalAlpha = vis ? 0.55 : 0.18; ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(q.sx, q.sy); ctx.lineTo(ax, y); ctx.stroke();
+        const dica = dicaDaEtiqueta(n); if (c.el.title !== dica) c.el.title = dica;
         c.el.style.opacity = vis ? "1" : "0.35"; c.el.style.color = col; c.el.style.left = x + "px"; c.el.style.top = y + "px";
         c.el.innerHTML = `<span class="dot"></span>${escapeHtml(n.label)}${n.gavetas ? ` <small style="color:${AZUL}">${n.gavetas} gaveta${n.gavetas > 1 ? "s" : ""}</small>` : ""}${n.gate ? ' <small>chancela</small>' : ""}${i === goal ? ' <span class="goal">◀ próximo</span>' : ""}`;
         c.here.style.left = q.sx + "px"; c.here.style.top = q.sy + "px"; c.here.style.opacity = n.aqui && vis ? "1" : "0";
@@ -230,7 +251,12 @@ export default function CerebroCanvas({ regioes, sinapses = [], onRegiao, destaq
     // podem reportar `hidden` no mount e o cérebro ficaria preto.
     const onVis = () => { oculto = document.visibilityState === "hidden"; };
     document.addEventListener("visibilitychange", onVis);
-    const down = (e: PointerEvent) => { drag = true; px = e.clientX; py = e.clientY; cv.setPointerCapture(e.pointerId); };
+    const down = (e: PointerEvent) => {
+      drag = true; px = e.clientX; py = e.clientY; cv.setPointerCapture(e.pointerId);
+      // #661: girou uma vez, a dica some (e não volta)
+      setGirou(true);
+      try { localStorage.setItem(CHAVE_GIROU, "1"); } catch { /* ignore */ }
+    };
     const move = (e: PointerEvent) => { if (!drag) return; yaw += (e.clientX - px) * 0.006; pitch = Math.max(-1.1, Math.min(1.1, pitch + (e.clientY - py) * 0.006)); px = e.clientX; py = e.clientY; };
     const up = () => { drag = false; };
     cv.addEventListener("pointerdown", down); cv.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
@@ -241,7 +267,7 @@ export default function CerebroCanvas({ regioes, sinapses = [], onRegiao, destaq
   return (
     <div ref={wrapRef} className="relative h-full w-full overflow-hidden" style={{ background: "radial-gradient(1200px 820px at 50% 40%,#0a1430 0%,#060a1a 46%,#02040a 100%)" }}>
       <style>{`
-        .cerebro-node{position:absolute;transform:translate(-50%,-50%);font-size:11.5px;white-space:nowrap;padding:4px 9px;border-radius:999px;border:1px solid currentColor;background:rgba(8,16,36,.6);backdrop-filter:blur(4px);transition:opacity .3s;font-weight:600;cursor:default}
+        .cerebro-node{position:absolute;transform:translate(-50%,-50%);font-size:11.5px;white-space:nowrap;padding:4px 9px;border-radius:999px;border:1px solid currentColor;background:rgba(8,16,36,.6);backdrop-filter:blur(4px);transition:opacity .3s;font-weight:600;cursor:pointer}
         .cerebro-node .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor;margin-right:6px;vertical-align:middle}
         .cerebro-node small{color:#9fb6e0;font-weight:500;margin-left:5px;font-size:10px}
         .cerebro-node .goal{color:#bfe6ff;margin-left:6px;font-size:10px;font-weight:700}
@@ -249,6 +275,13 @@ export default function CerebroCanvas({ regioes, sinapses = [], onRegiao, destaq
       `}</style>
       <canvas ref={cvRef} className="block h-full w-full touch-none" aria-label="Mapa de conhecimento: um nó por tópico do percurso" />
       <div ref={labelsRef} className="pointer-events-none absolute inset-0 [&>.cerebro-node]:pointer-events-auto" />
+      {/* #661: o que cada cor quer dizer e que dá pra girar */}
+      <div data-legenda className="pointer-events-none absolute bottom-2 left-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-semibold text-[#9fb6e0]">
+        {LEGENDA.map((l) => (
+          <span key={l.rotulo} className="inline-flex items-center gap-1"><span aria-hidden className="h-2 w-2 rounded-full" style={{ background: l.cor }} />{l.rotulo}</span>
+        ))}
+      </div>
+      {!girou && <div data-dica-girar className="pointer-events-none absolute bottom-2 right-3 rounded-full bg-white/[0.07] px-2.5 py-1 text-[10.5px] font-semibold text-[#9fe0ff]">Arraste para girar</div>}
     </div>
   );
 }
