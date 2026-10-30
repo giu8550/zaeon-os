@@ -21,3 +21,23 @@ describe("Carregando (#645)", () => {
     expect(tentou).toBe(1);
   });
 });
+
+describe("Carregando · #657", () => {
+  it("falhou: avisa NA HORA (sem esperar 4 s/15 s) e já oferece 'Tentar de novo'; sem o pontinho girando", () => {
+    let tentou = 0;
+    const { container } = render(<Carregando texto="Abrindo o canal…" falhou onTentar={() => { tentou++; }} />);
+    expect(screen.getByText("Não deu pra abrir o Escritório")).toBeTruthy();
+    expect(container.querySelector("[data-girando]")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
+    expect(tentou).toBe(1);
+  });
+  it("sem internet: diz isso e que abre sozinho quando voltar", () => {
+    render(<Carregando texto="Abrindo o canal…" offline onTentar={() => {}} />);
+    expect(screen.getByText("Você está sem internet")).toBeTruthy();
+    expect(screen.getByText(/abre sozinho/)).toBeTruthy();
+  });
+  it("carregando normal: o pontinho girando mostra que não travou", () => {
+    const { container } = render(<Carregando texto="Abrindo o canal…" onTentar={() => {}} />);
+    expect(container.querySelector("[data-girando]")).not.toBeNull();
+  });
+});
