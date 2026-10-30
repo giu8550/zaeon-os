@@ -17,7 +17,7 @@ import { podeEscrever } from "@/lib/canal/gate";
 import { montarAliases, parseMentions } from "@/lib/canal/mention";
 import { resolverAlvos, estaForaDaConversa, agentesPorRecencia } from "@/lib/canal/alvo";
 import { humanosNoCanal } from "@/lib/canal/convite";
-import { EV_MENSAGEM, publicarPusher, type MensagemWire } from "@/lib/canal/realtime";
+import { EV_DIGITANDO, EV_MENSAGEM, publicarPusher, type MensagemWire } from "@/lib/canal/realtime";
 import { dispararTurnos, depsReais } from "@/lib/canal/queue";
 import { pedidoDeChore } from "@/lib/chore/triagem";
 import { saidasDaMensagem, textoDespedida, textoSaiu, textoVoltou, agentesDepois } from "@/lib/canal/dispensa";
@@ -135,6 +135,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       id: saiu.id, canalId: canal.id, autorTipo: "sistema", autorId: k, texto: saiu.texto, mencoes: [],
       createdAt: saiu.createdAt.toISOString(), autorNome: nome, autorAvatar: null,
     } satisfies MensagemWire);
+    // #645: se ela ainda estava escrevendo (a resposta que vai ser descartada), o balão some na hora pra todo mundo
+    await publicarPusher(canal.id, EV_DIGITANDO, { agentKey: k, estado: "ocioso", parou: true });
   }
 
   const vias = await dispararTurnos(

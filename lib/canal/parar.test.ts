@@ -51,3 +51,21 @@ describe("avisoDeQuemParou (#645)", () => {
     expect(avisoDeQuemParou(parados, "teo", true)).toBe(true);    // o próximo turno aparece normal
   });
 });
+
+describe("avisoDeQuemParou · a marca 'parou' (#645)", () => {
+  it("o 'ocioso' do PRÓPRIO ■ não solta a agente: o 'redigindo' atrasado continua ignorado; só o fim do turno solta", async () => {
+    const { avisoDeQuemParou } = await import("./parar");
+    const parados = new Set<string>();
+    expect(avisoDeQuemParou(parados, "teo", false, true)).toBe(true);    // o aviso do ■: apaga o balão
+    expect(parados.has("teo")).toBe(true);
+    expect(avisoDeQuemParou(parados, "teo", true)).toBe(false);          // "redigindo" atrasado: ignorado (era o defeito)
+    expect(avisoDeQuemParou(parados, "teo", false)).toBe(true);          // o "ocioso" do fim do turno: solta
+    expect(avisoDeQuemParou(parados, "teo", true)).toBe(true);           // turno novo aparece
+  });
+  it("vale pra quem viu o ■ de outra tela (ou a saída da agente): a marca já basta", async () => {
+    const { avisoDeQuemParou } = await import("./parar");
+    const parados = new Set<string>();   // esta tela não clicou em nada
+    avisoDeQuemParou(parados, "teo", false, true);
+    expect(avisoDeQuemParou(parados, "teo", true)).toBe(false);
+  });
+});

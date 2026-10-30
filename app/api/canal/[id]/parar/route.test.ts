@@ -38,6 +38,10 @@ describe("parar", () => {
       ["mensagem", "parar", undefined], ["agente-digitando", "teo", "ocioso"], ["agente-digitando", "aura", "ocioso"],
     ]);
   });
+  it("#645: o aviso do ■ leva a marca 'parou' (a tela não solta a agente com ele)", async () => {
+    await parar({ agentes: ["teo"] });
+    expect(state.publicados.find(([, ev]) => ev === "agente-digitando")![2]).toEqual({ agentKey: "teo", estado: "ocioso", parou: true });
+  });
   it("lixo em `agentes` é ignorado", async () => {
     await parar({ agentes: ["teo", 3, "<script>", "x".repeat(60)] });
     expect(state.publicados.filter(([, ev]) => ev === "agente-digitando").map(([, , p]) => (p as any).agentKey)).toEqual(["teo"]);

@@ -36,7 +36,10 @@ export const mostraParar = (escrevendo: number, texto: string, temAnexo: boolean
  * antigo, segue avisando): o aviso ATIVO é ignorado — o balão e o ■ não voltam; o "ocioso" do fim libera a agente.
  * Muda `parados` (tira a agente quando o turno acaba). true = mostrar o aviso.
  */
-export function avisoDeQuemParou(parados: Set<string>, agentKey: string, ativo: boolean): boolean {
+export function avisoDeQuemParou(parados: Set<string>, agentKey: string, ativo: boolean, parou = false): boolean {
+  // o aviso do PRÓPRIO ■ (ou da saída da agente) — `parou: true`: apaga o balão e passa a ignorar o atrasado. Antes ele
+  // chegava como um "ocioso" comum, era lido como "o turno acabou" e soltava a agente (o balão e o ■ voltavam)
+  if (parou) { parados.add(agentKey); return true; }
   if (!parados.has(agentKey)) return true;
   if (ativo) return false;
   parados.delete(agentKey);
