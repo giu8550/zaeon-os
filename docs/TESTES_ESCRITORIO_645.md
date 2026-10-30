@@ -64,3 +64,27 @@ As 29 são as de sempre deste Windows, nenhuma desta branch: sem pacotes locais 
 
 `NÃO VERIFICADO`: se a causa da resposta atrasada é mesmo o worker (o item 1 do teste confirma); o tempo real de
 abrir o Escritório com internet lenta (depende da conexão).
+
+---
+
+## 5. Depois do deploy — o que o teste em produção mostrou e a correção (2ª PR do #645)
+
+**O worker não existe:** o log do deploy disse "→ Worker: não está rodando (turnos no web)" e o `/api/health` mostra
+`"escritorio":"inline"`. A suspeita do item 1 estava errada — mas o teste em produção (29/10) mostrou que a resposta
+de quem saiu **já não entra** (pedido longo + "@teo sai" + F5: nada) e a do ■ também não. O descarte funciona.
+
+**O ■ ainda precisava de 2 cliques (item 2) — causa achada:** a rota do ■ manda um "ocioso" pra apagar o balão das
+outras telas; a tela lia esse "ocioso" como "o turno acabou", soltava a agente e o próximo "redigindo" (o turno segue
+por trás até o fim) trazia o balão e o ■ de volta. Agora o aviso do ■ leva a marca **`parou: true`**: a tela apaga o
+balão **e** passa a ignorar o "escrevendo" atrasado dessa agente; só o "ocioso" do fim do turno solta. Vale também
+pra quem viu o ■ de outra tela.
+
+**Balão de quem saiu (item 9, novo):** depois do "Téo saiu da conversa", o balão "Téo está investigando…" ficava até o
+turno acabar. A rota da mensagem agora manda o mesmo aviso com `parou: true` quando a agente sai — o balão some na hora.
+
+Testes: `lib/canal/parar.test.ts` (a marca não solta a agente; vale sem ter clicado), `app/api/canal/[id]/parar` (o
+aviso leva a marca), `app/api/canal/[id]/mensagem` (a saída manda o aviso com a marca). Achado pelo teste: a rota da
+mensagem nem importava o `EV_DIGITANDO` — sem o teste, o "@teo sai" quebraria em produção.
+
+**Testar depois do deploy:** Ctrl+Shift+R → pergunta longa → ■ **uma vez** → o balão e o ■ não voltam (esperar ~30 s).
+E: pergunta longa → "@teo sai" → o balão "investigando…" some junto com o "Téo saiu".
