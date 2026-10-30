@@ -109,6 +109,13 @@ export function proximoDoBackbone(m: Pick<MapaView, "nos" | "backbone" | "modoVa
   return null;
 }
 
+/** #661: "Etapa 2 de 7" — a etapa em que a pessoa está (a próxima a concluir); tudo concluído → "Percurso concluído". */
+export function andamentoDoPercurso(backbone: readonly string[], proximoId: string | null | undefined): string | null {
+  if (!backbone.length) return null;
+  const i = proximoId ? backbone.indexOf(proximoId) : -1;
+  return i >= 0 ? `Etapa ${i + 1} de ${backbone.length}` : "Percurso concluído";
+}
+
 /** "O que falta" no vocabulário do arquétipo, ciente do critério de completude. */
 export function quantoFaltaConcluir(m: Pick<MapaView, "nos" | "backbone" | "modoValidacao" | "tipoTopico" | "criterioCompletude" | "objetivo">): string {
   const a = ARQUETIPOS[m.tipoTopico];

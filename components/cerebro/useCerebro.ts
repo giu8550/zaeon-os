@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type PusherClient from "pusher-js";
 import { estadoDaBolinha, type EstadoBolinha } from "@/lib/map/bolinha";
+import { mensagemDeErro } from "@/lib/canal/conexao";
 import { canalCerebro, EV_ERRO, EV_GERADO, EV_TURNO } from "@/lib/map/realtime";
 import type { MapaView } from "@/lib/map/tipos";
 
@@ -94,7 +95,7 @@ export function useCerebro(scopeId: string | null, opts: { aberto?: boolean } = 
       void refetch();
     } catch (e: any) {
       gerandoRef.current = false;
-      setSt((s) => ({ ...s, gerando: false, estado: s.mapa ? "vazia" : "sugerida", erro: e?.message ?? "falhou" }));
+      setSt((s) => ({ ...s, gerando: false, estado: s.mapa ? "vazia" : "sugerida", erro: mensagemDeErro(e, "o mapa não foi gerado") }));
     }
   }, [on, scopeId, refetch]);
 

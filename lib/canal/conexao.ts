@@ -20,7 +20,8 @@ export function ehErroDeRede(e: unknown): boolean {
 export function mensagemDeErro(e: unknown, oQue: string): string {
   if (ehErroDeRede(e)) return `Sem conexão — ${oQue}. Tente de novo.`;
   const msg = String((e as { message?: string })?.message ?? e ?? "").trim();
-  return msg || `Algo deu errado — ${oQue}.`;
+  // #661: "HTTP 500" não diz nada pra pessoa
+  return msg && !/^HTTP \d+$/.test(msg) ? msg : `Algo deu errado — ${oQue}.`;
 }
 
 /** Estados do Pusher (connection.state): initialized, connecting, connected, unavailable, failed, disconnected. */
