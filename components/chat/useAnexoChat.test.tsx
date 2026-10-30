@@ -41,3 +41,15 @@ describe("vários anexos visíveis", () => {
     expect(tirar).toHaveBeenCalledWith("2");
   });
 });
+
+describe("avisoPdfNaoAbriu (#414)", () => {
+  it("PDF da web que não abriu: diz o que houve e dá o link do site; upload local: pede pra soltar de novo", async () => {
+    const { avisoPdfNaoAbriu } = await import("./useAnexoChat");
+    const web = avisoPdfNaoAbriu("Artigo X.pdf", "https://revista.org/art/1");
+    expect(web).toContain("**Artigo X**");
+    expect(web).toContain("[site original](https://revista.org/art/1)");
+    const local = avisoPdfNaoAbriu("Meu PDF", "blob:abc");
+    expect(local).not.toContain("](");
+    expect(local).toContain("Solte o PDF de novo");
+  });
+});
