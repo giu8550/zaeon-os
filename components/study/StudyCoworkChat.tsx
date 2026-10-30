@@ -82,6 +82,8 @@ import { separarProgresso, faseCorrente } from "@/lib/agent/progresso";
 import { revelarPorTempo, safeCut } from "@/lib/ui/typewriter";
 import { cronometrarResposta, EVT_TEMPOS, fmtTempos, verTempos, type TemposResposta } from "@/lib/chat/temposResposta";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
+import { useArmazemDaConta } from "@/lib/chat/contaNoNavegador";
+import type { Armazem } from "@/lib/chat/threads";
 import { esperarTurno } from "@/lib/chat/turnoRetomavel";
 import { pedirAura } from "@/lib/chat/auraClient";
 import { EVT_FEEDBACK } from "@/lib/chat/feedback";
@@ -191,7 +193,14 @@ export function textoParaHistorico(m: {
 // real não classifica a intenção, isto mantém o loading honesto.
 const isQuickPrompt = (t: string) => t.trim().split(/\s+/).filter(Boolean).length <= 8;
 
+/** #663: cada conta tem as suas conversas; trocar de conta remonta o chat com a área da outra. */
 export default function StudyCoworkChat({ active = true }: { active?: boolean }) {
+  const area = useArmazemDaConta();
+  if (!area) return null;
+  return <ChatDaConta key={area.conta} armazem={area.armazem} active={active} />;
+}
+
+function ChatDaConta({ active, armazem }: { active: boolean; armazem: Armazem }) {
   // Abas de conversa. Antes havia UMA thread global (zaeon.cowork.thread.v1); agora cada
   // aba tem histórico próprio, e a antiga vira a aba #1 na primeira carga (ver threads.ts).
   const [threads, setThreads] = useState<Thread[]>([]);
@@ -226,12 +235,12 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   modoPesquisaRef.current = modoPesquisa;
   useEffect(() => {
     if (!CHAT_UNICO) return;
-    try { setModoPesquisa(modoPesquisaDa(localStorage, abaAtiva)); } catch { setModoPesquisa(false); }
+    try { setModoPesquisa(modoPesquisaDa(armazem, abaAtiva)); } catch { setModoPesquisa(false); }
   }, [abaAtiva]);
   const ligarModoPesquisa = useCallback((v: boolean) => {
     setModoPesquisa(v);
     const aba = abaAtivaRef.current;
-    if (aba) try { gravarModoPesquisa(localStorage, aba, v); } catch { /* ignore */ }
+    if (aba) try { gravarModoPesquisa(armazem, aba, v); } catch { /* ignore */ }
   }, []);
   // o CÉREBRO da conversa ativa (o mesmo da Sala de Pesquisa — HANDOFF_CEREBRO_AURA §3): o turno já marca a conversa
   // como estudável (lib/map/gatekeeper, pelo `cartolinaScopeId`); aqui entram a bolinha ("Gerar mapa") e o painel
@@ -442,22 +451,22 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         if (r.ok) setSpaces(await r.json());
       } catch { /* ignore */ }
     })();
-    // memória de conversa: L0 (localStorage, rápido) primeiro; se vazio (device novo /
+    // memória de conversa: L0 (armazem, rápido) primeiro; se vazio (device novo /
     // cache limpo), cai no L1 durável (DB) via /api/ai/transcript. docs/MEMORY_AND_PERSISTENCE.md.
     let hadLocal = false;
     // Device REALMENTE novo? (o índice de conversas nunca existiu). Apagar a última conversa deixa um índice
     // com uma aba nova vazia — NÃO é device novo, então o L1 durável não deve ressuscitar a conversa apagada.
     let deviceNovo = false;
-    try { deviceNovo = localStorage.getItem(CHAVE_INDICE) == null; } catch { /* ignore */ }
+    try { deviceNovo = armazem.getItem(CHAVE_INDICE) == null; } catch { /* ignore */ }
     try {
-      const lista = carregarThreads(localStorage);
-      const ativa = threadAtiva(localStorage, lista);
+      const lista = carregarThreads(armazem);
+      const ativa = threadAtiva(armazem, lista);
       setThreads(lista);
       threadsRef.current = lista;
       setAbaAtiva(ativa);
       abaAtivaRef.current = ativa;
       if (ativa) {
-        const guardadas = carregarMensagens<Msg>(localStorage, ativa);
+        const guardadas = carregarMensagens<Msg>(armazem, ativa);
         if (guardadas.length) { setMessages(guardadas); hadLocal = true; }
       }
     } catch { /* ignore */ }
@@ -482,7 +491,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
         .map(enxugarArtefatos) // artefato pesado fica na sessão; o diagrama (só um id) persiste
         .map(({ streaming, fresh, ...m }) => m); // B2: flags de animação não persistem (reload não re-digita)
       const aba = abaAtivaRef.current;
-      if (aba) salvarMensagens(localStorage, aba, slim);
+      if (aba) salvarMensagens(armazem, aba, slim);
     } catch { /* ignore */ }
   }, [messages]);
 
@@ -554,9 +563,9 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       if (d.scopeId && d.scopeId !== abaAtivaRef.current) {
         if (d.attachMsgId) {
           try {
-            const guardadas = carregarMensagens<Msg>(localStorage, d.scopeId);
+            const guardadas = carregarMensagens<Msg>(armazem, d.scopeId);
             const novas = guardadas.map((m) => (m.id === d.attachMsgId ? (!m.studioBlock || m.studioBlock.studioKind === block.studioKind ? { ...m, studioBlock: block } : { ...m, blocosExtra: [...(m.blocosExtra ?? []).filter((b) => b.studioKind !== block.studioKind), block] }) : m));
-            salvarMensagens(localStorage, d.scopeId, novas.map(enxugarArtefatos));
+            salvarMensagens(armazem, d.scopeId, novas.map(enxugarArtefatos));
           } catch { /* ignore */ }
         }
         return;
@@ -613,7 +622,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
       .filter((m) => m.kind !== "studio" && !(m.kind === "text" && !m.text))
       .map(enxugarArtefatos)
       .map(({ streaming, fresh, ...m }) => m);
-    salvarMensagens(localStorage, aba, slim);
+    salvarMensagens(armazem, aba, slim);
   }, [messages]);
 
   const trocarAba = useCallback((id: string) => {
@@ -621,11 +630,11 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     guardarAtual();
     abaAtivaRef.current = id;
     setAbaAtiva(id);
-    marcarAtiva(localStorage, id);
-    setMessages(carregarMensagens<Msg>(localStorage, id));
+    marcarAtiva(armazem, id);
+    setMessages(carregarMensagens<Msg>(armazem, id));
     const t = tocarThread(threadsRef.current, id);
     threadsRef.current = t;
-    salvarThreads(localStorage, t);
+    salvarThreads(armazem, t);
     setThreads(t);
   }, [guardarAtual]);
 
@@ -634,25 +643,25 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const novaAba = useCallback(() => {
     guardarAtual();
     const { threads: lista, nova } = criarThread(threadsRef.current);
-    salvarThreads(localStorage, lista);
+    salvarThreads(armazem, lista);
     threadsRef.current = lista;
     abaAtivaRef.current = nova.id;
     setThreads(lista);
     setAbaAtiva(nova.id);
-    marcarAtiva(localStorage, nova.id);
+    marcarAtiva(armazem, nova.id);
     setMessages([]);
   }, [guardarAtual]);
 
   const fecharAba = useCallback((id: string) => {
-    const { threads: lista, proxima } = fecharThread(localStorage, threadsRef.current, id);
-    salvarThreads(localStorage, lista);
+    const { threads: lista, proxima } = fecharThread(armazem, threadsRef.current, id);
+    salvarThreads(armazem, lista);
     threadsRef.current = lista;
     setThreads(lista);
     if (id === abaAtivaRef.current) {
       abaAtivaRef.current = proxima;
       setAbaAtiva(proxima);
-      marcarAtiva(localStorage, proxima);
-      setMessages(carregarMensagens<Msg>(localStorage, proxima));
+      marcarAtiva(armazem, proxima);
+      setMessages(carregarMensagens<Msg>(armazem, proxima));
     }
   }, []);
 
@@ -676,7 +685,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
   const renomearAba = useCallback((id: string, titulo: string) => {
     const lista = renomearThread(threadsRef.current, id, titulo);
     threadsRef.current = lista;
-    salvarThreads(localStorage, lista);
+    salvarThreads(armazem, lista);
     setThreads(lista);
   }, []);
 
@@ -687,17 +696,17 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     guardarAtual();
     let ctx = contexto;
     if (ctx === undefined) {
-      const msgsPai = paiId === abaAtivaRef.current ? msgsRef.current : carregarMensagens<Msg>(localStorage, paiId);
+      const msgsPai = paiId === abaAtivaRef.current ? msgsRef.current : carregarMensagens<Msg>(armazem, paiId);
       const ultima = [...msgsPai].reverse().find((m) => m.role === "assistant" && textoParaHistorico(m));
       ctx = ultima ? textoParaHistorico(ultima).slice(-1500) : undefined;
     }
     const { threads: lista, nova } = criarSubThread(threadsRef.current, paiId, TITULO_PADRAO, ctx);
-    salvarThreads(localStorage, lista);
+    salvarThreads(armazem, lista);
     threadsRef.current = lista;
     abaAtivaRef.current = nova.id;
     setThreads(lista);
     setAbaAtiva(nova.id);
-    marcarAtiva(localStorage, nova.id);
+    marcarAtiva(armazem, nova.id);
     setMessages([]);
     setEditando(null);
     setInput((v) => (v.trim() ? v : "Aprofunde: "));
@@ -721,7 +730,7 @@ export default function StudyCoworkChat({ active = true }: { active?: boolean })
     if (!atual || atual.titulo !== TITULO_PADRAO) return;
     const lista = renomearThread(threadsRef.current, aba, tituloAPartirDe(texto.replace(/^aprofunde:\s*/i, "")));
     threadsRef.current = lista;
-    salvarThreads(localStorage, lista);
+    salvarThreads(armazem, lista);
     setThreads(lista);
   }, []);
 

@@ -6,7 +6,8 @@
  */
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
-import { arvoreDeThreads, carregarThreads, ESCOPO_COWORK, ESCOPO_PESQUISA, type Thread } from "@/lib/chat/threads";
+import { arvoreDeThreads, listarThreads, ESCOPO_COWORK, ESCOPO_PESQUISA, type Thread } from "@/lib/chat/threads";
+import { useArmazemDaConta } from "@/lib/chat/contaNoNavegador";
 import { pedirConversa, type SalaChat } from "@/lib/chat/conversasNav";
 
 export default function ConversasDaSala({ sala, onEntrar, max = 5 }: {
@@ -16,12 +17,15 @@ export default function ConversasDaSala({ sala, onEntrar, max = 5 }: {
   max?: number;
 }) {
   const [recentes, setRecentes] = useState<Thread[]>([]);
+  const area = useArmazemDaConta();
   useEffect(() => {
+    setRecentes([]);
+    if (!area) return;
     try {
-      const lista = carregarThreads(localStorage, sala === "pesquisa" ? ESCOPO_PESQUISA : ESCOPO_COWORK);
+      const lista = listarThreads(area.armazem, sala === "pesquisa" ? ESCOPO_PESQUISA : ESCOPO_COWORK);
       setRecentes(arvoreDeThreads(lista).map((n) => n.thread).slice(0, max));
     } catch { /* aba anônima: só o "+ Nova" */ }
-  }, [sala, max]);
+  }, [sala, max, area]);
 
   const ir = (p: { id?: string; nova?: boolean }) => { pedirConversa({ sala, ...p }); onEntrar(); };
   return (
