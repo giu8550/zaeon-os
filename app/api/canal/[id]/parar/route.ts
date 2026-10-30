@@ -31,6 +31,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     id: row.id, canalId: canal.id, autorTipo: "sistema", autorId: AUTOR_PARAR, texto: row.texto, mencoes: [],
     createdAt: row.createdAt.toISOString(), autorNome: u.name || "Alguém", autorAvatar: null,
   } satisfies MensagemWire);
-  for (const agentKey of agentes) await publicarPusher(canal.id, EV_DIGITANDO, { agentKey, estado: "ocioso" });
+  // `parou: true` — a tela apaga o balão E passa a ignorar o "escrevendo" atrasado dessa agente (#645: sem a marca, este
+  // "ocioso" era lido como "o turno acabou", soltava a agente e o próximo aviso trazia o balão e o ■ de volta)
+  for (const agentKey of agentes) await publicarPusher(canal.id, EV_DIGITANDO, { agentKey, estado: "ocioso", parou: true });
   return NextResponse.json({ ok: true, mensagem: { id: row.id } });
 }

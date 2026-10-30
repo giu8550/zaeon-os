@@ -167,7 +167,9 @@ describe("POST /api/canal/[id]/mensagem · #438 agente dispensada", () => {
     expect(state.criadas[1].texto).toContain("@aura");
     expect(state.criadas[2].texto).toBe("Aura saiu da conversa");
     // a pessoa vê tudo ao vivo: a mensagem, a despedida e a linha do sistema
-    expect(state.publicados.map((p) => (p[2] as any).autorTipo)).toEqual(["humano", "agente", "sistema"]);
+    expect(state.publicados.filter((p) => p[1] === "mensagem").map((p) => (p[2] as any).autorTipo)).toEqual(["humano", "agente", "sistema"]);
+    // #645: e o balão "escrevendo" dela some na hora pra todo mundo (com a marca: o aviso atrasado não o traz de volta)
+    expect(state.publicados.at(-1)).toEqual([CANAL, "agente-digitando", { agentKey: "aura", estado: "ocioso", parou: true }]);
   });
 
   it("sem @, dispensando a agente da vez (quem estava falando com ela)", async () => {

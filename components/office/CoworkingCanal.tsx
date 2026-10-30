@@ -338,11 +338,11 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       });
       // alguém marcou/apagou horário na agenda deste canal → a bandeja (se aberta) recarrega
       ch.bind(EV_AGENDA, () => { if (c.id === ativoRef.current) setAgendaVersao((v) => v + 1); });
-      ch.bind(EV_DIGITANDO, (d: { agentKey: string; estado: string }) => {
+      ch.bind(EV_DIGITANDO, (d: { agentKey: string; estado: string; parou?: boolean }) => {
         if (c.id !== ativoRef.current) return;
         // estado em palavras (pesquisando, investigando, em descanso…); valor desconhecido = "digitando"
         const est = normalizarEstado(d.estado);
-        if (!avisoDeQuemParou(parados.current, d.agentKey, estaAtivo(est))) return;   // #645: o ■ vale com 1 clique
+        if (!avisoDeQuemParou(parados.current, d.agentKey, estaAtivo(est), d.parou === true)) return;   // #645: o ■ vale com 1 clique
         setEstadoAgente((m) => ({ ...m, [d.agentKey]: est }));
         if (estaAtivo(est)) agenteAte.current[d.agentKey] = Date.now() + PRAZO_AGENTE_MS;
         setDigitando((prev) => (estaAtivo(est) ? [...new Set([...prev, d.agentKey])] : prev.filter((k) => k !== d.agentKey)));
