@@ -4,9 +4,12 @@ import { render, screen, fireEvent, cleanup, waitFor, act } from "@testing-libra
 import axe from "axe-core";
 import { respostaStream } from "@/lib/chat/test-utils";
 
+const sessao = vi.hoisted(() => ({ atual: { data: { user: { email: "ana@zaeon.com" } }, status: "authenticated" } as any }));
 vi.mock("next/link", () => ({ default: ({ href, children, ...p }: any) => <a href={href} {...p}>{children}</a> }));
 vi.mock("@/components/studio/StudioBlock", () => ({ default: ({ block }: any) => <div data-testid="studio">{block.studioKind}:{block.title}</div> }));
+vi.mock("next-auth/react", () => ({ useSession: () => sessao.atual }));
 import MobileChat from "@/components/mobile/MobileChat";
+import { chaveDaConta, contaDaSessao } from "@/lib/chat/contaNoNavegador";
 
 const S = '@@STRUCTURED@@{"nucleo":"A luz é uma onda eletromagnética.","conceitos":["fóton"]}';
 const j = (b: any, status = 200) => new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json" } });
@@ -36,7 +39,7 @@ describe("MobileChat · Estudos", () => {
     render(<MobileChat surface="estudos" />);
     digitarEEnviar("fotossíntese");
     await screen.findByText("ok");
-    expect(JSON.parse(localStorage.getItem("zaeon.m.conversas")!)[0].titulo).toBe("fotossíntese");
+    expect(JSON.parse(localStorage.getItem(chaveDaConta(contaDaSessao("ana@zaeon.com"), "zaeon.m.conversas"))!)[0].titulo).toBe("fotossíntese");
     expect(JSON.parse(localStorage.getItem("zaeon.m.aba")!)).toBe("estudos");
   });
   it("ações: gera um artefato com cartão de progresso e depois o viewer", async () => {
@@ -113,5 +116,30 @@ describe("MobileChat · Pesquisa", () => {
     digitarEEnviar("x");
     const link = await screen.findByRole("link", { name: "Entrar" });
     expect(link.getAttribute("href")).toBe("/login?callbackUrl=/m/pesquisa");
+  });
+});
+
+describe("MobileChat · conversas por conta (#663)", () => {
+  const conta = (email: string | null) => { sessao.atual = email ? { data: { user: { email } }, status: "authenticated" } : { data: null, status: "unauthenticated" }; };
+  afterEach(() => conta("ana@zaeon.com"));
+  it("depois de sair, as conversas não aparecem; ao entrar de novo, voltam", async () => {
+    rotear((u) => (u === "/api/ai/chat" ? respostaStream([S]) : j({})));
+    render(<MobileChat surface="estudos" />);
+    digitarEEnviar("segredo da ana");
+    await screen.findByText(/onda eletromagnética/);
+    cleanup();
+    conta(null);
+    render(<MobileChat surface="estudos" />);
+    await waitFor(() => expect(screen.getByLabelText("Mensagem")).toBeTruthy());
+    expect(screen.queryByText("segredo da ana")).toBeNull();
+    cleanup();
+    conta("bia@zaeon.com");
+    render(<MobileChat surface="estudos" />);
+    await waitFor(() => expect(screen.getByLabelText("Mensagem")).toBeTruthy());
+    expect(screen.queryByText("segredo da ana")).toBeNull();
+    cleanup();
+    conta("ana@zaeon.com");
+    render(<MobileChat surface="estudos" />);
+    expect(await screen.findByText("segredo da ana")).toBeTruthy();
   });
 });

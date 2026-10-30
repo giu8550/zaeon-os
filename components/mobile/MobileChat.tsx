@@ -11,6 +11,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useAuraChat } from "@/lib/chat/useAuraChat";
+import { useArmazemDaConta } from "@/lib/chat/contaNoNavegador";
+import type { Armazem } from "@/lib/chat/threads";
 import { useScholar } from "@/lib/chat/useScholar";
 import { criarEstudo, gerarArtefato, type BlocoStudio } from "@/lib/studio/studioClient";
 import { cookiePref } from "@/lib/ui/mobilePref";
@@ -34,12 +36,19 @@ const K_CONVERSAS = "zaeon.m.conversas";
 const K_CONVERSA = "zaeon.m.conversa";
 const novaId = () => "m" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
-function ler<T>(k: string, padrao: T): T { try { const v = localStorage.getItem(k); return v ? (JSON.parse(v) as T) : padrao; } catch { return padrao; } }
-function gravar(k: string, v: unknown) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* sem L0 */ } }
+function ler<T>(a: Armazem, k: string, padrao: T): T { try { const v = a.getItem(k); return v ? (JSON.parse(v) as T) : padrao; } catch { return padrao; } }
+function gravar(a: Armazem, k: string, v: unknown) { try { a.setItem(k, JSON.stringify(v)); } catch { /* sem L0 */ } }
 
 type Geracao = { id: string; kind: string; rotulo: string; status: "gerando" | "pronto" | "erro"; bloco?: BlocoStudio; aberto?: boolean };
 
+/** #663: cada conta tem as suas conversas; trocar de conta remonta o chat com a área da outra. */
 export default function MobileChat({ surface }: { surface: Surface }) {
+  const area = useArmazemDaConta();
+  if (!area) return null;
+  return <ChatDaConta key={area.conta} armazem={area.armazem} surface={surface} />;
+}
+
+function ChatDaConta({ surface, armazem }: { surface: Surface; armazem: Armazem }) {
   const [conversaId, setConversaId] = useState<string>("");
   const [conversas, setConversas] = useState<ConversaLocal[]>([]);
   const [texto, setTexto] = useState("");
@@ -50,12 +59,12 @@ export default function MobileChat({ surface }: { surface: Surface }) {
 
   // última aba + conversa corrente (L0, por aparelho)
   useEffect(() => {
-    gravar(K_ABA, surface);
-    const lista = ler<ConversaLocal[]>(K_CONVERSAS, []);
+    try { localStorage.setItem(K_ABA, JSON.stringify(surface)); } catch { /* sem L0 */ }
+    const lista = ler<ConversaLocal[]>(armazem, K_CONVERSAS, []);
     setConversas(lista);
-    setConversaId(ler<string>(K_CONVERSA, "") || lista[0]?.id || novaId());
+    setConversaId(ler<string>(armazem, K_CONVERSA, "") || lista[0]?.id || novaId());
   }, [surface]);
-  useEffect(() => { if (conversaId) gravar(K_CONVERSA, conversaId); }, [conversaId]);
+  useEffect(() => { if (conversaId) gravar(armazem, K_CONVERSA, conversaId); }, [conversaId]);
 
   const gerar = useCallback(async (kind: string, topico: string) => {
     const id = novaId();
@@ -70,6 +79,7 @@ export default function MobileChat({ surface }: { surface: Surface }) {
   }, []);
 
   const aura = useAuraChat({
+    armazem,
     scopeId: conversaId || "pendente",
     onAcao: ({ kind, topic }) => void gerar(kind, topic), // a própria Aura pediu um artefato
   });
@@ -86,7 +96,7 @@ export default function MobileChat({ surface }: { surface: Surface }) {
     // batiza a conversa com a 1ª pergunta
     if (!conversas.some((c) => c.id === conversaId)) {
       const nova = [{ id: conversaId, titulo: t.slice(0, 60), at: Date.now() }, ...conversas].slice(0, 50);
-      setConversas(nova); gravar(K_CONVERSAS, nova);
+      setConversas(nova); gravar(armazem, K_CONVERSAS, nova);
     }
     void aura.enviar(t);
   }, [texto, surface, scholar, aura, conversas, conversaId]);

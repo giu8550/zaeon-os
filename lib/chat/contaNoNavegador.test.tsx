@@ -73,6 +73,19 @@ describe("migrarConversasAntigas", () => {
     expect(listarThreads(armazemDaConta(localStorage, CONTA_ANONIMA))).toEqual([]);
     expect(localStorage.getItem(CHAVE_INDICE)).not.toBeNull();
   });
+  it("as conversas do celular também vão para a conta", () => {
+    localStorage.setItem("zaeon.m.conversas", "[1]");
+    localStorage.setItem("zaeon.m.conversa", '"m1"');
+    localStorage.setItem("zaeon.m.chat.estudos.m1", "[2]");
+    localStorage.setItem("zaeon.m.aba", '"estudos"');
+    migrarConversasAntigas(localStorage, A);
+    const a = armazemDaConta(localStorage, A);
+    expect(a.getItem("zaeon.m.conversas")).toBe("[1]");
+    expect(a.getItem("zaeon.m.conversa")).toBe('"m1"');
+    expect(a.getItem("zaeon.m.chat.estudos.m1")).toBe("[2]");
+    expect(localStorage.getItem("zaeon.m.conversas")).toBeNull();
+    expect(localStorage.getItem("zaeon.m.aba")).toBe('"estudos"');
+  });
   it("preferências do aparelho ficam onde estão", () => {
     antigas();
     migrarConversasAntigas(localStorage, A);
