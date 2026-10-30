@@ -32,6 +32,16 @@ export const EVT_ANEXAR = "zaeon:chat:anexar";
 
 const ehPdf = (f: File) => f.type === "application/pdf" || /\.pdf$/i.test(f.name);
 
+/** #414: o PDF arrastado da biblioteca não abriu (o site de origem recusou ou saiu do ar) — a mensagem da Aura, com o link
+ *  pro site quando é um endereço da web (o upload local não tem pra onde mandar). */
+export function avisoPdfNaoAbriu(titulo: string, pdfUrl: string): string {
+  const nome = (titulo || "esse documento").replace(/\.pdf$/i, "");
+  const web = /^https?:\/\//i.test(pdfUrl);
+  return web
+    ? `Não consegui abrir **${nome}** aqui: o site de origem não deixou baixar o PDF (ou saiu do ar). Abra no [site original](${pdfUrl}), baixe o arquivo e solte o PDF aqui na conversa — aí eu leio.`
+    : `Não consegui abrir **${nome}**: o arquivo não está mais disponível. Solte o PDF de novo aqui na conversa — aí eu leio.`;
+}
+
 /** os bytes de um PDF da biblioteca como data: URL (remoto pelo proxy; upload local direto) */
 export async function pdfDaBiblioteca(f: LibraryFile): Promise<string | null> {
   try {
@@ -128,7 +138,9 @@ export function useAnexoChat(
   const anexarDaBiblioteca = useCallback(async (id: string) => {
     const f = filesRef.current.find((x) => x.id === id); if (!f) return;
     const dataUrl = await pdfDaBiblioteca(f);
-    if (dataUrl) { fixar({ id: f.id, nome: f.title, dataUrl }); oRef.current.focar(); }
+    if (dataUrl) { fixar({ id: f.id, nome: f.title, dataUrl }); oRef.current.focar(); return; }
+    // #414: antes não acontecia NADA ("o PDF não aparece quando arrastamos") — agora a Aura diz o que houve e o caminho
+    oRef.current.aoGuardar?.(avisoPdfNaoAbriu(f.title, f.pdfUrl));
   }, []);
 
   useEffect(() => {
