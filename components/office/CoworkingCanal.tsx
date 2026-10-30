@@ -34,6 +34,7 @@ import { canalChannel, presenceChannel, EV_MENSAGEM, EV_DIGITANDO, EV_AGENDA, EV
 import { comFotoDaLista, comFotos, juntarParcial, type AvisoMensagem } from "@/lib/canal/aviso";
 import { linhasChamaveis, quemRespondeSemArroba } from "@/lib/canal/alvo";
 import { avisoDeQuemParou, mostraParar } from "@/lib/canal/parar";
+import { chegouAoVivo, confirmarEnviada, ehErroDeRede, ehLocal, estaEnviando, mensagemDeErro, vigiaAoVivo, PREFIXO_ENVIANDO } from "@/lib/canal/conexao";
 import Carregando from "@/components/office/Carregando";
 import { Square } from "lucide-react";
 import { deveAvisarDigitando, podarDigitando, quemDigita, estaNoFim, vigiaReconexao, TTL_DIGITANDO_MS, type Digitando } from "@/lib/canal/presenca";
@@ -61,6 +62,10 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const [ativoId, setAtivoId] = useState<string | null>(null);
   const [det, setDet] = useState<Detalhe | null>(null);
   const [carregando, setCarregando] = useState(true);
+  // #657: internet ruim — a busca FALHOU (não é demora), o navegador está offline, a conexão ao vivo caiu
+  const [falhaCarga, setFalhaCarga] = useState(false);
+  const [offline, setOffline] = useState(() => typeof navigator !== "undefined" && navigator.onLine === false);
+  const [reconectando, setReconectando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [naoLidas, setNaoLidas] = useState<Record<string, number>>({});
   const [online, setOnline] = useState<Pessoa[]>([]);
@@ -205,9 +210,11 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const adiantado = useRef<{ id: string; resp: Promise<Response | null> } | null>(null);
 
   // ─── canais: carrega; sem nenhum, cria o primeiro (a sala nunca abre vazia) ───
-  useEffect(() => {
-    let vivo = true;
-    (async () => {
+  // #657: uma função (não só o efeito de abertura) — o "Tentar de novo" e a internet voltando refazem SÓ isto
+  const carregarLista = useCallback(async () => {
+    setFalhaCarga(false);
+    setCarregando(true);
+    {
       try {
         let ultimo: string | null = null;
         try { ultimo = localStorage.getItem(LS_ULTIMO); } catch { /* ignore */ }
@@ -220,26 +227,32 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
           const c = await fetch("/api/canal", { method: "POST", headers: H, body: JSON.stringify({ titulo: "Meu escritório", acesso: "turma", agentes: ["aura"], primeiro: true }) });
           if (c.ok) lista = [(await c.json()).canal];
         }
-        if (!vivo) return;
         setCanais(lista);
         let ult: string | null = null;
         try { ult = localStorage.getItem(LS_ULTIMO); } catch { /* ignore */ }
         setAtivoId(lista.find((c) => c.id === ult)?.id ?? lista[0]?.id ?? null);
       } catch (e) {
-        if (vivo) setErro(String((e as Error)?.message ?? e));
+        // #657: sem internet / caiu no meio → "Não deu pra abrir" na hora (antes: "Abrindo…" esperando à toa)
+        if (ehErroDeRede(e)) setFalhaCarga(true); else setErro(String((e as Error)?.message ?? e));
       } finally {
-        if (vivo) setCarregando(false);
+        setCarregando(false);
       }
-    })();
-    return () => { vivo = false; };
+    }
   }, []);
+  useEffect(() => { void carregarLista(); }, [carregarLista]);
 
   // ─── detalhe do canal ativo (+ marca lido) ───
   const carregarDetalhe = useCallback(async (id: string) => {
     // #645: o que já começou a carregar junto com a lista (só uma vez; depois, busca normal)
     const pre = adiantado.current?.id === id ? await adiantado.current.resp : null;
     adiantado.current = null;
-    const r = pre ?? await fetch(`/api/canal/${id}`, { cache: "no-store" });
+    let r = pre;
+    if (!r) {
+      try { r = await fetch(`/api/canal/${id}`, { cache: "no-store" }); } catch (e) {
+        if (ehErroDeRede(e)) { setFalhaCarga(true); return; }   // #657: avisa na hora (e volta sozinho com a internet)
+        throw e;
+      }
+    }
     if (!r.ok) {
       // sem acesso a ESTE canal (o dono mudou o acesso, tirou a pessoa…): some da lista e abre o próximo — a tela
       // nunca trava num canal fechado (o seletor, os convites e os outros canais continuam ao alcance)
@@ -257,6 +270,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     meusAliases.current = [nome, nome.split(/\s+/)[0] ?? ""].filter(Boolean);
     // #645: a foto inteira de cada pessoa veio uma vez só (em `pessoas`) — completa as mensagens com ela
     setDet({ ...d, mensagens: comFotos(d, d.eu) });
+    setFalhaCarga(false);
     setDigitando([]);
     setEstadoAgente({});
     setPessoasDigitando({});
@@ -271,13 +285,27 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   detRef.current = det;
   const atualizarDesde = useCallback(async (id: string) => {
     const atual = detRef.current;
-    const ult = atual?.canal.id === id ? [...atual.mensagens].reverse().find((m) => !m.id.startsWith("efemera-")) : undefined;
+    const ult = atual?.canal.id === id ? [...atual.mensagens].reverse().find((m) => !ehLocal(m.id)) : undefined;
     if (!ult) return carregarDetalhe(id);
     const r = await fetch(`/api/canal/${id}?desde=${encodeURIComponent(ult.createdAt)}`, { cache: "no-store" }).catch(() => null);
     if (!r?.ok) return carregarDetalhe(id);
     const novo: Detalhe = await r.json();
     setDet((d) => (d && d.canal.id === id ? { ...d, canal: novo.canal, agentes: novo.agentes, ...juntarParcial(d, novo) } : d));
   }, [carregarDetalhe]);
+
+  // ─── #657: tentar de novo SÓ o Escritório (não recarrega a página) e voltar sozinho quando a internet voltar ───
+  const tentarDeNovo = useCallback(() => {
+    setFalhaCarga(false);
+    if (!canaisRef.current.length) void carregarLista();
+    else if (ativoRef.current) void carregarDetalhe(ativoRef.current).catch(() => setFalhaCarga(true));
+  }, [carregarLista, carregarDetalhe]);
+  useEffect(() => {
+    const voltou = () => { setOffline(false); if (!detRef.current) tentarDeNovo(); };
+    const caiu = () => setOffline(true);
+    window.addEventListener("online", voltou);
+    window.addEventListener("offline", caiu);
+    return () => { window.removeEventListener("online", voltou); window.removeEventListener("offline", caiu); };
+  }, [tentarDeNovo]);
 
   // ─── badge no título da aba ───
   const totalNaoLidas = useMemo(() => Object.values(naoLidas).reduce((a, b) => a + b, 0), [naoLidas]);
@@ -316,8 +344,11 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       p = new PusherClient(key, { cluster, channelAuthorization: { endpoint: "/api/canal/pusher-auth", transport: "ajax" } });
       // #560: a conexão caiu e voltou → relê a conversa aberta (o que chegou enquanto estava fora não vem pelo Pusher)
       const voltou = vigiaReconexao();
+      const caiu = vigiaAoVivo();   // #657: "Reconectando…" enquanto a conexão ao vivo está fora
       p.connection.bind("state_change", (s: { current: string }) => {
-        if (voltou(s?.current) && ativoRef.current) void carregarDetalhe(ativoRef.current);
+        setReconectando(caiu(s?.current));
+        // #657: ao voltar, só o que chegou enquanto estava fora (não as 60 mensagens de novo)
+        if (voltou(s?.current) && ativoRef.current) void atualizarDesde(ativoRef.current);
       });
     }
     pusherRef.current = p;
@@ -334,7 +365,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       // #468: o dono me tirou deste escritório → paro de ouvir e ele some da minha lista (sem esperar o F5)
       ch.bind(EV_REMOVIDO, (d: { userId?: string }) => {
         if (!d?.userId || d.userId !== meuIdRef.current) return;
-        void tirarDaTela(c.id).catch((e) => setErro(String((e as Error)?.message ?? e)));
+        void tirarDaTela(c.id).catch((e) => setErro(mensagemDeErro(e, "não deu pra atualizar a lista")));
       });
       // alguém marcou/apagou horário na agenda deste canal → a bandeja (se aberta) recarrega
       ch.bind(EV_AGENDA, () => { if (c.id === ativoRef.current) setAgendaVersao((v) => v + 1); });
@@ -382,7 +413,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       // #438: aviso leve (mensagem grande demais pro tempo real) → busca a conversa; senão entra na lista, com a
       // foto da lista de pessoas quando o aviso veio sem ela (foto guardada inteira não vai pelo Pusher)
       if (m.cortada) void atualizarDesde(canalId);
-      else setDet((d) => (d && !d.mensagens.some((x) => x.id === m.id) ? { ...d, mensagens: [...d.mensagens, comFotoDaLista(m, d.pessoas)] } : d));
+      // #657: a minha que chegou ao vivo antes da resposta do envio substitui a "enviando…" igual
+      else setDet((d) => (d ? { ...d, mensagens: chegouAoVivo(d.mensagens, comFotoDaLista(m, d.pessoas), meuIdRef.current) } : d));
       if (m.autorTipo === "agente") setDigitando((prev) => prev.filter((k) => k !== m.autorId));
       // a mensagem da pessoa chegou: ela parou de "digitar"
       if (m.autorTipo === "humano") setPessoasDigitando((prev) => { if (!(m.autorId in prev)) return prev; const n = { ...prev }; delete n[m.autorId]; return n; });
@@ -446,10 +478,24 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
     const t = textoFixo ?? mensagemComAnexos(texto, guardados);
     if (!t || !ativoId || enviando || subindo) return;
     setEnviando(true);
+    // #657: a mensagem entra NA HORA, meio apagada, "enviando…" (antes nada aparecia até o servidor responder); deu
+    // errado → sai da conversa e o texto volta pra caixa
+    const eu = detRef.current?.eu;
+    const temp: MensagemWire = {
+      id: `${PREFIXO_ENVIANDO}${Date.now()}`, canalId: ativoId, autorTipo: "humano", autorId: meuIdRef.current ?? "", texto: t, mencoes: [],
+      createdAt: new Date().toISOString(), autorNome: eu?.nome ?? "", autorAvatar: eu?.avatar ?? null,
+    };
+    const rascunho = texto;
+    setDet((d) => (d ? { ...d, mensagens: [...d.mensagens, temp] } : d));
+    if (textoFixo === undefined) setTexto("");
+    const desfazer = () => {
+      setDet((d) => (d ? { ...d, mensagens: d.mensagens.filter((x) => x.id !== temp.id) } : d));
+      if (textoFixo === undefined) setTexto((atual) => atual || rascunho);
+    };
     try {
       void pedirPermissao(); // 1ª vez: gesto do usuário → pode pedir
       const r = await fetch(`/api/canal/${ativoId}/mensagem`, { method: "POST", headers: H, body: JSON.stringify({ texto: t }) });
-      if (!r.ok) { const j = await r.json().catch(() => ({})); setErro(j?.error || `Falhou (${r.status})`); return; }
+      if (!r.ok) { const j = await r.json().catch(() => ({})); desfazer(); setErro(j?.error || `Falhou (${r.status})`); return; }
       const j = await r.json();
       const m: MensagemWire = j.mensagem;
       // Quem vai responder = os `turnos` do servidor: as @menções OU, sem @, o último agente do canal.
@@ -461,8 +507,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
         // um "em descanso" antigo não pode aparecer como o balão de "escrevendo" do novo turno
         setEstadoAgente((m) => ({ ...m, ...Object.fromEntries(alvos.map((k) => [k, "digitando" as EstadoAgente])) }));
       }
-      setDet((d) => (d && !d.mensagens.some((x) => x.id === m.id) ? { ...d, mensagens: [...d.mensagens, m] } : d));
-      if (textoFixo === undefined) { setTexto(""); setAnexos([]); }
+      setDet((d) => (d ? { ...d, mensagens: confirmarEnviada(d.mensagens, temp.id, m) } : d));
+      if (textoFixo === undefined) setAnexos([]);
       ultimoAvisoDigitando.current = null; // a próxima mensagem volta a avisar na primeira tecla
       setErro(null);
       // agentes na barra: os chamados entram, a dispensada sai (#440 — o servidor manda a lista final)
@@ -473,7 +519,8 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
         setDet((d) => (d && d.canal.id === ativoId ? { ...d, canal: ajustar(d.canal) } : d));
       }
     } catch (e) {
-      setErro(String((e as Error)?.message ?? e));
+      desfazer();
+      setErro(mensagemDeErro(e, "sua mensagem não foi enviada"));   // #657: não o "NetworkError…" cru
     } finally {
       setEnviando(false);
       inputRef.current?.focus();
@@ -532,7 +579,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       if (r.ok && j?.jaContatos) return { ok: true, msg: "Vocês já são contatos — a conversa está na aba Privado." };
       return { ok: false, msg: j?.error || `Não deu pra convidar (${r.status}).` };
     } catch (e) {
-      return { ok: false, msg: String((e as Error)?.message ?? e) };
+      return { ok: false, msg: mensagemDeErro(e, "o convite não foi enviado") };
     }
   }, [carregarConvites, conversaDoConvite]);
 
@@ -584,7 +631,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       setMenu(null);
       await tirarDaTela(c.id);
     } catch (e) {
-      setErro(String((e as Error)?.message ?? e));
+      setErro(mensagemDeErro(e, "não deu pra apagar"));
     } finally {
       setApagando(null);
     }
@@ -612,9 +659,10 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   // ─── render ───
   if (erro === "off") return <Vazio texto="O escritório coworking ainda não está ligado neste ambiente." />;
   // #645: demorou → avisa que pode ser a conexão e, mais um pouco, "Tentar de novo"
-  if (carregando) return <Carregando texto="Abrindo o escritório…" onTentar={() => window.location.reload()} />;
+  // #657: falhou → avisa na hora; sem internet → diz isso e abre sozinho quando voltar; "Tentar de novo" refaz só o Escritório
+  if (carregando) return <Carregando texto="Abrindo o escritório…" onTentar={tentarDeNovo} falhou={falhaCarga} offline={offline} />;
   if ((!ativoId || !det) && erro === "403") return <Vazio texto="Você não tem acesso a este canal." />;
-  if (!ativoId || !det) return <Carregando texto="Abrindo o canal…" onTentar={() => (ativoId ? void carregarDetalhe(ativoId).catch(() => undefined) : window.location.reload())} />;
+  if (!ativoId || !det) return <Carregando texto="Abrindo o canal…" onTentar={tentarDeNovo} falhou={falhaCarga} offline={offline} />;
 
   const canal = det.canal;
   const meuId = det.eu.id;
@@ -633,7 +681,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
       if (r.status === 201) { void carregarConvites(); return { ok: true, msg: "Convite enviado. Ela aceita pelo sino." }; }
       if (r.ok && j?.dmCanalId) { void abrirConversa(j.dmCanalId); return { ok: true, msg: "Vocês já são contatos." }; }
       return { ok: false, msg: j?.error || `Não deu pra convidar (${r.status}).` };
-    } catch (e) { return { ok: false, msg: String((e as Error)?.message ?? e) }; }
+    } catch (e) { return { ok: false, msg: mensagemDeErro(e, "o convite não foi enviado") }; }
   };
   const removerPessoa = async (p: { id: string; nome: string }) => {
     if (!window.confirm(textoConfirmarRemover(p.nome))) return;
@@ -643,7 +691,7 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   const conversaCom = (uid: string) => convites.contatos.find((c) => c.pessoa.id === uid)?.dmCanalId ?? null;
   // A dica "Zenita responde": quem responde se EU mandar sem @ agora — a mesma regra do servidor (#466): numa
   // conversa com outras pessoas, a agente só responde quem estava falando com ela (lib/canal/alvo.ts).
-  const quemResponde = quemRespondeSemArroba(det.mensagens.filter((m) => !m.id.startsWith("efemera-")), agentes.map((a) => a.agentKey), meuId, humanosNoCanal(canal));
+  const quemResponde = quemRespondeSemArroba(det.mensagens.filter((m) => !ehLocal(m.id)), agentes.map((a) => a.agentKey), meuId, humanosNoCanal(canal));
   const agenteAtivo = agentes.find((a) => a.agentKey === quemResponde) ?? null;
   // #635: as linhas "saiu da conversa" que ganham "Chamar de volta" — só a ÚLTIMA saída de cada agente que ainda está fora
   const chamavel = linhasChamaveis(det.mensagens, agentes.map((a) => a.agentKey));
@@ -653,6 +701,13 @@ export default function CoworkingCanal({ agenteInicial = null }: { agenteInicial
   return (
     <div className="w-full h-full min-h-0 flex flex-col p-2 sm:p-4" style={zoom.style}>
       <div data-tour="escritorio-canal" className={`relative flex-1 min-h-0 flex flex-col rounded-[28px] overflow-hidden ${VIDRO_PAINEL}`}>
+        {/* #657: a conexão ao vivo caiu (ou a internet): as mensagens novas não chegam até voltar */}
+        {(reconectando || offline) && (
+          <div role="status" aria-live="polite" className="pointer-events-none absolute left-1/2 top-14 z-40 -translate-x-1/2 flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-50/95 px-3 py-1 text-[11.5px] font-semibold text-amber-800 shadow-sm dark:bg-amber-900/70 dark:text-amber-100">
+            <span aria-hidden className="h-2.5 w-2.5 rounded-full border-2 border-current border-t-transparent animate-spin motion-reduce:animate-none" />
+            {offline ? "Sem internet — as mensagens chegam quando voltar" : "Reconectando…"}
+          </div>
+        )}
         {/* agenda semanal do canal: bandeja por cima da conversa (#396) */}
         <AgendaBandeja canalId={ativoId} aberta={agendaAberta} onFechar={() => setAgendaAberta(false)} versao={agendaVersao} />
         {/* barra: agenda · canal · presença · cartolina · config */}
@@ -867,7 +922,7 @@ function Bolha({ m, minha, aliases }: { m: MensagemWire; minha: boolean; aliases
   return (
     <div className={`flex items-end gap-2 ${minha ? "flex-row-reverse" : ""}`}>
       {!minha && <AgentAvatar src={m.autorAvatar} nome={nome} size={30} />}
-      <div className={`max-w-[85%] sm:max-w-[70%] flex flex-col ${minha ? "items-end" : "items-start"}`}>
+      <div className={`max-w-[85%] sm:max-w-[70%] flex flex-col ${minha ? "items-end" : "items-start"} ${estaEnviando(m.id) ? "opacity-60" : ""}`}>
         {!minha && (
           <span className={`px-1 mb-0.5 text-[11px] font-semibold ${m.autorTipo === "agente" ? "text-cyan-700 dark:text-cyan-300" : TXT_MUDO}`}>
             {nome}{m.autorTipo === "agente" ? ` · @${m.autorId}` : ""}
@@ -880,7 +935,7 @@ function Bolha({ m, minha, aliases }: { m: MensagemWire; minha: boolean; aliases
             return alvo ? <span key={i} className="font-bold text-blue-700 dark:text-cyan-300">{p}</span> : <span key={i}>{p}</span>;
           })}
         </div>
-        <span className={`px-1 mt-0.5 text-[10px] ${TXT_MUDO}`}>{hora(m.createdAt)}</span>
+        <span className={`px-1 mt-0.5 text-[10px] ${TXT_MUDO}`}>{estaEnviando(m.id) ? "enviando…" : hora(m.createdAt)}</span>
       </div>
     </div>
   );
