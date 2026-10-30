@@ -3,7 +3,7 @@
 ## Resultado automático
 
 - Testes do mapa e da conexão: 140 de 140 passando.
-- Suíte completa: 4863 passando, 10 ignorados, 29 falhas. As 29 são as falhas já conhecidas no Windows (`pg`, sandpack, `leitor/compose`, `octa/fortify`, `octa/genart`, `studio/storage`); nenhuma vem do mapa.
+- Suíte completa: 4870 passando, 10 ignorados, 29 falhas. As 29 são as falhas já conhecidas no Windows (`pg`, sandpack, `leitor/compose`, `octa/fortify`, `octa/genart`, `studio/storage`); nenhuma vem do mapa.
 - Checagem de tipos do projeto inteiro: limpa.
 - Ainda não testado no navegador com um mapa real: a tela depende de login e banco. Use a lista abaixo em produção.
 
