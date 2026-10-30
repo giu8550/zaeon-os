@@ -26,10 +26,11 @@ const attr = (tag: string, nome: string): string | null => {
 const desescapar = (s: string) => s.replace(/&amp;/g, "&").replace(/&#x2F;/gi, "/").replace(/&#47;/g, "/");
 
 /**
- * O endereço do PDF que a página anuncia (absoluto, resolvido contra a própria página). Só olha o começo da página
- * (as marcações ficam no <head>). Nada anunciado → null. NÃO checa se o host é público: quem chama revalida (SSRF).
+ * Os endereços de PDF que a página anuncia, na ordem (absolutos, resolvidos contra a própria página, sem repetir). Só
+ * olha o começo da página (as marcações ficam no <head>). Nada anunciado → []. NÃO checa se o host é público: quem
+ * chama revalida (SSRF). Revisão do #414: quem chama tenta os seguintes quando o primeiro não é PDF.
  */
-export function pdfDaPagina(html: string, base: string): string | null {
+export function pdfsDaPagina(html: string, base: string): string[] {
   const head = html.slice(0, 200_000);
   const candidatos: string[] = [];
   for (const tag of head.match(/<meta\b[^>]*>/gi) ?? []) {
@@ -45,11 +46,15 @@ export function pdfDaPagina(html: string, base: string): string | null {
       if (h) candidatos.push(h);
     }
   }
+  const out: string[] = [];
   for (const c of candidatos) {
     try {
       const u = new URL(desescapar(c), base);
-      if (u.protocol === "http:" || u.protocol === "https:") return u.toString();
+      if ((u.protocol === "http:" || u.protocol === "https:") && !out.includes(u.toString())) out.push(u.toString());
     } catch { /* endereço inválido: tenta o próximo */ }
   }
-  return null;
+  return out;
 }
+
+/** O primeiro PDF anunciado (ou null). */
+export const pdfDaPagina = (html: string, base: string): string | null => pdfsDaPagina(html, base)[0] ?? null;

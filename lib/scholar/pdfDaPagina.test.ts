@@ -24,3 +24,11 @@ describe("pdfDoArxiv (#414)", () => {
     expect(pdfDoArxiv("https://notarxiv.org/abs/1")).toBeNull();
   });
 });
+
+describe("pdfsDaPagina (#414, revisão)", () => {
+  it("devolve todos os anunciados, na ordem e sem repetir", async () => {
+    const { pdfsDaPagina } = await import("./pdfDaPagina");
+    const h = `<meta name="citation_pdf_url" content="/a.pdf"><meta name="citation_pdf_url" content="/a.pdf"><link rel="alternate" type="application/pdf" href="/b.pdf"><metadata name="citation_pdf_url" content="/nao.pdf">`;
+    expect(pdfsDaPagina(h, "https://r.org/x")).toEqual(["https://r.org/a.pdf", "https://r.org/b.pdf"]);
+  });
+});
