@@ -14,7 +14,7 @@ import { Fingerprint, Instagram, Linkedin, Globe, Signal, BatteryMedium } from "
 import { EQUIPE, type MembroEquipe } from "@/lib/about/equipe";
 
 function Foto({ m }: { m: MembroEquipe }) {
-  const [falhou, setFalhou] = useState(false);
+  const [falhou, setFalhou] = useState(!m.foto);
   const iniciais = m.nome.split(/\s+/).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
   return (
     <div className="relative shrink-0 h-24 w-24 md:h-28 md:w-28 rounded-2xl p-[2px]" style={{ background: `linear-gradient(160deg, ${m.acento}, transparent 70%)` }}>

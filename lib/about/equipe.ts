@@ -7,8 +7,9 @@ export type MembroEquipe = {
   id: string;
   nome: string;
   cargo: string;
-  /** caminho público da foto (public/…) */
-  foto: string;
+  /** caminho público da foto (public/…). Sem foto ainda → sem o campo: o PDA mostra as iniciais SEM pedir a imagem
+   *  (#414: o /team/cofundadora.jpg que não existe dava 404 no console de toda visita à página Sobre) */
+  foto?: string;
   /** 2–3 frases, na primeira pessoa ou não */
   bio: string;
   /** "o que faz" em 3 pílulas */
@@ -32,7 +33,7 @@ export const EQUIPE: MembroEquipe[] = [
     id: "cofundadora",
     nome: "Cofundadora",
     cargo: "Cofundadora",
-    foto: "/team/cofundadora.jpg",
+    // #414: a foto ainda não existe em public/team/ — quando chegar, é só pôr o arquivo e voltar com `foto: "/team/cofundadora.jpg"`
     bio: "Ao lado do fundador desde o início, cuida de que a Zaeon seja útil pra gente de verdade: pessoas, instituições e o que a plataforma entrega no mundo real.",
     tags: ["Pessoas", "Instituições", "Entrega"],
     acento: "#a78bfa",

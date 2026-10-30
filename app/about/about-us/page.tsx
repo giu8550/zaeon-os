@@ -305,12 +305,15 @@ const AgentSection = () => {
                         </span>
                         {/* Wrapper com fundo sutil para garantir visibilidade no modo claro e escuro */}
                         <div className="relative px-6 py-2 rounded-xl bg-white/40 dark:bg-slate-800/80 backdrop-blur-md border border-slate-200 dark:border-white/10 opacity-70 hover:opacity-100 transition-all duration-300 filter grayscale hover:grayscale-0 shadow-sm cursor-default">
-                            {/* ⚠️ Você pode trocar este src pela imagem local usando next/image no futuro */}
-                            <img
-                                src="https://upload.wikimedia.org/wikipedia/commons/0/0e/Google_for_Startups_logo.svg"
-                                alt="Google for Startups"
-                                className="h-5 md:h-6 w-auto object-contain"
-                            />
+                            {/* #414: o logo vinha de um endereço da Wikimedia que não existe mais (404 em toda visita) — agora é
+                                texto com as cores do Google, sem depender de site de fora. Pra voltar a ser imagem: pôr o
+                                arquivo em public/ e trocar por um <img src="/…"> local. */}
+                            <span role="img" aria-label="Google for Startups" className="flex items-baseline gap-1.5 text-[15px] md:text-[17px] font-semibold tracking-tight leading-none">
+                                <span aria-hidden>
+                                    <span style={{ color: "#4285F4" }}>G</span><span style={{ color: "#EA4335" }}>o</span><span style={{ color: "#FBBC05" }}>o</span><span style={{ color: "#4285F4" }}>g</span><span style={{ color: "#34A853" }}>l</span><span style={{ color: "#EA4335" }}>e</span>
+                                </span>
+                                <span aria-hidden className="font-normal text-slate-600 dark:text-slate-300">for Startups</span>
+                            </span>
                         </div>
                     </div>
                 </motion.div>
