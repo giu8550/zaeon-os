@@ -27,7 +27,7 @@ describe("rotas de validação", () => {
     expect((await APPLY(req({ evidencia: "x" }), { params: { id: ID, noId: "k_1" } })).status).toBe(403);
     m.getMapaForUser.mockResolvedValue({ mapa, papel: "dono" });
     m.aplicarNo.mockResolvedValue({ ok: false, motivo: "sem_professor" });
-    expect((await APPLY(req({}), { params: { id: ID, noId: "k_1" } })).status).toBe(409);
+    expect((await APPLY(req({ evidencia: "x" }), { params: { id: ID, noId: "k_1" } })).status).toBe(409);
     m.aplicarNo.mockResolvedValue({ ok: true, mapa, validacao: { id: VID, status: "pendente" }, estado: "aplicado" });
     const r = await APPLY(req({ evidencia: "laudo", validadorId: "zz" }), { params: { id: ID, noId: "k_1" } });
     expect(r.status).toBe(201);
