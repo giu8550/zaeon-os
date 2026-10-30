@@ -94,6 +94,8 @@ export async function generateMap(input: GenerateMapInput): Promise<GenerateMapR
       bb = normalizarBackbone(raw, classificacao.tipoTopico, existente?.nos ?? []);
     } catch { /* fallback abaixo */ }
   }
+  // #661: ao REFAZER, sem resposta do modelo fica o percurso que já existe (o genérico apagaria o plano real)
+  if (!bb && existente?.backbone.length) throw new Error("generateMap: modelo indisponível, percurso mantido");
   if (!bb) { degraded = true; bb = normalizarBackbone({ passos: backboneFallback(classificacao.tipoTopico, input.topico) }, classificacao.tipoTopico, existente?.nos ?? [])!; }
 
   const campos = { tipoTopico: classificacao.tipoTopico, objetivo: classificacao.objetivo, modoValidacao: classificacao.modoValidacao, criterioCompletude: classificacao.criterioCompletude };

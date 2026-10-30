@@ -11,7 +11,12 @@
 
 `POST /api/map/[id]/node/[noId]/apply` agora responde 400 (`motivo: "sem_evidencia"`) quando a evidência está ausente, vazia ou só com espaços. Antes, a etapa avançava mesmo sem evidência. Quem chamar essa rota sem texto passa a receber erro.
 
+Ao refazer um mapa com `force`, se o modelo não devolver um plano, `generateMap` agora falha e mantém o percurso existente, em vez de trocá-lo pelo genérico. A geração do primeiro mapa continua usando o genérico.
+
 ## O que os testes cobrem
+
+- `components/cerebro/useCerebro.test.tsx`: o ↻ manda `force`, segue gerando até o mapa mudar e, na falha ou no tempo limite (90 s), devolve o mapa com o aviso.
+- `lib/map/generateMap.test.ts`: refazer com o modelo fora do ar não altera o percurso.
 
 - `app/api/map/[id]/node/[noId]/apply/route.test.ts`: sem evidência não aplica; com evidência aplica com o texto limpo.
 - `components/cerebro/CerebroPanel.test.tsx`: caixinha no lugar da janelinha do navegador; Enviar só com texto; Cancelar e Esc fecham só a caixinha; falha de rede mostra frase em português e mantém o texto; "Voltar à conversa"; "Etapa 2 de 3"; dicas das etiquetas; legenda.
@@ -27,4 +32,6 @@
 5. Escreva como aplicou e envie: a etapa avança ou vai para o professor.
 6. Com F12 → Rede → Sem conexão, tente enviar: aparece "Sem conexão — sua aplicação não foi enviada" e o texto continua na caixinha.
 7. Passe o mouse numa etiqueta: aparece a explicação. A legenda das 5 cores está visível.
-8. Em um navegador que nunca girou o mapa, aparece "Arraste para girar"; depois de girar, a dica some.
+8. Clique no ↻: pergunta "Refazer o percurso?". Cancelar ou Esc não mudam nada.
+9. Confirme: aparece "Gerando o mapa…" e depois o percurso novo. O que você já estudou continua guardado, mas as etapas podem mudar.
+10. Em um navegador que nunca girou o mapa, aparece "Arraste para girar"; depois de girar, a dica some.

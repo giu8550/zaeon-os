@@ -27,7 +27,7 @@ const CerebroCanvas = dynamic(() => import("./CerebroCanvas"), { ssr: false, loa
 const COR: Record<string, string> = { a_conquistar: "#e88a2e", aprendido: "#78beff", aplicado: "#aadcff", validado: "#e0f4ff" };
 
 export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }: {
-  st: CerebroState & { gerar: (t?: string) => Promise<void>; refetch: (r?: string[]) => Promise<void> };
+  st: CerebroState & { gerar: (t?: string) => Promise<void>; refazer: () => Promise<void>; refetch: (r?: string[]) => Promise<void> };
   onFechar: () => void;
   onGerar?: () => void;
   onAbrirMensagem?: (msgId: string, no: MapaNo) => void;
@@ -42,6 +42,7 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
   // aceitava OK com ela vazia)
   const [caixa, setCaixa] = useState<MapaNo | null>(null);
   const [evidencia, setEvidencia] = useState("");
+  const [confirmarRefazer, setConfirmarRefazer] = useState(false);
   const aplicar = async (no: MapaNo) => {
     if (!mapa || !evidencia.trim()) return;
     setAplicando(no.id); setAviso(null);
@@ -62,7 +63,7 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
   const membros = useMemo(() => (mapa && ficha ? mapa.nos.filter((n) => n.id !== ficha.id && n.regiao === ficha.id && (n.drawers?.length ?? 0) > 0) : []), [mapa, ficha]);
   const aoRegiao = (r: RegiaoVisual) => setFichaId((cur) => (cur === r.id ? null : r.id));
   // Esc fecha (o clique fora e a bolinha são tratados por quem monta o painel — o mapa é modal, sem "x").
-  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); if (caixa) setCaixa(null); else if (fichaId) setFichaId(null); else onFechar(); } }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [caixa, fichaId, onFechar]);
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); if (confirmarRefazer) setConfirmarRefazer(false); else if (caixa) setCaixa(null); else if (fichaId) setFichaId(null); else onFechar(); } }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [confirmarRefazer, caixa, fichaId, onFechar]);
   const gerar = onGerar ?? (() => void st.gerar());
   // o tour do laboratório (lib/onboarding/tourSala) anda quando o mapa do percurso abre PRONTO
   const temMapa = !!mapa;
@@ -88,10 +89,10 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
           <X size={13} /> Voltar à conversa
         </button>
         <button
-          onClick={st.estado === "gerando" ? undefined : gerar}
+          onClick={st.estado === "gerando" ? undefined : mapa?.backbone.length ? () => setConfirmarRefazer(true) : gerar}
           disabled={st.estado === "gerando"}
-          aria-label={mapa?.backbone.length ? "Retraçar o percurso" : ROTULO[st.estado === "oculta" ? "vazia" : st.estado] || "Gerar o percurso"}
-          title={mapa?.backbone.length ? "Retraçar o percurso" : "Gerar o percurso"}
+          aria-label={mapa?.backbone.length ? "Refazer o percurso" : ROTULO[st.estado === "oculta" ? "vazia" : st.estado] || "Gerar o percurso"}
+          title={mapa?.backbone.length ? "Refazer o percurso" : "Gerar o percurso"}
           className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full border border-cyan-300/40 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25 disabled:opacity-70"
         >
           {st.estado === "gerando" ? <span className="absolute inset-0 animate-spin rounded-full border-2 border-transparent border-t-cyan-300" aria-hidden /> : null}
@@ -107,6 +108,18 @@ export default function CerebroPanel({ st, onFechar, onGerar, onAbrirMensagem }:
         {/* #661: em que etapa a pessoa está */}
         {andamento && <span data-andamento className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-bold text-[#9fe0ff]">{andamento}</span>}
       </div>
+      {/* #661: refazer pede confirmação, porque as etapas podem mudar */}
+      {confirmarRefazer && st.estado === "ativa" && (
+        <div data-confirma-refazer className="absolute left-3 top-14 z-30 w-[min(360px,88vw)] rounded-2xl border border-cyan-300/40 bg-[rgba(10,21,38,.97)] p-3 shadow-2xl">
+          <p className="text-[13px] font-bold text-cyan-100">Refazer o percurso?</p>
+          <p className="mt-1 text-[12px] text-[#9fb6e0]">O que você já estudou fica guardado, mas as etapas podem mudar.</p>
+          <div className="mt-2 flex justify-end gap-2">
+            <button type="button" onClick={() => setConfirmarRefazer(false)} className="rounded-lg px-3 py-1.5 text-[12px] font-bold text-[#9fb6e0] hover:text-white">Cancelar</button>
+            <button type="button" onClick={() => { setConfirmarRefazer(false); void st.refazer(); }} className="rounded-lg border border-cyan-300/40 bg-cyan-500/15 px-3 py-1.5 text-[12px] font-bold text-cyan-100 hover:bg-cyan-500/25">Refazer</button>
+          </div>
+        </div>
+      )}
+      {st.estado === "ativa" && st.erro && <p role="alert" className="absolute bottom-3 left-3 z-20 max-w-[min(420px,88vw)] rounded-xl bg-[rgba(10,21,38,.95)] px-3 py-2 text-[12px] text-amber-100">{st.erro}</p>}
       {/* sub-aba: as GAVETAS dos mapas gerados antes (abre embaixo dos botões) */}
       {anteriores && <div className="absolute left-3 top-14 z-20 w-[min(420px,88vw)] overflow-hidden rounded-2xl border border-white/10 shadow-2xl"><MapasAnteriores atualId={mapa?.id ?? null} onFechar={() => setAnteriores(false)} /></div>}
 

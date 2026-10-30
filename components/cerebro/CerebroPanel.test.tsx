@@ -16,7 +16,7 @@ import { dicaDaEtiqueta, LEGENDA } from "./CerebroCanvas";
 
 const no = (id: string, label: string, estado = "a_conquistar") => ({ id, label, estado, tipo: "conceito", planejado: true, drawers: [] });
 const mapa: any = { id: "m1", nos: [no("a", "Etapa A", "validado"), no("b", "Etapa B"), no("c", "Etapa C")], arestas: [], backbone: ["a", "b", "c"], modoValidacao: "humana", tipoTopico: "aplicavel", criterioCompletude: "", objetivo: "" };
-const st: any = { mapa, estado: "ativa", tituloSugerido: null, gerando: false, erro: null, recentes: [], gerar: vi.fn(), refetch: vi.fn(async () => {}) };
+const st: any = { mapa, estado: "ativa", tituloSugerido: null, gerando: false, erro: null, recentes: [], gerar: vi.fn(), refazer: vi.fn(async () => {}), refetch: vi.fn(async () => {}) };
 
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
@@ -73,6 +73,35 @@ describe("CerebroPanel (#661)", () => {
     expect(screen.getByText("Etapa 2 de 3")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Voltar à conversa/ }));
     expect(onFechar).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("botão ↻ (#661)", () => {
+  const abrir = () => fireEvent.click(screen.getByRole("button", { name: "Refazer o percurso" }));
+  it("pede confirmação antes; Cancelar e Esc não refazem nem saem do mapa", () => {
+    st.refazer.mockClear();
+    const onFechar = vi.fn();
+    render(<CerebroPanel st={st} onFechar={onFechar} />);
+    abrir();
+    expect(st.refazer).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    abrir();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByText("Refazer o percurso?")).toBeNull();
+    expect(st.refazer).not.toHaveBeenCalled();
+    expect(onFechar).not.toHaveBeenCalled();
+  });
+  it("confirmado: refaz", () => {
+    st.refazer.mockClear();
+    render(<CerebroPanel st={st} onFechar={() => {}} />);
+    abrir();
+    fireEvent.click(screen.getByRole("button", { name: "Refazer" }));
+    expect(st.refazer).toHaveBeenCalledTimes(1);
+  });
+  it("falhou: o mapa continua e o aviso aparece", () => {
+    render(<CerebroPanel st={{ ...st, erro: "Não deu para refazer o mapa agora — o seu continua aqui." }} onFechar={() => {}} />);
+    expect(screen.getByRole("alert").textContent).toMatch(/o seu continua aqui/);
+    expect(screen.getByText("Etapa 2 de 3")).toBeTruthy();
   });
 });
 

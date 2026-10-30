@@ -8,6 +8,7 @@ import { prisma } from "@/src/lib/prisma";
 import { entrar, sanitizeScopeId } from "@/lib/map/route-auth";
 import { findOwnMapa } from "@/lib/map/store";
 import { cerebroJobId, enqueueGenerateMap, processCerebroJob } from "@/lib/map/queue";
+import { avisarErro } from "@/lib/map/realtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +30,10 @@ export async function POST(req: Request) {
   const contexto = typeof body?.contexto === "string" ? body.contexto.slice(0, 1200) : (existente ? existente.nos.slice(0, 12).map((n) => n.label).join("; ") : undefined);
   const data = { userId: a.userId, surface: "estudos" as const, scopeId, topico, contexto, force };
   const enfileirado = await enqueueGenerateMap(data).catch(() => false);
-  if (!enfileirado) void processCerebroJob(data).catch((e) => console.warn("[cerebro] geração inline falhou:", e?.message ?? e));
+  if (!enfileirado) void processCerebroJob(data).catch(async (e) => {
+    console.warn("[cerebro] geração inline falhou:", e?.message ?? e);
+    // #661: avisa o painel na hora (sem isso ele só descobria pelo tempo limite)
+    if (existente) await avisarErro(existente.id, "Não deu para refazer o mapa agora — o seu continua aqui.").catch(() => {});
+  });
   return NextResponse.json({ enfileirado, jobId: cerebroJobId(a.userId, scopeId) }, { status: 202 });
 }

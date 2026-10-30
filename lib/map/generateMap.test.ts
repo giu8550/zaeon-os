@@ -71,6 +71,12 @@ describe("generateMap", () => {
     expect(f.mapa.backbone).toHaveLength(4);
   });
 
+  it("refazer com o modelo fora do ar: mantém o percurso, não troca pelo genérico (#661)", async () => {
+    st.find.mockResolvedValue(mapaDe({ backbone: ["x", "y", "z"] }));
+    await expect(generateMap({ ...base, force: true, genJson: (vi.fn(async () => { throw new Error("404"); }) as unknown as GenJson) })).rejects.toThrow(/percurso mantido/);
+    expect(st.patch).not.toHaveBeenCalled();
+  });
+
   it("modelo fora do ar: heurística + backbone genérico do arquétipo (degraded) — nunca sem percurso", async () => {
     st.find.mockResolvedValue(null);
     st.create.mockImplementation(async (i: any) => mapaDe(i));
