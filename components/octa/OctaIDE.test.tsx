@@ -4,6 +4,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, fireEvent, cleanup, waitFor, within } from "@testing-library/react";
 
 // saída do runner e erros do app React que cada teste injeta
+const sessao = vi.hoisted(() => ({ atual: { data: { user: { email: "ana@zaeon.com" } }, status: "authenticated" } as any }));
 const sim = vi.hoisted(() => ({ output: [] as { type: string; text: string; ts: number }[], errosReact: [] as string[] }));
 vi.mock("next/dynamic", async () => {
   const React = await import("react");
@@ -16,7 +17,10 @@ vi.mock("@/app/agentic-modules/codelab/useCodeRunner", () => ({
   useCodeRunner: () => ({ run: vi.fn(), output: sim.output, isRunning: false, isPyodideReady: true, clearOutput: vi.fn(), iframeRef: { current: null } }),
 }));
 
+vi.mock("next-auth/react", () => ({ useSession: () => sessao.atual }));
+
 import OctaIDE, { AVISO_PUBLICO } from "./OctaIDE";
+import { armazemDaConta, contaDaSessao, migrarConversasAntigas } from "@/lib/chat/contaNoNavegador";
 
 const ID = "0123456789abcdef01234567";
 type Rota = (url: string, init?: RequestInit) => Response | undefined;
@@ -399,5 +403,40 @@ describe("OctaIDE · Corrigir com o Octa", () => {
     const corpo = JSON.parse(String(chamadas((u, i) => u === "/api/octa/turnos" && i?.method === "POST")[0][1]!.body));
     expect(corpo.pedido).toContain("NameError: x");
     expect(caixa.value).toBe("depois quero um botão azul");
+  });
+});
+
+describe("OctaIDE · por conta (#663)", () => {
+  const CHAT = "zaeon.octa.chat.v1", ANA = contaDaSessao("ana@zaeon.com");
+  const entrar = (email: string | null) => { sessao.atual = email ? { data: { user: { email } }, status: "authenticated" } : { data: null, status: "unauthenticated" }; };
+  const conversa = JSON.stringify([{ id: "m1", role: "user", texto: "segredo do rascunho", text: "segredo do rascunho" }]);
+  afterEach(() => entrar("ana@zaeon.com"));
+
+  it("enquanto a sessão carrega, a IDE não abre", () => {
+    sessao.atual = { data: null, status: "loading" };
+    const { container } = render(<OctaIDE />);
+    expect(container.firstChild).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it("o chat, o projeto e o turno antigos do Octa vão para a conta; outra conta não os recebe", () => {
+    for (const k of [CHAT, "zaeon.octa.projeto.ultimo", `zaeon.octa.chat.${ID}`, `zaeon.octa.turno.${ID}`, "zaeon.octa.ide.v1", `zaeon.octa.proj.${ID}`]) localStorage.setItem(k, conversa);
+    migrarConversasAntigas(localStorage, ANA);
+    const ana = armazemDaConta(localStorage, ANA), bia = armazemDaConta(localStorage, contaDaSessao("bia@zaeon.com"));
+    for (const k of [CHAT, "zaeon.octa.projeto.ultimo", `zaeon.octa.chat.${ID}`, `zaeon.octa.turno.${ID}`, "zaeon.octa.ide.v1", `zaeon.octa.proj.${ID}`]) {
+      expect(ana.getItem(k)).toBe(conversa);
+      expect(bia.getItem(k)).toBeNull();
+      expect(localStorage.getItem(k)).toBeNull();
+    }
+  });
+  it("a IDE lê só a área de quem está logado", async () => {
+    armazemDaConta(localStorage, ANA).setItem("zaeon.octa.projeto.ultimo", ID);
+    const getItem = vi.spyOn(Storage.prototype, "getItem");
+    entrar("bia@zaeon.com");
+    render(<OctaIDE />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const lidas = getItem.mock.calls.map(([k]) => k);
+    expect(lidas).toContain(`zaeon.conta.${contaDaSessao("bia@zaeon.com")}.zaeon.octa.projeto.ultimo`);
+    expect(lidas).not.toContain(`zaeon.conta.${ANA}.zaeon.octa.projeto.ultimo`);
+    getItem.mockRestore();
   });
 });

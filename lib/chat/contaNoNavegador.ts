@@ -11,8 +11,8 @@ import type { Armazem } from "@/lib/chat/threads";
 
 export const CONTA_ANONIMA = "anon";
 
-/** O que no navegador pertence a uma conta: as conversas (também as do celular), o rascunho e o modo pesquisa de cada conversa. */
-const PREFIXOS_DA_CONTA = ["zaeon.cowork.thread", "zaeon.research.thread", "zaeon.research.draft.v1", "zaeon.chat.modoPesquisa.v1", "zaeon.m.conversa", "zaeon.m.chat."];
+/** O que no navegador pertence a uma conta: as conversas (também as do celular e do Octa), o rascunho e o modo pesquisa de cada conversa. */
+const PREFIXOS_DA_CONTA = ["zaeon.cowork.thread", "zaeon.research.thread", "zaeon.research.draft.v1", "zaeon.chat.modoPesquisa.v1", "zaeon.m.conversa", "zaeon.m.chat.", "zaeon.octa."];
 
 /** Resumo do e-mail: a chave identifica a conta sem deixar o e-mail escrito no navegador. */
 function resumo(texto: string, semente: number): string {
