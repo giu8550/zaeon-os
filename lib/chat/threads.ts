@@ -123,6 +123,12 @@ export function carregarThreads(a: Armazem, e: Escopo = ESCOPO_COWORK): Thread[]
   return [primeira];
 }
 
+/** #663: só lê a lista. Quem não é o chat não pode criá-la: o chat usa a falta dela para buscar o histórico no servidor. */
+export function listarThreads(a: Armazem, e: Escopo = ESCOPO_COWORK): Thread[] {
+  const salvas = ler<Thread[]>(a, e.indice, []);
+  return Array.isArray(salvas) ? salvas.filter((t) => t && t.id) : [];
+}
+
 export function salvarThreads(a: Armazem, threads: readonly Thread[], e: Escopo = ESCOPO_COWORK): void {
   gravar(a, e.indice, threads.slice(0, MAX_ABAS));
 }

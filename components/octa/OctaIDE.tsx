@@ -26,6 +26,8 @@ import {
   type EstadoIDE, type NoArvore,
 } from "@/lib/octa/ideWorkspace";
 import { textoErroPublicar, type EventoTurno } from "@/lib/octa/passos";
+import { useArmazemDaConta } from "@/lib/chat/contaNoNavegador";
+import type { Armazem } from "@/lib/chat/threads";
 import type { PermissaoOcta } from "@/lib/octa/projetos";
 import PreviaSvg from "./PreviaSvg";
 import CorrigirComOcta from "./CorrigirComOcta";
@@ -74,8 +76,6 @@ const CHAVE_CHAT = "zaeon.octa.chat.v1";
 const CHAVE_ULTIMO = "zaeon.octa.projeto.ultimo";
 const chaveChatProjeto = (id: string) => `zaeon.octa.chat.${id}`;
 const chaveTurno = (id: string) => `zaeon.octa.turno.${id}`;
-const lerLS = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
-const gravarLS = (k: string, v: string | null) => { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* */ } };
 const linkSeguro = (u: unknown): string | null => (typeof u === "string" && /^https:\/\//i.test(u) ? u : null);
 
 const meta = (p: any): ProjetoMeta => ({
@@ -149,7 +149,16 @@ function Arvore({ nos, ativo, abertasPastas, alternar, onAbrir, onApagar, travad
   );
 }
 
+/** #663: cada conta tem o seu chat e o seu rascunho; trocar de conta remonta a IDE com a área da outra. */
 export default function OctaIDE() {
+  const area = useArmazemDaConta();
+  if (!area) return null;
+  return <IdeDaConta key={area.conta} armazem={area.armazem} />;
+}
+
+function IdeDaConta({ armazem }: { armazem: Armazem }) {
+  const lerLS = (k: string) => { try { return armazem.getItem(k); } catch { return null; } };
+  const gravarLS = (k: string, v: string | null) => { try { v === null ? armazem.removeItem(k) : armazem.setItem(k, v); } catch { /* */ } };
   // ── projeto aberto ──
   const [projetos, setProjetos] = useState<ProjetoMeta[] | null>(null);
   const [servidorOk, setServidorOk] = useState(true);
@@ -225,8 +234,8 @@ export default function OctaIDE() {
     ideRef.current = ide;
     if (!ide) return;
     const p = projetoRef.current;
-    if (p) salvarCacheProjeto(p.id, ide);
-    else if (rascunho) salvar(ide);
+    if (p) salvarCacheProjeto(p.id, ide, armazem);
+    else if (rascunho) salvar(ide, armazem);
     if (!p || !sujo.current) return;
     setSalvamento("pendente");
     if (timerSalvar.current) clearTimeout(timerSalvar.current);
@@ -308,7 +317,7 @@ export default function OctaIDE() {
     setVista("codigo");
     sujo.current = false;
     setSalvamento("salvo");
-    setIde(carregarCacheProjeto(p.id));
+    setIde(carregarCacheProjeto(p.id, armazem));
     carregarChat(chaveChatProjeto(p.id));
     gravarLS(CHAVE_ULTIMO, p.id);
     const r = await fetch(`/api/octa/projetos/${p.id}`).catch(() => null);
@@ -333,7 +342,7 @@ export default function OctaIDE() {
     setProjeto(null);
     setRascunho(true);
     setVista("codigo");
-    setIde(carregar());
+    setIde(carregar(armazem));
     carregarChat(CHAVE_CHAT);
     gravarLS(CHAVE_ULTIMO, "rascunho");
   };

@@ -75,16 +75,18 @@ export function abrir(e: EstadoIDE, p: string): EstadoIDE {
   return { ...e, abertos: e.abertos.includes(p) ? e.abertos : [...e.abertos, p], ativo: p };
 }
 
+/** #663: a área da conta logada (lib/chat/contaNoNavegador). Sem ela, o navegador direto. */
+type Armazem = Pick<Storage, "getItem" | "setItem">;
 const CHAVE = "zaeon.octa.ide.v1";
-export function carregar(): EstadoIDE {
+export function carregar(a?: Armazem): EstadoIDE {
   try {
-    const v = JSON.parse(localStorage.getItem(CHAVE) || "null");
+    const v = JSON.parse((a ?? localStorage).getItem(CHAVE) || "null");
     if (v && typeof v.arquivos === "object" && Array.isArray(v.abertos)) return v;
   } catch { /* storage bloqueado/corrompido → projeto inicial */ }
   return PROJETO_INICIAL;
 }
-export function salvar(e: EstadoIDE): boolean {
-  try { localStorage.setItem(CHAVE, JSON.stringify(e)); return true; } catch { return false; }
+export function salvar(e: EstadoIDE, a?: Armazem): boolean {
+  try { (a ?? localStorage).setItem(CHAVE, JSON.stringify(e)); return true; } catch { return false; }
 }
 
 // ───────────────────────────── #421: SVG é imagem, não texto ─────────────────────────────
@@ -148,15 +150,15 @@ export function montarPrevia(arquivos: Workspace): string | null {
 
 /** Cache no navegador do projeto aberto (a fonte da verdade é o servidor; isto só mostra rápido ao reabrir). */
 const chaveProjeto = (id: string) => `zaeon.octa.proj.${id}`;
-export function carregarCacheProjeto(id: string): EstadoIDE | null {
+export function carregarCacheProjeto(id: string, a?: Armazem): EstadoIDE | null {
   try {
-    const v = JSON.parse(localStorage.getItem(chaveProjeto(id)) || "null");
+    const v = JSON.parse((a ?? localStorage).getItem(chaveProjeto(id)) || "null");
     if (v && typeof v.arquivos === "object" && Array.isArray(v.abertos)) return v;
   } catch { /* */ }
   return null;
 }
-export function salvarCacheProjeto(id: string, e: EstadoIDE): void {
-  try { localStorage.setItem(chaveProjeto(id), JSON.stringify(e)); } catch { /* storage cheio/bloqueado: o servidor tem tudo */ }
+export function salvarCacheProjeto(id: string, e: EstadoIDE, a?: Armazem): void {
+  try { (a ?? localStorage).setItem(chaveProjeto(id), JSON.stringify(e)); } catch { /* storage cheio/bloqueado: o servidor tem tudo */ }
 }
 
 /** O estilo da biblioteca que o DESIGN.md do projeto diz usar (marcador `<!-- zaeon-estilo: id -->` na 1ª linha). */

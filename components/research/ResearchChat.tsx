@@ -21,6 +21,8 @@ import { sinalDoChat } from "@/lib/avatars/presenca";
 import LivrosCartao from "@/components/chat/LivrosCartao";
 import { researchWorkType } from "@/lib/agent/tools";
 import { appendTranscript, hydrateTranscript } from "@/lib/agent/transcriptClient";
+import { useArmazemDaConta } from "@/lib/chat/contaNoNavegador";
+import type { Armazem } from "@/lib/chat/threads";
 import StructuredAnswerView from "@/components/study/StructuredAnswerView";
 import type { StructuredAnswer } from "@/lib/agent/contracts";
 import { parseStructuredStream, STRUCTURED_SENTINEL } from "@/lib/agent/structured-client";
@@ -110,7 +112,15 @@ const QUICK: { label: string; tpl: string }[] = [
   { label: "Resumir", tpl: "Resuma em 3 parágrafos: " },
 ];
 
-export default function ResearchChat({
+/** #663: cada conta tem as suas conversas; trocar de conta remonta o chat com a área da outra. */
+export default function ResearchChat(props: Omit<Parameters<typeof ChatDaConta>[0], "armazem">) {
+  const area = useArmazemDaConta();
+  if (!area) return null;
+  return <ChatDaConta key={area.conta} armazem={area.armazem} {...props} />;
+}
+
+function ChatDaConta({
+  armazem,
   workType,
   tccWorkId,
   active = true,
@@ -122,6 +132,7 @@ export default function ResearchChat({
   onAtivar,
   onGerando,
 }: {
+  armazem: Armazem;
   workType?: string | null;
   /** TCC cross-sala aberto na folha: o chat lapida ESTE documento — e tudo nasce como sugestão. */
   tccWorkId?: string | null;
@@ -188,17 +199,17 @@ export default function ResearchChat({
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, sending]);
 
-  // Carga inicial: L0 (localStorage) primeiro; se vazio, L1 durável (DB). + rascunho.
+  // Carga inicial: L0 (armazem) primeiro; se vazio, L1 durável (DB). + rascunho.
   useEffect(() => {
-    try { const d = localStorage.getItem(DRAFT_KEY_R); if (d) setInput(d); } catch { /* ignore */ }
+    try { const d = armazem.getItem(DRAFT_KEY_R); if (d) setInput(d); } catch { /* ignore */ }
     let hadLocal = false;
     try {
-      const lista = carregarThreads(localStorage, ESCOPO_PESQUISA);
-      const ativa = threadAtiva(localStorage, lista, ESCOPO_PESQUISA);
+      const lista = carregarThreads(armazem, ESCOPO_PESQUISA);
+      const ativa = threadAtiva(armazem, lista, ESCOPO_PESQUISA);
       setThreads(lista); threadsRef.current = lista;
       setAbaAtiva(ativa); abaAtivaRef.current = ativa;
       if (ativa) {
-        const guardadas = carregarMensagens<Msg>(localStorage, ativa, ESCOPO_PESQUISA);
+        const guardadas = carregarMensagens<Msg>(armazem, ativa, ESCOPO_PESQUISA);
         if (guardadas.length) { setMessages(guardadas); hadLocal = true; }
       }
     } catch { /* ignore */ }
@@ -213,10 +224,10 @@ export default function ResearchChat({
   // Espelha a conversa ATIVA (últimas 60) e o rascunho no localStorage — não perde ao trocar de aba/reload.
   useEffect(() => {
     const aba = abaAtivaRef.current;
-    if (aba) salvarMensagens(localStorage, aba, messages.filter((m) => m.text).map(enxugar), ESCOPO_PESQUISA);
+    if (aba) salvarMensagens(armazem, aba, messages.filter((m) => m.text).map(enxugar), ESCOPO_PESQUISA);
   }, [messages]);
   useEffect(() => {
-    try { input ? localStorage.setItem(DRAFT_KEY_R, input) : localStorage.removeItem(DRAFT_KEY_R); } catch { /* ignore */ }
+    try { input ? armazem.setItem(DRAFT_KEY_R, input) : armazem.removeItem(DRAFT_KEY_R); } catch { /* ignore */ }
   }, [input]);
 
   // Trocar/criar/fechar conversa — bloqueado enquanto responde (a resposta em curso pertence
@@ -235,11 +246,11 @@ export default function ResearchChat({
     onAtivar?.();
     if (sending || id === abaAtivaRef.current) return;
     abaAtivaRef.current = id; setAbaAtiva(id);
-    marcarAtiva(localStorage, id, ESCOPO_PESQUISA);
-    setMessages(carregarMensagens<Msg>(localStorage, id, ESCOPO_PESQUISA));
+    marcarAtiva(armazem, id, ESCOPO_PESQUISA);
+    setMessages(carregarMensagens<Msg>(armazem, id, ESCOPO_PESQUISA));
     focarComposer();
     const t = tocarThread(threadsRef.current, id);
-    threadsRef.current = t; salvarThreads(localStorage, t, ESCOPO_PESQUISA); setThreads(t);
+    threadsRef.current = t; salvarThreads(armazem, t, ESCOPO_PESQUISA); setThreads(t);
   };
   const novaAba = () => {
     onAtivar?.();
@@ -247,9 +258,9 @@ export default function ResearchChat({
     if (anexoRef.current) tirarAnexo();   // conversa nova começa sem o arquivo da anterior
     tirarDoLote();
     const { threads: lista, nova } = criarThread(threadsRef.current);
-    threadsRef.current = lista; salvarThreads(localStorage, lista, ESCOPO_PESQUISA); setThreads(lista);
+    threadsRef.current = lista; salvarThreads(armazem, lista, ESCOPO_PESQUISA); setThreads(lista);
     abaAtivaRef.current = nova.id; setAbaAtiva(nova.id);
-    marcarAtiva(localStorage, nova.id, ESCOPO_PESQUISA);
+    marcarAtiva(armazem, nova.id, ESCOPO_PESQUISA);
     setMessages([]);
     focarComposer();
   };
@@ -276,17 +287,17 @@ export default function ResearchChat({
   }, []);
   const fecharAba = (id: string) => {
     if (sending) return;
-    const { threads: lista, proxima } = fecharThread(localStorage, threadsRef.current, id, ESCOPO_PESQUISA);
-    threadsRef.current = lista; salvarThreads(localStorage, lista, ESCOPO_PESQUISA); setThreads(lista);
+    const { threads: lista, proxima } = fecharThread(armazem, threadsRef.current, id, ESCOPO_PESQUISA);
+    threadsRef.current = lista; salvarThreads(armazem, lista, ESCOPO_PESQUISA); setThreads(lista);
     if (id === abaAtivaRef.current) {
       abaAtivaRef.current = proxima; setAbaAtiva(proxima);
-      marcarAtiva(localStorage, proxima, ESCOPO_PESQUISA);
-      setMessages(carregarMensagens<Msg>(localStorage, proxima, ESCOPO_PESQUISA));
+      marcarAtiva(armazem, proxima, ESCOPO_PESQUISA);
+      setMessages(carregarMensagens<Msg>(armazem, proxima, ESCOPO_PESQUISA));
     }
   };
   const renomearAba = (id: string, titulo: string) => {
     const lista = renomearThread(threadsRef.current, id, titulo);
-    threadsRef.current = lista; salvarThreads(localStorage, lista, ESCOPO_PESQUISA); setThreads(lista);
+    threadsRef.current = lista; salvarThreads(armazem, lista, ESCOPO_PESQUISA); setThreads(lista);
   };
   // Sub-tema do mesmo nicho: sub-conversa ligada à mãe, herdando o contexto (vai junto em cada envio).
   // Começa vazia, com "Aprofunde: " no composer — a 1ª pergunta batiza a sub-conversa.
@@ -299,13 +310,13 @@ export default function ResearchChat({
     let ctx = contexto;
     if (ctx === undefined && pai) {
       // Pelo "＋ sub-tema" da barra: o contexto é o fim da última resposta da mãe.
-      const msgsPai = paiId === abaAtivaRef.current ? msgsRef.current : carregarMensagens<Msg>(localStorage, paiId, ESCOPO_PESQUISA);
+      const msgsPai = paiId === abaAtivaRef.current ? msgsRef.current : carregarMensagens<Msg>(armazem, paiId, ESCOPO_PESQUISA);
       ctx = [...msgsPai].reverse().find((m) => m.role === "assistant" && m.text)?.text.slice(-1500);
     }
     const { threads: lista, nova } = criarSubThread(threadsRef.current, paiId, TITULO_PADRAO, ctx);
-    threadsRef.current = lista; salvarThreads(localStorage, lista, ESCOPO_PESQUISA); setThreads(lista);
+    threadsRef.current = lista; salvarThreads(armazem, lista, ESCOPO_PESQUISA); setThreads(lista);
     abaAtivaRef.current = nova.id; setAbaAtiva(nova.id);
-    marcarAtiva(localStorage, nova.id, ESCOPO_PESQUISA);
+    marcarAtiva(armazem, nova.id, ESCOPO_PESQUISA);
     setMessages([]); setEditando(null);
     setInput((v) => v.trim() ? v : "Aprofunde: ");
     focarComposer();
@@ -330,7 +341,7 @@ export default function ResearchChat({
     const atual = threadsRef.current.find((t) => t.id === aba);
     if (!aba || !atual || atual.titulo !== TITULO_PADRAO) return;
     const lista = renomearThread(threadsRef.current, aba, tituloAPartirDe(texto.replace(/^aprofunde:\s*/i, "")));
-    threadsRef.current = lista; salvarThreads(localStorage, lista, ESCOPO_PESQUISA); setThreads(lista);
+    threadsRef.current = lista; salvarThreads(armazem, lista, ESCOPO_PESQUISA); setThreads(lista);
   };
   // Numa sub-conversa, o modelo sabe de qual nicho ela saiu (título da mãe + o trecho herdado).
   const contextoDaSub = () => {

@@ -27,17 +27,22 @@ const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 export const chaveL0 = (surface: string, scopeId: string) => `zaeon.m.chat.${surface}.${scopeId}`;
 const MAX_L0 = 80;
 
-function carregar(chave: string): MsgAura[] {
-  try { const v = JSON.parse(localStorage.getItem(chave) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; }
+function carregar(chave: string, a: Armazem): MsgAura[] {
+  try { const v = JSON.parse(a.getItem(chave) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; }
 }
 
+type Armazem = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
 export function useAuraChat(o: {
+  /** #663: a área da conta logada. Sem ela, o navegador direto. */
+  armazem?: Armazem;
   scopeId: string;
   surface?: "estudos" | "pesquisa";
   /** Ação do Studio pedida pela Aura (mapa mental, flashcards…): o mobile mostra o cartão de progresso. */
   onAcao?: (a: { kind: string; topic: string; msgId: string }) => void;
 }) {
   const surface = o.surface ?? "estudos";
+  const armazem = () => o.armazem ?? localStorage;
   const chave = chaveL0(surface, o.scopeId);
   // A lista anda JUNTO com a conversa a que pertence. Com uma lista solta, o efeito que
   // persiste rodava no mount ANTES da lista carregada chegar e gravava [] por cima do L0
@@ -68,7 +73,7 @@ export function useAuraChat(o: {
   // pendente no worker quando a pessoa saiu (Fase 3) — a partir da lista que acabou de ler.
   useEffect(() => {
     let vivo = true;
-    const lista = carregar(chave);
+    const lista = carregar(chave, armazem());
     setEstado({ chave, msgs: lista });
     lista.forEach((m, i) => {
       if (!m.pendente || !m.turnId || vivos.current.has(m.turnId)) return;
@@ -92,7 +97,7 @@ export function useAuraChat(o: {
   // Persiste só a lista que É desta conversa (nunca a vazia de antes do carregamento).
   useEffect(() => {
     if (estado.chave !== chave) return;
-    try { localStorage.setItem(chave, JSON.stringify(estado.msgs.slice(-MAX_L0).map(({ chegando, ...m }) => m))); } catch { /* cota cheia: segue sem L0 */ }
+    try { armazem().setItem(chave, JSON.stringify(estado.msgs.slice(-MAX_L0).map(({ chegando, ...m }) => m))); } catch { /* cota cheia: segue sem L0 */ }
   }, [chave, estado]);
 
   const enviar = useCallback(async (texto: string) => {
@@ -127,7 +132,7 @@ export function useAuraChat(o: {
     }
   }, [enviando, surface, o.scopeId, patch, finalizar, setMensagens]);
 
-  const limpar = useCallback(() => { setEstado({ chave, msgs: [] }); try { localStorage.removeItem(chave); } catch { /* ignore */ } }, [chave]);
+  const limpar = useCallback(() => { setEstado({ chave, msgs: [] }); try { armazem().removeItem(chave); } catch { /* ignore */ } }, [chave]);
 
   return { mensagens, enviar, enviando, limpar };
 }
