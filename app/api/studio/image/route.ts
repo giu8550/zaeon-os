@@ -14,6 +14,7 @@ import { studioUid } from "@/lib/studio/auth";
 import { loadStudyContext } from "@/lib/studio/content";
 import { generateImageResult, imagenAvailable } from "@/lib/studio/imagen";
 import { writeStudioFile } from "@/lib/studio/storage";
+import { assuntoDaImagem } from "@/lib/studio/tituloImagem";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -65,7 +66,8 @@ export async function POST(req: Request) {
   if (!prompt && topic) {
     prompt = await craftPromptFromStudy(`Tópico pedido na conversa: ${topic}`);
     // #749: o tópico já vem "imagem: …" (rótulo do studio_generate) — o título saía "Imagem — imagem: …"
-    title = `Imagem — ${topic.replace(/^imagem\s*[:—–-]\s*/i, "")}`;
+    // #764: e repetia o pedido inteiro ("Imagem — faça uma imagem de um vulcão…") — agora só o assunto
+    title = `Imagem — ${assuntoDaImagem(topic)}`;
   }
   if (!prompt) return NextResponse.json({ error: "Forneça um prompt ou um estudo com conteúdo." }, { status: 400 });
 

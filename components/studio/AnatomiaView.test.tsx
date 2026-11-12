@@ -89,7 +89,25 @@ describe("AnatomiaView — a placa é o padrão", () => {
   it("oferece 'Ver em 3D' e o atalho para o atlas", () => {
     const { getByText, container } = render(<AnatomiaView data={PULMAO} />);
     expect(getByText("Ver em 3D")).toBeTruthy();
-    expect(container.querySelector('a[href="/anatomia"]')).toBeTruthy();
+    // #764: o atlas abre JÁ na estrutura
+    expect(container.querySelector('a[href="/anatomia?conceito=FMA7310"]')).toBeTruthy();
+  });
+
+  it("#764 · nome em português quando a rota manda (não 'heart')", () => {
+    const { container } = render(<AnatomiaView data={{ ...PULMAO, nomeNaTela: "pulmão esquerdo" }} />);
+    expect(container.textContent).toContain("pulmão esquerdo");
+    expect(container.textContent).not.toContain("left lung");
+  });
+
+  it("#764 · conversa reaberta (só o número): busca o estado em /api/studio/<id> e oferece o 3D", async () => {
+    const chamadas: string[] = [];
+    const antes = globalThis.fetch;
+    globalThis.fetch = (async (u: string) => { chamadas.push(String(u)); return { ok: true, json: async () => ({ meta: PULMAO }) }; }) as any;
+    try {
+      const { findByText } = render(<AnatomiaView data={{}} artifactId="art1" />);
+      expect(await findByText("Ver em 3D")).toBeTruthy();
+      expect(chamadas).toEqual(["/api/studio/art1"]);
+    } finally { globalThis.fetch = antes; }
   });
 
   it("sem cena utilizável NÃO oferece 3D, e ainda assim mostra os dados", () => {

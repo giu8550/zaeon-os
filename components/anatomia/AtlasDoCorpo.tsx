@@ -59,6 +59,12 @@ const LIMITE_DA_BUSCA = 80;
 /** Quantas peças o painel de detalhe lista antes de resumir. Valor do original. */
 const LIMITE_DA_LISTA = 50;
 
+/** #764 · PURA: o conceito pedido na URL (`?conceito=FMA7088`), ou null */
+export function conceitoDaUrl(busca: string): string | null {
+  const v = new URLSearchParams(busca).get("conceito");
+  return v && /^[\w.-]{1,40}$/.test(v) ? v : null;
+}
+
 export default function AtlasDoCorpo() {
   const [atlas, setAtlas] = useState<Atlas | null>(null);
   const [estado, setEstado] = useState(ESTADO_INICIAL);
@@ -132,6 +138,16 @@ export default function AtlasDoCorpo() {
     setDetalhe(true);
     setPainel(null);
   }, []);
+
+  // #764: "Abrir o atlas" no cartão do chat abre JÁ na estrutura (/anatomia?conceito=FMA7088), não no corpo inteiro
+  const abriuDoChat = useRef(false);
+  useEffect(() => {
+    if (!atlas || abriuDoChat.current) return;
+    abriuDoChat.current = true;
+    const id = conceitoDaUrl(window.location.search);
+    const c = id ? conceitosPorId.get(id) : undefined;
+    if (c) escolher(c);
+  }, [atlas, conceitosPorId, escolher]);
 
   const escolherPecaDaCena = useCallback((id: string) => {
     const p = pecasPorId.get(id);
