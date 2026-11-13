@@ -16,7 +16,7 @@ const ESTADO = {
   explode: 0,
   visible: ["respiratory"] as any,
   selected: ["FJ1234", "FJ1235"],
-  isolate: false,
+  isolate: true,   // o artefato nasce ISOLADO; não isolado é erro (lib/anatomia/isolamento)
   view: "three-quarter" as any,
   rotate: false,
   reset: 0,
@@ -89,8 +89,24 @@ describe("AnatomiaView — a placa é o padrão", () => {
   it("oferece 'Ver em 3D' e o atalho para o atlas", () => {
     const { getByText, container } = render(<AnatomiaView data={PULMAO} />);
     expect(getByText("Ver em 3D")).toBeTruthy();
-    // #764: o atlas abre JÁ na estrutura
-    expect(container.querySelector('a[href="/anatomia?conceito=FMA7310"]')).toBeTruthy();
+    // o atalho abre o atlas NA estrutura. Era `/anatomia` seco, que abria o corpo inteiro sem nada
+    // selecionado — o defeito que o dono viu (2026-11-12).
+    expect(container.querySelector('a[href="/anatomia?estrutura=FMA7310"]')).toBeTruthy();
+    expect(container.querySelector('a[href="/anatomia"]')).toBeNull();
+    expect(container.querySelector("[data-anatomia-erro]")).toBeNull();
+  });
+
+  it("cena NÃO isolada é erro: sem 3D, com o aviso — nunca o corpo inteiro no lugar da peça", () => {
+    const naoIsolada: AnatomiaData = { ...PULMAO, estado: { ...ESTADO, isolate: false } };
+    expect(cenaUtilizavel(naoIsolada)).toBe(false);
+    const { container } = render(<AnatomiaView data={naoIsolada} />);
+    expect(container.textContent).not.toContain("Ver em 3D");
+    expect(container.querySelector("[data-anatomia-erro]")!.textContent).toMatch(/não veio isolada/);
+  });
+
+  it("sem id de conceito, não há link para o atlas (ele abriria o corpo inteiro)", () => {
+    const { container } = render(<AnatomiaView data={{ ...PULMAO, conceito: { nome: "left lung" } }} />);
+    expect(container.querySelector("a[href^='/anatomia']")).toBeNull();
   });
 
   it("#764 · nome em português quando a rota manda (não 'heart')", () => {
@@ -104,9 +120,12 @@ describe("AnatomiaView — a placa é o padrão", () => {
     const antes = globalThis.fetch;
     globalThis.fetch = (async (u: string) => { chamadas.push(String(u)); return { ok: true, json: async () => ({ meta: PULMAO }) }; }) as any;
     try {
-      const { findByText } = render(<AnatomiaView data={{}} artifactId="art1" />);
+      const { findByText, container } = render(<AnatomiaView data={{}} artifactId="art1" />);
+      // enquanto busca, o aviso de "não veio isolada" não pisca
+      expect(container.querySelector("[data-anatomia-erro]")).toBeNull();
       expect(await findByText("Ver em 3D")).toBeTruthy();
       expect(chamadas).toEqual(["/api/studio/art1"]);
+      expect(container.querySelector("[data-anatomia-erro]")).toBeNull();
     } finally { globalThis.fetch = antes; }
   });
 

@@ -31,8 +31,9 @@ import { blocoFonteColada, objetivoComFonte, pedidoParaTitulo, separarFonteColad
 import { blocoDosAnexos } from "@/lib/agent/anexos";
 import { sinteseLigada } from "@/lib/agent/sintese-flag";
 import { graficoLigado } from "@/lib/agent/graficosDoTurno";
-import { MODELO_PADRAO, modeloDoId, nomeDoModeloServido } from "@/lib/chat/modelos";
+import { MODELO_PADRAO, modeloDoId, nomeDoModeloServido, viaGateway } from "@/lib/chat/modelos";
 import { podeProNasPesadas } from "@/lib/ai/proNasPesadas";
+import { podeClaudeNoChat } from "@/lib/chat/premiumChat";
 import { markRunning, saveDone, saveError } from "@/lib/agent/chat-turn-store";
 import type { Wing } from "@/lib/agent/memory";
 import { mentorBySlug } from "@/lib/agent/mentors";
@@ -71,6 +72,13 @@ export type ChatTurnParams = {
    * texto; e assim o turno atravessa a fila do CHAT_BG como JSON. Vazio/ausente = turno sem anexo.
    */
   anexos?: import("@/lib/agent/anexos").AnexoDoTurno[];
+  /**
+   * F-visão ("be my eyes") · as IMAGENS anexadas. Ao contrário dos `anexos` (texto), estas viajam com
+   * os BYTES (base64), porque a tool `descrever_imagem` precisa olhar a imagem — e por isso o turno de
+   * imagem roda INLINE, nunca pela fila do CHAT_BG (base64 pesado não vai pro Redis). Só a rota com a
+   * flag VISAO_HARNESS as preenche; ausente = turno sem imagem (o caminho de hoje, byte a byte).
+   */
+  imagens?: import("@/lib/agent/toolsVisao").ImagemDoTurno[];
   /**
    * O MOTOR que o aluno escolheu ao plugar um agente da orquestra na Loja (lib/orquestra/catalogo). O turno
    * continua sendo da Aura; a orquestra confere plano e chave e, se puder, entrega o trabalho a esse motor.
@@ -182,25 +190,52 @@ export async function runChatTurn(
       // F3: os anexos viajam no ToolContext — é dele que `ler_anexo`/`listar_anexos` os tiram, e é
       // ele que o `disponivelNoTurno` consulta pra decidir se as tools existem neste turno.
       ...(params.anexos?.length ? { anexos: params.anexos } : {}),
+      // F-visão: as imagens viajam no MESMO ToolContext — é delas que `descrever_imagem` tira os
+      // bytes, e é o `disponivelNoTurno` dela que vê se há imagem neste turno.
+      ...(params.imagens?.length ? { imagens: params.imagens } : {}),
       // O PORTÃO DE HABILIDADE (lib/agent/runtime ToolContext.toolsDoAgente): a base inteira pra
       // todas + as tools das habilidades desta. É o que faz `enabledSkills` deixar de ser rótulo.
       toolsDoAgente: toolsPermitidas(habilidades),
     };
-    const escolhido = modeloDoId(params.modelo);
+    let escolhido = modeloDoId(params.modelo);
     // `taskId` = o TURNO: todas as chamadas de modelo deste turno ficam ligadas no TokenLedger (o console Zaeon Hermes
     // agrupa por ele pra medir a saúde do chat — quantos turnos caíram na reserva, quanto cada fase levou).
     const ledgerTurno = { agentKey: mentor?.slug ?? agente, mentorSlug: mentor?.slug ?? null, userId: userId ?? null, surface: surfaceLedger(surface ?? hctx.activeTab), scopeId: typeof ac.cartolinaScopeId === "string" ? ac.cartolinaScopeId : null, taskId: turnId ?? params.tarefaId ?? novoIdDeTarefa() };
-    // MODELO LOCAL (Zaeon/Contabo): caminho enxuto em streaming. Não começou → segue pelo Google, abaixo.
-    if (escolhido?.provedor === "zaeon" && escolhido.grupo) {
-      narrar(serializarProgresso({ fase: "draft", rotulo: `${escolhido.nome} pensando no servidor Zaeon` }));
+    // GATE do Claude (Anthropic) no chat = o MESMO da #786 no Octa: plano Max + flag premium + BUDGET por
+    // pessoa (virtual key). Sem direito, sem flag, ou a key não saiu → cai pro Google (fecha fechado: nunca
+    // gasta crédito da org pela master key). Zaeon (local, grátis) não passa por aqui. lib/chat/premiumChat.
+    let keyGateway: string | undefined;
+    if (escolhido?.provedor === "anthropic") {
+      const grupoClaude = escolhido.grupo!;   // anthropic do catálogo é sempre roteado pelo grupo (viaGateway)
+      const nomeClaude = escolhido.nome;
+      if (userId && (await podeClaudeNoChat(userId))) {
+        const [{ emitirVirtualKey, modeloReal }, { premiumBudgetUsd }] = await Promise.all([
+          import("@/lib/octa/litellm"), import("@/lib/octa/modelosPremium"),
+        ]);
+        const vk = await emitirVirtualKey({
+          userId, sessionId: ledgerTurno.taskId, maxBudgetUsd: premiumBudgetUsd(),
+          duracao: "24h", modelos: [grupoClaude, modeloReal("forte")],
+        }).catch(() => null);
+        if (vk?.ok) keyGateway = vk.vk.key;
+      }
+      if (!keyGateway) {
+        narrar(serializarProgresso({ fase: "draft", rotulo: `${nomeClaude} é do plano Max — respondendo pelo Google` }));
+        escolhido = null;   // sem direito/budget: o turno segue pelo harness do Google, abaixo
+      }
+    }
+    // MODELO PELO GATEWAY (Zaeon/Contabo local OU Claude/Anthropic): caminho enxuto em streaming, sem as
+    // tools do harness. Não começou → segue pelo Google (harness completo), abaixo.
+    if (viaGateway(escolhido)) {
+      const ondePensa = escolhido.provedor === "zaeon" ? "no servidor Zaeon" : "pelos créditos Anthropic";
+      narrar(serializarProgresso({ fase: "draft", rotulo: `${escolhido.nome} pensando ${ondePensa}` }));
       try {
         const [{ turnoLocal }, { blocoDaBase }] = await Promise.all([import("@/lib/agent/turnoLocal"), import("@/lib/rag/citar")]);
         const s = await turnoLocal({
           prompt, history: params.history, systemContext: params.systemContext,
-          base: blocoDaBase(await basePromise) || undefined, grupo: escolhido.grupo, ctx: ledgerTurno,
+          base: blocoDaBase(await basePromise) || undefined, grupo: escolhido.grupo, key: keyGateway, ctx: ledgerTurno,
         }, (pedaco) => narrar(pedaco));
-        if (s.interrompido) narrar("\n\n_(a resposta local foi interrompida aqui)_");
-        narrar(serializarModelo(nomeDoModeloServido(escolhido.grupo, "contabo")));
+        if (s.interrompido) narrar("\n\n_(a resposta foi interrompida aqui)_");
+        narrar(serializarModelo(nomeDoModeloServido(escolhido.grupo)));
         const outLocal: HarnessOutput = { mode: "text", text: "" };
         if (userId) {
           void Promise.all([import("@/lib/canal/usage"), import("@/src/lib/prisma")])
@@ -348,7 +383,54 @@ export async function runChatTurn(
         }))
         .catch((e) => console.error("[cache] guardar falhou:", String((e as Error)?.message ?? e).slice(0, 160)));
     }
-    const out = resolveHarnessOutput(state, answer, surface, objetivo, { trabalhoNoEditor: multi });
+    /**
+     * A PEÇA DO ATLAS NO LUGAR DO PALPITE (lib/agent/anatomiaDoTurno). Para quem tem a habilidade
+     * `anatomia`: se o PEDIDO nomeia uma estrutura que o atlas tem, o artefato do turno é ela — e não
+     * o diagrama, a imagem ou o guia que o harness escolheria sozinho. Decidido pelo dado, sem modelo;
+     * vale também para a resposta que veio do cache. Best-effort: sem atlas no disco, nada muda.
+     */
+    let respostaFinal = answer;
+    if (habilidades.includes("anatomia")) {
+      try {
+        const [{ carregarAtlas }, { estruturaNomeada }, { artefatosComAnatomia }] = await Promise.all([
+          import("@/lib/anatomia/carregar"), import("@/lib/anatomia/pedido"), import("@/lib/agent/anatomiaDoTurno"),
+        ]);
+        const atlas = carregarAtlas();
+        const estrutura = atlas ? estruturaNomeada(atlas, objetivo) : null;
+        if (estrutura) {
+          const artefatos = artefatosComAnatomia({
+            artefatos: (answer as { artifacts?: any[] }).artifacts ?? state.artifacts ?? [],
+            objetivo, estrutura, explicito: state.intent === "gerar_artefato",
+          });
+          respostaFinal = { ...(answer as object), artifacts: artefatos } as typeof answer;
+        }
+      } catch { /* a peça é um ganho, não uma condição: o turno segue como estava */ }
+    }
+    /**
+     * O PORTÃO DO ISOLAMENTO, para TODO agente (lib/agent/anatomiaDoTurno `validarArtefatosDeAnatomia`):
+     * artefato de anatomia só viaja se o atlas consegue mostrá-lo ISOLADO. Título que é classe
+     * genérica, o corpo inteiro ou estrutura que o atlas não tem cai aqui — carregar o que não é a
+     * parte pedida é erro (decisão do dono, 2026-11-12), e erro não vira cartão.
+     */
+    {
+      const atuais = ((respostaFinal as { artifacts?: any[] }).artifacts ?? state.artifacts ?? []) as any[];
+      if (atuais.some((a) => String(a?.studioKind) === "anatomia")) {
+        try {
+          const [{ carregarAtlas }, { cenaDoConceito }, { validarArtefatosDeAnatomia }] = await Promise.all([
+            import("@/lib/anatomia/carregar"), import("@/lib/anatomia/cena-do-conceito"), import("@/lib/agent/anatomiaDoTurno"),
+          ]);
+          const atlas = carregarAtlas();
+          if (atlas) {
+            const validos = validarArtefatosDeAnatomia(atuais, (titulo) => {
+              const r = cenaDoConceito(atlas, titulo);
+              return r.ok ? { ok: true, nome: r.dados.conceito.nome } : { ok: false };
+            });
+            respostaFinal = { ...(respostaFinal as object), artifacts: validos } as typeof answer;
+          }
+        } catch { /* sem atlas no disco a rota do cartão já recusa (503): nada a validar aqui */ }
+      }
+    }
+    const out = resolveHarnessOutput(state, respostaFinal, surface, objetivo, { trabalhoNoEditor: multi });
     // TCC cross-sala: "crie um TCC sobre X" cria o TCC da conversa; nos turnos seguintes
     // `work.sections` vira operação por seção. AGUARDADO (é só banco, sem modelo) porque o cliente
     // precisa do workId pra abrir a aba — e best-effort: null nunca derruba o turno.
@@ -378,7 +460,9 @@ export async function runChatTurn(
         const id = await srv.iniciarRea(userId, scopeIdRea, titulo).catch(() => null);
         if (id) {
           out.answer = { ...out.answer, reaBlueprint: { id, titulo, gerando: true } };
-          void srv.reaBlueprintDoTurno({ userId, scopeId: scopeIdRea, titulo, prompt, answerTexto: textoDaResposta(out.answer), history: params.history }).catch(() => null);
+          // o REA herda o modelo da superfície: se o aluno escolheu um modelo de gateway (Claude/Zaeon),
+          // o blueprint é redigido por ele; senão, Gemini (ver genPadrao em rea-blueprint/server).
+          void srv.reaBlueprintDoTurno({ userId, scopeId: scopeIdRea, titulo, prompt, answerTexto: textoDaResposta(out.answer), history: params.history, grupoGateway: viaGateway(escolhido) ? escolhido.grupo : null }).catch(() => null);
         }
       }
     }

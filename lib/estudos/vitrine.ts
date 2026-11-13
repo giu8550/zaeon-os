@@ -13,12 +13,16 @@
 import type { Raridade } from "./blueprint";
 import { AGENTES_ORQUESTRA } from "@/lib/orquestra/catalogo";
 import type { PluginChat } from "@/lib/plugins/chatPlugins";
+import type { ParteResumo, Apoio } from "./pesquisas";
+import { INICIANTES } from "@/lib/forja/catalogoIniciantes";
 
 /** o desenho 3D do tema (components/estudos/modelos3d) */
-export type Modelo3D = "console" | "chip" | "planta" | "predio" | "drone" | "foguete" | "molecula" | "engrenagem" | "livro" | "graos" | "ondas" | "robo";
+export type Modelo3D = "console" | "chip" | "planta" | "predio" | "drone" | "foguete" | "molecula" | "engrenagem" | "livro" | "graos" | "ondas" | "robo" | "pasta";
 /** o tipo de conhecimento à venda */
-export type TipoProduto = "curso" | "codigo" | "artigo" | "negocio" | "rwa" | "agente";
-export const NOME_TIPO: Record<TipoProduto, string> = { curso: "Curso", codigo: "Código", artigo: "Trabalho acadêmico", negocio: "Negócio", rwa: "Ativo real (RWA)", agente: "Feito por agente de IA" };
+/** o tipo de conhecimento à venda. `skill` = procedimento da casa (.claude/skills), plugável no chat.
+ *  `pesquisa` = uma PASTA de pesquisa (lib/estudos/pesquisas): os papéis dentro dela são as partes. */
+export type TipoProduto = "curso" | "codigo" | "artigo" | "negocio" | "rwa" | "agente" | "skill" | "pesquisa";
+export const NOME_TIPO: Record<TipoProduto, string> = { curso: "Curso", codigo: "Código", artigo: "Trabalho acadêmico", negocio: "Negócio", rwa: "Ativo real (RWA)", agente: "Feito por agente de IA", skill: "Skill", pesquisa: "Pesquisa" };
 /** quem executa: você mesmo (DYOM) ou um agente de IA que faz por você */
 export type Execucao = "dyom" | "agente";
 
@@ -35,21 +39,79 @@ export type ItemVitrine = {
   entrega: string[];
   /** um toque de ironia (o dono: "outras tipificações profundas — ou não — contêm ironia") */
   ironia?: boolean;
+  /**
+   * preço FIXO em reais, quando o item é pago. `undefined` = o preço vem de `preco` (SOL, catálogo
+   * simulado). Itens de skill (pago/curso) usam ESTE campo: o dono quis o preço fixo em reais, com
+   * a conversão para SOL feita ao vivo na exibição (lib/solana/cotacao).
+   */
+  precoBRL?: number;
+  /**
+   * a conta DONA do item. Todo item pago e todo curso pertencem ao fundador (DONO_VITRINE) — regra
+   * do dono, verificada no portão das skills. `undefined` nos itens grátis e no catálogo simulado.
+   */
+  dono?: string;
+  /**
+   * DEVICE: o que o aluno baixa e roda na máquina dele. Presente só nos itens de família "device".
+   * É o que a UI usa para mostrar o botão de download (o espelho) e as instruções APÓS o plug.
+   */
+  device?: { plataforma: string; mirror: string; sha256: string | null };
   tags: string[];
   /** blueprint que vira AGENTE no seletor da sidebar (não espera a moeda: adicionar é grátis e instantâneo) */
   plugavel?: PluginChat;
+  // ── os DETALHES (painel "detalhes" do card — components/estudos/DetalhesBuild). Vêm da API, ligados à conta. ──
+  /** a CONTA que publicou (quando o card está ligado a um usuário) */
+  conta?: { id: string; nome: string; handle?: string | null; avatarUrl?: string | null; verificada?: boolean };
+  /** o nicho da build (ex.: "Aeroespacial"); sem ele, o painel mostra o tipo */
+  nicho?: string;
+  /** a descrição longa, escrita por quem publicou (sem limite de tamanho; parágrafos separados por linha em branco) */
+  descricao?: string;
+  /** quantas pessoas validaram a build */
+  validadores?: number;
+  /** a FOTO do card, posta pelo dono na curadoria (lib/estudos/curadoria) — no lugar do emoji do tema */
+  imagem?: string;
+  /** PESQUISA: o card é uma PASTA e estes são os papéis dentro dela (o texto de cada um vem sob demanda, pelo slug) */
+  pasta?: { slug: string; partes: ParteResumo[] };
+  /** PESQUISA aberta a APOIO (financiamento em SOL) — lib/estudos/pesquisas */
+  apoio?: Apoio;
 };
 
 export const MOEDA = { simbolo: "SOL", nome: "Solana (SOL)", ativa: false } as const;
 
+/**
+ * Os 10 projetos OSS para iniciantes (Forja, Fase C) como itens da vitrine — GRÁTIS (código aberto não
+ * cobra). Cada um abre o board da Forja daquele repo na Sala de Estudos (id `forja:<cursoId>`, consumido
+ * por lib/forja/desbloqueioForja). Autor e licença são os REAIS do repo estudado (atribuição preservada).
+ */
+const MODELO_INICIANTE: Record<string, Modelo3D> = {
+  "jogo-da-velha": "console", "portfolio": "livro", "api-rest-crud": "engrenagem",
+  "encurtador-de-url": "engrenagem", "app-de-clima": "ondas", "pomodoro": "engrenagem",
+};
+export const ITENS_FORJA_INICIANTES: readonly ItemVitrine[] = INICIANTES.map((e): ItemVitrine => ({
+  id: `forja:${e.id}`, titulo: e.titulo, subtitulo: e.resumo,
+  tipo: "curso", execucao: "dyom", modelo: MODELO_INICIANTE[e.id] ?? "chip",
+  autor: e.licenca?.titular ?? "comunidade open source", raridade: "comum", profundidade: 34,
+  preco: 0, fracoes: { total: 1, vendidas: 0 },
+  selos: { supervisionado: false, linksOk: true, codigoPrivado: false },
+  entrega: [
+    "o curso interativo da Forja: board (entender → espelho → entregar), temperatura e lições",
+    `o repositório-referência estudado de verdade (${e.repo}, ${e.licenca?.spdx ?? "open source"})`,
+    "publique o SEU primeiro projeto no GitHub pela Octa",
+  ],
+  tags: ["forja", "código aberto", "iniciante", "grátis", e.conceito ?? "projeto"],
+}));
+
 export const CATALOGO: readonly ItemVitrine[] = [
   { id: "octa-code", titulo: "Octa Code", subtitulo: "O agente de código da Zaeon, com a IDE dele — e freio de mão: não mexe onde você não pediu", tipo: "agente", execucao: "agente", modelo: "robo", autor: "Zaeon", raridade: "lendaria", profundidade: 90, preco: 0, fracoes: { total: 1, vendidas: 0 }, selos: { supervisionado: false, linksOk: true, codigoPrivado: false }, entrega: ["a IDE do Octa: editor, seu repositório do GitHub e execução no navegador", "revisão de código que aponta o trecho, sem reescrever o arquivo", "mudanças só no escopo pedido (as 4 perguntas antes de cada extra)", "telas mobile no padrão nativo (Expo/RN, Apple HIG)", "código colado é dado, nunca ordem — e segredo nunca vai pro modelo"], tags: ["código", "agente", "IDE", "grátis"], plugavel: "octa-code" },
   { id: "eiffel-cad", titulo: "Eiffel", subtitulo: "O engenheiro de estruturas da Zaeon — modela a peça em CAD paramétrico e te dá o STEP", tipo: "agente", execucao: "agente", modelo: "predio", autor: "Zaeon", raridade: "lendaria", profundidade: 88, preco: 0, fracoes: { total: 1, vendidas: 0 }, selos: { supervisionado: true, linksOk: true, codigoPrivado: false }, entrega: ["CAD paramétrico de verdade (SolidCraft, MIT/Apache-2.0): esboço, extrusão, filete, chanfro", "a peça vira ARTEFATO na conversa, com visualizador 3D e o STEP pra baixar", "modo edição: você mexe na peça, com timeline e parâmetros", "cada etapa verificada com medida real — volume, área, massa, centro de massa", "caminho de carga explicado: de onde a força vem, por onde desce, onde sai"], tags: ["engenharia", "CAD", "estruturas", "agente", "grátis"], plugavel: "eiffel-cad" },
+  // A NOETHER: o card é o AGENTE, e as skills de matemática vêm dentro dele (as que são só dela não têm card próprio —
+  // lib/estudos/vitrineSkills, metadado `zaeon-card: agente`). Um plug, e o seletor ganha a matemática com tudo no bolso.
+  { id: "noether-matematica", titulo: "Noether", subtitulo: "A matemática da Zaeon — conduz a demonstração passo a passo e te deixa arrastar o teorema", tipo: "agente", execucao: "agente", modelo: "livro", autor: "Zaeon", raridade: "lendaria", profundidade: 87, preco: 0, fracoes: { total: 1, vendidas: 0 }, selos: { supervisionado: false, linksOk: true, codigoPrivado: false }, entrega: ["resolução passo a passo, uma regra por passo, tipografada na tela (KaTeX)", "geometria dinâmica: a construção com pontos que você arrasta (JSXGraph)", "conta simbólica exata e a conferência da SUA resposta (SymPy)", "o esqueleto da demonstração ou do algoritmo em diagrama (Mermaid)", "o curso de algoritmos clássicos, notebooks no navegador e cálculo numérico", "ela pede a sua tentativa antes de resolver — e não faz a prova por você"], tags: ["matemática", "cálculo", "geometria", "demonstração", "agente", "grátis"], plugavel: "noether-matematica" },
   // OS AGENTES DA ORQUESTRA (lib/orquestra/catalogo): blueprints que viram agente no seletor, como o Octa — o
   // estado de cada um (liberado / exige plano / em breve) vem do servidor no modal (GET /api/orquestra/agentes).
   ...AGENTES_ORQUESTRA.map((a): ItemVitrine => ({
     id: a.id, titulo: a.nome, subtitulo: a.resumo, tipo: "agente", execucao: "agente",
-    modelo: a.formato === "enxame" ? "ondas" : "robo", autor: a.laboratorio,
+    // quem publica é a ZAEON (o agente é dela, orquestrando o modelo do laboratório — que segue nas tags)
+    modelo: a.formato === "enxame" ? "ondas" : "robo", autor: "Zaeon",
     raridade: a.formato === "enxame" ? "lendaria" : "epica", profundidade: a.formato === "enxame" ? 95 : 85,
     preco: 0, fracoes: { total: 1, vendidas: 0 }, selos: { supervisionado: false, linksOk: true, codigoPrivado: false },
     entrega: [a.comoTrabalha, "fontes reais: bases acadêmicas, web e a base da Zaeon", "citações conferidas — chave que nenhuma busca devolveu é cortada", `incluso a partir do plano ${a.minPlan === "max" ? "Max" : "Pro"}`],
@@ -68,17 +130,24 @@ export const CATALOGO: readonly ItemVitrine[] = [
   { id: "agente-ir", titulo: "Um agente de IA que faz a sua declaração de IR", subtitulo: "Lê os informes, monta a declaração e explica cada linha", tipo: "agente", execucao: "agente", modelo: "robo", autor: "Agente Fisco (Zaeon)", raridade: "epica", profundidade: 66, preco: 15, fracoes: { total: 800, vendidas: 402 }, selos: { supervisionado: true, linksOk: true, codigoPrivado: true }, entrega: ["o agente pronto", "as regras de 2027 conferidas", "o relatório pra contador revisar"], tags: ["finanças", "agente", "impostos"] },
   { id: "predio-bambu", titulo: "Prédio de 4 andares em bambu", subtitulo: "O blueprint estrutural — cálculo, tratamento e as normas", tipo: "rwa", execucao: "dyom", modelo: "predio", autor: "Ateliê Taquara", raridade: "lendaria", profundidade: 86, preco: 60, fracoes: { total: 600, vendidas: 210 }, selos: { supervisionado: true, linksOk: true, codigoPrivado: false }, entrega: ["projeto estrutural", "o ensaio de flexão", "o prédio-piloto (fração do aluguel)"], tags: ["construção", "bambu", "RWA"] },
   { id: "tcc-ia-escrita", titulo: "TCC escrito com método (e sem plágio)", subtitulo: "O percurso, as fontes conferidas e a banca simulada", tipo: "artigo", execucao: "agente", modelo: "livro", autor: "Aura (Zaeon)", raridade: "rara", profundidade: 55, preco: 0, fracoes: { total: 1, vendidas: 0 }, selos: { supervisionado: true, linksOk: true, codigoPrivado: false }, entrega: ["o modelo do TCC", "o checklist ABNT", "a banca simulada"], tags: ["academia", "escrita", "grátis"] },
+  // os 10 projetos OSS para iniciantes (Forja) — grátis, abrem o board da Forja (ver ITENS_FORJA_INICIANTES)
+  ...ITENS_FORJA_INICIANTES,
 ];
 
-export type FiltroVitrine = "todos" | "gratis" | "dyom" | "agente" | "rwa" | "ironia";
+export type FiltroVitrine = "todos" | "gratis" | "dyom" | "agente" | "rwa" | "skill" | "pesquisa" | "ironia";
 export const FILTROS: { id: FiltroVitrine; nome: string }[] = [
   { id: "todos", nome: "Tudo" }, { id: "dyom", nome: "Faça você mesmo" }, { id: "agente", nome: "Um agente faz" },
-  { id: "rwa", nome: "Ativos reais" }, { id: "gratis", nome: "Grátis" }, { id: "ironia", nome: "Com ironia" },
+  { id: "rwa", nome: "Ativos reais" }, { id: "skill", nome: "Skills" }, { id: "pesquisa", nome: "Pesquisas" }, { id: "gratis", nome: "Grátis" }, { id: "ironia", nome: "Com ironia" },
 ];
+/** abas cujo conteúdo só vem do BANCO (sem nada embutido): ficam escondidas enquanto não há item nelas */
+export const FILTROS_DO_BANCO: readonly FiltroVitrine[] = ["pesquisa"];
+/** as abas que a vitrine mostra: as fixas sempre; as do banco só quando têm o que mostrar */
+export const filtrosVisiveis = (itens: readonly ItemVitrine[]) =>
+  FILTROS.filter((f) => !FILTROS_DO_BANCO.includes(f.id) || filtrarVitrine(itens, f.id).length > 0);
 export function filtrarVitrine(itens: readonly ItemVitrine[], f: FiltroVitrine, busca = ""): ItemVitrine[] {
   const q = busca.trim().toLowerCase();
   return itens.filter((i) =>
-    (f === "todos" || (f === "gratis" && i.preco === 0) || (f === "dyom" && i.execucao === "dyom") || (f === "agente" && i.execucao === "agente") || (f === "rwa" && i.tipo === "rwa") || (f === "ironia" && !!i.ironia))
+    (f === "todos" || (f === "gratis" && i.preco === 0) || (f === "dyom" && i.execucao === "dyom") || (f === "agente" && i.execucao === "agente") || (f === "rwa" && i.tipo === "rwa") || (f === "skill" && i.tipo === "skill") || (f === "pesquisa" && i.tipo === "pesquisa") || (f === "ironia" && !!i.ironia))
     && (!q || `${i.titulo} ${i.subtitulo} ${i.autor} ${i.tags.join(" ")}`.toLowerCase().includes(q)));
 }
 /** o quanto das frações já foi vendido (0..1) — e o preço "cheio" (todas as frações) */
@@ -86,3 +155,12 @@ export const vendido = (i: ItemVitrine) => (i.fracoes.total ? i.fracoes.vendidas
 export const valorTotal = (i: ItemVitrine) => i.preco * i.fracoes.total;
 /** "48 SOL" / "Grátis" */
 export const precoTexto = (p: number) => (p <= 0 ? "Grátis" : `${p.toLocaleString("pt-BR")} ${MOEDA.simbolo}`);
+
+/** junta os cards do admin (preferidos) com o catálogo embutido SEM repetir id — se um item do admin usa o mesmo id de um
+ *  embutido, fica só o do admin (senão a carta aparece duas vezes e as duas dividem o estado de "conectado", que é por id). */
+export function mesclarCatalogo(doAdmin: readonly ItemVitrine[], base: readonly ItemVitrine[] = CATALOGO): ItemVitrine[] {
+  const vistos = new Set<string>();
+  const out: ItemVitrine[] = [];
+  for (const it of [...doAdmin, ...base]) { if (!vistos.has(it.id)) { vistos.add(it.id); out.push(it); } }
+  return out;
+}

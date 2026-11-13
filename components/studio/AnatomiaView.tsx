@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { Box, FileText, Layers, ExternalLink } from "lucide-react";
 import type { Atlas, EstadoCena, SistemaId } from "@/lib/anatomia/atlas";
+import { estadoEstaIsolado, linkDoAtlas } from "@/lib/anatomia/isolamento";
 
 const CenaDoCorpo = dynamic(() => import("@/components/anatomia/CenaDoCorpo"), { ssr: false });
 
@@ -46,9 +47,13 @@ export function rotuloDeMalhas(n: unknown): string {
   return k === 1 ? "1 malha" : `${k.toLocaleString("pt-BR")} malhas`;
 }
 
-/** PURA: o estado é utilizável? Sem peça selecionada a cena desenha o corpo todo sem destaque. */
+/**
+ * PURA: o estado é utilizável? Só o ISOLADO é (lib/anatomia/isolamento). Sem peça selecionada a cena
+ * desenha o corpo todo; com seleção e sem isolamento, a peça fica atrás de centenas de outras. Os
+ * dois casos são ERRO (decisão do dono, 2026-11-12) — o cartão avisa em vez de montar o visor.
+ */
 export function cenaUtilizavel(d: AnatomiaData): boolean {
-  return Array.isArray(d.estado?.selected) && d.estado!.selected.length > 0;
+  return estadoEstaIsolado(d.estado);
 }
 
 /** O visor 3D. Só monta quando chamado — busca o atlas na hora e solta na saída. */
@@ -124,8 +129,9 @@ function Placa({ d, compacta }: { d: AnatomiaData; compacta?: boolean }) {
  * #764 · a conversa reaberta só guarda o NÚMERO do artefato (como a imagem): sem o estado em mãos, busca em
  * /api/studio/<id> — o estado da cena mora no `meta` do artefato.
  */
-function useDadosDoServidor(data: AnatomiaData, artifactId?: string): AnatomiaData {
+function useDadosDoServidor(data: AnatomiaData, artifactId?: string): { data: AnatomiaData; carregando: boolean } {
   const [doServidor, setDoServidor] = useState<AnatomiaData | null>(null);
+  const [terminou, setTerminou] = useState(false);
   const precisa = !data?.estado && !!artifactId;
   useEffect(() => {
     if (!precisa) return;
@@ -133,14 +139,17 @@ function useDadosDoServidor(data: AnatomiaData, artifactId?: string): AnatomiaDa
     fetch(`/api/studio/${encodeURIComponent(artifactId!)}`, { credentials: "same-origin" })
       .then((r) => (r.ok ? r.json() : null))
       .then((a) => { if (vivo && a?.meta && typeof a.meta === "object") setDoServidor(a.meta as AnatomiaData); })
-      .catch(() => { /* fica a placa sem 3D */ });
+      .catch(() => { /* fica a placa sem 3D */ })
+      .finally(() => { if (vivo) setTerminou(true); });
     return () => { vivo = false; };
   }, [precisa, artifactId]);
-  return precisa ? doServidor ?? data ?? {} : data;
+  if (!precisa) return { data, carregando: false };
+  return { data: doServidor ?? data ?? {}, carregando: !terminou };
 }
 
 export default function AnatomiaView({ data: dataDoBloco, nu = false, artifactId }: { data: AnatomiaData; nu?: boolean; artifactId?: string }) {
-  const data = useDadosDoServidor(dataDoBloco, artifactId);
+  // enquanto busca no servidor, ainda não dá para dizer que a cena "não veio isolada"
+  const { data, carregando } = useDadosDoServidor(dataDoBloco, artifactId);
   const [modo, setModo] = useState<"fatos" | "3d">("fatos");
   const podeVer3D = cenaUtilizavel(data);
   const nome = data.nomeNaTela || data.conceito?.nome || data.termoBuscado || "estrutura";
@@ -176,6 +185,11 @@ export default function AnatomiaView({ data: dataDoBloco, nu = false, artifactId
           : <Placa d={data} />}
       </div>
 
+      {!podeVer3D && !carregando && (
+        <p data-anatomia-erro role="alert" className="m-0 rounded-xl border border-amber-300/50 bg-amber-50/60 dark:bg-amber-400/[0.07] px-3 py-2 text-[11px] text-amber-800 dark:text-amber-200">
+          Esta cena não veio isolada, então o 3D não abre: mostrar o corpo inteiro no lugar de {nome} seria um erro. Peça a estrutura de novo pelo nome.
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-1.5">
         {podeVer3D && (
           <button
@@ -187,10 +201,13 @@ export default function AnatomiaView({ data: dataDoBloco, nu = false, artifactId
           </button>
         )}
         <a
-          href={data.conceito?.id ? `/anatomia?conceito=${encodeURIComponent(data.conceito.id)}` : "/anatomia"}
+          // JÁ NA ESTRUTURA: este link era `/anatomia` seco e abria o corpo inteiro, sem nada
+          // selecionado — o defeito que o dono viu. Sem id de conceito, o link nem aparece.
+          href={linkDoAtlas(data.conceito?.id) ?? undefined}
+          hidden={!linkDoAtlas(data.conceito?.id)}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold text-slate-700 dark:text-white/80 border border-slate-200 dark:border-white/10 hover:border-cyan-400/50 transition-colors"
         >
-          <ExternalLink size={12} /> Abrir o atlas
+          <ExternalLink size={12} /> Abrir {nome} no atlas
         </a>
         {data.fonte?.url && (
           <a

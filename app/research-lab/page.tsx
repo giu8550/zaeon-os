@@ -186,6 +186,7 @@ import { LOUNGE_ROTA, MSG_FECHAR_TABLET, MSG_IA, pedeFoco, pedeTablet, pedeTutor
 import { instalarMonitorIA } from "@/lib/ui/monitorIA";
 import { onEnterSubmit } from "@/lib/ui/enterSubmit";
 import { escritorioCowork } from "@/lib/canal/flags";
+import PublicarPesquisa from "@/components/estudos/PublicarPesquisa";
 import { unifiedResearchRoom, resolveLabTab, isSubTab, projetosOn, type LabTab, type ResearchSubTab } from "@/lib/research/unifiedRoom";
 import { EVT_ANEXAR, pdfDaBiblioteca } from "@/components/chat/useAnexoChat";
 import { chatUnicoOn, pedidoDoLink, pedirAoChat } from "@/lib/chat/chatUnico";
@@ -201,6 +202,7 @@ const CHAT_UNICO = chatUnicoOn();
 import NewsPanel from "@/components/research/NewsPanel";
 import ProfilePanel from "@/components/research/ProfilePanel";
 import { EVT_VER_PERFIL, idDoEvento } from "@/lib/perfil/eventos";
+import { EVT_ABRIR_PROJETO } from "@/lib/octa/ideNav";
 import EditableProfile from "@/components/research/EditableProfile";
 import MiniTourToast from "@/components/research/MiniTourToast";
 import SavedCitationsSection from "./SavedCitationsSection";
@@ -1080,6 +1082,21 @@ export default function HomeworkPage({
       .catch(() => {});
   }, []);
   useEffect(() => { loadWorks(); }, [loadWorks]);
+  // PUBLICAR NA VITRINE (lib/estudos/pesquisas): o status de cada trabalho já mandado (workId → status) e a janelinha
+  const [publicacoes, setPublicacoes] = useState<Record<string, { status: string; motivo?: string | null }>>({});
+  const [publicando, setPublicando] = useState<{ id: string; title: string } | null>(null);
+  const loadPublicacoes = useCallback(() => {
+    fetch("/api/estudos/vitrine/pesquisas?minhas=1", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!Array.isArray(d?.minhas)) return;
+        const m: Record<string, { status: string; motivo?: string | null }> = {};
+        for (const p of d.minhas as { workId?: string | null; status: string; motivo?: string | null }[]) if (p.workId) m[p.workId] = { status: p.status, motivo: p.motivo };
+        setPublicacoes(m);
+      })
+      .catch(() => {});
+  }, []);
+  useEffect(() => { loadPublicacoes(); }, [loadPublicacoes]);
   const [citationContent, setCitationContent] = useState<string | null>(null);
   const [activeCitationText, setActiveCitationText] = useState<string | null>(
     null,
@@ -1708,6 +1725,13 @@ export default function HomeworkPage({
     const onSetTab = (e: any) => setActiveTab(e?.detail); // inválida é ignorada na setActiveTab
     window.addEventListener("zaeon:set-tab", onSetTab);
     return () => window.removeEventListener("zaeon:set-tab", onSetTab);
+  }, []);
+  // Ponte REA → Octa: o cartão do Blueprint já gravou o id do projeto em CHAVE_ULTIMO_PROJETO; aqui
+  // só trocamos para a aba da IDE (que não aceita setActiveTab), e ela faz boot nesse projeto.
+  useEffect(() => {
+    const onAbrirOcta = () => setActiveTabRaw("octa");
+    window.addEventListener(EVT_ABRIR_PROJETO, onAbrirOcta);
+    return () => window.removeEventListener(EVT_ABRIR_PROJETO, onAbrirOcta);
   }, []);
   // #427: "Ver perfil" no escritório → aba Perfil com o perfil daquela pessoa (só leitura, sem cérebros)
   useEffect(() => {
@@ -3019,6 +3043,14 @@ export default function HomeworkPage({
                 multiple
                 onChange={(e) => handleFiles(e.target.files)}
               />
+              {publicando && (
+                <PublicarPesquisa
+                  work={publicando}
+                  jaEnviado={publicacoes[publicando.id]}
+                  onFechar={() => setPublicando(null)}
+                  onEnviado={loadPublicacoes}
+                />
+              )}
               <ResearchShell
                 tccWorkId={tccWorkId}
                 flipped={isChatLeft}
@@ -3048,6 +3080,8 @@ export default function HomeworkPage({
                 sessions={sessions}
                 onNewWork={handleNewWork}
                 onDeleteWork={handleDeleteWork}
+                onPublishWork={(id) => setPublicando({ id, title: sessions.find((x) => x.id === id)?.title ?? "Pesquisa sem título" })}
+                publicacoes={publicacoes}
                 onOpenSession={handleOpenWork}
                 researchWindowContent={
                   <div
