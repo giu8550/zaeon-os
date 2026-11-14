@@ -26,6 +26,20 @@ export function numeroBR(v: number): string {
   return v.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 }
 
+/**
+ * #764 · o pedido de gráfico com o desenho GARANTIDO. O modelo às vezes escrevia só os números no texto e pulava o
+ * ```grafico ("faça um gráfico da população de cada região do Brasil" veio sem barras). Agora ele também manda o
+ * campo `grafico` no JSON (mesmo formato do bloco) e, se o texto não trouxe o bloco, o código põe o bloco no fim.
+ * Devolve o bloco pronto, ou null quando o texto já tem um ou o campo não vale como gráfico (sem fonte, < 2 barras).
+ */
+export function blocoDoCampoGrafico(campo: unknown, corpo: string): string | null {
+  if (/```grafico/.test(corpo)) return null;
+  if (!campo || typeof campo !== "object") return null;
+  const json = JSON.stringify(campo);
+  if (!ehGraficoDeDados(json) || !parseGraficoDados(json).ok) return null;
+  return "```grafico\n" + json + "\n```";
+}
+
 const texto = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
 
 export function parseGraficoDados(json: string): { ok: true; grafico: Grafico } | { ok: false; erro: string } {

@@ -59,11 +59,11 @@ import DicaSubTema from "@/components/chat/DicaSubTema";
 import Desenhando from "@/components/chat/Desenhando";
 import CartaoArtefato from "@/components/chat/CartaoArtefato";
 import DocumentoArtefato from "@/components/studio/DocumentoArtefato";
-import { abrirDocumento, EVT_ABRIR_DOC, KINDS_EM_ABA, ROTULO_DOC, type DocArtefato } from "@/lib/chat/documentos";
+import { abrirDocumento, destinoDoDoc, EVT_ABRIR_DOC, KINDS_EM_ABA, ROTULO_DOC, type DocArtefato } from "@/lib/chat/documentos";
 import { assuntoDe, pedeAula } from "@/lib/agent/aprender";
 import { pedeCaderno } from "@/lib/jornadas/cadernoRitmo";
 import { EVT_ABRIR_CADERNO, consumirCadernoPendente } from "@/lib/jornadas/desbloqueio";
-import { EVT_ABRIR_FORJA, consumirForjaPendente } from "@/lib/forja/desbloqueioForja";
+import { EVT_ABRIR_ESTUDO, consumirEstudoPendente, type EstudoPendente } from "@/lib/estudos/desbloqueioEstudo";
 import ChatZoom, { useChatFontScale } from "@/components/chat/ChatZoom";
 import { zoomNoDiagrama } from "@/components/studio/DiagramView";
 import { AnimatePresence } from "framer-motion";
@@ -155,15 +155,17 @@ type Msg = {
 };
 
 /** Kinds que nascem do assunto/conversa, sem um estudo de origem (não criam estudo vazio). */
-const SEM_ESTUDO = new Set(["diagram", "mindmap", "molecule", "aula", "caderno", "forja"]);
+const SEM_ESTUDO = new Set(["diagram", "mindmap", "molecule", "aula", "caderno", "forja", "device"]);
 /** #749: além do diagrama e da aula (que abrem em aba), o que fica guardado na conversa pelo número — o arquivo mora no servidor */
-const GUARDA_NO_SERVIDOR = new Set(["image"]);
+// #764: a anatomia também — o cartão 3D sumia ao trocar de conversa ou recarregar (o estado da cena mora no artefato)
+const GUARDA_NO_SERVIDOR = new Set(["image", "anatomia"]);
 const AVISO_ARTEFATO: Record<string, string> = {
   diagram: "Desenhando o diagrama interativo…",
   mindmap: "Desenhando o mapa…",
   aula: "Preparando a aula interativa — plano, roteiro e narração (1 a 3 min)…",
   caderno: "Abrindo seu caderno da jornada…",
   forja: "Montando seu estudo do repositório…",
+  device: "Preparando seu painel de download e instruções…",
 };
 
 /**
@@ -430,14 +432,16 @@ function ChatDaConta({ active, armazem }: { active: boolean; armazem: Armazem })
     const on = (e: Event) => {
       const d = (e as CustomEvent<DocArtefato>).detail;
       if (!d || d.sala !== "estudos") return;
-      // a conversa DE ONDE o documento saiu (a geração leva segundos — a pessoa pode ter trocado de conversa)
-      const aba = d.scopeId ?? abaAtivaRef.current;
+      // destinoDoDoc (lib/chat/documentos): auto-abertura (forja/caderno de um card) entra na aba ATIVA de agora
+      // e foca — nunca num scopeId capturado cedo no mount, que a sincronização de conversas pode ter deixado
+      // para trás (aba fantasma → board invisível). O resto segue a conversa de origem, sem roubar a tela.
+      const { aba, foca } = destinoDoDoc(d, abaAtivaRef.current);
       if (!aba) return;
       setDocsPorAba((p) => {
         const xs = p[aba] ?? [];
         return xs.some((x) => x.artifactId === d.artifactId) ? p : { ...p, [aba]: [...xs, d] };
       });
-      if (d.focar && aba === abaAtivaRef.current) setDocAtivoPorAba((p) => ({ ...p, [aba]: d.artifactId }));
+      if (foca) setDocAtivoPorAba((p) => ({ ...p, [aba]: d.artifactId }));
     };
     window.addEventListener(EVT_ABRIR_DOC, on);
     return () => window.removeEventListener(EVT_ABRIR_DOC, on);
@@ -935,7 +939,7 @@ function ChatDaConta({ active, armazem }: { active: boolean; armazem: Armazem })
    */
   // #745 (revisão): o PDF de uma aula que falhou fica na memória da tela (grande demais para guardar na mensagem)
   const pdfDoRefazer = useRef(new Map<string, { dataUrl: string; nome?: string }>());
-  const runStudioAction = useCallback(async (kind: string, topic: string, attachMsgId?: string, silencioso = false, contexto?: string, pdf?: { dataUrl: string; nome?: string }, espacoDeAntes?: string) => {
+  const runStudioAction = useCallback(async (kind: string, topic: string, attachMsgId?: string, silencioso = false, contexto?: string, pdf?: { dataUrl: string; nome?: string }, espacoDeAntes?: string, autoAbrir = false) => {
     // a conversa que pediu: o artefato volta pra ela mesmo se a pessoa trocar de conversa durante a geração
     const scopeId = abaAtivaRef.current ?? undefined;
     // Fonte da geração: o estudo EM FOCO (se a pessoa está trabalhando nele) OU um
@@ -964,11 +968,13 @@ function ChatDaConta({ active, armazem }: { active: boolean; armazem: Armazem })
     if (aviso) marcar(undefined);
     avisarDesenho(r.tipo === "pronto" ? "pronto" : "falhou", kind);
     if (r.tipo === "pronto") {
-      window.dispatchEvent(new CustomEvent("zaeon:study:embed", { detail: { ...r.bloco, attachMsgId, scopeId } }));
+      // auto-abertura (card de forja/caderno): a conversa-alvo é a ATIVA de agora (pós-sync), não a capturada no mount.
+      const escopo = autoAbrir ? (abaAtivaRef.current ?? scopeId) : scopeId;
+      window.dispatchEvent(new CustomEvent("zaeon:study:embed", { detail: { ...r.bloco, attachMsgId, scopeId: escopo } }));
       // Documento (diagrama/aula): abre a aba em "Documentos"; pedido explícito já mostra ela.
       if (KINDS_EM_ABA.has(r.bloco.studioKind) && r.bloco.artifactId) {
-        gravarArtefato("estudos", threadsRef.current.find((t) => t.id === scopeId), { studioKind: r.bloco.studioKind, artifactId: r.bloco.artifactId, title: r.bloco.title || topic });
-        abrirDocumento({ sala: "estudos", studioKind: r.bloco.studioKind, artifactId: r.bloco.artifactId, titulo: r.bloco.title || topic, data: r.bloco.data, focar: !silencioso, scopeId });
+        gravarArtefato("estudos", threadsRef.current.find((t) => t.id === escopo), { studioKind: r.bloco.studioKind, artifactId: r.bloco.artifactId, title: r.bloco.title || topic });
+        abrirDocumento({ sala: "estudos", studioKind: r.bloco.studioKind, artifactId: r.bloco.artifactId, titulo: r.bloco.title || topic, data: r.bloco.data, focar: !silencioso, scopeId: escopo, autoAbrir });
       } else if (GUARDA_NO_SERVIDOR.has(r.bloco.studioKind) && r.bloco.artifactId) {
         // #749: a imagem sumia ao reabrir a conversa (só o diagrama e a aula ficavam guardados) — guarda o número dela
         gravarArtefato("estudos", threadsRef.current.find((t) => t.id === scopeId), { studioKind: r.bloco.studioKind, artifactId: r.bloco.artifactId, title: r.bloco.title || topic });
@@ -980,6 +986,7 @@ function ChatDaConta({ active, armazem }: { active: boolean; armazem: Armazem })
     }
   }, [focusIds, avisarFalha]);
   const runStudioActionRef = useRef(runStudioAction); runStudioActionRef.current = runStudioAction;
+  const novaAbaRef = useRef(novaAba); novaAbaRef.current = novaAba; // pro laço do desbloqueio abrir em conversa nova
 
   // P4 · laço do desbloqueio: o card de música desbloqueado deixa um Caderno PENDENTE (lib/jornadas/
   // desbloqueio). A Sala de Estudos abre esse caderno sozinha — no mount (quem já comprou) e pelo
@@ -990,7 +997,7 @@ function ChatDaConta({ active, armazem }: { active: boolean; armazem: Armazem })
       const c = id || "ritmo";
       if (cadernoAbertoRef.current.has(c)) return;
       cadernoAbertoRef.current.add(c);
-      void runStudioActionRef.current("caderno", c, undefined, false);
+      void runStudioActionRef.current("caderno", c, undefined, false, undefined, undefined, undefined, true);
     };
     const pendente = consumirCadernoPendente();
     if (pendente) abrir(pendente);
@@ -999,19 +1006,22 @@ function ChatDaConta({ active, armazem }: { active: boolean; armazem: Armazem })
     return () => window.removeEventListener(EVT_ABRIR_CADERNO, onEvt);
   }, []);
 
-  // O MESMO laço, para os cursos de REPOSITÓRIO da Forja: o card OSS pego na vitrine deixa um curso
-  // PENDENTE (lib/forja/desbloqueioForja), e a Sala abre o board da Forja sozinha. Uma vez por id.
-  const forjaAbertoRef = useRef<Set<string>>(new Set());
+  // Cursos de código (Forja e skill:* board) NÃO auto-abrem aqui: quem leva à ÁREA PRÓPRIA do curso é
+  // o botão "abrir" da vitrine (VitrineEstudos → abrirCurso → StudyRoomContent, aba "curso"). Auto-abrir
+  // no meio do ritual de conexão arrancaria o aluno da vitrine/modal. Só o DEVICE abre aqui (doc em aba).
+  const estudoAbertoRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    const abrir = (id: string | null) => {
-      if (!id || forjaAbertoRef.current.has(id)) return;
-      forjaAbertoRef.current.add(id);
-      void runStudioActionRef.current("forja", id, undefined, false);
+    const abrir = (e: EstudoPendente | null) => {
+      if (!e?.slug || estudoAbertoRef.current.has(e.slug)) return;
+      if (e.modulo !== "device") return;          // board é tratado pelo botão "abrir" (área própria do curso)
+      estudoAbertoRef.current.add(e.slug);
+      novaAbaRef.current();                       // device: conversa nova, não invade um thread de outro assunto
+      void runStudioActionRef.current("device", e.slug, undefined, false, undefined, undefined, undefined, true);
     };
-    abrir(consumirForjaPendente());
-    const onEvt = (e: Event) => { consumirForjaPendente(); abrir((e as CustomEvent).detail as string); };
-    window.addEventListener(EVT_ABRIR_FORJA, onEvt);
-    return () => window.removeEventListener(EVT_ABRIR_FORJA, onEvt);
+    abrir(consumirEstudoPendente());
+    const onEvt = (ev: Event) => { consumirEstudoPendente(); abrir((ev as CustomEvent).detail as EstudoPendente); };
+    window.addEventListener(EVT_ABRIR_ESTUDO, onEvt);
+    return () => window.removeEventListener(EVT_ABRIR_ESTUDO, onEvt);
   }, []);
 
   // ── envio pro chat da Aura ──────────────────────────────────────────────────

@@ -109,6 +109,26 @@ describe("AnatomiaView — a placa é o padrão", () => {
     expect(container.querySelector("a[href^='/anatomia']")).toBeNull();
   });
 
+  it("#764 · nome em português quando a rota manda (não 'heart')", () => {
+    const { container } = render(<AnatomiaView data={{ ...PULMAO, nomeNaTela: "pulmão esquerdo" }} />);
+    expect(container.textContent).toContain("pulmão esquerdo");
+    expect(container.textContent).not.toContain("left lung");
+  });
+
+  it("#764 · conversa reaberta (só o número): busca o estado em /api/studio/<id> e oferece o 3D", async () => {
+    const chamadas: string[] = [];
+    const antes = globalThis.fetch;
+    globalThis.fetch = (async (u: string) => { chamadas.push(String(u)); return { ok: true, json: async () => ({ meta: PULMAO }) }; }) as any;
+    try {
+      const { findByText, container } = render(<AnatomiaView data={{}} artifactId="art1" />);
+      // enquanto busca, o aviso de "não veio isolada" não pisca
+      expect(container.querySelector("[data-anatomia-erro]")).toBeNull();
+      expect(await findByText("Ver em 3D")).toBeTruthy();
+      expect(chamadas).toEqual(["/api/studio/art1"]);
+      expect(container.querySelector("[data-anatomia-erro]")).toBeNull();
+    } finally { globalThis.fetch = antes; }
+  });
+
   it("sem cena utilizável NÃO oferece 3D, e ainda assim mostra os dados", () => {
     const semCena: AnatomiaData = { ...PULMAO, estado: { ...ESTADO, selected: [] } };
     const { container } = render(<AnatomiaView data={semCena} />);

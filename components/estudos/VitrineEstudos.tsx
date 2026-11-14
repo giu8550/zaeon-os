@@ -31,6 +31,8 @@ import { pctApoio, solFmt } from "@/lib/estudos/pesquisas";
 import { destinoDe, type Destino } from "@/lib/estudos/detalhes";
 import { cadernoDoItem, marcarCadernoPendente } from "@/lib/jornadas/desbloqueio";
 import { forjaDoItem, marcarForjaPendente } from "@/lib/forja/desbloqueioForja";
+import { estudoDoItem, marcarEstudoPendente } from "@/lib/estudos/desbloqueioEstudo";
+import { abrirCurso, cursoIdDoItem } from "@/lib/forja/abrirCurso";
 import { EVT_ESTUDOS_CHAT } from "@/lib/chat/conversasNav";
 import "./vitrine-card.css";
 import "./vitrine-claim.css";
@@ -148,7 +150,7 @@ export default function VitrineEstudos() {
                         window.setTimeout(() => setFases((f) => ({ ...f, clamp: true })), 70),             // prensas finas deslizam
                         window.setTimeout(() => setFases((f) => ({ ...f, impact: true, lit: true })), 700), // CONTATO: energia Tron + flash + carga
                         window.setTimeout(() => setFases((f) => ({ ...f, impact: false })), 1160),
-                        window.setTimeout(() => { conectarItem(it.id); if (it.plugavel) plugar(it.plugavel); marcarCadernoPendente(cadernoDoItem(it)); marcarForjaPendente(forjaDoItem(it)); }, 1700), // COMPRA/PLUG acontece (+ caderno de jornada ou curso de repo, se houver)
+                        window.setTimeout(() => { conectarItem(it.id); if (it.plugavel) plugar(it.plugavel); marcarCadernoPendente(cadernoDoItem(it)); marcarForjaPendente(forjaDoItem(it)); marcarEstudoPendente(estudoDoItem(it)); }, 1700), // COMPRA/PLUG acontece (+ caderno de jornada, curso de repo, ou o módulo da skill: board/device/agente)
                         window.setTimeout(() => setFases((f) => ({ ...f, desintegra: true })), 1860),        // a carta desintegra e sai de cena
                         window.setTimeout(() => { setDepois(it); fecharInspect(); }, 2600),
                     );
@@ -352,7 +354,7 @@ export default function VitrineEstudos() {
                         <p>Já está na sua conta, disponível {destinoDe(depois).texto}. Quer abrir agora ou continuar explorando?</p>
                         <div className="vd-dois">
                             <button type="button" className="vd-bt voltar" onClick={() => setDepois(null)}>← voltar à vitrine</button>
-                            <button type="button" className="vd-bt abrir" onClick={() => { const d = destinoDe(depois); setDepois(null); abrirDestino(d); }}>abrir {destinoDe(depois).texto} ↗</button>
+                            <button type="button" className="vd-bt abrir" onClick={() => { const cid = cursoIdDoItem(depois); setDepois(null); if (cid) abrirCurso({ cursoId: cid, titulo: depois.titulo }); else abrirDestino(destinoDe(depois)); }}>abrir {destinoDe(depois).texto} ↗</button>
                         </div>
                     </div>
                 </div>

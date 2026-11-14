@@ -42,6 +42,7 @@ import { capacidadeDe, habilidadesDoTurno, toolsPermitidas } from "@/lib/agents/
 import { agenteChat, type AgenteChatId } from "@/lib/agents/chatAgentes";
 import { vozDoTurno } from "@/lib/agents/voz";
 import { escopoDoTurno } from "@/lib/agents/escopo";
+import { pedeImagem } from "@/lib/agent/pedeImagem";
 
 export type ChatTurnParams = {
   prompt: string;
@@ -253,7 +254,9 @@ export async function runChatTurn(
     // impessoal. Qualquer falha = "não achou": o turno segue normal.
     const cache = await import("@/lib/rag/cacheRespostas");
     const escopoCache = cache.escopoDoCache(surfaceLedger(surface ?? hctx.activeTab), mentor?.slug);
-    const usaCache = cache.cacheLigado() && !colada.fonte && (!escolhido || escolhido.id === MODELO_PADRAO) && cache.perguntaCacheavel(prompt);
+    // #764: pedido de IMAGEM nunca consulta o cache — "faça uma imagem do coração humano" tinha virado explicação antes
+    // do #756, e o cache seguia servindo essa explicação (com diagrama) em vez de deixar o turno gerar a imagem
+    const usaCache = cache.cacheLigado() && !colada.fonte && (!escolhido || escolhido.id === MODELO_PADRAO) && cache.perguntaCacheavel(prompt) && !pedeImagem(prompt);
     const cacheP = usaCache
       ? Promise.all([import("@/lib/rag/pg"), import("@/lib/rag/embed")])
         .then(async ([{ ragPg }, { embedPerguntaCompartilhado }]) => cache.consultarCache(ragPg(), { pergunta: prompt, vetor: await embedPerguntaCompartilhado(objetivo), escopo: escopoCache }))
@@ -457,9 +460,25 @@ export async function runChatTurn(
         const id = await srv.iniciarRea(userId, scopeIdRea, titulo).catch(() => null);
         if (id) {
           out.answer = { ...out.answer, reaBlueprint: { id, titulo, gerando: true } };
-          // o REA herda o modelo da superfície: se o aluno escolheu um modelo de gateway (Claude/Zaeon),
-          // o blueprint é redigido por ele; senão, Gemini (ver genPadrao em rea-blueprint/server).
-          void srv.reaBlueprintDoTurno({ userId, scopeId: scopeIdRea, titulo, prompt, answerTexto: textoDaResposta(out.answer), history: params.history, grupoGateway: viaGateway(escolhido) ? escolhido.grupo : null }).catch(() => null);
+          const grupoGateway = viaGateway(escolhido) ? escolhido.grupo : null;
+          // CAMADA EXECUTORA REAL: se o pedido tem um alvo analisável (um site/URL no texto) E o motor do REA
+          // está ligado (REA_BRIDGE_URL/TOKEN), rodamos a engenharia reversa DE VERDADE em paralelo e a evidência
+          // real entra no blueprint como OBSERVAÇÃO. Sem motor/sem alvo → cai no modo leve (explicação), como antes.
+          // O REA herda o modelo da superfície (gateway Claude/Zaeon) ou Gemini (ver genPadrao em server.ts).
+          void (async () => {
+            let evidencia: string | undefined, ferramentas: string[] | undefined;
+            try {
+              const rea = await import("@/lib/octa/rea");
+              if (rea.reaBridgeConfigurado()) {
+                const alvo = (await import("@/lib/rea-blueprint/alvoReal")).detectarAlvoReal(prompt);
+                if (alvo) {
+                  const r = await (await import("@/lib/rea-blueprint/executor")).executarReaReal(alvo, { chamarRea: rea.chamarRea, uploadRea: rea.uploadRea });
+                  if (r.ok) { evidencia = r.evidencia; ferramentas = r.ferramentas; }
+                }
+              }
+            } catch { /* motor fora do ar: segue no modo leve (explicação) */ }
+            await srv.reaBlueprintDoTurno({ userId, scopeId: scopeIdRea, titulo, prompt, answerTexto: textoDaResposta(out.answer), history: params.history, grupoGateway, evidencia, ferramentas }).catch(() => null);
+          })();
         }
       }
     }
