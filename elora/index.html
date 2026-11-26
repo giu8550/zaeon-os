@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <!-- Faz a página respeitar a largura real do celular -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Élora — Entrar</title>
+
+  <!-- Fontes: Fraunces (serifada, para a marca e títulos) e Inter (sem serifa, para leitura) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <main class="layout">
+
+    <!-- ========== PAINEL DA MARCA (lado esquerdo) ========== -->
+    <section class="brand" aria-label="Sobre a Élora">
+      <a href="#" class="logo">Élora</a>
+
+      <div class="brand__text">
+        <h1>Estude com calma.<br><em>Aprenda de verdade.</em></h1>
+        <p>Organize suas matérias, acompanhe seu progresso e mantenha o foco no que importa.</p>
+      </div>
+
+      <ul class="brand__stats">
+        <li><strong>12 mil</strong> estudantes</li>
+        <li><strong>340</strong> trilhas de estudo</li>
+      </ul>
+    </section>
+
+    <!-- ========== CARTÃO DO FORMULÁRIO (lado direito) ========== -->
+    <section class="auth">
+
+      <!--
+        Truque sem JavaScript: dois botões de rádio invisíveis guardam
+        qual aba está ativa. As <label> abaixo marcam o rádio quando
+        clicadas, e o CSS usa :checked para mostrar o painel certo.
+      -->
+      <input type="radio" name="aba" id="aba-entrar" class="tab-radio" checked>
+      <input type="radio" name="aba" id="aba-cadastrar" class="tab-radio">
+
+      <div class="card">
+
+        <nav class="tabs" aria-label="Escolha uma opção">
+          <label for="aba-entrar" class="tab tab--entrar">Entrar</label>
+          <label for="aba-cadastrar" class="tab tab--cadastrar">Criar conta</label>
+        </nav>
+
+        <!-- ---------- PAINEL: ENTRAR ---------- -->
+        <form class="panel panel--entrar" action="#" method="post">
+          <header class="panel__head">
+            <h2>Bem-vindo de volta</h2>
+            <p>Entre para continuar seus estudos.</p>
+          </header>
+
+          <div class="field">
+            <!-- placeholder=" " (um espaço) é necessário para o efeito de rótulo flutuante -->
+            <input type="email" id="login-email" name="email" placeholder=" " autocomplete="email" required>
+            <label for="login-email">E-mail</label>
+          </div>
+
+          <div class="field">
+            <input type="password" id="login-senha" name="senha" placeholder=" " autocomplete="current-password" minlength="8" required>
+            <label for="login-senha">Senha</label>
+          </div>
+
+          <div class="row">
+            <label class="check">
+              <input type="checkbox" name="lembrar">
+              <span>Lembrar de mim</span>
+            </label>
+            <a href="#" class="link">Esqueci a senha</a>
+          </div>
+
+          <button type="submit" class="btn">Entrar</button>
+
+          <p class="switch">
+            Ainda não tem conta? <label for="aba-cadastrar" class="link">Criar conta</label>
+          </p>
+        </form>
+
+        <!-- ---------- PAINEL: CRIAR CONTA ---------- -->
+        <form class="panel panel--cadastrar" action="#" method="post">
+          <header class="panel__head">
+            <h2>Comece sua jornada</h2>
+            <p>Leva menos de um minuto.</p>
+          </header>
+
+          <div class="field">
+            <input type="text" id="cad-nome" name="nome" placeholder=" " autocomplete="name" required>
+            <label for="cad-nome">Nome completo</label>
+          </div>
+
+          <div class="field">
+            <input type="email" id="cad-email" name="email" placeholder=" " autocomplete="email" required>
+            <label for="cad-email">E-mail</label>
+          </div>
+
+          <div class="field">
+            <input type="password" id="cad-senha" name="senha" placeholder=" " autocomplete="new-password" minlength="8" required aria-describedby="dica-senha">
+            <label for="cad-senha">Senha</label>
+            <small id="dica-senha" class="hint">Mínimo de 8 caracteres.</small>
+          </div>
+
+          <label class="check">
+            <input type="checkbox" name="termos" required>
+            <span>Aceito os <a href="#" class="link">termos de uso</a></span>
+          </label>
+
+          <button type="submit" class="btn">Criar conta</button>
+
+          <p class="switch">
+            Já tem conta? <label for="aba-entrar" class="link">Entrar</label>
+          </p>
+        </form>
+
+      </div>
+    </section>
+
+  </main>
+
+</body>
+</html>

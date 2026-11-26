@@ -1,0 +1,359 @@
+/* =========================================================
+   ÉLORA — Login e cadastro (HTML + CSS puro)
+   ========================================================= */
+
+/* ---------- 1. TOKENS (variáveis de design) ----------
+   Centralizar cores, fontes e medidas aqui permite mudar
+   o visual inteiro alterando um só lugar.
+   Doc: https://developer.mozilla.org/pt-BR/docs/Web/CSS/Using_CSS_custom_properties */
+:root {
+  --ink:        #1f1b2e;   /* texto principal, quase preto com fundo roxo */
+  --ink-soft:   #6b6580;   /* texto secundário */
+  --plum:       #3b2a5c;   /* cor da marca */
+  --plum-dark:  #241a3a;
+  --accent:     #c9a86a;   /* dourado suave, usado com moderação */
+  --paper:      #f7f4ee;   /* fundo creme, mais acolhedor que branco puro */
+  --surface:    #ffffff;
+  --line:       #e3ded4;
+  --error:      #b3261e;
+
+  --font-display: "Fraunces", Georgia, serif;
+  --font-body:    "Inter", system-ui, sans-serif;
+
+  --radius: 14px;
+  --ease: 200ms ease;
+}
+
+/* ---------- 2. RESET MÍNIMO ---------- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;   /* largura passa a incluir padding e borda */
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--paper);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- 3. LAYOUT GERAL ----------
+   Grid com duas colunas: marca (esquerda) e formulário (direita).
+   Doc: https://developer.mozilla.org/pt-BR/docs/Web/CSS/CSS_grid_layout */
+.layout {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  min-height: 100vh;
+}
+
+/* ---------- 4. PAINEL DA MARCA ---------- */
+.brand {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;   /* logo no topo, números embaixo */
+  padding: clamp(2rem, 5vw, 4rem);
+  color: var(--paper);
+  /* Dois gradientes sobrepostos: um brilho dourado e o fundo roxo */
+  background:
+    radial-gradient(circle at 80% 15%, rgb(201 168 106 / 0.25), transparent 45%),
+    linear-gradient(160deg, var(--plum), var(--plum-dark));
+}
+
+.logo {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: inherit;
+  text-decoration: none;
+}
+
+.brand__text h1 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  /* clamp(mínimo, ideal, máximo): o título cresce com a tela sem exagerar
+     Doc: https://developer.mozilla.org/pt-BR/docs/Web/CSS/clamp */
+  font-size: clamp(2rem, 4vw, 3.25rem);
+  line-height: 1.1;
+  margin-bottom: 1rem;
+}
+
+.brand__text em {
+  color: var(--accent);
+}
+
+.brand__text p {
+  max-width: 38ch;   /* "ch" ≈ largura de um caractere: limita a linha para leitura confortável */
+  opacity: 0.8;
+}
+
+.brand__stats {
+  display: flex;
+  gap: 2.5rem;
+  list-style: none;
+  padding: 0;
+  font-size: 0.875rem;
+  opacity: 0.85;
+}
+
+.brand__stats strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+/* ---------- 5. ÁREA DO FORMULÁRIO ---------- */
+.auth {
+  display: grid;
+  place-items: center;   /* centraliza o cartão vertical e horizontalmente */
+  padding: 2rem 1rem;
+}
+
+.card {
+  width: 100%;
+  max-width: 420px;
+  padding: 2.5rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 50px -20px rgb(36 26 58 / 0.25);
+}
+
+/* ---------- 6. ABAS (troca sem JavaScript) ---------- */
+.tab-radio {
+  /* Esconde o rádio visualmente, mas o mantém acessível ao teclado */
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+  margin-bottom: 2rem;
+  background: var(--paper);
+  border-radius: 999px;
+}
+
+.tab {
+  padding: 0.6rem;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background var(--ease), color var(--ease);
+}
+
+/* Aba ativa: "~" seleciona irmãos que vêm depois do rádio marcado
+   Doc: https://developer.mozilla.org/pt-BR/docs/Web/CSS/General_sibling_combinator */
+#aba-entrar:checked ~ .card .tab--entrar,
+#aba-cadastrar:checked ~ .card .tab--cadastrar {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+}
+
+/* Foco por teclado nos rádios escondidos aparece na aba correspondente */
+#aba-entrar:focus-visible ~ .card .tab--entrar,
+#aba-cadastrar:focus-visible ~ .card .tab--cadastrar {
+  outline: 2px solid var(--plum);
+  outline-offset: 2px;
+}
+
+/* Painéis: começam escondidos; o rádio marcado revela o seu */
+.panel {
+  display: none;
+}
+
+#aba-entrar:checked ~ .card .panel--entrar,
+#aba-cadastrar:checked ~ .card .panel--cadastrar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  animation: aparecer 300ms ease;
+}
+
+@keyframes aparecer {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.panel__head h2 {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.panel__head p {
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+/* ---------- 7. CAMPOS COM RÓTULO FLUTUANTE ---------- */
+.field {
+  position: relative;   /* referência para posicionar o label por cima do input */
+}
+
+.field input {
+  width: 100%;
+  padding: 1.35rem 1rem 0.55rem;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  transition: border-color var(--ease), box-shadow var(--ease);
+}
+
+.field label {
+  position: absolute;
+  left: 1rem;
+  top: 0.95rem;
+  color: var(--ink-soft);
+  pointer-events: none;   /* o clique "atravessa" o label e chega ao input */
+  transition: transform var(--ease), font-size var(--ease), color var(--ease);
+  transform-origin: left top;
+}
+
+/* O label sobe quando o campo está em foco OU já tem texto.
+   :placeholder-shown é verdadeiro só quando o campo está vazio.
+   Doc: https://developer.mozilla.org/pt-BR/docs/Web/CSS/:placeholder-shown */
+.field input:focus + label,
+.field input:not(:placeholder-shown) + label {
+  transform: translateY(-0.55rem) scale(0.78);
+  color: var(--plum);
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--plum);
+  box-shadow: 0 0 0 4px rgb(59 42 92 / 0.12);
+}
+
+/* Erro só depois que a pessoa interagiu (não pinta tudo de vermelho ao abrir)
+   Doc: https://developer.mozilla.org/en-US/docs/Web/CSS/:user-invalid */
+.field input:user-invalid {
+  border-color: var(--error);
+}
+
+.field input:user-invalid + label {
+  color: var(--error);
+}
+
+.hint {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+/* ---------- 8. CHECKBOX, LINKS E LINHA AUXILIAR ---------- */
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.875rem;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.check input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--plum);   /* colore checkbox nativo sem recriá-lo */
+}
+
+.link {
+  color: var(--plum);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: text-decoration-color var(--ease);
+}
+
+.link:hover {
+  text-decoration-color: currentColor;
+}
+
+/* ---------- 9. BOTÃO ---------- */
+.btn {
+  margin-top: 0.4rem;
+  padding: 0.9rem;
+  font: inherit;
+  font-weight: 600;
+  color: var(--paper);
+  background: var(--plum);
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background var(--ease), transform var(--ease);
+}
+
+.btn:hover {
+  background: var(--plum-dark);
+}
+
+.btn:active {
+  transform: scale(0.98);   /* pequeno "afundar" ao clicar */
+}
+
+.btn:focus-visible,
+.link:focus-visible {
+  outline: 2px solid var(--plum);
+  outline-offset: 3px;
+}
+
+.switch {
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--ink-soft);
+}
+
+/* ---------- 10. RESPONSIVO ----------
+   Em telas menores, a marca vira uma faixa no topo.
+   Doc: https://developer.mozilla.org/pt-BR/docs/Web/CSS/Media_Queries/Using_media_queries */
+@media (max-width: 860px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .brand {
+    gap: 1.5rem;
+    padding: 2rem 1.5rem;
+  }
+
+  .brand__stats {
+    display: none;   /* informação secundária sai para priorizar o formulário */
+  }
+
+  .card {
+    padding: 2rem 1.5rem;
+  }
+}
+
+/* ---------- 11. ACESSIBILIDADE: MOVIMENTO REDUZIDO ----------
+   Respeita quem configurou o sistema para menos animações. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
