@@ -1,0 +1,75 @@
+name: Teste em lote da IA (manual)
+
+# #883 · pedido do Martinez (28/11): testar a IA (voz, imagem, laboratórios) em LOTE e por regra, não à mão em produção.
+# Roda scripts/eval-ia-lote.ts contra o Hugging Face de verdade, com o HF_TOKEN dos secrets do repositório.
+# GASTA CRÉDITOS DO HF: só roda quando alguém aperta "Run workflow" (nunca em push, PR ou agenda).
+# Resultado: o relatório no resumo deste run + o arquivo eval-ia-lote (md e json) para baixar.
+on:
+  workflow_dispatch:
+    inputs:
+      areas:
+        description: "Áreas, separadas por vírgula (labs, voz, imagem)"
+        required: false
+        default: "labs,voz,imagem"
+      vezes:
+        description: "Quantas vezes cada caso roda (1 a 20)"
+        required: false
+        default: "3"
+      minimo:
+        description: "Acerto mínimo para passar (0 a 1)"
+        required: false
+        default: "0.9"
+
+concurrency:
+  group: eval-ia
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  lote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      # mesma ordem do ci.yml: a lista de install scripts revisados é checada antes do npm ci
+      - name: Vetting de dependências
+        run: node scripts/vet-deps.mjs
+
+      - name: Install deps
+        run: |
+          npm ci --ignore-scripts
+          npm rebuild
+
+      # o ffmpeg converte a voz quando o provedor manda mp3 (lib/voice/hf-voz)
+      - name: ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+
+      - name: Rodar o teste em lote
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          AREAS: ${{ github.event.inputs.areas }}
+          VEZES: ${{ github.event.inputs.vezes }}
+          MINIMO: ${{ github.event.inputs.minimo }}
+        run: |
+          if [ -z "$HF_TOKEN" ]; then echo "::error::HF_TOKEN ausente nos secrets do repositório"; exit 1; fi
+          npx tsx --tsconfig tsconfig.json scripts/eval-ia-lote.ts "--areas=$AREAS" "--vezes=$VEZES" "--minimo=$MINIMO"
+
+      - name: Guardar o relatório
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-ia-lote
+          path: |
+            eval-ia-lote.md
+            eval-ia-lote.json
+          if-no-files-found: ignore
