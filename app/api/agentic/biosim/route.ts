@@ -21,13 +21,13 @@ import { authOptions } from '@/src/lib/auth';
 import { VertexAI } from '@google-cloud/vertexai';
 // #883 (parte 3a): sem foto, a IA sai pelo envelope (Hugging Face primeiro, Google só de queda)
 import { iaDoLaboratorio, idDoAluno } from '@/lib/agentic/labIa';
+import { promptBiosim, mensagemBiosim } from '@/lib/agentic/prompts';
 import { registrarTokens } from '@/lib/llm/ledger';
 import { usageDoVertex, USAGE_VAZIO } from '@/lib/llm/usage';
 import fs from 'fs';
 import path from 'path';
 import {
   ROOM_POLICY,
-  buildPolicyContext,
   isIntentAllowed,
   validateDescriptor,
 } from '@/app/agentic-modules/biosim3d/accessPolicy';
@@ -37,38 +37,6 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 // ─── Base classifier prompt (room policy appended at runtime) ─────────────────
-const CLASSIFIER_BASE = `You are a scientific visualization intent classifier for BioSim3D.
-
-Given a user prompt and/or an image, return ONLY a JSON object with these fields:
-- "intent": one of "molecule" | "protein" | "descriptor"
-- "query": the extracted name/formula to look up (for molecule or protein intents)
-- "pdbId": a 4-character PDB ID if the user explicitly mentioned one (optional)
-- "descriptor": a BioSim3D SceneDescriptor JSON (only when intent is "descriptor")
-- "voxels": (OPTIONAL) An array of { x, y, z, color, type } objects (LIMIT 400 items). ONLY include this if an IMAGE is provided, and you need to generate a custom 3D point-cloud approximation of the image's biological subject (e.g., fungi, plant, specific cell). Scale coordinates roughly between -10 and 10.
-
-INTENT RULES:
-- "molecule" → user asks about or uploads an image of a specific chemical compound (aspirin, ATP, caffeine, glucose, etc.)
-- "protein"  → user asks about or uploads an image of a protein, enzyme, antibody, virus, or macromolecular structure (haemoglobin, etc.)
-- "descriptor" → everything else: cells, anatomy, physics, math, quantum orbitals, animals, plants, fractals, wave functions, etc.
-
-IF AN IMAGE IS PROVIDED:
-1. Identify the primary subject of the image (e.g., "a red blood cell", "a mushroom", "the caffeine molecule").
-2. Choose the intent based on the rules above.
-3. If intent is molecule/protein, set "query" to the exact name determined from the image.
-4. If intent is descriptor, build the best matching SceneDescriptor AND populate the "voxels" array to visually represent the image structure in 3D.
-
-For "descriptor" intent, return a SceneDescriptor in the "descriptor" field using EXACTLY these renderModes:
-"dna", "rna", "molecule", "crystal", "cell", "plant", "fungus", "animal", "quantum", "atom", "math", "protein", "anatomy", "particle"
-
-For anatomy renderMode, set parameters.bodyPart: "skeleton" | "heart" | "neuron" | "skin" | "lung" | "bloodCells" | "eye" | "skull" | "muscle"
-For particle renderMode, set parameters.physicsType: "bubbleChamber" | "proton" | "wavePacket" | "photon" | "particleDecay" | "uncertainty"
-For math renderMode, set parameters.mathFunction: "ripple" | "saddle" | "paraboloid" | "torus" | "lorenz" | "mobius" | "fourier" | "network"
-For animal renderMode, set parameters.animalType: "horse" | "dog" | "human" | "fish" | "bird"
-For plant renderMode, set parameters.plantType: "tree" | "flower" | "fern" | "seed" | "mycelium" | "mushroom"
-For quantum renderMode, set parameters.orbital: "s" | "p" | "d"
-
-Return ONLY valid JSON. No markdown, no backticks, no explanation.`;
-
 // ─── Vertex AI client factory ─────────────────────────────────────────────────
 function getModel() {
   const credentials = (() => { const __v = vertexCredentials(); return { project_id: __v.project, client_email: __v.client_email, private_key: __v.private_key }; })(); // robust parse
@@ -274,11 +242,8 @@ export async function POST(req: Request) {
     }
 
     // ── Step 2: Classify with room-scoped system prompt ───────────────────────
-    const systemPrompt = CLASSIFIER_BASE + '\n' + buildPolicyContext(courseRoom);
-    let userMessage = `Room: ${courseRoom} (${policy.label})\nUser prompt: "${prompt.trim()}"`;
-    if (imageFile) {
-      userMessage += `\n[Context: An image was provided. Translate the visual into a point cloud structure if applicable.]`;
-    }
+    const systemPrompt = promptBiosim(courseRoom);
+    const userMessage = mensagemBiosim(courseRoom, prompt, !!imageFile);
 
     const raw = await callGemini(systemPrompt, userMessage, imagePart, idDoAluno(session));
 
